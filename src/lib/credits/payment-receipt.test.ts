@@ -92,12 +92,13 @@ describe('credit payment receipt helpers', () => {
     // estrictamente del pago.
     expect(paymentRows).toEqual(
       expect.arrayContaining([
-        ['Valor Cuota', expect.stringContaining('250.000')],
         ['MONTO ABONADO', expect.stringContaining('250.000')],
         ['Método de Pago', 'Efectivo'],
       ])
     )
     expect(paymentRows.some(([etiqueta]) => etiqueta === 'Cuota Pagada')).toBe(false)
+    // Se pago la cuota justa: el valor de la cuota repetiria el monto abonado.
+    expect(paymentRows.some(([etiqueta]) => etiqueta === 'Valor Cuota')).toBe(false)
 
     const planRows = buildInstallmentPlanRows({
       paymentId: 'pay-1',
@@ -120,6 +121,7 @@ describe('credit payment receipt helpers', () => {
       paymentId: 'pay-1',
       paymentAmount: 250000,
       currentCreditBalance: 1000000,
+      totalCreditAmount: 1500000,
       pendingInstallmentsCount: 4,
       nextDueDate: '2026-10-01',
       nextDueAmount: 250000,
@@ -127,7 +129,9 @@ describe('credit payment receipt helpers', () => {
 
     expect(statusRows).toEqual(
       expect.arrayContaining([
-        ['SALDO PENDIENTE (FALTA)', expect.stringContaining('1.000.000')],
+        ['Total financiado', expect.stringContaining('1.500.000')],
+        ['Total pagado', expect.stringContaining('500.000')],
+        ['SALDO PENDIENTE', expect.stringContaining('1.000.000')],
       ])
     )
   })

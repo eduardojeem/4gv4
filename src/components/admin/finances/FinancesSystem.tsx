@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { CircleDollarSign, ReceiptText, UsersRound, ChartNoAxesCombined, Settings2, Plus, BookOpenCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -15,6 +16,8 @@ import { FinanceEmptyState, FinanceErrorState, FinanceLoadingState, FinanceStale
 import { FinanceSummary } from './FinanceSummary'
 import { PayrollPanel } from './PayrollPanel'
 import { ProfitabilityPanel } from './ProfitabilityPanel'
+import { TechnicianPaymentHelp } from '@/components/dashboard/technicians/detail/TechnicianPaymentHelp'
+import { FinanceWorkflowHelp } from './FinanceWorkflowHelp'
 
 const sections = [
   { value: 'Resumen', icon: CircleDollarSign },
@@ -33,7 +36,8 @@ function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>
 }
 
 export function FinancesSystem() {
-  const [activeTab, setActiveTab] = useState<FinanceSection>('Resumen')
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<FinanceSection>(() => searchParams.get('section') === 'payroll' ? 'Nómina' : 'Resumen')
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [businessGuideOpen, setBusinessGuideOpen] = useState(false)
   const [businessGuideTab, setBusinessGuideTab] = useState<string>('resumen')
@@ -78,6 +82,7 @@ export function FinancesSystem() {
       </div>
     </header>
     <FinanceFilters filters={finances.filters} isRefreshing={finances.isRefreshing ?? false} onDateRangeChange={finances.setDateRange} onRefresh={refreshAll} />
+    <FinanceWorkflowHelp />
     <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FinanceSection)} className="space-y-4">
       <h2 className="sr-only">Qué querés administrar</h2>
       <div className="overflow-x-auto pb-1">
@@ -88,6 +93,7 @@ export function FinancesSystem() {
         </TabsList>
       </div>
       <FinanceSectionHelp key={activeTab} section={activeTab} onOpenGuide={openBusinessGuide} />
+      {activeTab === 'Nómina' && <TechnicianPaymentHelp />}
       <TabsContent value="Resumen" className="mt-0 space-y-4">
         {finances.isLoading && !summary ? <FinanceLoadingState /> : null}
         {!finances.isLoading && finances.error && !summary ? <FinanceErrorState error={finances.error} onRetry={refreshAll} /> : null}

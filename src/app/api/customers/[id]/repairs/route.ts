@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import { isCountableRepair } from '@/lib/customers/customer-spend'
 
 /**
@@ -21,6 +22,11 @@ export async function GET(
 
     if (!organization) {
       return NextResponse.json({ error: 'Organización no encontrada' }, { status: 403 })
+    }
+    {
+      // El módulo de la sección (ver ROUTE_MODULES): apagado o fuera del plan, no responde.
+      const denied = await moduleAccessResponse(organization.id, 'repairs')
+      if (denied) return denied
     }
 
     const { id: customerId } = await context.params

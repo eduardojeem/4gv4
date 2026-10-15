@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ElementType } from 'react'
+import { useEffect, useMemo, useState, type ElementType, type MutableRefObject } from 'react'
 import { moduleDisplayHint, moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 import { dashboardNavGroups } from '@/config/dashboard-navigation'
 import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigation'
@@ -42,6 +42,8 @@ import {
   ORGANIZATION_MODULES,
   defaultOperatingModelFor,
   getSuggestedModules,
+  moduleDependencyProblems,
+  modulesForVerticalChange,
   type BusinessVertical,
   type OperatingModel,
   type OrganizationModule,
@@ -107,7 +109,23 @@ const moduleIcons: Record<OrganizationModule, ElementType> = {
   security: LockKeyhole,
 }
 
-export function BusinessProfileCard() {
+/**
+ * Lo que la pagina de configuracion necesita del perfil para tratarlo como un
+ * cambio mas: saber si hay algo sin guardar y poder guardarlo o descartarlo
+ * desde la barra comun. Antes el perfil tenia su propio boton y sus cambios no
+ * contaban como pendientes: se podian perder al salir sin ningun aviso.
+ */
+export type BusinessProfileActions = {
+  save: () => Promise<boolean>
+  reset: () => void
+}
+
+type BusinessProfileCardProps = {
+  onStateChange?: (state: { dirty: boolean; canSave: boolean }) => void
+  actionsRef?: MutableRefObject<BusinessProfileActions | null>
+}
+
+export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfileCardProps = {}) {
   const router = useRouter()
   const profile = useSubscriptionStatus()
   const [vertical, setVertical] = useState(profile.businessVertical)
@@ -158,7 +176,9 @@ export function BusinessProfileCard() {
   // recomendadas que incluye el plan (una cosmética no necesita Reparaciones).
   // Se muestra qué cambió y se puede deshacer.
   const applyRecommendationFor = (nextVertical: BusinessVertical, nextModel: OperatingModel) => {
-    const recommended = getSuggestedModules(nextVertical, nextModel).filter(module => entitled.has(module))
+    // Las herramientas generales (Finanzas, Informes, Seguridad, Analítica) no
+    // dependen del rubro: quedan como estaban.
+    const recommended = modulesForVerticalChange(enabled, getSuggestedModules(nextVertical, nextModel), entitled)
     const added = recommended.filter(module => !enabled.includes(module))
     const removed = enabled.filter(module => !recommended.includes(module))
     if (added.length === 0 && removed.length === 0) {
@@ -226,7 +246,9 @@ export function BusinessProfileCard() {
       : current.filter(item => item !== module))
   }
 
-  const save = async () => {
+  const dependencyProblems = moduleDependencyProblems(enabled)
+
+  const save = async (): Promise<boolean> => {
     setSaving(true)
     try {
       const response = await fetch('/api/admin/organization-profile', {
@@ -256,12 +278,33 @@ export function BusinessProfileCard() {
       setPrepareWebsite(false)
       setAutoChange(null)
       router.refresh()
+      return true
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar el perfil.')
+      return false
     } finally {
       setSaving(false)
     }
   }
+
+  const reset = () => {
+    setVertical(profile.businessVertical)
+    setModel(profile.operatingModel)
+    setEnabled(profile.enabledModules ?? profile.effectiveModules)
+    setServiceDetails(readServiceBusinessDetails(profile))
+    setPrepareWebsite(false)
+    setAutoChange(null)
+  }
+
+  const canSave = dirty && !saving && dependencyProblems.length === 0
+  useEffect(() => {
+    onStateChange?.({ dirty, canSave })
+  }, [dirty, canSave, onStateChange])
+  // Las funciones cambian en cada render: se publican sin dependencias para que
+  // la pagina siempre llame a la version con el estado actual.
+  useEffect(() => {
+    if (actionsRef) actionsRef.current = { save, reset }
+  })
 
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm">
@@ -730,9 +773,14 @@ export function BusinessProfileCard() {
               {enabled.length} de {ORGANIZATION_MODULES.length} herramientas activadas
             </Badge>
           </div>
+          {dependencyProblems.length > 0 && (
+            <ul role="alert" className="w-full space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 sm:w-auto">
+              {dependencyProblems.map((problem) => <li key={problem}>{problem}</li>)}
+            </ul>
+          )}
           <Button
-            onClick={save}
-            disabled={!dirty || saving}
+            onClick={() => void save()}
+            disabled={!canSave}
             className="gap-2 sm:min-w-44"
           >
             {saving ? (

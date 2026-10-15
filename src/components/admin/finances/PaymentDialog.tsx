@@ -30,6 +30,7 @@ export function PaymentDialog({
   payrollEntryId,
   branchId,
   outstandingAmount,
+  recipientLabel,
   onSaved,
 }: {
   open: boolean
@@ -39,6 +40,7 @@ export function PaymentDialog({
   payrollEntryId?: string
   branchId: string | null | undefined
   outstandingAmount?: number
+  recipientLabel?: string
   onSaved: () => void | Promise<void>
 }) {
   const [method, setMethod] = useState('bank_transfer')
@@ -163,7 +165,7 @@ export function PaymentDialog({
               <DialogTitle className="text-lg font-bold">Registrar pago</DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {payrollEntryId
-                  ? 'Emite un pago total o parcial correspondiente a la nómina de este colaborador.'
+                  ? 'Registra un pago realizado de la nómina. No ejecuta una transferencia bancaria.'
                   : 'Registra la cancelación o abono de esta obligación financiera.'}
               </DialogDescription>
             </div>
@@ -176,6 +178,13 @@ export function PaymentDialog({
         }} className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto">
           <fieldset disabled={isSubmitting || paymentConfirmed} className="min-w-0 p-6 space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <p className="font-medium break-words">Destinatario o concepto: {recipientLabel || (payrollEntryId ? 'Colaborador de esta liquidación' : 'Obligación seleccionada')}</p>
+            <p className="mt-1 text-muted-foreground">Registrá únicamente un pago realizado. La transferencia se efectúa fuera del sistema; el efectivo registra un egreso en la caja elegida.</p>
+            {outstandingAmount !== undefined && amountValue !== '' && Number.isFinite(Number(amountValue)) && Number(amountValue) > 0 && Number(amountValue) <= outstandingAmount && (
+              <p className="mt-2 font-medium" aria-live="polite">Saldo después del registro: {formatCurrency(Math.round((outstandingAmount - Number(amountValue)) * 100) / 100)}</p>
+            )}
+          </div>
           {/* Card de Saldo Pendiente Autorizado */}
           {outstandingAmount !== undefined ? (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-center justify-between gap-3">
@@ -232,7 +241,7 @@ export function PaymentDialog({
                 setMethod(event.target.value)
                 if (event.target.value !== 'cash') setCashSessionId('')
               }}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-1 text-base shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="bank_transfer">Transferencia bancaria</option>
               <option value="cash">Efectivo</option>

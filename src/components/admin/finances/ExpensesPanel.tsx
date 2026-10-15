@@ -730,6 +730,7 @@ export function ExpensesPanel({
         onOpenChange={(open) => !open && setPaying(null)}
         organizationId={organizationId}
         obligationId={paying?.id}
+        recipientLabel={paying?.concept ?? undefined}
         branchId={branchId}
         outstandingAmount={paying?.outstanding_amount}
         onSaved={changed}

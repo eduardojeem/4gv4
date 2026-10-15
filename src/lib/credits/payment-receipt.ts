@@ -1,12 +1,14 @@
-import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
+const formatCurrency = (amount: number) => toPdfText(formatCurrencyBase(amount, { maximumFractionDigits: 2 }))
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
-import { CREDIT_PAPER_WIDTH_MM, type CreditPaperFormat } from './paper'
+import { CREDIT_PAPER_WIDTH_MM, toPdfText, type CreditPaperFormat } from './paper'
 
 export type CreditPaymentReceiptMethod = 'cash' | 'card' | 'transfer' | string | null | undefined
 
 export type CreditPaymentReceiptInput = {
   paymentId: string
+  receiptNumber?: string
   paymentDate?: string | Date | null
   paymentAmount: number
   paymentMethod?: CreditPaymentReceiptMethod
@@ -127,11 +129,10 @@ export function buildCreditInfoRows(
     ['Cliente', input.customerName],
   ]
 
+  // El telefono del cliente no aporta nada a un recibo que el cliente ya tiene
+  // en la mano: se saco para dejar solo lo que identifica el pago.
   if (customerCode) {
     rows.push([corto ? 'RUC / CI' : 'RUC / CI / ID', customerCode])
-  }
-  if (input.customerPhone) {
-    rows.push(['Teléfono', input.customerPhone])
   }
 
   rows.push([corto ? 'Crédito' : 'Crédito Nº', creditCode])
@@ -148,10 +149,8 @@ export function buildCreditInfoRows(
     rows.push(['Concepto', input.creditLabel])
   }
 
-  if (typeof input.totalCreditAmount === 'number' && input.totalCreditAmount > 0) {
-    const planText = input.totalInstallments ? ` (${input.totalInstallments} cuotas)` : ''
-    rows.push([corto ? 'Financiado' : 'Total Financiado', `${formatCurrency(input.totalCreditAmount)}${planText}`])
-  }
+  // El total financiado va en el estado de cuenta, junto a lo pagado y al
+  // saldo, para que las tres cifras se lean juntas.
 
   return rows
 }
@@ -170,7 +169,13 @@ export function buildPaymentDetailRows(
     rows.push([corto ? 'Vence' : 'Vencimiento Cuota', formatDateOnlyDisplay(input.installmentDueDate, undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })])
   }
 
-  if (typeof input.installmentAmount === 'number' && input.installmentAmount > 0) {
+  // El valor de la cuota solo se muestra si difiere de lo abonado: cuando se
+  // paga la cuota justa, eran dos filas con el mismo monto.
+  if (
+    typeof input.installmentAmount === 'number' &&
+    input.installmentAmount > 0 &&
+    Math.abs(input.installmentAmount - input.paymentAmount) >= 0.005
+  ) {
     rows.push([corto ? 'Valor' : 'Valor Cuota', formatCurrency(input.installmentAmount)])
   }
 
@@ -266,11 +271,13 @@ export function buildInstallmentPlanRows(
     ])
   }
 
-  if (p.paid !== null && p.total !== null) {
-    const porcentaje = Math.round((p.paid / p.total) * 100)
-    rows.push([corto ? 'Pagadas' : 'Cuotas pagadas', `${p.paid} de ${p.total}  (${porcentaje}%)`])
-  } else if (p.paid !== null) {
-    rows.push([corto ? 'Pagadas' : 'Cuotas pagadas', String(p.paid)])
+  // "Pagadas" y "Faltan" dicen lo mismo de dos formas (y la barra de casillas
+  // lo vuelve a decir). Queda "Pagadas" solo cuando no hay una cuota puntual.
+  if (p.current === null && p.paid !== null) {
+    rows.push([
+      corto ? 'Pagadas' : 'Cuotas pagadas',
+      p.total !== null ? `${p.paid} de ${p.total}` : String(p.paid),
+    ])
   }
 
   if (p.pending !== null) {
@@ -342,6 +349,19 @@ export function buildAccountStatusRows(
   const corto = opciones.compacto === true
   const rows: ReceiptRow[] = []
 
+  // Total financiado, lo pagado y lo que falta, en ese orden: las tres cifras
+  // con las que el cliente controla su credito. El principal ya incluye el
+  // interes, asi que pagado = total - saldo.
+  const total = typeof input.totalCreditAmount === 'number' && input.totalCreditAmount > 0
+    ? input.totalCreditAmount
+    : null
+  if (total !== null) {
+    rows.push([corto ? 'Total créd.' : 'Total financiado', formatCurrency(total)])
+    if (typeof input.currentCreditBalance === 'number') {
+      rows.push([corto ? 'Pagado' : 'Total pagado', formatCurrency(Math.max(0, total - Math.max(0, input.currentCreditBalance)))])
+    }
+  }
+
   if (typeof input.currentCreditBalance === 'number') {
     const balance = Math.max(0, input.currentCreditBalance)
     if (balance === 0) {
@@ -349,7 +369,7 @@ export function buildAccountStatusRows(
       // en dolares el comprobante decia "Gs. 0".
       rows.push(['SALDO PENDIENTE', `${formatCurrency(0)} (TOTALMENTE SALDADO)`])
     } else {
-      rows.push([corto ? 'SALDO' : 'SALDO PENDIENTE (FALTA)', formatCurrency(balance)])
+      rows.push([corto ? 'SALDO' : 'SALDO PENDIENTE', formatCurrency(balance)])
     }
   }
 
@@ -359,6 +379,11 @@ export function buildAccountStatusRows(
   }
 
   return rows
+}
+
+/** Las filas clave llevan la etiqueta en mayusculas y se imprimen mas grandes. */
+function esFilaDestacada(etiqueta: string) {
+  return /[A-Z]/.test(etiqueta) && etiqueta === etiqueta.toUpperCase()
 }
 
 export function getCreditPaymentReceiptHeight(input: CreditPaymentReceiptInput, printerWidthMm = CREDIT_PAYMENT_RECEIPT_WIDTH_MM) {
@@ -516,7 +541,7 @@ export async function createCreditPaymentReceiptPdf(
   const izq = t.contentLeftMm
   const der = pageW - t.contentLeftMm
 
-  const receiptNumber = buildCreditPaymentReceiptNumber(input.paymentId)
+  const receiptNumber = input.receiptNumber || buildCreditPaymentReceiptNumber(input.paymentId)
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
   const compacto = usesShortLabels(t.pageWidthMm)
   const creditRows = buildCreditInfoRows(input, { compacto })
@@ -528,24 +553,20 @@ export async function createCreditPaymentReceiptPdf(
   const tablaMargen = { left: izq, right: pageW - izq - t.contentWidthMm }
 
   // ─── Emisor ─────────────────────────────────────────────────────────────
-  // Antes la cabecera era un rectangulo negro con el titulo dentro. No decia de
-  // que comercio salia el comprobante — `businessName` llegaba en la entrada y
-  // se descartaba — y en termica esa mancha gasta cabezal y sale gris sucia.
-  // Ahora encabeza el negocio, y la jerarquia la dan el tamaño y una linea, que
-  // salen igual en termica, laser y tinta.
+  // Todo el comprobante va en negrita y negro puro: en termica el gris y el
+  // texto fino salen lavados y a los pocos meses no se leen. La jerarquia la
+  // dan el tamaño, las bandas negras de los titulos y las lineas.
   let y = t.isSheet ? 22 : 7
 
   doc.setTextColor(0)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(t.titleFontSize)
+  doc.setFontSize(t.titleFontSize + 1)
   const nombreEmisor = input.businessName?.trim() || 'Comprobante de pago'
   const lineasNombre = doc.splitTextToSize(nombreEmisor, t.contentWidthMm)
   doc.text(lineasNombre, centro, y, { align: 'center' })
-  y += lineasNombre.length * t.titleFontSize * 0.42 + 1
+  y += lineasNombre.length * (t.titleFontSize + 1) * 0.42 + 1
 
-  doc.setFont('helvetica', 'normal')
   doc.setFontSize(t.metaFontSize)
-  doc.setTextColor(90)
   const identidad = [
     input.businessRuc ? `RUC ${input.businessRuc}` : '',
     input.businessPhone || '',
@@ -559,41 +580,28 @@ export async function createCreditPaymentReceiptPdf(
     doc.text(dir, centro, y, { align: 'center' })
     y += dir.length * t.metaFontSize * 0.42 + 1
   }
-  doc.setTextColor(0)
 
   y += 2
-  doc.setDrawColor(30, 58, 138)
+  doc.setDrawColor(0)
   doc.setLineWidth(0.6)
   doc.line(izq, y, der, y)
   doc.setLineWidth(0.2)
   y += t.isSheet ? 8 : 5
 
   // ─── Titulo del documento ───────────────────────────────────────────────
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(t.receiptFontSize + 1)
+  doc.setFontSize(t.receiptFontSize + 2)
   doc.text('COMPROBANTE DE PAGO', centro, y, { align: 'center' })
-  y += t.receiptFontSize * 0.48 + 2
+  y += t.receiptFontSize * 0.5 + 2
 
-  doc.setFontSize(t.receiptFontSize)
-  doc.setTextColor(30, 58, 138)
-  doc.text(receiptNumber, centro, y, { align: 'center' })
-  doc.setTextColor(0)
+  doc.setFontSize(t.receiptFontSize + 0.5)
+  doc.text(`N° ${receiptNumber}`, centro, y, { align: 'center' })
   y += t.receiptFontSize * 0.48 + 1.5
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(t.metaFontSize)
-  doc.setTextColor(100)
-  doc.text(paidAt.toLocaleString(getDisplayLocale()), centro, y, { align: 'center', maxWidth: t.contentWidthMm })
-  doc.setTextColor(0)
+  doc.setFontSize(t.metaFontSize + 0.5)
+  doc.text(toPdfText(paidAt.toLocaleString(getDisplayLocale())), centro, y, { align: 'center', maxWidth: t.contentWidthMm })
   y += t.metaFontSize * 0.42 + t.sectionGap
 
-  const seccion = (
-    titulo: string,
-    filas: ReceiptRow[],
-    color: [number, number, number],
-    valorEnNegrita: boolean,
-    startY: number
-  ) => {
+  const seccion = (titulo: string, filas: ReceiptRow[], startY: number) => {
     autoTable(doc, {
       startY,
       // El titulo abarca las dos columnas. Sin colSpan quedaba encerrado en la
@@ -603,17 +611,26 @@ export async function createCreditPaymentReceiptPdf(
       body: filas,
       theme: 'grid',
       headStyles: {
-        fillColor: color,
+        fillColor: [0, 0, 0],
         textColor: 255,
         fontStyle: 'bold',
         halign: 'center',
-        fontSize: t.tableHeaderFontSize,
+        fontSize: t.tableHeaderFontSize + 0.5,
       },
-      bodyStyles: { fontSize: t.tableBodyFontSize },
-      styles: { cellPadding: t.cellPadding, overflow: 'linebreak' },
+      bodyStyles: { fontSize: t.tableBodyFontSize + 0.3, fontStyle: 'bold', textColor: 0 },
+      styles: { cellPadding: t.cellPadding, overflow: 'linebreak', lineColor: [0, 0, 0], lineWidth: 0.25 },
       columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: t.labelColumnWidth, textColor: [71, 85, 105] },
-        1: { cellWidth: t.valueColumnWidth, fontStyle: valorEnNegrita ? 'bold' : 'normal' },
+        0: { cellWidth: t.labelColumnWidth },
+        1: { cellWidth: t.valueColumnWidth },
+      },
+      // Las filas con etiqueta en mayusculas (monto abonado, cuota, saldo) son
+      // las que el cliente busca: van mas grandes que el resto.
+      didParseCell: (data: { section: string; row: { raw: unknown }; cell: { styles: { fontSize: number } } }) => {
+        if (data.section !== 'body') return
+        const etiqueta = String((data.row.raw as ReceiptRow)[0] ?? '')
+        if (esFilaDestacada(etiqueta)) {
+          data.cell.styles.fontSize = t.tableBodyFontSize + 1.8
+        }
       },
       margin: tablaMargen,
     })
@@ -624,14 +641,14 @@ export async function createCreditPaymentReceiptPdf(
   // EFECTUADO" se quebraba en tres lineas dentro de su propia cabecera.
   const titulo = (largo: string, corto: string) => (compacto ? corto : largo)
 
-  let fin = seccion(titulo('DATOS DEL CLIENTE Y VENTA', 'CLIENTE'), creditRows, [30, 58, 138], false, y)
-  fin = seccion(titulo('DETALLE DEL PAGO EFECTUADO', 'PAGO'), paymentRows, [16, 115, 74], true, fin + t.sectionGap)
+  let fin = seccion(titulo('DATOS DEL CLIENTE', 'CLIENTE'), creditRows, y)
+  fin = seccion(titulo('DETALLE DEL PAGO', 'PAGO'), paymentRows, fin + t.sectionGap)
 
   // ─── Plan de cuotas ─────────────────────────────────────────────────────
   // Va entre lo que se acaba de pagar y lo que se sigue debiendo, que es el
   // orden en que se lee: cuanto pague ahora, donde voy, cuanto me falta.
   if (planRows.length > 0) {
-    fin = seccion(titulo('PLAN DE CUOTAS', 'CUOTAS'), planRows, [124, 45, 18], true, fin + t.sectionGap)
+    fin = seccion(titulo('PLAN DE CUOTAS', 'CUOTAS'), planRows, fin + t.sectionGap)
 
     // Una casilla por cuota, llenas las pagadas. Es la misma pregunta del
     // cliente respondida sin leer: cuantas van y cuantas faltan. Se dibuja en
@@ -642,26 +659,22 @@ export async function createCreditPaymentReceiptPdf(
       const ancho = t.contentWidthMm
       const casilla = ancho / progreso.total
 
-      doc.setDrawColor(120)
-      doc.setLineWidth(0.2)
+      doc.setDrawColor(0)
+      doc.setLineWidth(0.25)
+      doc.setFillColor(0, 0, 0)
 
       for (let i = 0; i < progreso.total; i++) {
         const x = izq + i * casilla
-        if (i < progreso.paid) {
-          doc.setFillColor(30, 58, 138)
-          doc.rect(x, barraY, casilla, alto, 'FD')
-        } else {
-          doc.rect(x, barraY, casilla, alto, 'D')
-        }
+        doc.rect(x, barraY, casilla, alto, i < progreso.paid ? 'FD' : 'D')
       }
 
-      doc.setDrawColor(0)
+      doc.setLineWidth(0.2)
       fin = barraY + alto
     }
   }
 
   if (statusRows.length > 0) {
-    fin = seccion(titulo('ESTADO DE CUENTA', 'CUENTA'), statusRows, [71, 85, 105], true, fin + t.sectionGap)
+    fin = seccion(titulo('ESTADO DE CUENTA', 'CUENTA'), statusRows, fin + t.sectionGap)
   }
 
   // ─── Firma y pie ────────────────────────────────────────────────────────
@@ -673,29 +686,27 @@ export async function createCreditPaymentReceiptPdf(
   const firmaY = fin + t.sectionGap + (t.isSheet ? 16 : 10)
   const pieY = firmaY + (t.isSheet ? 8 : 5)
 
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(0)
+
   if (pieY + t.footerFontSize < pageH - t.footerBottom + 6) {
-    doc.setDrawColor(170)
+    doc.setDrawColor(0)
+    doc.setLineWidth(0.3)
     doc.setLineDashPattern([1, 1], 0)
     doc.line(izq + t.contentWidthMm * 0.15, firmaY, der - t.contentWidthMm * 0.15, firmaY)
     doc.setLineDashPattern([], 0)
+    doc.setLineWidth(0.2)
 
-    doc.setFontSize(t.footerFontSize)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(100)
+    doc.setFontSize(t.footerFontSize + 0.5)
     doc.text('Firma / Sello de cobranza', centro, firmaY + (t.isSheet ? 5 : 3.5), { align: 'center' })
-    doc.setTextColor(0)
   }
 
-  doc.setFontSize(t.footerFontSize)
-  doc.setFont('helvetica', 'italic')
-  doc.setTextColor(120)
+  doc.setFontSize(t.footerFontSize + 0.5)
   const pieFinal = Math.min(pageH - t.footerBottom, pieY + (t.isSheet ? 10 : 6))
   doc.text('Gracias por su pago. Conserve este comprobante.', centro, pieFinal, {
     align: 'center',
     maxWidth: t.contentWidthMm,
   })
-  doc.setTextColor(0)
-  doc.setFont('helvetica', 'normal')
 
   return { doc, receiptNumber }
 }

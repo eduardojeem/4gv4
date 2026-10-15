@@ -5,6 +5,8 @@ import { STARTER_CHECKOUT_CHOICES } from '@/lib/onboarding/checkout-choices'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }))
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ isAdmin: true }) }))
+// RootLayout supplies BranchProvider in the real application.
+vi.mock('@/contexts/branch-context', () => ({ useBranch: () => ({ selectedBranchId: null }) }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 
 const props = (over: Partial<Parameters<typeof OnboardingClient>[0]> = {}) => ({

@@ -123,3 +123,43 @@ export function normalizeBusinessProfile(input: LegacyProfileInput): Organizatio
     ? parsed.data
     : { businessVertical: inferredVertical, operatingModel: inferredModel, enabledModules: null }
 }
+
+/**
+ * Herramientas que no dependen del rubro. Al cambiar de rubro la configuración
+ * proponía los módulos del rubro nuevo y desmarcaba el resto: como Finanzas,
+ * Informes, Seguridad y Analítica no están en ninguna recomendación, una tienda
+ * que cambiaba de rubro las perdía sin notarlo. Cambiar de rubro no las toca.
+ */
+export const VERTICAL_INDEPENDENT_MODULES: readonly OrganizationModule[] = ['finances', 'reports', 'security', 'analytics']
+
+/** Módulos al cambiar de rubro: los del rubro nuevo que da el plan, y las herramientas generales como estaban. */
+export function modulesForVerticalChange(
+  current: readonly OrganizationModule[],
+  suggested: readonly OrganizationModule[],
+  entitled: ReadonlySet<string>,
+): OrganizationModule[] {
+  const general = new Set<OrganizationModule>(VERTICAL_INDEPENDENT_MODULES)
+  return Array.from(new Set([
+    ...suggested.filter((module) => entitled.has(module) && !general.has(module)),
+    ...current.filter((module) => general.has(module)),
+  ]))
+}
+
+/**
+ * Lo que un módulo necesita para funcionar. Se podía guardar «Pedidos» sin
+ * nada que vender o «Entregas» sin pedidos, y la sección quedaba vacía.
+ */
+export const MODULE_DEPENDENCIES: ReadonlyArray<{ module: OrganizationModule; needsAnyOf: readonly OrganizationModule[]; message: string }> = [
+  { module: 'inventory_admin', needsAnyOf: ['inventory'], message: 'Inventario avanzado necesita Inventario.' },
+  { module: 'delivery', needsAnyOf: ['orders'], message: 'Entregas necesita Pedidos: se entregan los pedidos online.' },
+  { module: 'orders', needsAnyOf: ['inventory', 'services'], message: 'Pedidos necesita Inventario o Servicios: algo para vender.' },
+  { module: 'ecommerce', needsAnyOf: ['inventory', 'services'], message: 'La tienda online necesita Inventario o Servicios: algo para mostrar.' },
+]
+
+/** Los problemas de dependencia de una selección de módulos (vacío = está bien). */
+export function moduleDependencyProblems(enabled: readonly OrganizationModule[]): string[] {
+  const active = new Set(enabled)
+  return MODULE_DEPENDENCIES
+    .filter((rule) => active.has(rule.module) && !rule.needsAnyOf.some((needed) => active.has(needed)))
+    .map((rule) => rule.message)
+}

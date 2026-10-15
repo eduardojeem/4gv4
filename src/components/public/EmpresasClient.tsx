@@ -1,12 +1,14 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
+  ArrowUpDown,
   Building2,
   Heart,
   Home,
   MapPin,
+  Scissors,
   Search,
   Shirt,
   ShoppingBasket,
@@ -15,12 +17,25 @@ import {
   Store, Wrench,
   Car,
   X,
-  Layers
+  Layers,
+  type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { OrganizationDetailModal } from '@/components/public/OrganizationDetailModal'
-import { normalizeCity, removeAccents } from '@/lib/public/city-normalizer'
+import { HorizontalScroller } from '@/components/public/HorizontalScroller'
+import { CompanyCityFilter } from '@/components/public/CompanyCityFilter'
+import { normalizeCity } from '@/lib/public/city-normalizer'
+import { rubroLabel } from '@/lib/public/organization-rubro'
+import {
+  cityFacets,
+  filterOrganizations,
+  parseSort,
+  rubroFacets,
+  sortOrganizations,
+  SORT_OPTIONS,
+  type SortId,
+} from '@/lib/public/empresas-filters'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 import { cn } from '@/lib/utils'
 
@@ -29,177 +44,172 @@ type Props = {
   initialQuery?: string
   initialRubro?: string
   initialCity?: string
+  initialSort?: string
 }
 
-const RUBRO_FILTERS = [
-  { id: 'all', label: 'Todos los rubros', icon: Store },
-  { id: 'tecnologia', label: 'Tecnología & Celulares', icon: Smartphone },
-  { id: 'indumentaria', label: 'Indumentaria & Moda', icon: Shirt },
-  { id: 'alimentos', label: 'Gastronomía & Alimentos', icon: ShoppingBasket },
-  { id: 'ferreteria', label: 'Ferretería & Obras', icon: Wrench },
-  { id: 'belleza', label: 'Belleza & Cosmética', icon: Sparkles },
-  { id: 'hogar', label: 'Hogar & Muebles', icon: Home },
-  { id: 'salud', label: 'Salud & Farmacia', icon: Heart },
-  { id: 'automotor', label: 'Automotor & Repuestos', icon: Car },
-  { id: 'comercio', label: 'Comercio General', icon: Building2 },
-]
+const RUBRO_ICONS: Record<string, LucideIcon> = {
+  tecnologia: Smartphone,
+  indumentaria: Shirt,
+  alimentos: ShoppingBasket,
+  ferreteria: Wrench,
+  belleza: Sparkles,
+  barberia: Scissors,
+  hogar: Home,
+  salud: Heart,
+  automotor: Car,
+  comercio: Building2,
+}
+
+/** Los filtros tal como están en la URL; la URL es la que manda. */
+function filtersFromUrl(params: URLSearchParams) {
+  return {
+    query: params.get('q') ?? '',
+    rubro: params.get('rubro') || 'all',
+    city: params.get('ciudad') || params.get('city') || 'all',
+    sort: parseSort(params.get('orden')),
+  }
+}
 
 export function EmpresasClient({
   organizations,
   initialQuery = '',
   initialRubro = 'all',
   initialCity = 'all',
+  initialSort,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const urlKey = searchParams.toString()
 
   const [query, setQuery] = useState(initialQuery)
   const [selectedRubro, setSelectedRubro] = useState(initialRubro)
   const [selectedCity, setSelectedCity] = useState(initialCity)
+  const [sort, setSort] = useState<SortId>(parseSort(initialSort))
   const [selectedOrgForDetails, setSelectedOrgForDetails] = useState<MarketplaceOrganization | null>(null)
 
-  // Conteo de empresas por rubro
-  const rubroCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: organizations.length }
-    organizations.forEach((org) => {
-      const r = org.rubro || 'comercio'
-      counts[r] = (counts[r] ?? 0) + 1
-    })
-    return counts
-  }, [organizations])
+  // La última búsqueda que escribimos en la URL. Si la URL cambia a otra cosa
+  // fue el usuario (Atrás/Adelante) y hay que mostrar lo que dice; si es la
+  // nuestra, no se pisa lo que siguió escribiendo mientras tanto.
+  const lastWrittenQuery = useRef(initialQuery.trim())
 
-  // Lista de ciudades normalizadas y consolidadas con sus conteos
-  const cityCounts = useMemo(() => {
-    const map = new Map<string, { display: string; key: string; count: number }>()
+  // Atrás y Adelante cambian la URL sin volver a montar el componente: sin
+  // esto la URL quedaba limpia pero el chip «Rubro: Tecnología» seguía puesto.
+  useEffect(() => {
+    const fromUrl = filtersFromUrl(new URLSearchParams(urlKey))
+    setSelectedRubro(fromUrl.rubro)
+    setSelectedCity(fromUrl.city)
+    setSort(fromUrl.sort)
+    if (fromUrl.query !== lastWrittenQuery.current) {
+      lastWrittenQuery.current = fromUrl.query
+      setQuery(fromUrl.query)
+    }
+  }, [urlKey])
 
-    organizations.forEach((org) => {
-      const norm = normalizeCity(org.city)
-      if (norm) {
-        const existing = map.get(norm.key)
-        if (existing) {
-          existing.count += 1
-        } else {
-          map.set(norm.key, { display: norm.display, key: norm.key, count: 1 })
-        }
-      }
-    })
+  const navigate = (params: URLSearchParams, mode: 'push' | 'replace' = 'push') => {
+    const qs = params.toString()
+    router[mode](qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
-    return [...map.values()].sort((a, b) => b.count - a.count || a.display.localeCompare(b.display))
-  }, [organizations])
-
-  // Sincronización de búsqueda con URL
+  // La búsqueda va a la URL al dejar de escribir, reemplazando la entrada del
+  // historial: antes cada pausa agregaba una y Atrás recorría «cel», «celu»…
   useEffect(() => {
     const trimmedQuery = query.trim()
-    const urlQuery = searchParams.get('q') ?? ''
-    if (trimmedQuery === urlQuery) return
+    if (trimmedQuery === lastWrittenQuery.current) return
 
     const handler = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (trimmedQuery) {
-        params.set('q', trimmedQuery)
-      } else {
-        params.delete('q')
-      }
-      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+      const params = new URLSearchParams(urlKey)
+      if (trimmedQuery) params.set('q', trimmedQuery)
+      else params.delete('q')
+      lastWrittenQuery.current = trimmedQuery
+      navigate(params, 'replace')
     }, 400)
 
     return () => clearTimeout(handler)
-  }, [query, router, pathname, searchParams])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, urlKey])
+
+  const setParam = (key: string, value: string, fallback: string) => {
+    const params = new URLSearchParams(urlKey)
+    if (value && value !== fallback) params.set(key, value)
+    else params.delete(key)
+    if (key === 'ciudad') params.delete('city')
+    navigate(params)
+  }
 
   const handleRubroChange = (rubroId: string) => {
     setSelectedRubro(rubroId)
-    const params = new URLSearchParams(searchParams.toString())
-    if (rubroId && rubroId !== 'all') {
-      params.set('rubro', rubroId)
-    } else {
-      params.delete('rubro')
-    }
-    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    setParam('rubro', rubroId, 'all')
   }
 
   const handleCityChange = (cityKey: string) => {
     setSelectedCity(cityKey)
-    const params = new URLSearchParams(searchParams.toString())
-    if (cityKey && cityKey !== 'all') {
-      params.set('ciudad', cityKey)
-    } else {
-      params.delete('ciudad')
-      params.delete('city')
-    }
-    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    setParam('ciudad', cityKey, 'all')
+  }
+
+  const handleSortChange = (value: string) => {
+    const next = parseSort(value)
+    setSort(next)
+    setParam('orden', next, 'destacadas')
   }
 
   const handleResetFilters = () => {
     setQuery('')
     setSelectedRubro('all')
     setSelectedCity('all')
-    router.push(pathname, { scroll: false })
+    lastWrittenQuery.current = ''
+    const params = new URLSearchParams()
+    if (sort !== 'destacadas') params.set('orden', sort)
+    navigate(params)
   }
 
-  // Filtrado inteligente de organizaciones
-  const filtered = useMemo(() => {
-    let result = organizations
+  const filters = { query, rubro: selectedRubro, city: selectedCity }
+  const filtered = useMemo(
+    () => sortOrganizations(filterOrganizations(organizations, { query, rubro: selectedRubro, city: selectedCity }), sort),
+    [organizations, query, selectedRubro, selectedCity, sort],
+  )
+  const rubros = useMemo(() => rubroFacets(organizations, filters), [organizations, query, selectedRubro, selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cities = useMemo(() => cityFacets(organizations, filters), [organizations, query, selectedRubro, selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
+  const countWithoutRubro = useMemo(
+    () => filterOrganizations(organizations, filters, 'rubro').length,
+    [organizations, query, selectedCity], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
-    // Filtro por Rubro
-    if (selectedRubro && selectedRubro !== 'all') {
-      result = result.filter((org) => (org.rubro || 'comercio') === selectedRubro)
-    }
-
-    // Filtro por Ciudad (unificando variantes y acentos)
-    if (selectedCity && selectedCity !== 'all') {
-      const selectedNorm = normalizeCity(selectedCity)
-      const targetKey = selectedNorm?.key || removeAccents(selectedCity)
-
-      result = result.filter((org) => {
-        const orgNorm = normalizeCity(org.city)
-        if (!orgNorm) return false
-        return orgNorm.key === targetKey || orgNorm.display.toLowerCase() === selectedCity.toLowerCase()
-      })
-    }
-
-    // Filtro por búsqueda de texto (tolerante a acentos y mayúsculas)
-    const q = removeAccents(query)
-    if (q) {
-      result = result.filter((org) => {
-        const normCity = normalizeCity(org.city)
-        const nameMatch = removeAccents(org.name).includes(q)
-        const slugMatch = removeAccents(org.slug).includes(q)
-        const cityMatch = normCity
-          ? removeAccents(normCity.display).includes(q) || normCity.key.includes(q)
-          : false
-        const rawCityMatch = org.city ? removeAccents(org.city).includes(q) : false
-        const addressMatch = org.address ? removeAccents(org.address).includes(q) : false
-        const verticalMatch = org.business_vertical ? removeAccents(org.business_vertical).includes(q) : false
-
-        return nameMatch || slugMatch || cityMatch || rawCityMatch || addressMatch || verticalMatch
-      })
-    }
-
-    return result
-  }, [organizations, query, selectedRubro, selectedCity])
-
-  const activeRubroMeta = RUBRO_FILTERS.find((r) => r.id === selectedRubro)
-  const activeCityMeta = cityCounts.find(
+  const activeRubroLabel = selectedRubro !== 'all' ? rubroLabel(selectedRubro) : null
+  const activeCityMeta = cities.find(
     (c) => c.key === selectedCity || c.display.toLowerCase() === selectedCity.toLowerCase()
   )
   const activeCityDisplay = activeCityMeta?.display || normalizeCity(selectedCity)?.display || selectedCity
   const hasActiveFilters = Boolean(query || selectedRubro !== 'all' || selectedCity !== 'all')
 
+  const chip = (active: boolean, disabled = false) => cn(
+    'group shrink-0 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs',
+    active
+      ? 'border-primary bg-primary text-primary-foreground shadow-xs cursor-pointer'
+      : disabled
+        ? 'border-border/60 bg-background text-muted-foreground/50 cursor-not-allowed'
+        : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground cursor-pointer'
+  )
+  const badge = (active: boolean) => cn(
+    'rounded-full px-1.5 py-px text-[10px] tabular-nums',
+    active ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
+  )
+
   return (
     <div className="space-y-6">
-      {/* ── Panel de Control: Buscador, Filtro por Ciudad y Rubros ── */}
+      {/* ── Panel de Control: Buscador, Ciudad, Orden y Rubros ── */}
       <div className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
-        {/* Buscador y Filtro por Ciudad */}
-        <div className="grid gap-3 sm:grid-cols-12 items-center">
+        <div className="grid gap-3 sm:grid-cols-12 items-end">
           {/* Buscador */}
-          <div className="sm:col-span-7 lg:col-span-6 relative">
+          <div className="relative sm:col-span-6 lg:col-span-5">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar por tienda, rubro o ciudad..."
-              className="h-10 rounded-xl pl-10 pr-9 text-xs sm:text-sm bg-background border-border/80 focus-visible:ring-primary"
+              aria-label="Buscar tiendas"
+              className="h-11 rounded-xl pl-10 pr-9 text-base sm:text-sm bg-background border-border/80 focus-visible:ring-primary [&::-webkit-search-cancel-button]:hidden"
             />
             {query && (
               <button
@@ -213,20 +223,23 @@ export function EmpresasClient({
             )}
           </div>
 
-          {/* Filtro por Ciudad (Consolidado) */}
-          <div className="sm:col-span-5 lg:col-span-4 relative">
-            <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+          <div className="sm:col-span-3">
+            <CompanyCityFilter cities={cities} value={activeCityMeta?.key || selectedCity}
+              selectedLabel={activeCityDisplay} total={filterOrganizations(organizations, filters, 'city').length}
+              onChange={handleCityChange} />
+          </div>
+
+          {/* Orden */}
+          <div className="sm:col-span-3 lg:col-span-2 relative">
+            <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
             <select
-              aria-label="Filtrar por ciudad"
-              value={activeCityMeta?.key || selectedCity}
-              onChange={(e) => handleCityChange(e.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
+              aria-label="Ordenar tiendas"
+              value={sort}
+              onChange={(e) => handleSortChange(e.target.value)}
+              className="h-11 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-base sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
             >
-              <option value="all">Todas las ciudades ({organizations.length})</option>
-              {cityCounts.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.display} ({c.count})
-                </option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
               ))}
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-xs">
@@ -235,68 +248,72 @@ export function EmpresasClient({
           </div>
 
           {/* Contador de Tiendas */}
-          <div className="sm:col-span-12 lg:col-span-2 flex justify-start lg:justify-end">
-            <p className="text-xs font-semibold text-muted-foreground">
+          <div className="flex justify-start pb-3 sm:col-span-12 lg:col-span-2 lg:justify-end">
+            <p className="text-xs font-semibold text-muted-foreground" aria-live="polite">
               <strong className="text-foreground">{filtered.length}</strong> de {organizations.length} tiendas
             </p>
           </div>
         </div>
 
         {/* ── Franja de Filtro por Rubros ── */}
-        <div className="pt-2 border-t border-border/60">
-          <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-muted-foreground">
-            <Layers className="h-3.5 w-3.5 text-primary" />
-            <span>Filtrar por rubro comercial:</span>
-          </div>
+        {rubros.length > 1 && (
+          <div className="pt-2 border-t border-border/60">
+            <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-muted-foreground">
+              <Layers className="h-3.5 w-3.5 text-primary" />
+              <span>Filtrar por rubro comercial:</span>
+            </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-hide">
-            {RUBRO_FILTERS.map((rubro) => {
-              const Icon = rubro.icon
-              const count = rubroCounts[rubro.id] ?? 0
-              const isActive = selectedRubro === rubro.id
+            <HorizontalScroller label="rubros" activeKey={selectedRubro} className="flex items-center gap-1.5 pb-1.5">
+              <button
+                type="button"
+                data-active={selectedRubro === 'all' ? 'true' : undefined}
+                aria-pressed={selectedRubro === 'all'}
+                onClick={() => handleRubroChange('all')}
+                className={chip(selectedRubro === 'all')}
+              >
+                <Store className={cn('h-3.5 w-3.5', selectedRubro === 'all' ? 'text-primary-foreground' : 'text-primary')} />
+                <span>Todos los rubros</span>
+                <span className={badge(selectedRubro === 'all')}>{countWithoutRubro}</span>
+              </button>
 
-              if (rubro.id !== 'all' && count === 0) return null
+              {rubros.map((rubro) => {
+                const Icon = RUBRO_ICONS[rubro.id] ?? Store
+                const isActive = selectedRubro === rubro.id
+                // Sin tiendas con la búsqueda y la ciudad actuales: se ve, pero no se elige.
+                const disabled = !isActive && rubro.count === 0
 
-              return (
-                <button
-                  key={rubro.id}
-                  type="button"
-                  onClick={() => handleRubroChange(rubro.id)}
-                  className={cn(
-                    'group shrink-0 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs cursor-pointer',
-                    isActive
-                      ? 'border-primary bg-primary text-primary-foreground shadow-xs'
-                      : 'border-border/80 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                  )}
-                >
-                  <Icon className={cn('h-3.5 w-3.5', isActive ? 'text-primary-foreground' : 'text-primary')} />
-                  <span>{rubro.label}</span>
-                  <span
-                    className={cn(
-                      'rounded-full px-1.5 py-px text-[10px] tabular-nums',
-                      isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
-                    )}
+                return (
+                  <button
+                    key={rubro.id}
+                    type="button"
+                    data-active={isActive ? 'true' : undefined}
+                    aria-pressed={isActive}
+                    disabled={disabled}
+                    onClick={() => handleRubroChange(rubro.id)}
+                    className={chip(isActive, disabled)}
                   >
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
+                    <Icon className={cn('h-3.5 w-3.5', isActive ? 'text-primary-foreground' : disabled ? 'text-muted-foreground/50' : 'text-primary')} />
+                    <span>{rubro.label}</span>
+                    <span className={badge(isActive)}>{rubro.count}</span>
+                  </button>
+                )
+              })}
+            </HorizontalScroller>
           </div>
-        </div>
+        )}
 
         {/* ── Chips de Filtros Activos ── */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
             <span className="text-[11px] font-semibold text-muted-foreground">Filtros activos:</span>
 
-            {selectedRubro !== 'all' && activeRubroMeta && (
+            {activeRubroLabel && (
               <button
                 type="button"
                 onClick={() => handleRubroChange('all')}
                 className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20 cursor-pointer"
               >
-                <span>Rubro: {activeRubroMeta.label}</span>
+                <span>Rubro: {activeRubroLabel}</span>
                 <X className="h-3 w-3" />
               </button>
             )}
@@ -327,7 +344,7 @@ export function EmpresasClient({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="text-xs font-medium text-primary hover:underline ml-1 cursor-pointer"
+              className="text-xs font-semibold text-primary hover:underline ml-1 cursor-pointer"
             >
               Restablecer filtros
             </button>

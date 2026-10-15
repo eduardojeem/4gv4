@@ -20,9 +20,11 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
 import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer, Share2 } from 'lucide-react'
-import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
+const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { createCreditPaymentReceiptPdf, projectPaidInstallments } from '@/lib/credits/payment-receipt'
+import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
+import type { CollectionResult } from '@/lib/credits/collection-contract'
 import { downloadPdfDocument, printPdfDocument, sharePdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { CreditPaperPicker } from './CreditPaperPicker'
@@ -30,13 +32,14 @@ import { toast } from 'sonner'
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer'
 export type PaymentConfirmResult =
-    | { success: true; appliedAmount?: number }
-    | { success: false; error: string }
+    | { success: true; appliedAmount?: number; collection?: CollectionResult }
+    | { success: false; error: string; uncertain?: boolean }
 
 interface CreditPaymentDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onConfirm: (method: PaymentMethod, amount: number, reference?: string, notes?: string) => Promise<PaymentConfirmResult>
+    onConfirm: (method: PaymentMethod, amount: number, reference?: string, notes?: string, recover?: boolean) => Promise<PaymentConfirmResult>
+    hasPendingAttempt?: boolean
     initialAmount?: number
     maxPaymentAmount?: number
     allowFullDebtPayment?: boolean
@@ -83,6 +86,7 @@ function CreditPaymentDialogContent({
     allowFullDebtPayment = false,
     totalDebtAmount,
     creditInfo,
+    hasPendingAttempt = false,
 }: CreditPaymentDialogProps) {
     const { format, changeFormat, issuer } = useCreditPrinting()
     const [method, setMethod] = useState<PaymentMethod>('cash')
@@ -92,12 +96,14 @@ function CreditPaymentDialogContent({
     const [notes, setNotes] = useState<string>('')
     const [error, setError] = useState<string>('')
     const [submitting, setSubmitting] = useState(false)
-    const [paymentDone, setPaymentDone] = useState<{ method: PaymentMethod; amount: number; reference?: string; notes?: string; date: Date } | null>(null)
+    const [needsRecovery, setNeedsRecovery] = useState(hasPendingAttempt)
+    const [paymentDone, setPaymentDone] = useState<{ method: PaymentMethod; amount: number; reference?: string; notes?: string; date: Date; collection?: CollectionResult } | null>(null)
 
 
     const handleAmountChange = (value: string) => {
-        const rawNumber = parseThousands(value)
-        setAmount(rawNumber ? String(rawNumber) : '')
+        const normalized = value.replace(/\./g, '').replace(',', '.')
+        if (!/^\d*(?:\.\d{0,2})?$/.test(normalized)) return
+        setAmount(normalized)
         setError('')
     }
 
@@ -109,7 +115,7 @@ function CreditPaymentDialogContent({
     const handleQuickAmount = (percentage: number) => {
         const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
         if (!effectiveMaxAmount) return
-        const calculatedAmount = Math.round(effectiveMaxAmount * percentage)
+        const calculatedAmount = Math.round(effectiveMaxAmount * percentage * 100) / 100
         setAmount(String(calculatedAmount))
         setError('')
     }
@@ -120,12 +126,12 @@ function CreditPaymentDialogContent({
         const numAmount = parseFloat(amount)
         const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
 
-        if (!numAmount || numAmount <= 0) {
+        if (!needsRecovery && (!numAmount || numAmount <= 0)) {
             setError('El monto debe ser mayor a 0')
             return
         }
 
-        if (effectiveMaxAmount !== undefined && numAmount > effectiveMaxAmount) {
+        if (!needsRecovery && effectiveMaxAmount !== undefined && numAmount > effectiveMaxAmount) {
             setError(`El monto no puede exceder ${formatCurrency(effectiveMaxAmount)}`)
             return
         }
@@ -134,20 +140,22 @@ function CreditPaymentDialogContent({
         setError('')
 
         try {
-            const result = await onConfirm(method, numAmount, reference || undefined, notes || undefined)
+            const result = await onConfirm(method, numAmount, reference || undefined, notes || undefined, needsRecovery)
 
             if (!result || result.success === false) {
                 setError((result as { success: false; error?: string })?.error || 'Error al registrar el pago')
+                setNeedsRecovery(result?.success === false && Boolean(result.uncertain))
                 setSubmitting(false)
                 return
             }
 
             setPaymentDone({
-                method,
-                amount: numAmount,
-                reference: reference || undefined,
-                notes: notes || undefined,
-                date: new Date()
+                method: result.collection?.paymentMethod ?? method,
+                amount: result.collection?.appliedAmount ?? result.appliedAmount ?? numAmount,
+                reference: result.collection?.reference ?? (reference || undefined),
+                notes: result.collection?.notes ?? (notes || undefined),
+                date: result.collection ? new Date(result.collection.recordedAt) : new Date(),
+                collection: result.collection,
             })
             setSubmitting(false)
         } catch (err: unknown) {
@@ -177,17 +185,11 @@ function CreditPaymentDialogContent({
         // pagina antes de este cobro. Imprimirlos tal cual le entrega al cliente
         // un comprobante que no cuenta el pago que tiene en la mano. El saldo ya
         // se corregia restando el importe; el conteo se proyecta igual.
-        const cuotasTrasElPago = projectPaidInstallments({
-            paidBefore: creditInfo?.paidInstallmentsCount,
-            totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
-            paymentAmount: paymentDone.amount,
-            installmentOutstanding: effectiveMaxAmount,
-            remainingBefore: creditInfo?.remainingBalance,
-            paysWholeCredit: allowFullDebtPayment,
-        })
+        const persistedBalance = paymentDone.collection?.creditBalances?.[creditInfo?.id ?? '']
 
         const sharedReceipt = await createCreditPaymentReceiptPdf({
-            paymentId: `dialog-${paymentDone.date.getTime()}`,
+            paymentId: paymentDone.collection?.receiptId ?? '',
+            receiptNumber: paymentDone.collection?.receiptNumber,
             paymentDate: paymentDone.date,
             paymentAmount: paymentDone.amount,
             paymentMethod: paymentDone.method,
@@ -207,14 +209,14 @@ function CreditPaymentDialogContent({
             productSummary: creditInfo?.productSummary,
             totalCreditAmount: creditInfo?.totalCreditAmount ?? creditInfo?.principal,
             totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
-            paidInstallmentsCount: cuotasTrasElPago.paid,
-            pendingInstallmentsCount: cuotasTrasElPago.pending,
+            paidInstallmentsCount: persistedBalance?.paidInstallments,
+            pendingInstallmentsCount: persistedBalance?.pendingInstallments,
             installmentNumber: allowFullDebtPayment ? null : creditInfo?.nextInstallmentNumber,
             installmentDueDate: allowFullDebtPayment ? null : creditInfo?.nextDueDate,
             installmentAmount: creditInfo?.installmentAmount,
-            currentCreditBalance: creditInfo ? Math.max(0, creditInfo.remainingBalance - paymentDone.amount) : null,
-            nextDueDate: creditInfo?.nextDueDate,
-            nextDueAmount: creditInfo?.nextDueAmount,
+            currentCreditBalance: persistedBalance?.remainingBalance ?? null,
+            nextDueDate: persistedBalance?.nextDueDate,
+            nextDueAmount: persistedBalance?.nextDueAmount,
             ...issuer,
         }, { format })
 
@@ -264,8 +266,8 @@ function CreditPaymentDialogContent({
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[550px] max-h-[90vh] flex flex-col overflow-hidden p-0">
+        <Dialog open={open} onOpenChange={next => { if (!submitting) onOpenChange(next) }}>
+            <DialogContent className="sm:max-w-[550px] max-h-[90dvh] flex flex-col overflow-hidden p-0">
                 <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         {paymentDone
@@ -279,6 +281,7 @@ function CreditPaymentDialogContent({
                             : 'Complete los detalles del pago a continuación'
                         }
                     </DialogDescription>
+                    {paymentDone?.collection && <p className="break-all text-sm font-mono">{paymentDone.collection.receiptNumber}</p>}
                 </DialogHeader>
 
                 {/* ===== PANTALLA DE ÉXITO ===== */}
@@ -323,7 +326,7 @@ function CreditPaymentDialogContent({
                                         <div className="flex justify-between text-sm">
                                             <span className="text-muted-foreground">Nuevo saldo</span>
                                             <span className="font-semibold text-orange-600">
-                                                {formatCurrency(Math.max(0, creditInfo.remainingBalance - paymentDone.amount))}
+                                                {paymentDone.collection?.creditBalances?.[creditInfo.id] ? formatCurrency(paymentDone.collection.creditBalances[creditInfo.id].remainingBalance) : 'Consultar saldo actualizado'}
                                             </span>
                                         </div>
                                     </>
@@ -380,7 +383,7 @@ function CreditPaymentDialogContent({
                     </>
                 ) : (
                     <>
-                        <div className="overflow-y-auto flex-1 px-6 space-y-4">
+                        <fieldset disabled={submitting || needsRecovery} className="overflow-y-auto flex-1 min-h-0 px-6 space-y-4 disabled:opacity-80">
                             {/* Credit & Customer Info */}
 
                             {creditInfo && (
@@ -475,13 +478,13 @@ function CreditPaymentDialogContent({
 
                             {/* Payment Details */}
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label htmlFor="method" className="text-sm font-medium">
                                             Método de Pago *
                                         </Label>
                                         <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
-                                            <SelectTrigger id="method">
+                                            <SelectTrigger id="method" className="min-h-11 w-full text-base md:text-sm">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -508,9 +511,9 @@ function CreditPaymentDialogContent({
                                             <Input
                                                 id="amount"
                                                 type="text"
-                                                inputMode="numeric"
-                                                className={`pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                                                value={formatThousands(amount)}
+                                                inputMode="decimal"
+                                                className={`min-h-11 pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                                                value={formatThousands(amount.split('.')[0]) + (amount.includes('.') ? ',' + amount.split('.')[1] : '')}
                                                 placeholder="0"
                                                 onChange={(e) => handleAmountChange(e.target.value)}
                                             />
@@ -608,7 +611,7 @@ function CreditPaymentDialogContent({
                                         Número de Referencia
                                         <span className="text-muted-foreground font-normal ml-1">(opcional)</span>
                                     </Label>
-                                    <Input id="reference" className="font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => setReference(e.target.value)} maxLength={50} />
+                                    <Input id="reference" className="min-h-11 font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => setReference(e.target.value)} maxLength={50} />
                                     <p className="text-xs text-muted-foreground">Número de transacción, comprobante o referencia del pago</p>
                                 </div>
 
@@ -635,21 +638,21 @@ function CreditPaymentDialogContent({
                                             <p className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">{formatCurrency(parseFloat(amount))}</p>
                                             {creditInfo && (
                                                 <p className="text-xs text-emerald-700/80 dark:text-emerald-400 mt-0.5">
-                                                    Nuevo saldo: <strong>{formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}</strong>
+                                                    Saldo estimado: <strong>{formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}</strong>
                                                 </p>
                                             )}
                                         </div>
                                     </div>
                                 </div>
                             )}
-                        </div>
+                        </fieldset>
 
                         {/* Footer fijo - formulario */}
                         <div className="px-6 pb-6 pt-4 border-t border-border shrink-0 flex items-center justify-end gap-3">
                             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
-                            <Button onClick={handleConfirm} disabled={!isValid || submitting} className="bg-green-600 hover:bg-green-700">
+                            <Button onClick={handleConfirm} disabled={(!isValid && !needsRecovery) || submitting} className="min-h-11 bg-green-600 hover:bg-green-700">
                                 <DollarSign className="h-4 w-4 mr-2" />
-                                {submitting ? 'Guardando...' : 'Confirmar Pago'}
+                                {submitting ? 'Confirmando...' : needsRecovery ? 'Recuperar cobro pendiente' : 'Confirmar Pago'}
                             </Button>
                         </div>
                     </>

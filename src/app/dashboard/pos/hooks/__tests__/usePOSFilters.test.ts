@@ -2,7 +2,7 @@
  * Tests para usePOSFilters hook
  */
 
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePOSFilters } from '../usePOSFilters'
 import type { Product } from '@/types/product-unified'
@@ -70,10 +70,10 @@ describe('usePOSFilters', () => {
     })
     
     // Wait for debounce
-    await new Promise(resolve => setTimeout(resolve, 350))
-    
-    expect(result.current.filteredProducts).toHaveLength(1)
-    expect(result.current.filteredProducts[0].name).toBe('iPhone 13')
+    await waitFor(() => {
+      expect(result.current.filteredProducts).toHaveLength(1)
+      expect(result.current.filteredProducts[0].name).toBe('iPhone 13')
+    })
   })
 
   it('should filter products by category', () => {

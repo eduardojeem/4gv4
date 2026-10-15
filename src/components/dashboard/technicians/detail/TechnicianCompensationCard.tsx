@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { addDays, todayIn } from '@/lib/agenda/time'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +15,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { type CompensationConfig, type EarningsResult } from '@/lib/technician/earnings'
+import { readTechnicianAttempt, persistTechnicianAttempt, clearTechnicianAttempt, type PendingTechnicianAttempt } from '@/lib/technician/pending-attempt'
 
 interface Props {
   technicianId: string
@@ -21,6 +24,7 @@ interface Props {
   earnings: EarningsResult | null
   isLoading: boolean
   onSaved: () => void
+  error?: string | null
 }
 
 const BASE_LABEL: Record<CompensationConfig['commission_base'], string> = {
@@ -28,11 +32,40 @@ const BASE_LABEL: Record<CompensationConfig['commission_base'], string> = {
   final: 'Total',
 }
 
-export function TechnicianCompensationCard({ technicianId, canManage, compensation, earnings, isLoading, onSaved }: Props) {
+export function TechnicianCompensationCard(props: Props) {
+  const context = useOptionalActiveOrganization()
+  const { selectedBranchId } = useBranch()
+  const organizationId = context?.organization?.id ?? ''
+  const scope = [organizationId, props.technicianId, selectedBranchId ?? 'all', props.canManage].join(':')
+  if (context?.isLoading) return <Skeleton className="h-48 w-full rounded-xl" />
+  return <ScopedTechnicianCompensationCard key={scope} {...props} scope={scope} organizationId={organizationId} />
+}
+
+function ScopedTechnicianCompensationCard({ technicianId, canManage, compensation, earnings, isLoading, onSaved, error, scope, organizationId }: Props & { scope: string; organizationId: string }) {
   const { selectedBranchId } = useBranch()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState<CompensationConfig>(compensation)
+  const [effectiveDate, setEffectiveDate] = useState(() => addDays(todayIn(), 1))
+  const saveAttempt = useRef<PendingTechnicianAttempt | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+
+  const openEditor = () => {
+    try {
+      saveAttempt.current ??= readTechnicianAttempt(scope, 'compensation')
+      if (saveAttempt.current) {
+        const saved = JSON.parse(saveAttempt.current.body)
+        if (![saved.base_salary, saved.commission_rate, saved.fixed_per_repair].every(value => typeof value === 'number' && Number.isFinite(value))
+          || !['labor','final'].includes(saved.commission_base) || !['listo','entregado'].includes(saved.accrual_status)
+          || typeof saved.effective_from !== 'string') throw new Error('Revisá las condiciones guardadas antes de registrar otra solicitud.')
+        setForm({ base_salary: saved.base_salary, commission_rate: saved.commission_rate, fixed_per_repair: saved.fixed_per_repair,
+          commission_base: saved.commission_base, accrual_status: saved.accrual_status, salary_effective_from: saved.salary_effective_from ?? null })
+        setEffectiveDate(saved.effective_from)
+      }
+      setIsEditing(true)
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo recuperar la solicitud') }
+  }
 
   // Sincronizar el form cuando llega/actualiza la config.
   useEffect(() => {
@@ -40,30 +73,42 @@ export function TechnicianCompensationCard({ technicianId, canManage, compensati
   }, [compensation, isEditing])
 
   const handleSave = async () => {
+    if (isSaving) return
+    saveAttempt.current ??= { key: crypto.randomUUID(), body: JSON.stringify({ ...form, effective_from: effectiveDate }), scope, fresh: true }
+    const attempt = saveAttempt.current
     setIsSaving(true)
     try {
+      persistTechnicianAttempt(attempt, 'compensation')
       const res = await fetch(`/api/repairs/technicians/${technicianId}/compensation`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
-        body: JSON.stringify(form),
+        headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId),
+          'x-idempotency-key': attempt.key, ...(organizationId ? { 'x-organization-id': organizationId } : {}) },
+        body: attempt.body,
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || `Error ${res.status}`)
+        if (res.status < 500 && attempt.fresh) { clearTechnicianAttempt(scope, 'compensation'); saveAttempt.current = null }
+        else { attempt.fresh = false }
+        throw new Error(body.message || body.error || `Error ${res.status}`)
       }
-      toast.success('Compensación actualizada')
+      clearTechnicianAttempt(scope, 'compensation')
+      saveAttempt.current = null
+      if (!mounted.current) return
+      toast.success('Condiciones guardadas con su fecha de vigencia')
       setIsEditing(false)
       onSaved()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
+      attempt.fresh = false
+      if (mounted.current) toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
     } finally {
-      setIsSaving(false)
+      if (mounted.current) setIsSaving(false)
     }
   }
 
   if (isLoading) {
     return <Skeleton className="h-48 w-full rounded-xl" />
   }
+  if (error) return <div role="alert" className="rounded-lg border border-destructive/30 p-4"><p>{error}</p><Button className="mt-3 min-h-11" variant="outline" onClick={onSaved}>Reintentar</Button></div>
 
   return (
     <Card className="border border-border/60 shadow-sm">
@@ -74,7 +119,7 @@ export function TechnicianCompensationCard({ technicianId, canManage, compensati
           <span className="text-xs font-normal text-muted-foreground">· este mes</span>
         </CardTitle>
         {canManage && !isEditing && (
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setIsEditing(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={openEditor}>
             <Pencil className="h-3.5 w-3.5" /> Editar
           </Button>
         )}
@@ -108,6 +153,8 @@ export function TechnicianCompensationCard({ technicianId, canManage, compensati
           </>
         ) : (
           <div className="space-y-4">
+            <div className="space-y-1.5"><Label htmlFor="technician-conditions-date">Estas condiciones rigen desde</Label><Input id="technician-conditions-date" type="date" value={effectiveDate} disabled={isSaving || Boolean(saveAttempt.current)} onChange={event => setEffectiveDate(event.target.value)} className="text-base" /><p className="text-xs text-muted-foreground">Se conserva el historial. Una nueva versión debe tener una fecha posterior a la anterior.</p></div>
+            <fieldset disabled={isSaving || Boolean(saveAttempt.current)}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Sueldo base mensual (Gs.)">
                 <Input type="number" min={0} value={form.base_salary}
@@ -146,6 +193,7 @@ export function TechnicianCompensationCard({ technicianId, canManage, compensati
                   onChange={(e) => setForm({ ...form, salary_effective_from: e.target.value || null })} />
               </Field>
             </div>
+            </fieldset>
             <p className="text-[11px] text-muted-foreground">
               El sueldo base se prorratea el primer mes según esta fecha. Vacío = mes completo.
             </p>

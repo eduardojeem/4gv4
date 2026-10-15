@@ -58,6 +58,7 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { StoreSetupAlert } from '@/components/dashboard/StoreSetupAlert'
 import { CashStatusBanner } from '@/components/dashboard/CashStatusBanner'
+import { BusinessStartGuide } from '@/components/dashboard/onboarding/BusinessStartGuide'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -669,6 +670,7 @@ export default function DashboardPage() {
       />}
 
       {/* Alerta de tienda pública no configurada o sin publicar */}
+      <BusinessStartGuide />
       <StoreSetupAlert />
 
       {/* KPI grid */}

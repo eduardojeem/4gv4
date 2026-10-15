@@ -3,17 +3,14 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
+import { technicianPaymentError, validPaymentRequestKey } from '@/lib/technician/payments-server'
 
 export const dynamic = 'force-dynamic'
-
 type RouteParams = { params: Promise<{ id: string; paymentId: string }> }
+const schema = z.object({ action: z.enum(['confirmar', 'confirmar_recibo', 'anular']) })
 
-const patchSchema = z.object({
-  action: z.enum(['confirmar', 'confirmar_recibo', 'anular']),
-})
-
-// PATCH: admin confirma/anula; el técnico (o admin) acusa recibo.
 export async function PATCH(req: NextRequest, context: RouteParams) {
   try {
     const moduleContext = await resolveRepairModuleContext()
@@ -21,116 +18,26 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
-    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-
-    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-    if (!organization) {
-      return NextResponse.json({ error: 'organization_required' }, { status: 403 })
+    const staff = auth as Extract<AuthResult, { authenticated: true }>
+    const organization = await getCurrentOrganizationContext(staff.user.id)
+    if (!organization) return NextResponse.json({ error: 'organization_required' }, { status: 403 })
+    const requestedOrganization = req.headers.get('x-organization-id')
+    if (requestedOrganization && requestedOrganization !== organization.id) return NextResponse.json({ error: 'organization_changed' }, { status: 409 })
+    const { id, paymentId } = await context.params
+    const input = schema.safeParse(await req.json().catch(() => null))
+    const key = req.headers.get('x-idempotency-key')
+    if (!input.success || !validPaymentRequestKey(key) || !z.uuid().safeParse(id).success || !z.uuid().safeParse(paymentId).success) {
+      return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
     }
-
-    const { paymentId } = await context.params
-    const parsed = patchSchema.safeParse(await req.json().catch(() => ({})))
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'validation_failed' }, { status: 400 })
-    }
-    const { action } = parsed.data
-
-    const supabase = createAdminSupabase()
-
-    const { data: payment, error: fetchError } = await supabase
-      .from('technician_payments')
-      .select('id, technician_id, status, amount, method, cash_movement_id')
-      .eq('id', paymentId)
-      .eq('organization_id', organization.id)
-      .maybeSingle()
-
-    if (fetchError) throw fetchError
-    if (!payment) return NextResponse.json({ error: 'payment_not_found' }, { status: 404 })
-
-    const isAdmin = staffAuth.role === 'admin' || staffAuth.role === 'super_admin'
-    const isOwner = payment.technician_id === staffAuth.user.id
-
-    const invalidTransition = () =>
-      NextResponse.json(
-        { error: 'invalid_transition', message: `No se puede aplicar "${action}" a un pago en estado "${payment.status}".` },
-        { status: 409 },
-      )
-
-    let update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-
-    if (action === 'confirmar') {
-      if (!isAdmin) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-      // Solo un pago pendiente se puede confirmar como pagado.
-      if (payment.status !== 'pendiente') return invalidTransition()
-      update = {
-        ...update,
-        status: 'pagado',
-        approved_by: staffAuth.user.id,
-        approved_at: new Date().toISOString(),
-      }
-    } else if (action === 'anular') {
-      if (!isAdmin) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-      // No se anula un pago ya confirmado por el técnico ni uno ya anulado.
-      if (payment.status === 'anulado' || payment.status === 'confirmado') return invalidTransition()
-
-      // Revertir el egreso de caja (best-effort): compensamos con un ingreso.
-      if (payment.cash_movement_id && payment.method === 'efectivo') {
-        try {
-          const { data: openSessions } = await supabase
-            .from('cash_closures')
-            .select('id, register_id')
-            .eq('organization_id', organization.id)
-            .is('date', null)
-            .order('created_at', { ascending: false })
-
-          const targetSession =
-            (openSessions ?? []).find((s) => s.register_id?.toLowerCase() === 'principal') ??
-            (openSessions ?? [])[0]
-
-          if (targetSession) {
-            await supabase.from('cash_movements').insert({
-              organization_id: organization.id,
-              session_id: targetSession.id,
-              type: 'cash_in',
-              amount: Number(payment.amount) || 0,
-              reason: 'Reversa de pago a técnico anulado',
-              payment_method: 'efectivo',
-              created_by: staffAuth.user.id,
-              created_at: new Date().toISOString(),
-            })
-          }
-        } catch (cashError) {
-          console.warn('[technician-payments] cash reversal skipped:', cashError)
-        }
-      }
-
-      update = { ...update, status: 'anulado' }
-    } else if (action === 'confirmar_recibo') {
-      // El técnico dueño (o un admin) acusa recibo — solo sobre un pago ya pagado.
-      if (!isAdmin && !isOwner) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-      if (payment.status !== 'pagado') return invalidTransition()
-      update = {
-        ...update,
-        status: 'confirmado',
-        confirmed_by: staffAuth.user.id,
-        confirmed_at: new Date().toISOString(),
-      }
-    }
-
-    const { data, error } = await supabase
-      .from('technician_payments')
-      .update(update)
-      .eq('id', paymentId)
-      .eq('organization_id', organization.id)
-      .select('*')
-      .single()
-
+    const requestedBranchId = getRequestedBranchId(req)
+    const branch = await resolveBranchScopeForUser({ userId: staff.user.id, role: staff.role,
+      organizationId: organization.id, requestedBranchId, strict: Boolean(requestedBranchId) })
+    if (!branch.branchId) return NextResponse.json({ error: 'branch_required' }, { status: 400 })
+    const { data, error } = await createAdminSupabase().rpc('server_transition_technician_payment', {
+      p_organization_id: organization.id, p_branch_id: branch.branchId, p_actor_user_id: staff.user.id,
+      p_technician_id: id, p_payment_id: paymentId, p_request_key: key, p_action: input.data.action,
+    })
     if (error) throw error
-
     return NextResponse.json({ payment: data })
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Error al actualizar el pago'
-    console.error('[technician-payments PATCH]', message)
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
+  } catch (error) { return technicianPaymentError(error) }
 }

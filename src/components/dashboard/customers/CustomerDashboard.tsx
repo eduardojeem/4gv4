@@ -45,6 +45,7 @@ import { useKeyboardShortcuts, customerDashboardShortcuts } from '@/hooks/use-ke
 import { KeyboardShortcutsIndicator } from '@/components/ui/keyboard-shortcuts-indicator'
 import { toast } from 'sonner'
 import { useCustomersWithCredits } from '@/hooks/use-customer-credits'
+import { CustomerCreditDataStatus } from './CustomerCreditBadge'
 import { useCustomerInsightsData } from '@/hooks/use-customer-insights-data'
 import { useCredits } from '@/hooks/use-credits'
 import { useCustomers } from '@/contexts/CustomerContext'
@@ -120,8 +121,8 @@ export function CustomerDashboard() {
     
   }, [updateFilters, filters, pagination.itemsPerPage, sortBy, sortOrder, router])
   const insights = useCustomerInsightsData(activeTab !== 'customers', activeTab === 'analytics')
-  const { creditSummaries: pageCreditSummaries } = useCustomersWithCredits(customers, activeTab === 'customers')
-  const { creditSummaries } = useCustomersWithCredits(
+  const { creditSummaries: pageCreditSummaries, loading: pageCreditLoading, error: pageCreditError, refresh: refreshPageCredits } = useCustomersWithCredits(customers, activeTab === 'customers')
+  const { creditSummaries, loading: creditSummaryLoading, error: creditSummaryError, refresh: refreshCreditSummaries } = useCustomersWithCredits(
     insights.customers,
     activeTab === 'credits' || activeTab === 'notifications'
   )
@@ -634,6 +635,8 @@ export function CustomerDashboard() {
                     
                     {/* Los dos campos manejan la misma busqueda: el de abajo
                         filtraba solo la pagina visible y con otras reglas. */}
+                    {pageCreditError && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 p-3 text-sm"><p>{pageCreditError}</p><Button type="button" variant="outline" onClick={refreshPageCredits}>Reintentar créditos</Button></div>}
+                    <CustomerCreditDataStatus.Provider value={pageCreditLoading ? 'loading' : pageCreditError ? 'error' : 'ready'}>
                     <CustomerListView
                       customers={paginatedCustomers}
                       searchTerm={filters.search}
@@ -669,6 +672,7 @@ export function CustomerDashboard() {
                       loading={loading || isDeletingCustomer || isBulkDeleting}
                       compact={compactMode}
                     />
+                    </CustomerCreditDataStatus.Provider>
                     
                     {/* Al buscar no se pagina: la lista ya viene recortada y
                         ordenada por relevancia, y el hook devuelve una sola
@@ -784,9 +788,11 @@ export function CustomerDashboard() {
             </TabsContent>
 
             <TabsContent value="credits" className="mt-0">
+              {creditSummaryLoading && <p className="p-4 text-sm text-muted-foreground">Verificando saldos de clientes…</p>}
+              {creditSummaryError && <div role="alert" className="space-y-2 p-4 text-sm text-destructive"><p>{creditSummaryError}</p><Button variant="outline" onClick={refreshCreditSummaries}>Reintentar créditos</Button></div>}
               {insights.loading && <div className="p-4 text-sm text-muted-foreground">Cargando cartera de clientes…</div>}
               {insights.error && <div role="alert" className="p-4 text-sm text-destructive">{insights.error}</div>}
-              {!insights.loading && !insights.error && (
+              {!insights.loading && !insights.error && !creditSummaryLoading && !creditSummaryError && (
               <Suspense fallback={<div className="p-4"><Skeleton className="h-32 w-full" /></div>}>
                 <CustomerActiveCreditsTab
                   customers={insights.customers}

@@ -109,7 +109,7 @@ function getDatabaseErrorResponse(error: unknown) {
 }
 
 // GET - Obtener promociones con filtros
-export const GET = withTenantAuth({ permission: 'promotions.read' }, async (request: NextRequest, { organization }) => {
+export const GET = withTenantAuth({ permission: 'promotions.read', module: 'promotions' }, async (request: NextRequest, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const active = searchParams.get('active')
@@ -185,7 +185,7 @@ export const GET = withTenantAuth({ permission: 'promotions.read' }, async (requ
 })
 
 // POST - Crear nueva promoción (staff only)
-export const POST = withTenantAuth({ permission: 'promotions.create' }, async (request: NextRequest, { organization }) => {
+export const POST = withTenantAuth({ permission: 'promotions.create', module: 'promotions' }, async (request: NextRequest, { organization }) => {
   try {
     const body = await request.json()
     const type = normalizePromotionType(body?.type)
@@ -293,7 +293,7 @@ export const POST = withTenantAuth({ permission: 'promotions.create' }, async (r
 })
 
 // PUT - Actualización masiva de promociones (staff only)
-export const PUT = withTenantAuth({ permission: 'promotions.update' }, async (request: NextRequest, { organization }) => {
+export const PUT = withTenantAuth({ permission: 'promotions.update', module: 'promotions' }, async (request: NextRequest, { organization }) => {
   try {
     const body = await request.json()
     const promotions = Array.isArray(body?.promotions) ? body.promotions : null

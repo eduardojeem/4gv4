@@ -5,6 +5,8 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { computeTechnicianEarnings } from '@/lib/technician/earnings-server'
+import { technicianPaymentError, validPaymentRequestKey } from '@/lib/technician/payments-server'
+import { getTechnicianPeriod } from '@/lib/technician/period'
 import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +19,8 @@ const compensationSchema = z.object({
   commission_base: z.enum(['labor', 'final']),
   fixed_per_repair: z.coerce.number().min(0).max(1_000_000_000),
   accrual_status: z.enum(['listo', 'entregado']),
-  salary_effective_from: z.string().optional().nullable().transform((v) => v || null),
+  salary_effective_from: z.union([z.iso.date(), z.literal('')]).optional().nullable().transform((v) => v || null),
+  effective_from: z.iso.date().optional(),
 })
 
 async function resolveContext(req: NextRequest) {
@@ -31,6 +34,10 @@ async function resolveContext(req: NextRequest) {
   const organization = await getCurrentOrganizationContext(staffAuth.user.id)
   if (!organization) {
     return { response: NextResponse.json({ error: 'organization_required' }, { status: 403 }) }
+  }
+  const requestedOrganization = req.headers.get('x-organization-id')
+  if (requestedOrganization && requestedOrganization !== organization.id) {
+    return { response: NextResponse.json({ error: 'organization_changed' }, { status: 409 }) }
   }
 
   const requestedBranchId = getRequestedBranchId(req)
@@ -75,9 +82,7 @@ export async function GET(req: NextRequest, context: RouteParams) {
 
     // Período: query ?from&to (ISO) o mes actual por defecto.
     const url = new URL(req.url)
-    const now = new Date()
-    const from = url.searchParams.get('from') || new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const to = url.searchParams.get('to') || now.toISOString()
+    const { from, to } = await getTechnicianPeriod(supabase, organization.id, url)
 
     // El prorrateo del sueldo base (según "vigente desde") se aplica dentro del helper.
     const { compensation, earnings } = await computeTechnicianEarnings(
@@ -86,154 +91,28 @@ export async function GET(req: NextRequest, context: RouteParams) {
 
     return NextResponse.json({ compensation, earnings, period: { from, to } })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Error al obtener la compensación'
-    console.error('[technician-compensation GET]', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return technicianPaymentError(error)
   }
 }
 
-// PUT: guardar la config de compensación (solo admin/super_admin)
+// PUT: conditions and both Finance components are committed together.
 export async function PUT(req: NextRequest, context: RouteParams) {
   try {
     const ctx = await resolveContext(req)
     if ('response' in ctx) return ctx.response
     const { staffAuth, organization } = ctx
     const { id: technicianId } = await context.params
-
-    if (staffAuth.role !== 'admin' && staffAuth.role !== 'super_admin') {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    if (staffAuth.role !== 'admin' && staffAuth.role !== 'super_admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    const input = compensationSchema.safeParse(await req.json().catch(() => null))
+    const key = req.headers.get('x-idempotency-key')
+    if (!input.success || !validPaymentRequestKey(key) || !z.uuid().safeParse(technicianId).success) {
+      return NextResponse.json({ error: 'invalid_request', message: 'Revisá las condiciones y la fecha de vigencia.' }, { status: 400 })
     }
-
-    const body = await req.json().catch(() => ({}))
-    const parsed = compensationSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'validation_failed', details: parsed.error.issues },
-        { status: 400 },
-      )
-    }
-
-    const supabase = createAdminSupabase()
-
-    const { data: member } = await supabase
-      .from('organization_members')
-      .select('user_id')
-      .eq('organization_id', organization.id)
-      .eq('user_id', technicianId)
-      .eq('status', 'active')
-      .maybeSingle()
-
-    if (!member) {
-      return NextResponse.json({ error: 'technician_not_found' }, { status: 404 })
-    }
-
-    const { data, error } = await supabase
-      .from('technician_compensation')
-      .upsert(
-        {
-          organization_id: organization.id,
-          technician_id: technicianId,
-          ...parsed.data,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'organization_id,technician_id' },
-      )
-      .select('base_salary, commission_rate, commission_base, fixed_per_repair, accrual_status, salary_effective_from')
-      .single()
-
+    const { data, error } = await createAdminSupabase().rpc('server_save_technician_compensation', {
+      p_organization_id: organization.id, p_actor_user_id: staffAuth.user.id,
+      p_technician_id: technicianId, p_request_key: key, p_input: input.data,
+    })
     if (error) throw error
-
-    // Sincronización automática con Finanzas y Nómina central
-    try {
-      const effectiveDate = parsed.data.salary_effective_from || new Date().toISOString().slice(0, 10)
-
-      // 1. Sincronizar sueldo base en employee_compensation
-      if (parsed.data.base_salary > 0) {
-        const { data: existingComp } = await supabase
-          .from('employee_compensation')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .eq('employee_id', technicianId)
-          .order('effective_from', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (existingComp) {
-          await supabase
-            .from('employee_compensation')
-            .update({
-              base_salary: parsed.data.base_salary,
-              effective_from: effectiveDate,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingComp.id)
-        } else {
-          await supabase
-            .from('employee_compensation')
-            .insert({
-              organization_id: organization.id,
-              employee_id: technicianId,
-              base_salary: parsed.data.base_salary,
-              pay_frequency: 'monthly',
-              effective_from: effectiveDate,
-              created_by: staffAuth.user.id,
-            })
-        }
-      }
-
-      // 2. Sincronizar regla de comisión en commission_rules
-      const sourceType = parsed.data.commission_base === 'labor' ? 'repair_labor' : 'repair'
-      const calcType = parsed.data.commission_rate > 0 ? 'percentage' : 'fixed'
-      const ruleVal = parsed.data.commission_rate > 0 ? parsed.data.commission_rate : parsed.data.fixed_per_repair
-
-      if (ruleVal > 0) {
-        const { data: existingRule } = await supabase
-          .from('commission_rules')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .eq('employee_id', technicianId)
-          .in('source_type', ['repair', 'repair_labor'])
-          .eq('status', 'approved')
-          .limit(1)
-          .maybeSingle()
-
-        if (existingRule) {
-          await supabase
-            .from('commission_rules')
-            .update({
-              source_type: sourceType,
-              calculation_type: calcType,
-              value: ruleVal,
-              accrual_status: parsed.data.accrual_status,
-              effective_from: effectiveDate,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingRule.id)
-        } else {
-          await supabase
-            .from('commission_rules')
-            .insert({
-              organization_id: organization.id,
-              scope_type: 'employee',
-              employee_id: technicianId,
-              source_type: sourceType,
-              calculation_type: calcType,
-              value: ruleVal,
-              accrual_status: parsed.data.accrual_status,
-              status: 'approved',
-              effective_from: effectiveDate,
-              created_by: staffAuth.user.id,
-            })
-        }
-      }
-    } catch (syncErr) {
-      console.error('[technician-compensation syncToFinance error]', syncErr)
-    }
-
-    return NextResponse.json({ compensation: data })
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Error al guardar la compensación'
-    console.error('[technician-compensation PUT]', message)
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
+    return NextResponse.json(data)
+  } catch (error) { return technicianPaymentError(error) }
 }

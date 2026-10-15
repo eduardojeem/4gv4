@@ -9,7 +9,8 @@ describe('credits tenant isolation contract', () => {
   it('starts from credits owned by the active organization', () => {
     expect(route).toContain(".from('credit_details')")
     expect(route).toContain(".eq('organization_id', organization.id)")
-    expect(route).toContain(".in('credit_id', creditIds)")
+    expect(route).toContain('chunkIds(creditIds,200)')
+    expect(route).toContain(".in('credit_id',ids)")
   })
 
   it('loads credit data only through the tenant API', () => {

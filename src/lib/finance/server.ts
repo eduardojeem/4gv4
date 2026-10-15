@@ -38,6 +38,12 @@ export class FinanceApiError extends Error {
 
 const PAYROLL_ERROR_MAPPINGS = [
   {
+    tokens: ['TECHNICIAN_RECONCILIATION_REQUIRED', 'TECHNICIAN_USE_PAYROLL'],
+    status: 409,
+    code: 'PAYROLL_RECONCILIATION_REQUIRED',
+    publicMessage: 'Hay pagos de técnicos en este período. Reconciliá el historial antes de generar o pagar otra liquidación.',
+  },
+  {
     tokens: [
       'PAYROLL_GENERATION_IDEMPOTENCY_KEY_REUSED',
       'PAYROLL_PAYMENT_IDEMPOTENCY_KEY_REUSED',
@@ -1256,6 +1262,11 @@ export async function getPayrollPreview(
 
   const staff = membersResult.data ?? []
   const compensation = compensationResult.data ?? []
+  const userIds = staff.map((m) => m.user_id)
+  const { data: profiles } = userIds.length
+    ? await admin.from('profiles').select('id, full_name, email').in('id', userIds)
+    : { data: [] }
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
   const claimedCommissionIds = new Set(
     (claimedResult.data ?? []).map((record) => record.earned_commission_id),
   )
@@ -1357,8 +1368,10 @@ export async function getPayrollPreview(
     const grossPay = roundMoney(salary + commission + bonuses)
     const netPay = roundMoney(grossPay + discounts + advances)
 
+    const profile = profileMap.get(member.user_id)
     return {
       employeeId: member.user_id,
+      employeeDisplayName: profile?.full_name || profile?.email || member.user_id,
       role: activeEvents[activeEvents.length - 1]?.employee_role ??
         (commissionByEmployee.get(member.user_id) ?? [])
           .sort((left, right) =>
@@ -1856,6 +1869,9 @@ export interface FinanceOrderItemRecord {
  */
 export interface FinanceTechnicianPaymentRecord {
   id: string
+  branchId?: string | null
+  /** Already represented by a mapped entry in the payroll ledger. */
+  payrollMapped?: boolean
   paidAt: string | null
   amount: number
   /** En efectivo salio de la caja; por transferencia tambien es plata que se fue. */
@@ -2168,6 +2184,7 @@ function buildFinancialSummary(
   // el registro se crea cuando la plata ya salio.
   const technicianPayments = (records.technicianPayments ?? [])
     .filter((payment) => {
+      if (payment.payrollMapped || !isInBranch(payment.branchId ?? null, filters)) return false
       const status = String(payment.status ?? '').toLowerCase()
       if (status === 'anulado' || status === 'pendiente') return false
       return isInPeriod(payment.paidAt, filters)
@@ -2233,6 +2250,15 @@ function buildFinancialSummary(
     )
   }
   const cashTimingWarnings = [
+    ...selectedOrders
+      .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID')
+      .map((order) => ({
+        code: 'MISSING_CASH_TIMING' as const,
+        message: 'El pedido figura pagado, pero no tiene un cobro fechado: el flujo usa la fecha del pedido y requiere conciliación.',
+        sourceId: order.id,
+        sourceLabel: order.code || order.id,
+        sourceType: 'order' as const,
+      })),
     ...(records.salePaymentTimingAvailable === false
       ? selectedSales.map((sale) => ({
           code: 'MISSING_CASH_TIMING' as const,
@@ -2430,7 +2456,7 @@ async function loadTechnicianPayments(
 ): Promise<FinanceTechnicianPaymentRecord[]> {
   const result = await admin
     .from('technician_payments')
-    .select('id, amount, method, status, paid_at', { count: 'exact' })
+    .select('id, amount, method, status, paid_at, branch_id', { count: 'exact' })
     .eq('organization_id', organizationId)
     .gte('paid_at', startDate)
     .lt('paid_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
@@ -2443,8 +2469,23 @@ async function loadTechnicianPayments(
   }
   assertBoundedFinanceRows(result.data as unknown[] | null, 'pagos a tecnicos', result.count)
 
+  const ids = (result.data ?? []).map(row => String(row.id))
+  const mapped = new Set<string>()
+  for (let offset = 0; offset < ids.length; offset += 200) {
+    const mapping = await admin.from('payroll_entries')
+      .select('legacy_source_id', { count: 'exact' })
+      .eq('organization_id', organizationId)
+      .in('legacy_source_id', ids.slice(offset, offset + 200))
+      .limit(FINANCE_REPORT_QUERY_LIMIT)
+    if (mapping.error) throw toFinanceApiError(mapping.error)
+    assertBoundedFinanceRows(mapping.data as unknown[] | null, 'vínculos de pagos históricos', mapping.count)
+    for (const row of mapping.data ?? []) mapped.add(String(row.legacy_source_id))
+  }
+
   return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
+    branchId: (row.branch_id as string | null) ?? null,
+    payrollMapped: mapped.has(String(row.id)),
     paidAt: row.paid_at ? String(row.paid_at) : null,
     amount: money(row.amount as number | string | null),
     method: (row.method as string | null) ?? null,

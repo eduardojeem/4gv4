@@ -21,7 +21,7 @@ type LoyaltyClient = {
  */
 export async function awardCreditInstallmentLoyaltyPoints(
   client: LoyaltyClient,
-  input: { organizationId: string; installmentId: string; paidAmount: number },
+  input: { organizationId: string; installmentId: string; paidAmount: number; paymentId?: string },
 ): Promise<{ points: number; error: { message?: string; code?: string } | null }> {
   const paid = Math.max(0, Number(input.paidAmount) || 0)
   if (!input.installmentId || paid <= 0) return { points: 0, error: null }
@@ -43,7 +43,7 @@ export async function awardCreditInstallmentLoyaltyPoints(
     p_customer_id: credit.customer_id,
     p_amount: paid,
     p_sale_id: null,
-    p_idempotency_key: `credit-installment:${input.installmentId}:${paidSoFar}`,
+    p_idempotency_key: input.paymentId ? `credit-payment:${input.paymentId}` : `credit-installment:${input.installmentId}:${paidSoFar}`,
   })
   if (awardError) return { points: 0, error: awardError }
   const points = Number((awarded as { points?: unknown } | null)?.points)

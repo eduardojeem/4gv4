@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, Refre
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { CREDITS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { formatCurrency } from '@/lib/currency'
-import { useCredits, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
+import { useCredits, InstallmentRow, isInstallmentLate as installmentIsLate } from '@/hooks/use-credits'
 import { CreditOverview } from '@/components/dashboard/credits/CreditOverview'
 import { CreditList } from '@/components/dashboard/credits/CreditList'
 import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
@@ -20,7 +20,8 @@ import { CreditDetailDialog } from '@/components/dashboard/credits/CreditDetailD
 import { PaymentsTimeline } from '@/components/dashboard/credits/PaymentsTimeline'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import { OrganizationModuleGate } from '@/components/admin/OrganizationModuleGate'
-import { formatDateInputLocal, formatDateOnlyDisplay, isSameLocalDate, startOfLocalDay } from '@/lib/date-only'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
+import { daysUntilCreditDue, creditCalendarDate } from '@/lib/credits/calendar'
 import { getCreditDisplayInfo, getInstallmentDisplayInfo } from '@/lib/credits/display'
 import { CreditExportModal } from '@/components/dashboard/credits/CreditExportModal'
 
@@ -39,6 +40,8 @@ export default function CreditsDashboardPage() {
 function CreditsDashboardContent() {
   const {
     loading,
+    globalSummary,
+    timeZone,
     isPending,
     error,
     refreshData,
@@ -49,6 +52,8 @@ function CreditsDashboardContent() {
     filterValues,
     setFilterValues,
     markInstallmentPaid,
+    hasPendingCreditPayment,
+    pendingCreditPayments = [],
     creditById,
     remainingByCredit,
     paidByCredit,
@@ -58,12 +63,14 @@ function CreditsDashboardContent() {
     saleItems
   } = useCredits()
 
+  const isInstallmentLate = useCallback((row: InstallmentRow) => installmentIsLate(row, timeZone), [timeZone])
+
   // Local UI State
   const [page, setPage] = useState(1)
   const pageSize = 10
   const [sortField] = useState<keyof InstallmentRow | null>(null)
   const [sortDirection] = useState<'asc' | 'desc'>('asc')
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('cuotas')
   const [creditViewMode, setCreditViewMode] = useState<'cards' | 'list' | 'table'>('cards')
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
@@ -98,26 +105,24 @@ function CreditsDashboardContent() {
 
   // Quick filter counts
   const { overdueCount, dueTodayCount } = useMemo(() => {
-    const now = new Date()
-    const today = startOfLocalDay(now)
 
     const overdue = installments.filter(i =>
       isInstallmentLate(i)
     ).length
 
     const dueToday = installments.filter(i => {
-      return (i.status === 'pending' || i.status === 'late') && isSameLocalDate(i.due_date, today)
+      return (i.status === 'pending' || i.status === 'late') && daysUntilCreditDue(i.due_date, timeZone) === 0
     }).length
 
     return { overdueCount: overdue, dueTodayCount: dueToday }
-  }, [installments])
+  }, [installments, isInstallmentLate, timeZone])
 
   const { pendingCount, paidCount, lateCount } = useMemo(() => {
     const pending = installments.filter(i => i.status === 'pending').length
     const paid = installments.filter(i => i.status === 'paid').length
     const late = installments.filter(i => isInstallmentLate(i)).length
     return { pendingCount: pending, paidCount: paid, lateCount: late }
-  }, [installments])
+  }, [installments, isInstallmentLate])
   const selectedDialogInstallment = useMemo(() => {
     if (!dialogInstallmentId) return null
     return installments.find(i => i.id === dialogInstallmentId) || null
@@ -144,6 +149,7 @@ function CreditsDashboardContent() {
 
   // Totales globales (no dependen del filtro) para el encabezado siempre visible.
   const portfolioTotals = useMemo(() => {
+    if (globalSummary) return globalSummary
     let outstanding = 0
     let overdue = 0
     let paid = 0
@@ -174,11 +180,9 @@ function CreditsDashboardContent() {
       overdueRate,
       currentRate,
     }
-  }, [installments])
+  }, [installments, globalSummary, isInstallmentLate])
 
   const collectionSummary = useMemo(() => {
-    const now = new Date()
-    const today = startOfLocalDay(now)
 
     let visibleOutstanding = 0
     let visibleOverdue = 0
@@ -191,7 +195,7 @@ function CreditsDashboardContent() {
       const paidAmount = Math.max(0, Number(installment.amount_paid || 0))
       const outstanding = Math.max(0, amount - paidAmount)
 
-      visibleCustomers.add(creditById[installment.credit_id]?.customer_name || installment.credit_id)
+      visibleCustomers.add(creditById[installment.credit_id]?.customer_id || installment.credit_id)
       visibleOutstanding += outstanding
 
       if (paidAmount > 0 && outstanding > 0) {
@@ -204,7 +208,7 @@ function CreditsDashboardContent() {
 
       if (
         outstanding > 0 &&
-        isSameLocalDate(installment.due_date, today) &&
+        daysUntilCreditDue(installment.due_date, timeZone) === 0 &&
         (installment.status === 'pending' || installment.status === 'late')
       ) {
         visibleDueToday += outstanding
@@ -218,7 +222,7 @@ function CreditsDashboardContent() {
       visibleDueToday,
       partialOpenCount,
     }
-  }, [filteredInstallments, creditById])
+  }, [filteredInstallments, creditById, isInstallmentLate, timeZone])
 
   const openPaymentDialogForInstallment = (installment: InstallmentRow, scope: 'installment' | 'credit' = 'installment') => {
     const outstanding = getInstallmentOutstanding(installment)
@@ -240,7 +244,8 @@ function CreditsDashboardContent() {
     method: PaymentMethod,
     amount: number,
     reference?: string,
-    notes?: string
+    notes?: string,
+    recover?: boolean
   ): Promise<PaymentConfirmResult> => {
     if (!dialogInstallmentId || !selectedDialogCreditId) {
       return { success: false, error: 'No hay cuota seleccionada para cobrar.' }
@@ -251,45 +256,15 @@ function CreditsDashboardContent() {
       notes
     ].filter(Boolean).join(' - ')
 
-    if (dialogPaymentScope === 'credit') {
-      const openInstallments = installments
-        .filter((installment) => installment.credit_id === selectedDialogCreditId && getInstallmentOutstanding(installment) > 0)
-        .sort((a, b) => (
-          startOfLocalDay(a.due_date).getTime() - startOfLocalDay(b.due_date).getTime() ||
-          a.installment_number - b.installment_number
-        ))
-
-      let remainingAmount = amount
-      let appliedAmount = 0
-
-      for (const installment of openInstallments) {
-        if (remainingAmount <= 0) break
-
-        const installmentOutstanding = getInstallmentOutstanding(installment)
-        const amountForInstallment = Math.min(installmentOutstanding, remainingAmount)
-        const result = await markInstallmentPaid(installment.id, method, amountForInstallment, fullNotes)
-
-        if (result.success === false) {
-          return { success: false, error: result.error }
-        }
-
-        appliedAmount += result.appliedAmount ?? amountForInstallment
-        remainingAmount -= result.appliedAmount ?? amountForInstallment
-      }
-
-      if (appliedAmount <= 0) {
-        return { success: false, error: 'No hay saldo abierto para cobrar en este credito.' }
-      }
-
-      return { success: true, appliedAmount }
-    }
-
-    const result = await markInstallmentPaid(dialogInstallmentId, method, amount, fullNotes)
+    const result = await markInstallmentPaid(dialogInstallmentId, method, amount, fullNotes, {
+      creditId: dialogPaymentScope === 'credit' ? selectedDialogCreditId : undefined,
+      reference, recover,
+    })
     if (result.success === false) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error, uncertain: result.uncertain }
     }
 
-    return { success: true, appliedAmount: result.appliedAmount }
+    return { success: true, appliedAmount: result.appliedAmount, collection: result.collection }
   }
 
   const handlePaymentDialogOpenChange = (open: boolean) => {
@@ -382,7 +357,7 @@ function CreditsDashboardContent() {
   }
 
   const handleFilterDueToday = () => {
-    const today = formatDateInputLocal()
+    const today = creditCalendarDate(new Date(), timeZone) ?? ''
     setFilterValues({
       ...filterValues,
       status: '',
@@ -410,6 +385,9 @@ function CreditsDashboardContent() {
 
   const router = useRouter()
 
+  if (error) return <RouteGuard route="/dashboard/credits" redirectTo="/dashboard"><Card className="m-4"><CardContent className="space-y-3 pt-6" role="alert"><h1 className="text-lg font-semibold">No pudimos cargar la cartera completa</h1><p className="text-sm text-muted-foreground">{error} No mostramos saldos supuestos.</p><Button onClick={refreshData} className="min-h-11">Reintentar</Button></CardContent></Card></RouteGuard>
+  if (loading && !globalSummary) return <div className="m-4 space-y-3" role="status" aria-busy="true"><p>Cargando cartera completa…</p><div className="h-28 animate-pulse rounded-lg bg-muted"/></div>
+
   return (
     <RouteGuard route="/dashboard/credits" redirectTo="/dashboard">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -434,6 +412,13 @@ function CreditsDashboardContent() {
           </div>
         </div>
 
+        {pendingCreditPayments.length > 0 && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p>Hay cobros pendientes de confirmar. Recuperá el comprobante; no vuelvas a recibir el dinero.</p>
+          {pendingCreditPayments.map(attempt => <Button key={attempt.creditId} type="button" variant="outline" className="min-h-11 w-full" onClick={() => {
+            const original = installments.find(row => row.id === attempt.installmentId)
+            if (original) openPaymentDialogForInstallment(original, 'credit')
+          }}>Recuperar comprobante · {attempt.customerName}</Button>)}
+        </div>}
         {/* Acciones principales de 1-Clic */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -678,7 +663,7 @@ function CreditsDashboardContent() {
               className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
             >
               <Users className="h-4 w-4" />
-              <span>Clientes ({credits.filter(c => c.status === 'active').length})</span>
+              <span>Créditos ({credits.filter(c => c.status === 'active').length})</span>
             </TabsTrigger>
             <TabsTrigger
               value="cuotas"
@@ -705,6 +690,7 @@ function CreditsDashboardContent() {
         {/* Tab Content: Resumen */}
         <TabsContent value="overview" className="space-y-6">
           <CreditOverview
+            timeZone={timeZone}
             credits={credits}
             installments={installments}
             creditById={creditById}
@@ -930,10 +916,9 @@ function CreditsDashboardContent() {
                 const display = getInstallmentDisplayInfo(row, credit, installments, sales, saleItems)
 
                 // Due date helpers
-                const dueDate = startOfLocalDay(row.due_date)
-                const today = startOfLocalDay(new Date())
-                const isToday = dueDate.getTime() === today.getTime()
-                const daysOverdue = effStatus === 'late' ? Math.floor((today.getTime() - dueDate.getTime()) / 86400000) : 0
+                const daysUntilDue = daysUntilCreditDue(row.due_date, timeZone)
+                const isToday = daysUntilDue === 0
+                const daysOverdue = effStatus === 'late' ? Math.max(0, -(daysUntilDue ?? 0)) : 0
 
                 // Row urgency styling
                 const rowBg = effStatus === 'late'
@@ -1134,6 +1119,7 @@ function CreditsDashboardContent() {
 
       {/* Payment Dialog */}
       <CreditPaymentDialog
+        hasPendingAttempt={selectedDialogCreditId ? hasPendingCreditPayment(selectedDialogCreditId) : false}
         open={isDialogOpen}
         onOpenChange={handlePaymentDialogOpenChange}
         onConfirm={handleConfirmPayment}
@@ -1191,6 +1177,7 @@ function CreditsDashboardContent() {
         saleItems={saleItems}
         allCredits={credits}
         allInstallments={installments}
+        onUpdated={refreshData}
         onPayInstallment={(installmentId) => {
           setIsDetailDialogOpen(false)
           handleMarkInstallmentPaidDirectly(installmentId)

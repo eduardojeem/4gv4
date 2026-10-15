@@ -1,5 +1,8 @@
 "use client"
 
+import { createContext, useContext } from 'react'
+export const CustomerCreditDataStatus = createContext<'ready' | 'loading' | 'error'>('ready')
+
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -26,6 +29,8 @@ export function CustomerCreditBadge({
   variant = 'default',
   showTooltip = true 
 }: CustomerCreditBadgeProps) {
+  const dataStatus = useContext(CustomerCreditDataStatus)
+  if (dataStatus !== 'ready') return <Badge variant="outline" className="gap-1 text-muted-foreground">{dataStatus === 'loading' ? 'Consultando créditos…' : 'Créditos no disponibles'}</Badge>
   if (!creditSummary) {
     return (
       <Badge variant="outline" className="gap-1 text-gray-500">
@@ -59,7 +64,7 @@ export function CustomerCreditBadge({
     if (creditSummary.next_payment?.is_overdue) {
       return <AlertTriangle className="h-3 w-3 text-red-500" />
     }
-    if (creditSummary.next_payment && creditSummary.next_payment.days_until_due <= 3) {
+    if (creditSummary.next_payment?.due_date && creditSummary.next_payment.days_until_due !== null && creditSummary.next_payment.days_until_due <= 3) {
       return <Clock className="h-3 w-3 text-yellow-500" />
     }
     return <CheckCircle className="h-3 w-3 text-green-500" />
@@ -107,7 +112,7 @@ export function CustomerCreditBadge({
         </div>
         <div>
           <div className="text-gray-400">Score Pago:</div>
-          <div className="font-medium">{creditSummary.payment_history.payment_score}/100</div>
+          <div className="font-medium">{creditSummary.payment_history.payment_score === null ? 'Sin historial suficiente' : creditSummary.payment_history.payment_score + '/100'}</div>
         </div>
       </div>
 
@@ -116,8 +121,8 @@ export function CustomerCreditBadge({
           <div className="text-gray-400">Próximo Pago:</div>
           <div className="font-medium">{formatCurrency(creditSummary.next_payment.amount)}</div>
           <div className="text-gray-400">
-            {creditSummary.next_payment.is_overdue 
-              ? `Vencido hace ${Math.abs(creditSummary.next_payment.days_until_due)} días`
+            {creditSummary.next_payment.days_until_due === null ? 'Sin vencimiento definido' : creditSummary.next_payment.is_overdue
+              ? `Vencido hace ${Math.abs(creditSummary.next_payment.days_until_due ?? 0)} días`
               : `Vence en ${creditSummary.next_payment.days_until_due} días`
             }
           </div>
@@ -265,7 +270,7 @@ export function CustomerCreditStats({ creditSummary }: { creditSummary: Customer
       </div>
       
       <div className="text-center p-2 bg-green-50 rounded-lg">
-        <div className="font-semibold text-green-600">{creditSummary.payment_history.payment_score}</div>
+        <div className="font-semibold text-green-600">{creditSummary.payment_history.payment_score ?? 'Sin historial'}</div>
         <div className="text-gray-600">Score</div>
       </div>
       

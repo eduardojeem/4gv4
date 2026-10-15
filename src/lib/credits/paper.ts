@@ -29,6 +29,18 @@ export const CREDIT_PAPER_WIDTH_MM: Record<CreditPaperFormat, number> = {
   'A4': 210,
 }
 
+/**
+ * Texto apto para las fuentes base del PDF.
+ *
+ * `Intl` separa el simbolo del monto con un espacio duro ("Gs. 1.000") y
+ * algunas horas con un espacio fino. Con Helvetica Bold varios visores y
+ * drivers de impresora termica no tienen ese glifo y lo imprimen como "?":
+ * los montos salian "Gs.?4.000.000". Se cambian por un espacio comun.
+ */
+export function toPdfText(value: string): string {
+  return value.replace(/[    ]/g, ' ')
+}
+
 export function isCreditPaperFormat(value: unknown): value is CreditPaperFormat {
   return value === '58mm' || value === '80mm' || value === 'A4'
 }

@@ -5,6 +5,7 @@ import { RepairsProvider } from '@/contexts/RepairsContext'
 import { SubscriptionGate } from '@/components/admin/SubscriptionGate'
 import { SubscriptionBanner } from '@/components/admin/SubscriptionBanner'
 import { ActiveOrganizationProvider } from '@/contexts/ActiveOrganizationContext'
+import { RouteModuleGate } from '@/components/admin/RouteModuleGate'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <AdminLayoutProvider>
             <AdminLayout>
               <SubscriptionBanner />
-              {children}
+              <RouteModuleGate>{children}</RouteModuleGate>
             </AdminLayout>
           </AdminLayoutProvider>
           </RepairsProvider>

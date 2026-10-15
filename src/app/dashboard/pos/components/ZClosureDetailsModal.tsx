@@ -18,6 +18,7 @@ import { ZClosureRecord, useCashRegisterContext } from '../contexts/CashRegister
 import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
 import { downloadPdfReport, type PdfSection } from '@/app/dashboard/pos/lib/exportPdf'
+import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
 
 interface ZClosureDetailsModalProps {
   isOpen: boolean
@@ -325,6 +326,9 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
               font-size: 9px;
               color: #555;
             }
+
+            ${HIGH_CONTRAST_PRINT_CSS}
+            body .total-row { font-size: 13px !important; font-weight: 900 !important; border-top-width: 2px !important; }
           </style>
         </head>
         <body>

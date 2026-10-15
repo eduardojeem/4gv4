@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { SubscriptionStatusProvider, type SubscriptionStatusData } from '@/contexts/SubscriptionStatusContext'
-import { BusinessProfileCard } from './BusinessProfileCard'
+import { BusinessProfileCard, type BusinessProfileActions } from './BusinessProfileCard'
 
 const status: SubscriptionStatusData = {
   status: 'active',
@@ -93,7 +93,7 @@ describe('BusinessProfileCard', () => {
         ...status,
         planCode: 'PRO',
         planName: 'Pro',
-        entitledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
+        entitledModules: ['inventory', 'pos', 'crm', 'repairs', 'analytics', 'security'],
         enabledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
         effectiveModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
       }}>
@@ -104,14 +104,15 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByLabelText('Forma de trabajo'))
     await user.click(screen.getByRole('option', { name: 'Negocio mixto' }))
 
-    // Lo que no recomienda el rubro se desmarca, y se avisa.
-    expect(screen.getByLabelText('Analytics avanzado')).not.toBeChecked()
-    expect(screen.getByLabelText('Seguridad y auditoría')).not.toBeChecked()
+    // Lo que recomienda la forma de trabajo se marca, y se avisa.
+    expect(screen.getByLabelText('Módulo de Reparaciones')).toBeChecked()
     expect(screen.getByText(/Marcamos las herramientas recomendadas para Ropa y moda/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
+    // Las herramientas generales no dependen del rubro: quedan como estaban.
     expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
   })
 
   it('una cosmética no lleva Reparaciones y propone preparar la página web', async () => {
@@ -227,5 +228,29 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByRole('option', { name: 'Ropa y moda' }))
 
     expect(screen.queryByText('Especialidades y atención')).not.toBeInTheDocument()
+  })
+
+  it('avisa a la página que hay cambios y se puede descartar desde afuera', async () => {
+    const user = userEvent.setup()
+    const onStateChange = vi.fn()
+    const actionsRef: { current: BusinessProfileActions | null } = { current: null }
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        planCode: 'PRO',
+        planName: 'Pro',
+        entitledModules: ['inventory', 'pos', 'crm', 'repairs'],
+      }}>
+        <BusinessProfileCard onStateChange={onStateChange} actionsRef={actionsRef} />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: false, canSave: false })
+    await user.click(screen.getByLabelText('Módulo de Reparaciones'))
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: true, canSave: true })
+
+    act(() => actionsRef.current?.reset())
+    expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: false, canSave: false })
   })
 })

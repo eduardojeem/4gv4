@@ -1,313 +1,51 @@
+// @vitest-environment node
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const ORG = '11111111-1111-4111-8111-111111111111'
-const BRANCH = '22222222-2222-4222-8222-222222222222'
-const CUSTOMER = '44444444-4444-4444-8444-444444444444'
-const REPAIR = '55555555-5555-4555-8555-555555555555'
-const INSTALLMENT = '66666666-6666-4666-8666-666666666666'
-const KEY = 'cobro-1234567890'
-
-const estado = vi.hoisted(() => ({
-  clienteDeLaEmpresa: true,
-  deudas: [] as unknown[],
-  cajaAbierta: true as boolean,
-  sucursalError: null as string | null,
-  rpcCuota: { error: null as null | { message: string }, applied: null as number | null },
-  reparacionFalla: null as string | null,
-  saldoFalla: false,
-  cajaFalla: false,
-  escriturasDirectas: [] as string[],
-  saldos: [] as unknown[],
-  movimientosCaja: [] as unknown[],
-  saldosBorrados: [] as unknown[],
-  rpcs: [] as Array<{ name: string; args: Record<string, unknown> }>,
-  cobrosReparacion: [] as Array<Record<string, unknown>>,
-}))
-
-vi.mock('@/lib/api/withTenantAuth', () => ({
-  withTenantAuth: (_o: unknown, handler: (req: unknown, ctx: unknown, route: unknown) => unknown) =>
-    (request: unknown, route: unknown) => handler(request, {
-      organization: { id: ORG, role: 'owner' },
-      user: { id: 'user-1', role: 'admin' },
-    }, route),
-}))
-
-vi.mock('@/lib/branches/server', () => ({
-  getRequestedBranchId: () => BRANCH,
-  resolveBranchScopeForUser: async (params: { strict?: boolean }) => {
-    if (estado.sucursalError && params.strict) throw new Error(estado.sucursalError)
-    return { branchId: BRANCH }
-  },
-}))
-
-vi.mock('@/lib/customers/collect-payment', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/customers/collect-payment')>()
-  return { ...real, loadCustomerDebts: async () => ({ debts: estado.deudas, error: null }) }
-})
-
-vi.mock('@/lib/credits/store-credit-balance', () => ({
-  readStoreCreditBalance: async () => ({ available: 0, ledger: 0, reserved: 0 }),
-}))
-
-vi.mock('@/lib/repairs/financial-closure-rpc', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/repairs/financial-closure-rpc')>()
-  return {
-    ...real,
-    closeRepairAndRegisterPayment: async (_client: unknown, input: Record<string, unknown>) => {
-      estado.cobrosReparacion.push(input)
-      if (estado.reparacionFalla) throw new real.FinancialClosureRpcError(estado.reparacionFalla, 'REPAIR_PAYMENT_INVALID_STATE', 422)
-      const payment = input.payment as { amount: number }
-      return { balance: 300 - payment.amount }
-    },
-  }
-})
-
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminSupabase: () => ({
-    from: (tabla: string) => {
-      if (tabla === 'customers') {
-        return {
-          select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({
-            data: estado.clienteDeLaEmpresa ? { id: CUSTOMER, name: 'Ana', credit_limit: 0 } : null,
-            error: null,
-          }) }) }) }),
-        }
-      }
-      if (tabla === 'customer_store_credits') {
-        return {
-          insert: (row: unknown) => ({
-            select: () => ({ single: async () => {
-              if (estado.saldoFalla) return { data: null, error: { message: 'caída' } }
-              estado.saldos.push(row)
-              return { data: { id: 'saldo-1' }, error: null }
-            } }),
-          }),
-          delete: () => ({ eq: (_c: string, id: unknown) => ({ eq: async () => { estado.saldosBorrados.push(id); return { error: null } } }) }),
-        }
-      }
-      if (tabla === 'cash_movements') {
-        return {
-          insert: async (row: unknown) => {
-            if (estado.cajaFalla) return { error: { message: 'caída' } }
-            estado.movimientosCaja.push(row)
-            return { error: null }
-          },
-        }
-      }
-      estado.escriturasDirectas.push(tabla)
-      return { update: () => ({ eq: async () => ({ error: null }) }), insert: async () => ({ error: null }) }
-    },
-  }),
-}))
-
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: async () => ({
-    from: (tabla: string) => {
-      if (tabla !== 'cash_closures') {
-        return {
-          // Leer no es escribir: los puntos consultan la cuota para saber de quién es.
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-          update: () => {
-            estado.escriturasDirectas.push(tabla)
-            return { eq: async () => ({ error: null }) }
-          },
-        }
-      }
-      const builder: { select: () => typeof builder; eq: () => typeof builder; is: () => typeof builder; order: () => Promise<{ data: { id: string; register_id: string }[]; error: null }> } = {
-        select: () => builder,
-        eq: () => builder,
-        is: () => builder,
-        order: async () => ({ data: estado.cajaAbierta ? [{ id: 'caja-1', register_id: 'principal' }] : [], error: null }),
-      }
-      return builder
-    },
-    rpc: async (name: string, args: Record<string, unknown>) => {
-      estado.rpcs.push({ name, args })
-      if (estado.rpcCuota.error) return { data: null, error: estado.rpcCuota.error }
-      return { data: { applied_amount: estado.rpcCuota.applied ?? args.p_amount }, error: null }
-    },
-  }),
-}))
-
-import { POST } from '@/app/api/customers/[id]/collect-payment/route'
-
-const deuda = (extra: Record<string, unknown>) => ({
-  id: INSTALLMENT, type: 'installment', title: 'Cuota 1', totalAmount: 100000, paidAmount: 0,
-  pendingAmount: 100000, isOverdue: true, status: 'Vencida', collectable: true, creditId: 'cr1', ...extra,
-})
-
-const cobrar = async (body: Record<string, unknown>) => {
-  const request = new NextRequest(`http://localhost/api/customers/${CUSTOMER}/collect-payment`, {
-    method: 'POST',
-    body: JSON.stringify({ paymentMethod: 'cash', idempotencyKey: KEY, ...body }),
-    headers: { 'Content-Type': 'application/json' },
-  })
-  const response = await (POST as unknown as (r: NextRequest, c: unknown) => Promise<Response>)(
-    request,
-    { params: Promise.resolve({ id: CUSTOMER }) },
-  )
-  return { status: response.status, body: await response.json() }
+const ORG='11111111-1111-4111-8111-111111111111', BRANCH='22222222-2222-4222-8222-222222222222'
+const ACTOR='33333333-3333-4333-8333-333333333333', CUSTOMER='44444444-4444-4444-8444-444444444444'
+const state=vi.hoisted(()=>({ found:true, branchError:false, error:null as {message:string;code?:string}|null, calls:[] as Array<{name:string;args:Record<string,unknown>}> }))
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_o:unknown,h:(r:unknown,c:unknown,x:unknown)=>unknown)=>(r:unknown,x:unknown)=>h(r,{organization:{id:ORG,role:'owner'},user:{id:ACTOR,role:'admin'}},x)}))
+vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:()=>BRANCH,resolveBranchScopeForUser:async()=>{if(state.branchError)throw new Error('Sucursal no autorizada');return {branchId:BRANCH}}}))
+vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({
+ from:(table:string)=>{const b={select:()=>b,eq:()=>b,maybeSingle:async()=>({data:state.found?(table==='credit_installments'?{id:'66666666-6666-4666-8666-666666666666',credit_id:'99999999-9999-4999-8999-999999999999',customer_credits:{customer_id:CUSTOMER,organization_id:ORG}}:{id:CUSTOMER,name:'Fixture',credit_limit:1000}):null,error:null}),insert:()=>{throw new Error('Non-atomic write forbidden')}};return b},
+ rpc:async(name:string,args:Record<string,unknown>)=>{state.calls.push({name,args});return {error:state.error,data:state.error?null:{
+  receiptId:'77777777-7777-4777-8777-777777777777',receiptNumber:'COL-FIXTURE',appliedAmount:100,excessToStoreCredit:0,recordedAt:'2026-10-11T12:00:00Z',
+  allocations:[{debtId:'66666666-6666-4666-8666-666666666666',type:'installment',paymentId:'88888888-8888-4888-8888-888888888888',appliedAmount:100,remainingBalance:50}]
+ }}}
+})}))
+vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({
+ from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})}),
+ rpc:async()=>{throw new Error('Legacy financial RPC forbidden')}
+})}))
+import {POST} from '@/app/api/customers/[id]/collect-payment/route'
+import {POST as creditPOST} from '@/app/api/credits/route'
+async function collect(extra:Record<string,unknown>={}){
+ const response=await (POST as unknown as (r:NextRequest,c:unknown)=>Promise<Response>)(new NextRequest('http://localhost/api/customers/'+CUSTOMER+'/collect-payment',{
+ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:100,paymentMethod:'cash',idempotencyKey:'fixture-key-12345',...extra})
+ }),{params:Promise.resolve({id:CUSTOMER})})
+ return {status:response.status,body:await response.json()}
 }
-
-beforeEach(() => {
-  Object.assign(estado, {
-    clienteDeLaEmpresa: true,
-    deudas: [deuda({})],
-    cajaAbierta: true,
-    sucursalError: null,
-    rpcCuota: { error: null, applied: null },
-    reparacionFalla: null,
-    saldoFalla: false,
-    cajaFalla: false,
-    escriturasDirectas: [],
-    saldos: [],
-    movimientosCaja: [],
-    saldosBorrados: [],
-    rpcs: [],
-    cobrosReparacion: [],
-  })
-})
-
-describe('cobrar a un cliente', () => {
-  /**
-   * El POST no verificaba la organización: con un ID de otra empresa se le
-   * podían marcar cuotas como pagadas usando el cliente de servicio.
-   */
-  it('un cliente de otra empresa no se toca', async () => {
-    estado.clienteDeLaEmpresa = false
-    const { status, body } = await cobrar({ amount: 100000 })
-
-    expect(status).toBe(404)
-    expect(body.error).toBe('El cliente no pertenece a la organización activa.')
-    expect(estado.rpcs).toHaveLength(0)
-    expect(estado.cobrosReparacion).toHaveLength(0)
-  })
-
-  it('no se puede cobrar en una sucursal a la que no se tiene acceso', async () => {
-    estado.sucursalError = 'No autorizado para operar sobre la sucursal seleccionada.'
-    const { status } = await cobrar({ amount: 100000 })
-    expect(status).toBe(403)
-    expect(estado.rpcs).toHaveLength(0)
-  })
-
-  /** Antes escribía paid_amount y amount_paid a mano, sin bloquear la fila. */
-  it('cada deuda se cobra por su camino atómico, nunca escribiendo a mano', async () => {
-    estado.deudas = [
-      deuda({ id: REPAIR, type: 'repair', title: 'Reparación #T-1', pendingAmount: 200000 }),
-      deuda({ pendingAmount: 100000, isOverdue: false }),
-    ]
-    const { status, body } = await cobrar({ amount: 300000 })
-
-    expect(status).toBe(200)
-    expect(estado.escriturasDirectas).toEqual([])
-
-    expect(estado.cobrosReparacion).toHaveLength(1)
-    expect(estado.cobrosReparacion[0]).toMatchObject({
-      repairId: REPAIR,
-      organizationId: ORG,
-      branchId: BRANCH,
-      cashSessionId: 'caja-1',
-      deliver: false,
-      payment: { method: 'cash', amount: 200000, idempotencyKey: `${KEY}:repair:${REPAIR}` },
-    })
-
-    expect(estado.rpcs).toEqual([{
-      name: 'register_credit_payment_atomic',
-      args: expect.objectContaining({ p_organization_id: ORG, p_branch_id: BRANCH, p_installment_id: INSTALLMENT, p_amount: 100000, p_method: 'cash' }),
-    }])
-    expect(body.appliedAllocations).toHaveLength(2)
-    expect(body.receiptNumber).toMatch(/^REC-\d{8}-[0-9A-F]{8}$/)
-  })
-
-  /** Un fallo a mitad de camino devolvía «Pago registrado» igual. */
-  it('si una deuda falla se corta ahí y se informa lo que sí se cobró', async () => {
-    estado.deudas = [
-      deuda({ pendingAmount: 100000 }),
-      deuda({ id: REPAIR, type: 'repair', title: 'Reparación #T-1', pendingAmount: 200000, isOverdue: false }),
-    ]
-    estado.reparacionFalla = 'No se puede procesar cobros en una reparación cancelada.'
-
-    const { status, body } = await cobrar({ amount: 300000 })
-
-    expect(status).toBe(207)
-    expect(body.success).toBe(false)
-    expect(body.partial).toBe(true)
-    expect(body.totalApplied).toBe(100000)
-    expect(body.error).toContain('Reparación #T-1')
-    expect(estado.saldos).toHaveLength(0)
-  })
-
-  it('si falla la primera no se registra nada', async () => {
-    estado.rpcCuota.error = { message: 'Open cash session required for cash payment' }
-    const { status, body } = await cobrar({ amount: 100000 })
-    expect(status).toBe(422)
-    expect(body.partial).toBe(false)
-  })
-
-  it('en efectivo exige caja abierta', async () => {
-    estado.cajaAbierta = false
-    const { status, body } = await cobrar({ amount: 100000 })
-    expect(status).toBe(409)
-    expect(body.code).toBe('CASH_REGISTER_NOT_OPEN')
-    expect(estado.rpcs).toHaveLength(0)
-  })
-
-  it('una transferencia sin comprobante no se registra', async () => {
-    const { status, body } = await cobrar({ amount: 100000, paymentMethod: 'transfer' })
-    expect(status).toBe(400)
-    expect(body.field).toBe('referenceNumber')
-  })
-
-  /** Un cero de más quedaba como saldo a favor sin que nadie lo notara. */
-  it('un sobrante no se acredita sin confirmación', async () => {
-    const { status, body } = await cobrar({ amount: 1000000 })
-    expect(status).toBe(422)
-    expect(body.code).toBe('EXCESS_REQUIRES_CONFIRMATION')
-    expect(body.excess).toBe(900000)
-    expect(estado.rpcs).toHaveLength(0)
-  })
-
-  /** Antes el sobrante se acreditaba y la plata no figuraba en ningún arqueo. */
-  it('el sobrante confirmado en efectivo entra a saldo a favor y a la caja', async () => {
-    const { status, body } = await cobrar({ amount: 150000, creditExcessToStoreCredit: true })
-
-    expect(status).toBe(200)
-    expect(body.excessToStoreCredit).toBe(50000)
-    expect(estado.saldos).toEqual([expect.objectContaining({ customer_id: CUSTOMER, organization_id: ORG, amount: 50000 })])
-    expect(estado.movimientosCaja).toEqual([expect.objectContaining({ session_id: 'caja-1', type: 'cash_in', amount: 50000, branch_id: BRANCH })])
-  })
-
-  it('si no se puede registrar en caja, el saldo a favor se revierte', async () => {
-    estado.cajaFalla = true
-    const { status, body } = await cobrar({ amount: 150000, creditExcessToStoreCredit: true })
-
-    expect(status).toBe(200)
-    expect(body.excessToStoreCredit).toBe(0)
-    expect(estado.saldosBorrados).toEqual(['saldo-1'])
-    expect(body.storeCreditWarning).toContain('no se pudo registrar en caja')
-  })
-
-  it('con tarjeta el sobrante va a saldo a favor sin movimiento de caja', async () => {
-    const { body } = await cobrar({ amount: 150000, paymentMethod: 'card', voucherNumber: '0482', creditExcessToStoreCredit: true })
-    expect(body.excessToStoreCredit).toBe(50000)
-    expect(estado.movimientosCaja).toHaveLength(0)
-  })
-
-  /** Si alguien pagó la cuota mientras tanto, lo que no entró no desaparece callado. */
-  it('lo que la cuota no aceptó se avisa', async () => {
-    estado.rpcCuota.applied = 60000
-    const { body } = await cobrar({ amount: 100000 })
-
-    expect(body.appliedAllocations[0].allocatedAmount).toBe(60000)
-    expect(body.storeCreditWarning).toContain('40.000')
-  })
-
-  it('las deudas de otra sucursal no se cobran', async () => {
-    estado.deudas = [deuda({ id: REPAIR, type: 'repair', collectable: false })]
-    const { status, body } = await cobrar({ amount: 100000 })
-    expect(status).toBe(422)
-    expect(body.code).toBe('NOTHING_TO_COLLECT')
-    expect(estado.cobrosReparacion).toHaveLength(0)
-  })
+beforeEach(()=>Object.assign(state,{found:true,branchError:false,error:null,calls:[]}))
+describe('transactional customer collection API',()=>{
+ it('returns persisted applied amount with one actor-scoped transaction',async()=>{
+  const {status,body}=await collect();expect(status).toBe(200);expect(body.totalApplied).toBe(100);expect(body.collection.allocations[0].remainingBalance).toBe(50)
+  expect(state.calls).toHaveLength(1);expect(state.calls[0]).toMatchObject({name:'collect_customer_payment_atomic',args:{p_actor_id:ACTOR,p_organization_id:ORG}})
+ })
+ it('rejects another tenant customer',async()=>{state.found=false;expect((await collect()).status).toBe(404);expect(state.calls).toHaveLength(0)})
+ it('rejects unauthorized branch',async()=>{state.branchError=true;expect((await collect()).status).toBe(403);expect(state.calls).toHaveLength(0)})
+ it.each([0,-1,1.001,1_000_000_001])('rejects invalid money %s',async amount=>{expect((await collect({amount})).status).toBe(400);expect(state.calls).toHaveLength(0)})
+ it('requires transfer reference',async()=>{expect((await collect({paymentMethod:'transfer'})).status).toBe(400)})
+ it('rejects a caller actor',async()=>{expect((await collect({actorId:ACTOR})).status).toBe(400);expect(state.calls).toHaveLength(0)})
+ it.each([['COLLECTION_BALANCE_CHANGED',409],['COLLECTION_CASH_CLOSED',409],['COLLECTION_EXCESS_CONFIRMATION',422],['COLLECTION_IDEMPOTENCY_CONFLICT',409]])('reports %s without partial success',async(message,status)=>{
+  state.error={message};const result=await collect();expect(result.status).toBe(status);expect(result.body.success).toBe(false);expect(result.body.partial).toBeUndefined()
+ })
+ it('requires migration without fallback',async()=>{state.error={code:'PGRST202',message:'Missing function'};expect((await collect()).status).toBe(503);expect(state.calls).toHaveLength(1)})
+ it('credit payment uses the same transaction and persisted amount',async()=>{
+  const response=await creditPOST(new NextRequest('http://localhost/api/credits',{method:'POST',body:JSON.stringify({
+    installmentId:'66666666-6666-4666-8666-666666666666',method:'cash',amount:100,idempotencyKey:'credit-single-fixture'
+  })}));const body=await response.json()
+  expect(response.status).toBe(200);expect(body.data.appliedAmount).toBe(100)
+  expect(body.data.collection.receiptNumber).toBe('COL-FIXTURE')
+  expect(state.calls[0].name).toBe('collect_customer_payment_atomic')
+ })
 })

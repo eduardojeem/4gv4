@@ -15,10 +15,12 @@ import { useAuth } from '@/contexts/auth-context'
 import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
 import { TechnicianCompensationCard } from '@/components/dashboard/technicians/detail/TechnicianCompensationCard'
 import { TechnicianPaymentsTab } from '@/components/dashboard/technicians/detail/TechnicianPaymentsTab'
+import { TechnicianPaymentHelp } from '@/components/dashboard/technicians/detail/TechnicianPaymentHelp'
 import { Activity, BarChart3, History, User, Wallet } from 'lucide-react'
 import { isActiveRepair, isCompletedRepair } from '@/lib/constants/repair-status'
 import { type Repair } from '@/types/repairs'
 import { HelpButton } from '@/components/help/HelpButton'
+import { Button } from '@/components/ui/button'
 
 function HeaderSkeleton() {
   return (
@@ -77,12 +79,13 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
   const { user } = useAuth()
   // La compensación es dato sensible: solo admin/super_admin (alineado con el API).
   const canManageCompensation = user?.role === 'admin' || user?.role === 'super_admin'
-  const { technicians, isLoading: isLoadingTechs } = useTechnicianStats()
-  const { repairs, isLoading: isLoadingRepairs } = useRepairs()
+  const { technicians, isLoading: isLoadingTechs, error: statsError, refresh: refreshStats } = useTechnicianStats()
+  const { repairs, isLoading: isLoadingRepairs, error: repairsError } = useRepairs()
   const {
     compensation,
     earnings: compEarnings,
     isLoading: compLoading,
+    error: compError,
     refresh: refreshComp,
   } = useTechnicianCompensation(resolvedParams.id, canManageCompensation)
   const [activeTab, setActiveTab] = useState('active')
@@ -135,6 +138,7 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
     router.push(`/dashboard/repairs?new=true&technician=${encodeURIComponent(resolvedParams.id)}`)
   }
 
+  if (statsError || repairsError) return <div role="alert" className="m-4 space-y-3 rounded-lg border border-destructive/30 p-4"><p>No se pudo cargar el perfil completo del técnico. No se mostrarán métricas parciales como definitivas.</p><Button variant="outline" onClick={() => { void refreshStats(); router.refresh() }}>Reintentar</Button></div>
   if (isLoading) {
     return (
       <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
@@ -179,12 +183,17 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
       />
 
       {canManageCompensation && (
+        <TechnicianPaymentHelp />
+      )}
+
+      {canManageCompensation && (
         <TechnicianCompensationCard
           technicianId={technician.id}
           canManage={canManageCompensation}
           compensation={compensation}
           earnings={compEarnings}
           isLoading={compLoading}
+          error={compError}
           onSaved={refreshComp}
         />
       )}

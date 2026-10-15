@@ -18,6 +18,7 @@ import {
     type LucideIcon,
 } from 'lucide-react'
 import type { OrganizationModule } from '@/lib/organization/business-profile'
+import { isRouteAvailable, requirementForPath } from '@/lib/navigation/route-modules'
 
 /**
  * Configuración de navegación del panel de administración
@@ -39,8 +40,11 @@ export interface NavItem {
     description?: string
     /** If true, only super_admin users can see and access this item */
     superAdminOnly?: boolean
-    /** Módulo del plan requerido para ver este item. Si el plan activo (efectivo) no lo incluye, se oculta. */
-    module?: OrganizationModule
+    /**
+     * Módulo requerido. No se escribe a mano: sale de ROUTE_MODULES
+     * (src/lib/navigation/route-modules.ts), igual que en las páginas.
+     */
+    module?: OrganizationModule | readonly OrganizationModule[]
     /**
      * Contador a mostrar al lado del nombre. El monitor de cajas era la unica
      * seccion que generaba alertas y no habia forma de saberlo sin entrar.
@@ -59,7 +63,7 @@ export interface NavCategory {
  * Categorías de navegación del admin panel
  * Agrupadas lógicamente por funcionalidad
  */
-export const adminNavCategories: NavCategory[] = [
+const rawAdminNavCategories: NavCategory[] = [
     {
         id: 'analytics',
         label: 'Análisis',
@@ -79,7 +83,6 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/analytics',
                 description: 'Análisis avanzado de datos',
                 permissions: ['analytics.read'],
-                module: 'analytics',
             },
             {
                 key: 'reports',
@@ -97,7 +100,6 @@ export const adminNavCategories: NavCategory[] = [
                 description: 'Visitas e interacciones de tu tienda online',
                 permissions: ['analytics.read'],
                 // Módulo propio: se puede vender sin Analytics.
-                module: 'web_analytics',
             },
         ],
     },
@@ -125,7 +127,6 @@ export const adminNavCategories: NavCategory[] = [
                 // `products.read` a secas: quien tenia solo el permiso de stock
                 // veia la seccion en el menu y encontraba el catalogo vacio.
                 permissions: ['products.read'],
-                module: 'inventory_admin',
             },
             {
                 key: 'finances',
@@ -134,7 +135,6 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/finances',
                 description: 'Gestión de gastos, nómina y rentabilidad',
                 permissions: ['finances.read'],
-                module: 'finances',
             },
         ],
     },
@@ -201,7 +201,6 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/security',
                 description: 'Logs de seguridad y auditoría',
                 permissions: ['settings.read'],
-                module: 'security',
             },
             {
                 key: 'settings',
@@ -242,6 +241,14 @@ export const adminNavCategories: NavCategory[] = [
         ],
     },
 ]
+
+export const adminNavCategories: NavCategory[] = rawAdminNavCategories.map((category) => ({
+  ...category,
+  items: category.items.map((item) => ({
+    ...item,
+    module: item.href ? requirementForPath(item.href)?.module ?? undefined : undefined,
+  })),
+}))
 
 /**
  * Lista plana de todos los items de navegación (para compatibilidad)
@@ -299,7 +306,7 @@ export function filterNavItemsByPermissions(
 
         // Items atados a un módulo del plan: ocultar si el plan activo no lo incluye,
         // sin importar el rol (un admin tampoco debería ver secciones fuera de su plan).
-        if (item.module && effectiveModules && !effectiveModules.includes(item.module)) {
+        if (item.href && effectiveModules && !isRouteAvailable(item.href, effectiveModules as readonly OrganizationModule[])) {
             return false
         }
 

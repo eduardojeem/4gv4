@@ -23,7 +23,10 @@ import { formatCurrency } from '@/lib/currency'
 import { formatCreditId } from '@/lib/utils'
 import { CreditRow, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
 
+import { daysUntilCreditDue } from '@/lib/credits/calendar'
+
 interface CreditOverviewProps {
+  timeZone?: string
   credits: CreditRow[]
   installments: InstallmentRow[]
   creditById: Record<string, CreditRow>
@@ -98,11 +101,6 @@ const getOutstandingAmount = (installment: InstallmentRow) => {
   return Math.max(0, amount - Math.min(amount, paid))
 }
 
-const startOfDay = (value: Date) => {
-  const copy = new Date(value)
-  copy.setHours(0, 0, 0, 0)
-  return copy
-}
 
 export function CreditOverview({
   credits,
@@ -110,12 +108,10 @@ export function CreditOverview({
   creditById,
   remainingByCredit,
   onRegisterPayment,
+  timeZone = 'America/Asuncion',
 }: CreditOverviewProps) {
   const metrics = useMemo(() => {
     const now = new Date()
-    const today = startOfDay(now)
-    const nextWeek = new Date(today)
-    nextWeek.setDate(today.getDate() + 7)
 
     let totalScheduled = 0
     let totalCollected = 0
@@ -140,9 +136,9 @@ export function CreditOverview({
     for (const installment of installments) {
       const amount = Number(installment.amount || 0)
       const paid = Math.max(0, Number(installment.amount_paid || 0))
-      const outstanding = getOutstandingAmount(installment)
-      const dueDate = startOfDay(new Date(installment.due_date))
-      const isLate = outstanding > 0 && isInstallmentLate(installment)
+      const outstanding = creditById[installment.credit_id]?.status === 'completed' ? 0 : getOutstandingAmount(installment)
+      const daysUntilDue = daysUntilCreditDue(installment.due_date, timeZone, now)
+      const isLate = outstanding > 0 && isInstallmentLate(installment, timeZone)
 
       totalScheduled += amount
       totalCollected += Math.min(amount, paid)
@@ -156,12 +152,12 @@ export function CreditOverview({
         partialInstallmentsAmount += outstanding
       }
 
-      if (dueDate.getTime() === today.getTime()) {
+      if (daysUntilDue === 0) {
         dueTodayCount += 1
         dueTodayAmount += outstanding
       }
 
-      if (dueDate > today && dueDate <= nextWeek) {
+      if (daysUntilDue !== null && daysUntilDue > 0 && daysUntilDue <= 7) {
         dueNext7DaysCount += 1
         dueNext7DaysAmount += outstanding
       }
@@ -169,7 +165,7 @@ export function CreditOverview({
       if (isLate) {
         const daysOverdue = Math.max(
           1,
-          Math.floor((today.getTime() - dueDate.getTime()) / 86400000)
+          -(daysUntilDue ?? 0)
         )
 
         portfolioOverdue += outstanding
@@ -217,17 +213,17 @@ export function CreditOverview({
           installment.credit_id === creditId && getOutstandingAmount(installment) > 0
         )
         const overdueAmount = openInstallments.reduce((sum, installment) => (
-          isInstallmentLate(installment) ? sum + getOutstandingAmount(installment) : sum
+          isInstallmentLate(installment, timeZone) ? sum + getOutstandingAmount(installment) : sum
         ), 0)
         const nextDueInstallment = [...openInstallments].sort((a, b) =>
           new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
         )[0]
         const daysOverdue = openInstallments.reduce((maxDays, installment) => {
-          if (!isInstallmentLate(installment)) return maxDays
+          if (!isInstallmentLate(installment, timeZone)) return maxDays
 
           const overdueDays = Math.max(
             1,
-            Math.floor((today.getTime() - startOfDay(new Date(installment.due_date)).getTime()) / 86400000)
+            -(daysUntilCreditDue(installment.due_date, timeZone, now) ?? 0)
           )
           return Math.max(maxDays, overdueDays)
         }, 0)
@@ -305,7 +301,7 @@ export function CreditOverview({
       topDebtors,
       priorityItems,
     }
-  }, [credits, installments, creditById, remainingByCredit])
+  }, [credits, installments, creditById, remainingByCredit, timeZone])
 
   const maxAgingAmount = Math.max(
     1,

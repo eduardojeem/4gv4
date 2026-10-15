@@ -1,5 +1,7 @@
 # Cómo usar la ficha para crédito
 
+Para consultar saldos y registrar cobros, ver [Cobros de Clientes y Créditos](customer-credit-collection.md). La ficha documental y su evaluación manual son independientes del pago de deudas existentes.
+
 ## Recorrido
 
 1. Abrí **Dashboard → Clientes**, seleccioná un cliente y entrá en **Ficha para crédito**.

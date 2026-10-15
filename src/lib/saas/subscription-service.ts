@@ -659,7 +659,8 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
 
 /** Info liviana del plan activo (código, nombre, módulos) para gating en el cliente. */
 export async function getOrganizationPlanInfo(
-  organizationId: string
+  organizationId: string,
+  options: { strict?: boolean } = {}
 ): Promise<{
   code: PlanCode
   name: string
@@ -683,7 +684,7 @@ export async function getOrganizationPlanInfo(
 }> {
   await applyScheduledDowngradeIfDue(organizationId)
   const supabase = createAdminSupabase()
-  const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
+  const [subscriptionResult, organizationResult, trialsResult] = await Promise.all([
     supabase.from('subscriptions').select('plan, payment_status, cancel_at_period_end, current_period_ends_at').eq('organization_id', organizationId).maybeSingle(),
     supabase.from('organizations').select('*').eq('id', organizationId).maybeSingle(),
     supabase
@@ -692,9 +693,16 @@ export async function getOrganizationPlanInfo(
       .eq('organization_id', organizationId),
   ])
 
+  if (options.strict && (subscriptionResult.error || organizationResult.error || trialsResult.error || !organizationResult.data)) {
+    throw new Error('No se pudo comprobar el perfil y la suscripción de la organización')
+  }
+  const { data: sub } = subscriptionResult
+  const { data: org } = organizationResult
+  const { data: trials } = trialsResult
+
   const code = normalizePlanCode(sub?.plan || org?.plan)
 
-  const { data: availablePlans } = await supabase
+  const { data: availablePlans, error: plansError } = await supabase
     .from('plans')
     .select('code, name, modules, is_active, limits')
 
@@ -706,6 +714,7 @@ export async function getOrganizationPlanInfo(
     limits: unknown
   }>
   const plan = planRows.find(row => String(row.code).toUpperCase() === code)
+  if (options.strict && (plansError || !plan)) throw new Error('No se pudo comprobar el plan vigente')
 
   const planModules = Array.isArray(plan?.modules) ? plan.modules.map(String) : []
   const modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>> = {}

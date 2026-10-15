@@ -94,9 +94,16 @@ function LogoMarquee({ items, direction = 'left' }: { items: MarketplaceOrganiza
   )
 }
 
+/**
+ * Cuándo el bloque dice algo. Con 2 tiendas de 1 reseña cada una, «las mejor
+ * calificadas del marketplace» era un título grande para casi nada, y ocupaba
+ * la primera pantalla.
+ */
+export const TOP_RATED_MINIMUMS = { stores: 3, reviewsPerStore: 2 } as const
+
 export function TopRatedCarousel({ organizations }: Props) {
   const topRated = organizations
-    .filter((org) => (org.review_count ?? 0) > 0)
+    .filter((org) => (org.review_count ?? 0) >= TOP_RATED_MINIMUMS.reviewsPerStore)
     .sort((a, b) => {
       const ratingDiff = Number(b.review_rating_avg ?? 0) - Number(a.review_rating_avg ?? 0)
       if (ratingDiff !== 0) return ratingDiff
@@ -104,7 +111,7 @@ export function TopRatedCarousel({ organizations }: Props) {
     })
     .slice(0, 16)
 
-  if (topRated.length === 0) return null
+  if (topRated.length < TOP_RATED_MINIMUMS.stores) return null
 
   const totalReviews = topRated.reduce((sum, org) => sum + Number(org.review_count ?? 0), 0)
   const avgRating = topRated.reduce((sum, org) => sum + Number(org.review_rating_avg ?? 0), 0) / topRated.length
@@ -118,7 +125,7 @@ export function TopRatedCarousel({ organizations }: Props) {
   const row2 = topRated.slice(mid)
 
   return (
-    <section className="mb-12 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
       {/* Header */}
       <div className="border-b border-slate-100 px-6 py-8 text-center dark:border-slate-800">
         <p className="text-sm font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">

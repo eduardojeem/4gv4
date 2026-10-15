@@ -17,7 +17,7 @@ const amount = (value: unknown) => Math.max(0, Number(value) || 0)
 
 /** Resumen comercial sensible usado por la ficha de reparaciones. */
 export const GET = withTenantAuth(
-  { permission: ['settings.manage', 'pos.sales.create'] },
+  { permission: ['settings.manage', 'pos.sales.create'], module: ['crm', 'pos'] },
   async (_request: NextRequest, { organization }, routeContext) => {
     const customerId = await getCustomerId(routeContext)
     if (!customerId) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 })

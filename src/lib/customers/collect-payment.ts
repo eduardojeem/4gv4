@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { resolveRepairCollectionPricing } from '@/lib/repairs/collection-pricing'
 import type { RepairPricingMode } from '@/lib/repairs/pricing'
+import { readAllCreditRows } from '@/lib/credits/portfolio'
+import { creditInstallmentIsOverdue, DEFAULT_CREDIT_TIMEZONE } from '@/lib/credits/calendar'
 
 /**
  * Cobro unificado a un cliente: sus reparaciones y cuotas pendientes en un solo
@@ -123,6 +125,7 @@ type QueryBuilder = PromiseLike<QueryResult> & {
   eq: (column: string, value: unknown) => QueryBuilder
   in: (column: string, values: unknown[]) => QueryBuilder
   order: (column: string, options?: { ascending?: boolean }) => QueryBuilder
+  range: (from: number, to: number) => QueryBuilder
 }
 
 type SupabaseLike = {
@@ -130,6 +133,10 @@ type SupabaseLike = {
 }
 
 const query = (supabase: SupabaseLike, table: string) => supabase.from(table) as QueryBuilder
+async function completeQuery(build: () => QueryBuilder): Promise<QueryResult> {
+  try { return { data: await readAllCreditRows((from,to)=>build().order('id').range(from,to)), error: null } }
+  catch (error) { return { data: null, error } }
+}
 
 const CANCELLED_REPAIR = new Set(['cancelado', 'cancelled', 'canceled'])
 const CANCELLED_CREDIT = new Set(['cancelled', 'canceled', 'cancelado'])
@@ -174,23 +181,21 @@ export function sortDebts(debts: DebtItem[]) {
  */
 export async function loadCustomerDebts(
   supabase: SupabaseLike,
-  input: { organizationId: string; customerId: string; branchId: string | null; now?: Date }
+  input: { organizationId: string; customerId: string; branchId: string | null; now?: Date; timeZone?: string }
 ): Promise<{ debts: DebtItem[]; error: string | null }> {
-  const today = new Date(input.now ?? Date.now())
-  today.setHours(0, 0, 0, 0)
   const debts: DebtItem[] = []
 
-  const repairsResult = await query(supabase, 'repairs')
-    .select('id, ticket_number, device_brand, device_model, problem_description, status, branch_id, pricing_mode, labor_cost, final_cost, estimated_cost, discount_amount, paid_amount, payment_status, delivered_at, created_at, parts:repair_parts(unit_price, unit_cost, quantity)')
+  const repairsResult = await completeQuery(() => query(supabase, 'repairs')
+    .select('id, ticket_number, device_brand, device_model, problem_description, status, branch_id, pricing_mode, labor_cost, final_cost, estimated_cost, discount_amount, paid_amount, payment_status, delivered_at, created_at, deleted_at, parts:repair_parts(unit_price, unit_cost, quantity)')
     .eq('customer_id', input.customerId)
-    .eq('organization_id', input.organizationId)
+    .eq('organization_id', input.organizationId))
 
   if (repairsResult.error) return { debts: [], error: 'No se pudieron leer las reparaciones del cliente.' }
 
   for (const r of (repairsResult.data ?? []) as Row[]) {
     const status = String(r.status ?? 'recibido').toLowerCase()
     // Una reparación cancelada no se cobra: el propio cobro de reparaciones la rechaza.
-    if (CANCELLED_REPAIR.has(status)) continue
+    if (CANCELLED_REPAIR.has(status) || r.deleted_at) continue
 
     const { pricing } = resolveRepairCollectionPricing({
       mode: (r.pricing_mode as RepairPricingMode | null) ?? undefined,
@@ -235,23 +240,23 @@ export async function loadCustomerDebts(
     })
   }
 
-  const creditsResult = await query(supabase, 'customer_credits')
+  const creditsResult = await completeQuery(() => query(supabase, 'customer_credits')
     .select('id, status')
     .eq('customer_id', input.customerId)
-    .eq('organization_id', input.organizationId)
+    .eq('organization_id', input.organizationId))
 
   if (creditsResult.error) return { debts: [], error: 'No se pudieron leer los créditos del cliente.' }
 
   // Un crédito cancelado no se cobra. Se filtra acá y no con `neq` en la
   // consulta, que dejaría afuera los créditos sin estado.
   const credits = ((creditsResult.data ?? []) as Row[])
-    .filter((c) => !CANCELLED_CREDIT.has(String(c.status ?? '').toLowerCase()))
+    .filter((c) => !CANCELLED_CREDIT.has(String(c.status ?? '').toLowerCase()) && c.status !== 'completed')
 
   if (credits.length > 0) {
-    const installmentsResult = await query(supabase, 'credit_installments')
+    const installmentsResult = await completeQuery(() => query(supabase, 'credit_installments')
       .select('id, credit_id, installment_number, due_date, amount, amount_paid, status')
       .in('credit_id', credits.map((c) => c.id))
-      .order('due_date', { ascending: true })
+      .order('due_date', { ascending: true }))
 
     if (installmentsResult.error) return { debts: [], error: 'No se pudieron leer las cuotas del cliente.' }
 
@@ -262,7 +267,7 @@ export async function loadCustomerDebts(
       if (inst.status === 'paid' || pending <= 0 || amount <= 0) continue
 
       const due = inst.due_date ? new Date(String(inst.due_date)) : null
-      const late = inst.status === 'late' || (due ? due < today : false)
+      const late = creditInstallmentIsOverdue(inst.due_date as string, String(inst.status), input.timeZone ?? DEFAULT_CREDIT_TIMEZONE, input.now)
 
       debts.push({
         id: String(inst.id),

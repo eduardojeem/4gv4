@@ -2,14 +2,25 @@
 
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import {
+  Activity,
+  ArrowLeft,
+  BarChart3,
+  Building2,
+  ChevronRight,
+  Download,
+  Home,
+  Loader2,
+  Shield,
+  Users,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BarChart3, Activity, Users, ArrowLeft, Home, ChevronRight, Download, Shield, Loader2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { AnalyticsOverview } from '@/components/dashboard/repairs/analytics/AnalyticsOverview'
 import { AnalyticsTechnicians } from '@/components/dashboard/repairs/analytics/AnalyticsTechnicians'
 import { RepairPerformanceMetrics } from '@/components/dashboard/repairs/analytics/RepairPerformanceMetrics'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 import { generateAnalyticsPDF } from '@/lib/repairs/analytics-pdf'
 import { useBranch } from '@/contexts/branch-context'
@@ -17,15 +28,25 @@ import { useAuth } from '@/contexts/auth-context'
 
 function AnalyticsLoading() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-32 rounded-2xl bg-muted/50 border border-border/30 animate-pulse" />
+          <div key={i} className="h-32 rounded-2xl bg-card border border-border/60 p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
+            </div>
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-3 w-20" />
+          </div>
         ))}
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Skeleton key={i} className="h-[400px] rounded-2xl bg-muted/30 border border-border/30" />
+          <div key={i} className="h-[360px] rounded-2xl bg-card border border-border/60 p-6 space-y-4">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-[260px] w-full rounded-xl" />
+          </div>
         ))}
       </div>
     </div>
@@ -33,43 +54,48 @@ function AnalyticsLoading() {
 }
 
 export default function RepairsAnalyticsPage() {
-  const router = useRouter()
   const { user, isAdmin, loading: authLoading } = useAuth()
   const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
   const [activeTab, setActiveTab] = useState('overview')
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
   const analyticsData = useRepairAnalytics('6m')
   const { selectedBranch } = useBranch()
 
-  const handleExportPDF = () => {
-    generateAnalyticsPDF(analyticsData, selectedBranch?.name || 'Taller')
+  const handleExportPDF = async () => {
+    setIsExportingPDF(true)
+    try {
+      generateAnalyticsPDF(analyticsData, selectedBranch?.name || 'Taller Central')
+    } finally {
+      setIsExportingPDF(false)
+    }
   }
 
   if (authLoading) {
     return (
-      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      <div className="mx-auto flex max-w-4xl flex-col items-center justify-center gap-3 py-28">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm font-medium text-muted-foreground">Verificando permisos de acceso…</p>
       </div>
     )
   }
 
   if (!canAccess) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh] p-6">
-        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+      <div className="flex items-center justify-center min-h-[60vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border/80 shadow-lg">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive">
+            <Shield className="h-7 w-7" />
           </div>
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
-            <p className="text-xs text-muted-foreground">
-              Las analíticas financieras y de productividad del taller están reservadas para administradores y gerencia.
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Las analíticas financieras, métricas de productividad y tiempos del taller están reservadas exclusivamente para administradores y gerencia.
             </p>
           </div>
-          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+          <Button asChild variant="outline" className="gap-2 text-xs font-semibold rounded-xl mt-2 w-full">
             <Link href="/dashboard/repairs">
               <ArrowLeft className="h-4 w-4" />
-              Volver a Reparaciones
+              Volver al Módulo de Reparaciones
             </Link>
           </Button>
         </div>
@@ -78,83 +104,113 @@ export default function RepairsAnalyticsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-6 md:p-8 w-full max-w-7xl mx-auto animate-in fade-in duration-500 relative print:p-0 print:gap-4">
-      {/* Background decoration */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl -z-10 pointer-events-none print:hidden" />
-
+    <div className="flex flex-col gap-6 p-4 sm:p-6 md:p-8 w-full max-w-7xl mx-auto print:p-0 print:gap-4">
       {/* Breadcrumbs */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground/80 font-medium relative z-10 print:hidden">
-        <Home className="h-4 w-4 hover:text-primary transition-colors cursor-pointer" />
-        <ChevronRight className="h-3 w-3" />
-        <span className="hover:text-foreground transition-colors cursor-pointer" onClick={() => router.push('/dashboard/repairs')}>Reparaciones</span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">Analytics</span>
-      </div>
-
-      <div className="-mt-4 relative z-10 print:hidden">
-        <Button
-          variant="ghost"
-          onClick={() => router.back()}
-          className="-ml-4 gap-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
+      <nav aria-label="Navegación de analíticas" className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground font-medium print:hidden">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-1 hover:text-primary transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Volver
-        </Button>
-      </div>
+          <Home className="h-3.5 w-3.5" />
+          <span>Inicio</span>
+        </Link>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+        <Link
+          href="/dashboard/repairs"
+          className="hover:text-primary transition-colors"
+        >
+          Reparaciones
+        </Link>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+        <span className="text-foreground font-semibold">Analíticas</span>
+      </nav>
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
-        <div className="flex items-center gap-5">
-          <div className="h-16 w-16 shrink-0 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-600/10 border border-primary/20 flex items-center justify-center shadow-inner print:border-none print:shadow-none">
-            <BarChart3 className="h-8 w-8 text-primary drop-shadow-sm" />
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/60 pb-5">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                  Analíticas de Reparaciones
+                </h1>
+                {selectedBranch?.name && (
+                  <Badge variant="outline" className="hidden sm:inline-flex items-center gap-1 text-xs border-primary/25 bg-primary/5 text-primary">
+                    <Building2 className="h-3 w-3" />
+                    <span>{selectedBranch.name}</span>
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <h1 className="bg-gradient-to-br from-primary via-primary/90 to-primary/50 bg-clip-text text-4xl font-black tracking-tight text-transparent drop-shadow-sm mb-2 print:text-black">
-              Analytics de Reparaciones
-            </h1>
-            <p className="text-muted-foreground text-lg max-w-xl leading-relaxed">
-              Análisis integral del rendimiento, métricas operativas y productividad de tu taller.
-            </p>
-          </div>
+
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl leading-relaxed">
+            Diagnóstico integral del flujo operativo, volumen de ingresos, cumplimiento de plazos y productividad técnica del taller.
+          </p>
+
+          {selectedBranch?.name && (
+            <div className="sm:hidden pt-1">
+              <Badge variant="outline" className="inline-flex items-center gap-1 text-xs border-primary/25 bg-primary/5 text-primary">
+                <Building2 className="h-3 w-3" />
+                <span>Sucursal: {selectedBranch.name}</span>
+              </Badge>
+            </div>
+          )}
         </div>
-        <Button 
-          onClick={handleExportPDF}
-          className="gap-2 shadow-md hover:shadow-lg transition-all print:hidden"
-        >
-          <Download className="h-4 w-4" />
-          Exportar a PDF
-        </Button>
-      </div>
+
+        <div className="flex items-center gap-2 shrink-0 print:hidden">
+          <Button
+            onClick={handleExportPDF}
+            disabled={isExportingPDF}
+            className="h-9 gap-2 text-xs font-semibold shadow-xs"
+          >
+            {isExportingPDF ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Generando PDF…</span>
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                <span>Exportar Informe PDF</span>
+              </>
+            )}
+          </Button>
+        </div>
+      </header>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
-        <div className="bg-background/50 backdrop-blur-xl rounded-2xl border border-border/50 shadow-sm p-1.5 inline-flex w-full overflow-x-auto no-scrollbar print:hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+        <div className="rounded-xl border border-border/70 bg-card/60 p-1.5 shadow-2xs print:hidden">
           <TabsList className="flex w-full sm:w-auto bg-transparent h-auto p-0 gap-1.5">
-            <TabsTrigger 
-              value="overview" 
-              className="flex-1 sm:flex-none flex items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all duration-300 group"
+            <TabsTrigger
+              value="overview"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 text-xs font-semibold rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs transition-all"
             >
-              <BarChart3 className="h-4 w-4 group-data-[state=active]:animate-pulse" />
+              <BarChart3 className="h-4 w-4" />
               <span>Vista General</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="performance" 
-              className="flex-1 sm:flex-none flex items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all duration-300 group"
+            <TabsTrigger
+              value="performance"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 text-xs font-semibold rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs transition-all"
             >
-              <Activity className="h-4 w-4 group-data-[state=active]:animate-pulse" />
-              <span>Rendimiento</span>
+              <Activity className="h-4 w-4" />
+              <span>Rendimiento y Tiempos</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="technicians" 
-              className="flex-1 sm:flex-none flex items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all duration-300 group"
+            <TabsTrigger
+              value="technicians"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 text-xs font-semibold rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs transition-all"
             >
-              <Users className="h-4 w-4 group-data-[state=active]:animate-pulse" />
-              <span>Técnicos</span>
+              <Users className="h-4 w-4" />
+              <span>Productividad por Técnico</span>
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <div className="mt-8 relative">
+        <div>
           <TabsContent value="overview" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
             <Suspense fallback={<AnalyticsLoading />}>
               <AnalyticsOverview />

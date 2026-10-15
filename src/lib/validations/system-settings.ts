@@ -34,9 +34,12 @@ export const SystemSettingsSchema = z.object({
     .max(100, 'El nombre no puede exceder 100 caracteres')
     .trim(),
   
-  companyEmail: z.string()
-    .email('Formato de email inválido')
-    .min(1, 'El email es obligatorio'),
+  // Opcional: un comercio chico puede no tener email, y exigirlo le impedia
+  // guardar cualquier otro cambio de la configuracion.
+  companyEmail: z.union([
+    z.string().trim().length(0),
+    z.string().trim().email('Formato de email inválido'),
+  ]),
   
   companyPhone: z.string()
     .max(50, 'El telefono no puede exceder 50 caracteres')

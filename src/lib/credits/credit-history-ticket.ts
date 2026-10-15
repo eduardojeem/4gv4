@@ -1,11 +1,14 @@
-import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId } from '@/lib/utils'
 import {
   getCreditPaperMetrics,
   type CreditPaperFormat,
   type CreditPaperMetrics,
+  toPdfText,
 } from './paper'
+
+const formatCurrency = (amount: number) => toPdfText(formatCurrencyBase(amount))
 
 /**
  * Estado de cuenta en rollo termico (58 mm y 80 mm).
@@ -97,6 +100,22 @@ function vigentes(credits: CreditHistoryTicketInput['credits']) {
 }
 
 /**
+ * Lo financiado de los creditos que siguen contando (todos menos los anulados).
+ * El principal ya incluye el interes; si un credito viejo no lo tiene cargado,
+ * se suma el valor de sus cuotas.
+ */
+export function totalFinanciado(credits: CreditHistoryTicketInput['credits']) {
+  return credits
+    .filter((c) => c.status !== 'cancelled')
+    .reduce((suma, c) => suma + financiadoDe(c), 0)
+}
+
+function financiadoDe(credit: CreditHistoryTicketInput['credits'][number]) {
+  if (credit.principal > 0) return credit.principal
+  return (credit.installments ?? []).reduce((s, i) => s + i.amount, 0)
+}
+
+/**
  * La linea mas util del documento, y la que no estaba: cuando y cuanto hay que
  * pagar la proxima vez.
  */
@@ -118,7 +137,7 @@ export function findNextDueInstallment(credits: CreditHistoryTicketInput['credit
 
 function separador(doc: Doc, m: CreditPaperMetrics, y: number, punteado = true) {
   doc.setDrawColor(0)
-  doc.setLineWidth(0.2)
+  doc.setLineWidth(0.3)
   if (punteado) doc.setLineDashPattern([0.5, 0.5], 0)
   doc.line(m.marginMm, y, m.pageWidthMm - m.marginMm, y)
   if (punteado) doc.setLineDashPattern([], 0)
@@ -159,7 +178,7 @@ function dibujar(
   doc.setFontSize(m.titleSize)
   y += parrafo(doc, input.companyName, centro, y, m.contentWidthMm, m.titleSize * 0.42, { align: 'center' })
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(m.smallSize)
   const identidad = [
     input.companyRuc ? `RUC ${input.companyRuc}` : '',
@@ -182,11 +201,11 @@ function dibujar(
   doc.text('ESTADO DE CUENTA', centro, y, { align: 'center' })
   y += m.lineGap
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(m.smallSize)
-  doc.setTextColor(90)
+  doc.setTextColor(0)
   doc.text(
-    `${ahora.toLocaleDateString(getDisplayLocale())} ${ahora.toLocaleTimeString(getDisplayLocale(), { hour: '2-digit', minute: '2-digit' })}`,
+    toPdfText(`${ahora.toLocaleDateString(getDisplayLocale())} ${ahora.toLocaleTimeString(getDisplayLocale(), { hour: '2-digit', minute: '2-digit' })}`),
     centro, y, { align: 'center' }
   )
   doc.setTextColor(0)
@@ -197,7 +216,7 @@ function dibujar(
   doc.setFontSize(m.bodySize)
   y += parrafo(doc, input.customerName, m.marginMm, y, m.contentWidthMm, m.bodySize * 0.42)
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(m.smallSize)
   const datosCliente = [
     input.customerCode ? `Cod. ${input.customerCode}` : '',
@@ -213,9 +232,18 @@ function dibujar(
   y += 4
 
   // ─── Lo que el cliente busca primero ──────────────────────────────────
-  // Saldo y proximo vencimiento van arriba del detalle: son la razon por la que
-  // se pide el documento.
-  doc.setFont('helvetica', 'normal')
+  // Total financiado, pagado y saldo, y despues el proximo vencimiento: son la
+  // razon por la que se pide el documento.
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(m.bodySize)
+  doc.text('TOTAL FINANCIADO', m.marginMm, y)
+  doc.text(formatCurrency(totalFinanciado(input.credits)), derecha, y, { align: 'right' })
+  y += m.lineGap
+
+  doc.text('TOTAL PAGADO', m.marginMm, y)
+  doc.text(formatCurrency(input.totalPaid), derecha, y, { align: 'right' })
+  y += m.lineGap + 0.5
+
   doc.setFontSize(m.smallSize)
   doc.text('SALDO PENDIENTE', m.marginMm, y)
   doc.setFont('helvetica', 'bold')
@@ -225,7 +253,7 @@ function dibujar(
 
   const proxima = findNextDueInstallment(input.credits)
   if (proxima) {
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(m.smallSize)
     doc.text('Proximo vencimiento', m.marginMm, y)
     doc.setFont('helvetica', 'bold')
@@ -237,10 +265,9 @@ function dibujar(
     y += m.lineGap
   }
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(m.smallSize)
   doc.text(`Creditos vigentes: ${vigentes(input.credits)}`, m.marginMm, y)
-  doc.text(`Pagado: ${formatCurrency(input.totalPaid)}`, derecha, y, { align: 'right' })
   y += m.lineGap
 
   y += 1
@@ -256,18 +283,18 @@ function dibujar(
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(m.bodySize)
     doc.text(codigo, m.marginMm, y)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(m.smallSize)
     doc.text(statusLabel(credit.status), derecha, y, { align: 'right' })
     y += m.lineGap
 
     doc.setFontSize(m.smallSize)
-    doc.setTextColor(90)
-    doc.text(`${formatCurrency(credit.principal)} - ${credit.termMonths}m`, m.marginMm, y)
+    doc.setTextColor(0)
+    doc.text(`Total ${formatCurrency(financiadoDe(credit))} - ${credit.termMonths} cuotas`, m.marginMm, y)
     doc.setTextColor(0)
     doc.setFont('helvetica', 'bold')
     doc.text(`Saldo ${formatCurrency(credit.remainingBalance ?? 0)}`, derecha, y, { align: 'right' })
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
     y += m.lineGap - 0.5
 
     if (credit.installments && credit.installments.length > 0) {
@@ -309,12 +336,13 @@ function dibujar(
         // distingue por la negrita y por la linea inferior.
         headStyles: {
           fontStyle: 'bold',
+          textColor: 0,
           fontSize: m.tableHeadSize,
           cellPadding: { top: 0.4, bottom: 1, left: 0.5, right: 0.5 },
-          lineWidth: { bottom: 0.2 },
+          lineWidth: { bottom: 0.4 },
           lineColor: [0, 0, 0],
         },
-        bodyStyles: { fontSize: m.tableBodySize, cellPadding: m.cellPadding },
+        bodyStyles: { fontSize: m.tableBodySize, cellPadding: m.cellPadding, fontStyle: 'bold', textColor: 0 },
         columnStyles,
         margin: { left: m.marginMm, right: m.marginMm },
         tableWidth: m.contentWidthMm,
@@ -324,7 +352,7 @@ function dibujar(
     }
 
     doc.setLineDashPattern([0.3, 0.8], 0)
-    doc.setDrawColor(150)
+    doc.setDrawColor(0)
     doc.setLineWidth(0.15)
     doc.line(m.marginMm + 8, y, m.pageWidthMm - m.marginMm - 8, y)
     doc.setLineDashPattern([], 0)
@@ -334,8 +362,8 @@ function dibujar(
 
   // ─── Pie ──────────────────────────────────────────────────────────────
   doc.setFontSize(m.smallSize)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(110)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(0)
   y += parrafo(doc, 'Documento informativo. Conservelo como referencia de su estado de cuenta.',
     centro, y, m.contentWidthMm, m.smallSize * 0.42, { align: 'center' })
   doc.setTextColor(0)

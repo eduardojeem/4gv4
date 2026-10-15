@@ -7,7 +7,8 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
 describe('customer portal access report wiring', () => {
   it('protects the aggregate endpoint with tenant analytics permission', () => {
     const route = read('src/app/api/reports/customers/route.ts')
-    expect(route).toContain("withTenantAuth({ permission: 'analytics.read' }")
+    // Y el módulo de Informes, como la página que lo muestra.
+    expect(route).toContain("withTenantAuth({ permission: 'analytics.read', module: 'reports' }")
     expect(route).toContain(".eq('organization_id', organization.id)")
     expect(route).toContain(".from('organization_members')")
     expect(route).not.toContain('email')

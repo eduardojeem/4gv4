@@ -95,7 +95,7 @@ describe('fallback del comprobante POS', () => {
     expect(html).toContain('Costo financiero:')
     expect(html).not.toContain('Costo financiero (10%)')
     expect(html).not.toContain('Cambio:')
-    expect(html).toContain('class="total-row final financed"')
+    expect(html).toContain('class="total-row final pc-total financed"')
     expect(html).toMatch(/\.total-row\.final[\s\S]*?font-size: 12px/)
     expect(html).not.toContain('IVA')
     expect(html).toContain('24/10/2026')

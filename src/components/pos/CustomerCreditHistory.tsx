@@ -3,7 +3,7 @@
  * Integrado con el sistema POS
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -47,10 +47,18 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
     getCustomerSales,
     getOverdueSales,
     recordPayment,
+    hasPendingPayment,
+    hasVerifiedCustomer,
+    loadCreditData,
+    loading,
+    error,
     formatCreditStatus,
     getCreditStatusColor,
     calculateDaysOverdue
   } = useCreditSystem()
+  useEffect(() => { void loadCreditData(customer.id) }, [customer.id, loadCreditData])
+  const needsRecovery = hasPendingPayment(customer.id)
+  const [submitting, setSubmitting] = useState(false)
 
   const [activeTab, setActiveTab] = useState('summary')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -98,29 +106,38 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
 
   // Manejar pago
   const handlePayment = async () => {
+    if (submitting || (!needsRecovery && (loading || error))) return
     // En guaraníes se escribe «100.000»: con parseFloat eso valía 100.
-    const amount = parseThousands(paymentAmount)
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const amount = paymentAmount.includes('.') ? Number(paymentAmount) : parseThousands(paymentAmount)
+    if (!needsRecovery && (!Number.isFinite(amount) || amount <= 0)) {
       toast.error('Ingrese un monto válido')
       return
     }
 
-    if (amount > creditSummary.usedCredit) {
+    if (!needsRecovery && amount > creditSummary.usedCredit) {
       toast.error('El monto no puede ser mayor al saldo pendiente')
       return
     }
 
+    setSubmitting(true)
     const success = await recordPayment(customer.id, amount, paymentMethod, paymentReference)
+    setSubmitting(false)
     if (success) {
+      if (!success.creditBalances) {
+        toast.info('Cobro confirmado: ' + success.receiptNumber, { description: 'Consultá el historial para obtener el saldo y comprobante completos.' })
+        setShowPaymentModal(false)
+        return
+      }
       setLastPayment({
         storeName: user?.organization?.name || 'Tu tienda',
         customerName: customer.name,
         customerPhone: customer.phone,
-        amount,
-        method: paymentMethod,
-        reference: paymentMethod === 'transfer' ? paymentReference || null : null,
-        paidAt: new Date(),
-        balanceAfter: Math.max(0, creditSummary.usedCredit - amount),
+        receiptNumber: success.receiptNumber,
+        amount: success.appliedAmount,
+        method: success.paymentMethod ?? paymentMethod,
+        reference: success.reference ?? null,
+        paidAt: new Date(success.recordedAt),
+        balanceAfter: Object.values(success.creditBalances).reduce((sum, balance) => sum + balance.remainingBalance, 0),
       })
       setPaymentAmount('')
       setPaymentReference('')
@@ -149,6 +166,14 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
     if (amount > 0) return 'text-red-600'
     return 'text-gray-600'
   }
+
+  if (!lastPayment && !hasVerifiedCustomer(customer.id)) return (
+    <Card><CardContent className="space-y-3 p-4">
+      <p role={error ? 'alert' : 'status'}>{error || 'Consultando el crédito del cliente…'}</p>
+      {error && <Button type="button" variant="outline" onClick={() => void loadCreditData(customer.id)}>Reintentar consulta</Button>}
+      {needsRecovery && <Button type="button" disabled={submitting} onClick={handlePayment}>Recuperar comprobante pendiente</Button>}
+    </CardContent></Card>
+  )
 
   return (
     <div className={compact ? "space-y-4" : "space-y-6"}>
@@ -451,13 +476,15 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
       </Tabs>
 
       {/* Modal de pago */}
-      <Dialog open={showPaymentModal} onOpenChange={(open) => { setShowPaymentModal(open); if (!open) setLastPayment(null) }}>
-        <DialogContent>
+      {needsRecovery && <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => setShowPaymentModal(true)}>Recuperar comprobante pendiente</Button>}
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (submitting) return; setShowPaymentModal(open); if (!open) setLastPayment(null) }}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           {lastPayment ? (
             <>
               <DialogHeader>
                 <DialogTitle>Pago registrado</DialogTitle>
                 <DialogDescription>Mandale el comprobante al cliente o imprimilo.</DialogDescription>
+                {lastPayment.receiptNumber && <p className="break-all font-mono text-sm">{lastPayment.receiptNumber}</p>}
               </DialogHeader>
               <dl className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-sm">
                 <div className="flex justify-between"><dt className="text-muted-foreground">Cliente</dt><dd className="font-medium">{lastPayment.customerName}</dd></div>
@@ -492,16 +519,18 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
               <Input
                 id="amount"
                 type="text"
-                inputMode="numeric"
+                inputMode="decimal"
+                className="min-h-11"
                 placeholder="0"
-                value={formatThousands(paymentAmount)}
+                value={formatThousands(paymentAmount.split('.')[0]) + (paymentAmount.includes('.') ? ',' + paymentAmount.split('.')[1] : '')}
                 onChange={(e) => {
-                  const raw = parseThousands(e.target.value)
-                  setPaymentAmount(raw > 0 ? String(raw) : '')
+                  const raw = e.target.value.replace(/\./g, '').replace(',', '.')
+                  if (!/^\d*(?:\.\d{0,2})?$/.test(raw)) return
+                  setPaymentAmount(raw)
                 }}
                 onFocus={(e) => e.target.select()}
               />
-              <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => setPaymentAmount(String(Math.round(creditSummary.usedCredit)))}>
+              <Button type="button" variant="link" size="sm" className="min-h-11 px-0 text-xs" onClick={() => setPaymentAmount(String(creditSummary.usedCredit))}>
                 Pagar todo el saldo
               </Button>
               <div className="text-sm text-gray-600 mt-1">
@@ -521,9 +550,9 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
                 </SelectContent>
               </Select>
             </div>
-            {paymentMethod === 'transfer' && (
+            {(paymentMethod === 'transfer' || paymentMethod === 'card') && (
               <div>
-                <Label htmlFor="reference">Referencia</Label>
+                <Label htmlFor="reference">{paymentMethod === 'card' ? 'Cupón de tarjeta *' : 'Referencia de transferencia *'}</Label>
                 <Input
                   id="reference"
                   placeholder="Número de referencia"
@@ -537,8 +566,8 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
             <Button variant="outline" onClick={() => setShowPaymentModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={handlePayment}>
-              Registrar Pago
+            <Button disabled={submitting || (!needsRecovery && (loading || !!error))} onClick={handlePayment} className="min-h-11">
+              {submitting ? 'Confirmando…' : needsRecovery ? 'Recuperar el mismo cobro' : 'Registrar Pago'}
             </Button>
           </DialogFooter>
           </>

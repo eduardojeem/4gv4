@@ -1,7 +1,6 @@
-
 'use client'
 
-import { useState, useCallback, memo, type ElementType } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -19,106 +18,111 @@ import { Tooltip } from 'recharts/es6/component/Tooltip'
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import {
   TrendingUp,
-  TrendingDown,
   Wrench,
-  DollarSign,
   Clock,
   Activity,
   CheckCircle2,
   Download,
-  RefreshCw
+  RefreshCw,
+  Coins,
+  Smartphone,
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
+import { formatCurrency } from '@/lib/currency'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 
-// Componente de métrica optimizado
-const MetricCard = memo(({
-  title,
-  value,
-  change,
-  icon: Icon,
-  format = 'number',
-  gradient,
-  trend
-}: {
+// Paleta armónica para estados de reparación
+const STATUS_COLORS: Record<string, string> = {
+  'Recibido': '#0284c7', // Sky
+  'En Diagnóstico': '#f59e0b', // Amber
+  'En Reparación': '#6366f1', // Indigo
+  'Pausado': '#f97316', // Orange
+  'Listo': '#10b981', // Emerald
+  'Entregado': '#16a34a', // Green
+  'Cancelado': '#64748b', // Slate
+}
+
+const FALLBACK_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b']
+
+interface MetricCardProps {
   title: string
   value: number | string
-  change?: number
-  icon: ElementType
+  sub?: string
+  icon: React.ElementType
   format?: 'number' | 'currency' | 'percentage' | 'days'
-  gradient: string
-  trend?: 'up' | 'down' | 'neutral'
-}) => {
-  const formatValue = useCallback((val: number | string) => {
-    if (typeof val === 'string') return val
-    if (val === undefined || val === null || isNaN(Number(val))) return '0'
+  accent: 'blue' | 'emerald' | 'amber' | 'indigo'
+}
 
-    const numVal = Number(val)
+const ACCENT_MAP = {
+  blue: {
+    iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    border: 'border-l-4 border-l-blue-500',
+    valueColor: 'text-foreground',
+  },
+  emerald: {
+    iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    border: 'border-l-4 border-l-emerald-500',
+    valueColor: 'text-emerald-600 dark:text-emerald-400',
+  },
+  amber: {
+    iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    border: 'border-l-4 border-l-amber-500',
+    valueColor: 'text-amber-600 dark:text-amber-400',
+  },
+  indigo: {
+    iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+    border: 'border-l-4 border-l-indigo-500',
+    valueColor: 'text-foreground',
+  },
+} as const
 
+const MetricCard = memo(function MetricCard({
+  title,
+  value,
+  sub,
+  icon: Icon,
+  format = 'number',
+  accent,
+}: MetricCardProps) {
+  const style = ACCENT_MAP[accent]
+
+  const formattedValue = () => {
+    if (typeof value === 'string') return value
+    const num = Number(value) || 0
     switch (format) {
       case 'currency':
-        return (
-          <div className="flex items-center gap-1">
-            <GSIcon className="h-6 w-6 text-muted-foreground/50" />
-            {numVal.toLocaleString()}
-          </div>
-        )
+        return formatCurrency(num)
       case 'percentage':
-        return `${Math.round(numVal)}%`
+        return `${Math.round(num)}%`
       case 'days':
-        return `${Math.round(numVal)} días`
+        return `${num.toFixed(1)} días`
       default:
-        return numVal.toLocaleString()
+        return num.toLocaleString()
     }
-  }, [format])
+  }
 
   return (
-    <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
-      <div className={`absolute inset-0 opacity-[0.03] bg-gradient-to-br ${gradient} group-hover:opacity-10 transition-opacity duration-300`} />
-
-      {/* Subtle top border accent */}
-      <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r ${gradient} opacity-50`} />
-
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-        <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+    <Card className={cn('relative overflow-hidden border-border/70 bg-card shadow-xs transition-all hover:shadow-md', style.border)}>
+      <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
+        <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           {title}
         </CardTitle>
-        <div className={`p-2.5 rounded-xl bg-gradient-to-br ${gradient} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-          <Icon className="h-4 w-4 text-white" />
+        <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg shadow-2xs', style.iconBg)}>
+          <Icon className="h-4 w-4" />
         </div>
       </CardHeader>
-      <CardContent className="relative z-10">
-        <div className="text-3xl font-black tracking-tight mb-1 text-foreground">
-          {formatValue(value)}
+      <CardContent className="px-4 pb-4 pt-1">
+        <div className={cn('text-2xl font-bold tracking-tight tabular-nums', style.valueColor)}>
+          {formattedValue()}
         </div>
-        {change !== undefined && (
-          <div className="flex items-center gap-1.5 text-sm mt-2">
-            <span className={cn(
-              "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
-              trend === 'up' ? "bg-green-500/10 text-green-600 dark:text-green-400" :
-              trend === 'down' ? "bg-red-500/10 text-red-600 dark:text-red-400" :
-              "bg-slate-500/10 text-slate-600 dark:text-slate-400"
-            )}>
-              {trend === 'up' ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : trend === 'down' ? (
-                <TrendingDown className="h-3 w-3" />
-              ) : null}
-              {change > 0 ? '+' : ''}{change}%
-            </span>
-            <span className="text-muted-foreground text-xs font-medium">vs mes anterior</span>
-          </div>
-        )}
+        {sub && <p className="text-[11px] text-muted-foreground mt-1 truncate">{sub}</p>}
       </CardContent>
     </Card>
   )
 })
-
-MetricCard.displayName = 'MetricCard'
 
 interface TooltipPayloadEntry {
   color?: string
@@ -133,59 +137,50 @@ interface CustomTooltipProps {
   label?: string
 }
 
-// Tooltip personalizado optimizado
-const CustomTooltip = memo(({ active, payload, label }: CustomTooltipProps) => {
+const ChartTooltip = memo(function ChartTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null
 
   return (
-    <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3">
-      <div className="font-medium text-sm mb-1">{label}</div>
-      {payload.map((entry, index: number) => (
-        <div key={index} className="text-sm flex items-center gap-2" style={{ color: entry.color }}>
-          <div
-            className="w-3 h-3 rounded-full flex-shrink-0"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span>{entry.name}:</span>
-          <span className="font-medium">
-            {entry.name.includes('Revenue') || entry.name.includes('Ingresos') ? (
-              <span className="flex items-center gap-1">
-                <GSIcon className="h-3 w-3" />
-                {entry.value.toLocaleString()}
-              </span>
-            ) : entry.value.toLocaleString()}
-          </span>
-        </div>
-      ))}
+    <div className="rounded-xl border border-border/80 bg-popover/95 p-3 text-xs shadow-xl backdrop-blur-md space-y-1.5">
+      <div className="font-bold text-foreground border-b border-border/50 pb-1">{label}</div>
+      {payload.map((entry, index) => {
+        const isRevenue =
+          entry.name.toLowerCase().includes('ingreso') ||
+          entry.name.toLowerCase().includes('revenue') ||
+          entry.name.toLowerCase().includes('facturación')
+
+        const val = typeof entry.value === 'number' && isRevenue
+          ? formatCurrency(entry.value)
+          : entry.value.toLocaleString()
+
+        return (
+          <div key={index} className="flex items-center justify-between gap-3 text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+              <span>{entry.name}:</span>
+            </div>
+            <span className="font-bold text-foreground tabular-nums">{val}</span>
+          </div>
+        )
+      })}
     </div>
   )
 })
 
-CustomTooltip.displayName = 'CustomTooltip'
-
-interface AnalyticsOverviewProps {
-  className?: string
-}
-
-export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
+export function AnalyticsOverview({ className }: { className?: string }) {
   const [timeRange, setTimeRange] = useState('6months')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const analytics = useRepairAnalytics(timeRange)
   const { refreshRepairs } = useRepairs()
 
-  const COLORS = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
-  ]
-
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
       await refreshRepairs()
-      toast.success('Datos actualizados')
-    } catch (_error) {
-      toast.error('Error al actualizar datos')
+      toast.success('Analíticas actualizadas con éxito.')
+    } catch {
+      toast.error('No se pudieron actualizar los datos.')
     } finally {
       setIsRefreshing(false)
     }
@@ -194,40 +189,48 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
   const exportData = useCallback(() => {
     const csvData = [
       ['Métrica', 'Valor'],
-      ['Total Reparaciones', analytics.metrics.totalRepairs],
-      ['Completadas', analytics.metrics.completedRepairs],
-      ['Tasa de Completado', `${Math.round(analytics.metrics.completionRate)}%`],
-      ['Tiempo Promedio', `${Math.round(analytics.metrics.avgRepairTime)} días`],
-      ['Ingresos Totales', analytics.metrics.totalRevenue],
-      ['Valor Promedio', Math.round(analytics.metrics.avgRepairValue)]
+      ['Total Reparaciones', String(analytics.metrics?.totalRepairs || 0)],
+      ['Completadas', String(analytics.metrics?.completedRepairs || 0)],
+      ['Tasa de Resolución', `${Math.round(analytics.metrics?.completionRate || 0)}%`],
+      ['Tiempo Promedio (días)', `${(analytics.metrics?.avgRepairTime || 0).toFixed(1)}`],
+      ['Ingresos Totales', formatCurrency(analytics.metrics?.totalRevenue || 0)],
+      ['Valor Promedio', formatCurrency(Math.round(analytics.metrics?.avgRepairValue || 0))],
     ]
 
-    const csv = csvData.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const csvContent = csvData.map((row) => row.join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `repair_analytics_${format(new Date(), 'yyyy-MM-dd')}.csv`
+    link.download = `analiticas_reparaciones_${format(new Date(), 'yyyy-MM-dd')}.csv`
     link.click()
-
-    toast.success('Datos exportados exitosamente')
+    URL.revokeObjectURL(link.href)
+    toast.success('Datos exportados en CSV con éxito.')
   }, [analytics])
+
+  const metrics = analytics.metrics || {
+    totalRepairs: 0,
+    completedRepairs: 0,
+    completionRate: 0,
+    avgRepairTime: 0,
+    totalRevenue: 0,
+  }
 
   return (
     <div className={cn('space-y-6', className)}>
-      {/* Header optimizado */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">Vista General</h2>
-            <p className="text-muted-foreground text-sm">
-              Resumen de actividad y métricas clave
-            </p>
-          </div>
+      {/* Controles de Período y Acciones */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-card/60 p-3.5 rounded-2xl border border-border/70 shadow-2xs">
+        <div className="space-y-0.5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Período de Análisis
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Visualizando métricas consolidadas del taller.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[160px] h-8 text-xs bg-card border-border/70 rounded-xl">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -241,146 +244,196 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing}
+            className="h-8 gap-1.5 text-xs font-semibold rounded-xl border-border/70"
           >
-            <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
-            Actualizar
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin text-primary')} />
+            <span>Actualizar</span>
           </Button>
 
-          <Button variant="outline" size="sm" onClick={exportData}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportData}
+            className="h-8 gap-1.5 text-xs font-semibold rounded-xl border-border/70"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Exportar CSV</span>
           </Button>
         </div>
       </div>
 
-      {/* Métricas principales optimizadas */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* KPI Cards Principales */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Reparaciones"
-          value={analytics.metrics.totalRepairs}
+          value={metrics.totalRepairs}
+          sub={`${metrics.completedRepairs} terminadas`}
           icon={Wrench}
-          gradient="bg-gradient-to-br from-pink-400 via-red-400 to-yellow-400"
+          accent="blue"
         />
 
         <MetricCard
-          title="Tasa de Completado"
-          value={analytics.metrics.completionRate}
+          title="Tasa de Resolución"
+          value={metrics.completionRate}
           format="percentage"
+          sub="Efectividad de cierre"
           icon={CheckCircle2}
-          gradient="bg-gradient-to-br from-green-400 via-blue-500 to-purple-600"
+          accent="emerald"
         />
 
         <MetricCard
           title="Tiempo Promedio"
-          value={analytics.metrics.avgRepairTime}
+          value={metrics.avgRepairTime}
           format="days"
+          sub="Para entrega final"
           icon={Clock}
-          gradient="bg-gradient-to-br from-orange-400 via-pink-500 to-red-500"
+          accent="amber"
         />
 
         <MetricCard
           title="Ingresos Totales"
-          value={analytics.metrics.totalRevenue}
+          value={metrics.totalRevenue}
           format="currency"
-          icon={DollarSign}
-          gradient="bg-gradient-to-br from-purple-500 via-indigo-600 to-blue-700"
+          sub="Facturación en el período"
+          icon={Coins}
+          accent="indigo"
         />
       </div>
 
+      {/* Gráficos Principales */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Tendencia temporal */}
-        <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 bg-blue-500/10 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-blue-500" />
+        {/* Tendencias Temporales */}
+        <Card className="border-border/70 bg-card shadow-xs">
+          <CardHeader className="pb-3 border-b border-border/50">
+            <CardTitle className="text-sm font-bold flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+                <span>Evolución Mensual de Reparaciones</span>
               </div>
-              Tendencias Temporales
+              <div className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-blue-500" /> Total
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" /> Completadas
+                </span>
+              </div>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={analytics.monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis dataKey="monthShort" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="totalRepairs"
-                  stroke="#3b82f6"
-                  fill="#3b82f6"
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                  name="Total Reparaciones"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="completedRepairs"
-                  stroke="#10b981"
-                  fill="#10b981"
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                  name="Completadas"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <CardContent className="pt-4">
+            {analytics.monthlyData && analytics.monthlyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={analytics.monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
+                  <XAxis dataKey="monthShort" tick={{ fontSize: 11 }} stroke="#888888" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#888888" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="totalRepairs"
+                    stroke="#3b82f6"
+                    fill="url(#totalGrad)"
+                    strokeWidth={2}
+                    name="Total Reparaciones"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="completedRepairs"
+                    stroke="#10b981"
+                    fill="url(#compGrad)"
+                    strokeWidth={2}
+                    name="Completadas"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-xs text-muted-foreground">
+                Sin datos mensuales registrados.
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Distribución por estado */}
-        <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 bg-purple-500/10 rounded-lg">
-                <Activity className="h-5 w-5 text-purple-500" />
+        {/* Distribución por Estado */}
+        <Card className="border-border/70 bg-card shadow-xs">
+          <CardHeader className="pb-3 border-b border-border/50">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <div className="p-1.5 bg-purple-500/10 rounded-lg text-purple-600 dark:text-purple-400">
+                <Activity className="h-4 w-4" />
               </div>
-              Distribución por Estado
+              <span>Distribución Actual por Estado</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={analytics.statusAnalysis}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="count"
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                >
-                  {analytics.statusAnalysis.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
+          <CardContent className="pt-4">
+            {analytics.statusAnalysis && analytics.statusAnalysis.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={analytics.statusAnalysis}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={95}
+                    paddingAngle={3}
+                    dataKey="count"
+                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {analytics.statusAnalysis.map((entry, index) => {
+                      const color = STATUS_COLORS[entry.name] || FALLBACK_COLORS[index % FALLBACK_COLORS.length]
+                      return <Cell key={`cell-${index}`} fill={color} stroke="transparent" />
+                    })}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-xs text-muted-foreground">
+                Sin estados registrados en el período.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Dispositivos */}
-      <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 bg-emerald-500/10 rounded-lg">
-              <Wrench className="h-5 w-5 text-emerald-500" />
+      {/* Dispositivos Atendidos */}
+      <Card className="border-border/70 bg-card shadow-xs">
+        <CardHeader className="pb-3 border-b border-border/50">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-600 dark:text-emerald-400">
+              <Smartphone className="h-4 w-4" />
             </div>
-            Reparaciones por Tipo de Dispositivo
+            <span>Volumen por Categoría de Dispositivo</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={analytics.deviceTypeAnalysis}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name="Cantidad" />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent className="pt-4">
+          {analytics.deviceTypeAnalysis && analytics.deviceTypeAnalysis.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={analytics.deviceTypeAnalysis} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#888888" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#888888" />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="count" fill="#10b981" radius={[6, 6, 0, 0]} name="Órdenes" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[260px] flex items-center justify-center text-xs text-muted-foreground">
+              Sin datos de dispositivos disponibles.
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -42,6 +42,9 @@ import { CustomerPreview } from './CustomerPreview'
 import { cn } from '@/lib/utils'
 import { Customer, mapRawToCustomer } from '@/hooks/use-customer-state'
 import { normalizeText } from '@/lib/customers/search'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOptionalAuth } from '@/contexts/auth-context'
+import { searchHistoryKey, readSearchHistory, saveSearchHistory } from '@/lib/customers/search-history'
 
 interface SearchSuggestion {
   value: string
@@ -85,20 +88,22 @@ export function ImprovedSearchBar({
   const [isFocused, setIsFocused] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const saved = localStorage.getItem('customer-search-history')
-      return saved ? JSON.parse(saved) as string[] : []
-    } catch {
-      return []
-    }
-  })
+  const organizationId = useOptionalActiveOrganization()?.organization?.id
+  const userId = useOptionalAuth()?.user?.id
+  const historyKey = organizationId && userId ? searchHistoryKey(organizationId,userId) : null
+  const [historyState, setHistoryState] = useState<{key:string|null;terms:string[]}>({key:null,terms:[]})
+  const recentSearches = historyState.key === historyKey ? historyState.terms : []
+  const setRecentSearches = (terms:string[]) => setHistoryState({key:historyKey,terms})
+  useEffect(() => {
+    // Hydrate this scope from browser storage; the key guard already hides the previous scope.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHistoryState({key:historyKey,terms:historyKey ? readSearchHistory(localStorage,historyKey) : []})
+  },[historyKey])
   const [showQuickFilters, setShowQuickFilters] = useState(false)
-  const [serverResult, setServerResult] = useState<{ query: string; customers: Customer[] } | null>(null)
+  const [serverResult, setServerResult] = useState<{ query: string; organizationId?: string; customers: Customer[] } | null>(null)
   const serverCustomers = useMemo(
-    () => serverResult?.query === value.trim() ? serverResult.customers : [],
-    [serverResult, value],
+    () => serverResult?.organizationId === organizationId && serverResult?.query === value.trim() ? serverResult.customers : [],
+    [serverResult, value, organizationId],
   )
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -111,11 +116,11 @@ export function ImprovedSearchBar({
       const params = new URLSearchParams({ search: term, page: '1', limit: '20', summary: '0' })
       void fetch(`/api/customers?${params.toString()}`, { signal: controller.signal })
         .then((response) => response.json())
-        .then((result) => { if (!controller.signal.aborted && result.success) setServerResult({ query: term, customers: (result.data || []).map(mapRawToCustomer) }) })
+        .then((result) => { if (!controller.signal.aborted && result.success) setServerResult({ query: term, organizationId, customers: (result.data || []).map(mapRawToCustomer) }) })
         .catch(() => { if (!controller.signal.aborted) setServerResult({ query: term, customers: [] }) })
     }, 250)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [value])
+  }, [value, organizationId])
 
   // Quick filters for common searches
   const quickFilters: QuickFilter[] = [
@@ -295,7 +300,7 @@ export function ImprovedSearchBar({
     
     const updated = [searchTerm, ...recentSearches.filter(s => s !== searchTerm)].slice(0, 8)
     setRecentSearches(updated)
-    localStorage.setItem('customer-search-history', JSON.stringify(updated))
+    if (historyKey) saveSearchHistory(localStorage,historyKey,updated)
   }
 
   // Handle keyboard shortcuts
@@ -430,7 +435,7 @@ export function ImprovedSearchBar({
 
   const clearHistory = () => {
     setRecentSearches([])
-    localStorage.removeItem('customer-search-history')
+    if (historyKey) { try { localStorage.removeItem(historyKey) } catch { /* Nonessential history. */ } }
   }
 
   // Highlight matching text

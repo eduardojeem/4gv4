@@ -185,6 +185,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackVa
 }
 
 // Hook para usar el contexto de autenticación
+export function useOptionalAuth() {
+  return useContext(AuthContext)
+}
+
 export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {

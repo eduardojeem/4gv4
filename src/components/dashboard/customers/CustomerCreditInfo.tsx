@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { useCustomerCredits, CustomerCreditSummary } from '@/hooks/use-customer-credits'
 import { Customer } from '@/hooks/use-customer-state'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
+import { creditCalendarDate } from '@/lib/credits/calendar'
 
 interface CustomerCreditInfoProps {
   customer: Customer
@@ -38,7 +40,7 @@ export function CustomerCreditInfo({ customer, compact: _compact = false, showAc
   const { loading, error, creditSummary, credits, installments: _installments, payments, refresh } = useCustomerCredits(customer.id, customer)
   const [activeTab, setActiveTab] = useState('resumen')
 
-  if (loading) {
+  if (loading || (!creditSummary && !error)) {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="h-32 bg-slate-100 dark:bg-slate-800 rounded-2xl"></div>
@@ -141,112 +143,34 @@ export function CustomerCreditInfo({ customer, compact: _compact = false, showAc
     <TooltipProvider>
       <div className="space-y-6">
         {/* ─── TARJETA PRINCIPAL DE RESUMEN FINANCIERO ─── */}
-        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-gradient-to-br from-slate-900 to-indigo-950 text-white overflow-hidden relative">
-          <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          <CardHeader className="pb-4 relative z-10">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-white/10 backdrop-blur-xs border border-white/15">
-                  <CreditCard className="h-5 w-5 text-blue-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-base font-bold text-white flex items-center gap-2">
-                    Estado de Créditos y Finanzas
-                  </CardTitle>
-                  <CardDescription className="text-xs text-slate-300">
-                    Línea de crédito comercial, deudas activas y saldo a favor
-                  </CardDescription>
-                </div>
+        <Card className="border bg-card shadow-sm">
+          <CardHeader className="gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <CardTitle className="text-lg">Situación del cliente</CardTitle>
+                <CardDescription className="mt-1 break-words">{customer.name} · {customer.customerCode}{customer.ruc ? ' · CI/RUC: ' + customer.ruc : ''}</CardDescription>
               </div>
-
-              {showActions && (
-                <div className="flex items-center gap-2">
-                  {onOpenPayment && (
-                    <Button
-                      size="sm"
-                      onClick={onOpenPayment}
-                      className="gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold shadow-md shadow-emerald-950/40 text-xs px-3.5"
-                    >
-                      <Coins className="h-4 w-4" />
-                      Cobrar / Abonar Deuda
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 rounded-xl border-white/20 bg-white/5 hover:bg-white/10 text-white text-xs"
-                    onClick={refresh}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Actualizar
-                  </Button>
-                </div>
-              )}
+              {showActions && <div className="flex flex-wrap gap-2">
+                {onOpenPayment && <Button onClick={onOpenPayment} className="min-h-11 gap-2"><Coins className="h-4 w-4"/>Cobrar</Button>}
+                {onEditCustomer && <Button variant="outline" onClick={onEditCustomer} className="min-h-11">Editar datos</Button>}
+                <Button variant="outline" onClick={refresh} className="min-h-11 gap-2"><RefreshCw className="h-4 w-4"/>Actualizar</Button>
+              </div>}
             </div>
           </CardHeader>
-
-          <CardContent className="relative z-10">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-white/5 backdrop-blur-xs border border-white/10">
-              {/* Límite de Crédito */}
-              <div>
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="text-xs text-slate-300 font-medium block">Límite Autorizado</span>
-                  {onEditCustomer && (
-                    <button
-                      type="button"
-                      onClick={onEditCustomer}
-                      className="text-[10px] text-blue-300 hover:text-blue-200 underline font-medium"
-                    >
-                      {summary.credit_limit > 0 ? 'Editar' : '+ Asignar'}
-                    </button>
-                  )}
-                </div>
-                <div className="text-xl sm:text-2xl font-bold font-mono text-white">
-                  {formatCurrency(summary.credit_limit)}
-                </div>
-                <span className="text-[11px] text-slate-400">
-                  {summary.credit_limit > 0 ? 'Crédito activo para POS' : 'Sin línea asignada (0 Gs)'}
-                </span>
-              </div>
-
-              {/* Deuda Total Activa */}
-              <div>
-                <span className="text-xs text-slate-300 font-medium block mb-1">Deuda Pendiente Total</span>
-                <div className={cn("text-xl sm:text-2xl font-bold font-mono", summary.total_pending > 0 ? "text-amber-400" : "text-emerald-400")}>
-                  {formatCurrency(summary.total_pending)}
-                </div>
-                <span className="text-[11px] text-slate-400">
-                  {summary.overdue_debt > 0 ? `⚠️ ${formatCurrency(summary.overdue_debt)} en mora` : 'Al día'}
-                </span>
-              </div>
-
-              {/* Crédito Disponible */}
-              <div>
-                <span className="text-xs text-slate-300 font-medium block mb-1">Crédito Disponible</span>
-                <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400">
-                  {formatCurrency(summary.available_credit)}
-                </div>
-                <span className="text-[11px] text-slate-400">
-                  {summary.credit_limit > 0 ? `${100 - summary.credit_utilization}% libre` : '0 Gs disponible'}
-                </span>
-              </div>
-
-              {/* Saldo a Favor / Billetera */}
-              <div>
-                <span className="text-xs text-slate-300 font-medium block mb-1">Saldo a Favor (Billetera)</span>
-                <div className="text-xl sm:text-2xl font-bold font-mono text-cyan-300">
-                  {formatCurrency(summary.store_balance)}
-                </div>
-                {/* Lo reservado por pedidos web pendientes no se puede gastar en
-                    el mostrador: decirlo evita prometer un saldo que no esta. */}
-                <span className="text-[11px] text-slate-400">
-                  {summary.store_reserved > 0
-                    ? `${formatCurrency(summary.store_reserved)} reservado en pedidos`
-                    : 'Disponible para compras'}
-                </span>
-              </div>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                {label:'Deuda total',value:summary.total_pending,help:'Cuotas y reparaciones pendientes',tone:'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20'},
+                {label:'Deuda vencida',value:summary.overdue_debt,help:'Parte de la deuda que está en mora',tone:'border-rose-200 bg-rose-50/50 dark:border-rose-900 dark:bg-rose-950/20'},
+                {label:'Cupo disponible',value:summary.available_credit,help:'Límite asignado: '+formatCurrency(summary.credit_limit),tone:'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20'},
+                {label:'Saldo a favor',value:summary.store_balance,help:summary.store_reserved>0?formatCurrency(summary.store_reserved)+' reservado en pedidos':'Disponible para compras',tone:'border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20'},
+              ].map(metric=><div key={metric.label} className={cn('min-w-0 rounded-lg border p-3',metric.tone)}>
+                <p className="text-sm font-medium">{metric.label}</p>
+                <p className="mt-1 break-words text-lg font-bold tabular-nums sm:text-xl">{formatCurrency(metric.value)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.help}</p>
+              </div>)}
             </div>
+            <p className="text-xs text-muted-foreground">El saldo a favor no se descuenta automáticamente de la deuda. El cupo disponible no reemplaza la aprobación de la ficha para crédito.</p>
           </CardContent>
         </Card>
 
@@ -348,17 +272,17 @@ export function CustomerCreditInfo({ customer, compact: _compact = false, showAc
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Fecha de Vencimiento:</span>
                         <span className="font-medium">
-                          {new Date(summary.next_payment.due_date).toLocaleDateString('es-PY')}
+                          {summary.next_payment.due_date ? formatDateOnlyDisplay(creditCalendarDate(summary.next_payment.due_date, summary.time_zone) ?? summary.next_payment.due_date) : 'Sin vencimiento definido'}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-1 border-t border-slate-100 dark:border-slate-800">
                         <span className="text-xs text-slate-500">Condición:</span>
-                        {summary.next_payment.is_overdue ? (
+                        {!summary.next_payment.due_date ? <Badge variant="outline">Sin vencimiento definido</Badge> : summary.next_payment.is_overdue ? (
                           <Badge variant="destructive" className="gap-1 text-xs">
                             <AlertTriangle className="h-3.5 w-3.5" />
                             Vencido
                           </Badge>
-                        ) : summary.next_payment.days_until_due <= 3 ? (
+                        ) : summary.next_payment.days_until_due !== null && summary.next_payment.days_until_due <= 3 ? (
                           <Badge variant="secondary" className="gap-1 text-xs bg-amber-100 text-amber-800 border-amber-300">
                             <Clock className="h-3.5 w-3.5" />
                             Vence en {summary.next_payment.days_until_due} días
@@ -416,8 +340,8 @@ export function CustomerCreditInfo({ customer, compact: _compact = false, showAc
 
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Puntaje Crediticio Estimado:</span>
-                    <span className={cn("text-xl font-bold font-mono", getPaymentScoreColor(summary.payment_history.payment_score))}>
-                      {summary.payment_history.payment_score} / 100
+                    <span className={cn("text-sm font-semibold", summary.payment_history.payment_score === null ? 'text-muted-foreground' : getPaymentScoreColor(summary.payment_history.payment_score))}>
+                      {summary.payment_history.payment_score === null ? 'Sin historial suficiente' : summary.payment_history.payment_score + ' / 100'}
                     </span>
                   </div>
                 </CardContent>
@@ -436,12 +360,13 @@ export function CustomerCreditInfo({ customer, compact: _compact = false, showAc
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Nivel de Riesgo:</span>
                     <Badge className={cn("gap-1.5 font-bold text-xs", getRiskColor(summary.risk_assessment.risk_level))}>
                       {getRiskIcon(summary.risk_assessment.risk_level)}
-                      {summary.risk_assessment.risk_level === 'low' ? 'Bajo (Confiable)' :
-                       summary.risk_assessment.risk_level === 'medium' ? 'Medio (Precaución)' :
-                       summary.risk_assessment.risk_level === 'high' ? 'Alto (Restringir)' : 'Crítico (Bloqueado)'}
+                      {summary.risk_assessment.risk_level === 'low' ? 'Bajo' :
+                       summary.risk_assessment.risk_level === 'medium' ? 'Medio' :
+                       summary.risk_assessment.risk_level === 'high' ? 'Alto' : 'Crítico'}
                     </Badge>
                   </div>
 
+                  <p className="text-xs text-muted-foreground">Indicador orientativo. No aprueba ni bloquea crédito; la decisión se guarda en Ficha para crédito.</p>
                   <div className="space-y-1.5">
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Factores Analizados:</span>
                     <div className="space-y-1">

@@ -145,8 +145,11 @@ describe('ventas a crédito: suman al cobrar cada cuota', () => {
   })
 
   it('se acredita en el cobro de cuotas, en el cobro por cliente y en la primera cuota del POS', () => {
-    expect(leer('src/app/api/credits/route.ts')).toContain('awardCreditInstallmentLoyaltyPoints(supabase as never, {')
-    expect(leer('src/app/api/customers/[id]/collect-payment/route.ts')).toContain('awardCreditInstallmentLoyaltyPoints(supabase as never, {')
+    for (const route of ['src/app/api/credits/route.ts', 'src/app/api/customers/[id]/collect-payment/route.ts']) {
+      const source = leer(route)
+      expect(source).toMatch(/await awardCreditInstallmentLoyaltyPoints\(/)
+      expect(source).toMatch(/paymentId:\s*\w+\.paymentId/)
+    }
     expect(leer('src/app/api/pos/process-sale/route.ts')).toContain(".eq('installment_number', 1)")
   })
 })

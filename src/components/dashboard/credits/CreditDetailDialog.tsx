@@ -39,6 +39,9 @@ import {
   Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin
 } from 'lucide-react'
 import { customerTypeLabel } from '@/lib/i18n/labels'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { canAmendCredit } from '@/lib/credits/amendment-contract'
+import { CreditAmendmentPanel } from './CreditAmendmentPanel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface InstallmentItem {
@@ -94,6 +97,7 @@ interface CreditDetailDialogProps {
      */
     allCredits?: CreditRow[]
     allInstallments?: InstallmentRow[]
+    onUpdated?: () => void | Promise<void>
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -146,8 +150,11 @@ export function CreditDetailDialog({
     saleItems = [],
     onPayInstallment,
     allCredits = [],
-    allInstallments = []
+    allInstallments = [],
+    onUpdated,
 }: CreditDetailDialogProps) {
+    const organization = useOptionalActiveOrganization()?.organization
+    const canEdit = canAmendCredit(organization?.role)
     const { format, changeFormat, issuer } = useCreditPrinting()
     const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({})
     const [customerDetails, setCustomerDetails] = useState<Database['public']['Tables']['customers']['Row'] | null>(null)
@@ -657,7 +664,7 @@ export function CreditDetailDialog({
 
                     {/* ── Tabs ── */}
                     <Tabs defaultValue="installments" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 h-9">
+                        <TabsList className={`grid w-full ${canEdit ? 'grid-cols-3' : 'grid-cols-2'} h-9`}>
                             <TabsTrigger value="installments" className="text-xs gap-1.5">
                                 <Receipt className="h-3.5 w-3.5" />
                                 Cuotas
@@ -668,6 +675,7 @@ export function CreditDetailDialog({
                                 Pagos
                                 <span className="ml-1 text-[10px] font-bold bg-muted rounded-full px-1.5">{payments.length}</span>
                             </TabsTrigger>
+                            {canEdit && <TabsTrigger value="amendments" className="text-xs">Editar e historial</TabsTrigger>}
                         </TabsList>
 
                         {/* Installments */}
@@ -860,6 +868,9 @@ export function CreditDetailDialog({
                                 </div>
                             )}
                         </TabsContent>
+                        {canEdit && <TabsContent value="amendments" className="mt-3">
+                            <CreditAmendmentPanel key={`${organization?.id}:${credit.id}`} creditId={credit.id} onUpdated={onUpdated} />
+                        </TabsContent>}
                     </Tabs>
 
                     {/* ── Actions ── */}

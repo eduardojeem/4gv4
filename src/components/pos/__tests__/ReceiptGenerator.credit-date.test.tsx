@@ -161,4 +161,36 @@ describe('ReceiptGenerator credit details', () => {
     expect(html).not.toContain('Gs. 120000')
     expect(html).not.toContain('</div>0<')
   })
+
+  it('no deja ceros sueltos, filas vacias ni textos inventados', () => {
+    const html = renderToStaticMarkup(
+      <ReceiptGenerator
+        receiptData={{
+          receiptNumber: 'V-AUDIT',
+          date: '24/09/2026',
+          time: '10:00',
+          cashier: 'Caja 1',
+          customer: { name: 'Ana', phone: '', email: '' },
+          items: [{ id: 'p1', name: 'Remera', sku: '', price: 50000, quantity: 1, discount: 0 }],
+          subtotal: 50000,
+          totalDiscount: 0,
+          tax: 0,
+          total: 50000,
+          payments: [{ id: 'sc', method: 'store_credit', amount: 50000 }],
+          change: 0,
+        }}
+        formatCurrency={actions.formatCurrency}
+      />,
+    )
+
+    // "Saldo a favor" salia como "a favor": se recortaba la primera palabra.
+    expect(html).toContain('Saldo a favor')
+    expect(html).not.toContain('Teléfono:')
+    expect(html).not.toContain('Servicio Técnico Especializado')
+    expect(html).not.toMatch(/>0</)
+    // Sin acciones propias: el modal ya tiene su barra de botones.
+    expect(html).not.toContain('Compartir')
+    // El numero de ticket aparece una sola vez.
+    expect(html.match(/V-AUDIT/g)).toHaveLength(1)
+  })
 })

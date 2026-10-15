@@ -3,6 +3,7 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 type PromotionRow = {
@@ -85,6 +86,11 @@ export async function GET(
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
     }
     {
+      // Con Promociones apagado o fuera del plan no se lee ni se edita.
+      const denied = await moduleAccessResponse(organization.id, 'promotions')
+      if (denied) return denied
+    }
+    {
       const response = requirePromotionPermission(organization, 'promotions.read')
       if (response) return response
     }
@@ -151,6 +157,11 @@ export async function PUT(
     const organization = await resolveOrganization(auth)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      // Con Promociones apagado o fuera del plan no se lee ni se edita.
+      const denied = await moduleAccessResponse(organization.id, 'promotions')
+      if (denied) return denied
     }
     {
       const response = requirePromotionPermission(organization, 'promotions.update')
@@ -322,6 +333,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
     }
     {
+      // Con Promociones apagado o fuera del plan no se lee ni se edita.
+      const denied = await moduleAccessResponse(organization.id, 'promotions')
+      if (denied) return denied
+    }
+    {
       const response = requirePromotionPermission(organization, 'promotions.delete')
       if (response) return response
     }
@@ -402,6 +418,11 @@ export async function PATCH(
     const organization = await resolveOrganization(auth)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      // Con Promociones apagado o fuera del plan no se lee ni se edita.
+      const denied = await moduleAccessResponse(organization.id, 'promotions')
+      if (denied) return denied
     }
     {
       const response = requirePromotionPermission(organization, 'promotions.update')

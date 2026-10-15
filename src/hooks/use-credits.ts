@@ -2,8 +2,14 @@ import { useState, useEffect, useRef, useMemo, useTransition, useCallback } from
 import type { SaleItemLike, SaleLike } from '@/lib/credits/display'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { useAuth } from '@/hooks/use-auth'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOptionalBranch } from '@/contexts/branch-context'
+import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt, CollectionAttemptError } from '@/lib/credits/collection-attempt'
+import type { CollectionResult } from '@/lib/credits/collection-contract'
+import type { CreditPortfolioSummary } from '@/lib/credits/portfolio'
 import { config } from '@/lib/config'
-import { endOfLocalDay, startOfLocalDay } from '@/lib/date-only'
+import { creditInstallmentIsOverdue, creditCalendarDate } from '@/lib/credits/calendar'
 
 export type CreditRow = {
     id: string
@@ -63,8 +69,8 @@ export type InstallmentProgressRow = {
 }
 
 export type MarkInstallmentPaidResult =
-    | { success: true; appliedAmount: number; installmentId: string }
-    | { success: false; error: string }
+    | { success: true; appliedAmount: number; installmentId: string; collection: CollectionResult }
+    | { success: false; error: string; uncertain?: boolean }
 
 type InstallmentFilters = {
     status: string
@@ -76,33 +82,19 @@ type InstallmentFilters = {
 }
 
 /** Retorna true si la cuota está vencida aunque su status sea 'pending' */
-export const isInstallmentLate = (i: InstallmentRow): boolean =>
-  i.status === 'late' || (i.status === 'pending' && startOfLocalDay(i.due_date) < startOfLocalDay(new Date()))
-
-const emptyTenantCreditsData = {
-    dbCredits: [],
-    dbInstallments: [],
-    dbPayments: [],
-    dbSummary: [],
-    dbInstallmentsProgress: [],
-    dbCustomers: [],
-    dbSales: [],
-    dbSaleItems: []
-}
+export const isInstallmentLate = (i: InstallmentRow, timeZone = 'America/Asuncion'): boolean =>
+  creditInstallmentIsOverdue(i.due_date, i.status, timeZone)
 
 const fetchTenantCreditsData = async () => {
   const response = await fetch('/api/credits', { cache: 'no-store' })
   const result = await response.json()
-
-  if (response.status === 402 && (result?.error === 'Module unavailable' || result?.message === 'This module is not enabled for the current plan.')) {
-    return emptyTenantCreditsData
-  }
 
   if (!response.ok || !result.success) {
     throw new Error(result.error || 'No se pudieron cargar los creditos.')
   }
 
   const data = result.data || {}
+  if (!data.globalSummary || data.pagination?.complete !== true) throw new Error('La respuesta de créditos está incompleta. Actualizá antes de consultar saldos.')
   return {
     dbCredits: data.credits,
     dbInstallments: data.installments,
@@ -111,15 +103,27 @@ const fetchTenantCreditsData = async () => {
     dbInstallmentsProgress: data.installmentsProgress,
     dbCustomers: data.customers,
     dbSales: data.sales,
-    dbSaleItems: data.saleItems
+    dbSaleItems: data.saleItems,
+    globalSummary: data.globalSummary as CreditPortfolioSummary,
+    timeZone: data.timeZone || 'America/Asuncion',
   }
 }
 
 export function useCredits(enabled = true) {
+    const { user } = useAuth()
+    const organizationId = useOptionalActiveOrganization()?.organization?.id
+    const branchId = useOptionalBranch()?.selectedBranchId ?? undefined
+    const [globalSummary, setGlobalSummary] = useState<CreditPortfolioSummary | null>(null)
+    const [loadedOrganizationId, setLoadedOrganizationId] = useState<string | undefined>()
+    const currentOrganizationRef = useRef(organizationId)
+    currentOrganizationRef.current = organizationId
+    const [timeZone, setTimeZone] = useState('America/Asuncion')
+
     const supabase = useMemo(() => createClient(), [])
     const [isPending, startTransition] = useTransition()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const hasCurrentData = enabled && !!user?.id && !error && loadedOrganizationId === organizationId
     const channelRef = useRef<ReturnType<SupabaseClient['channel']> | null>(null)
     const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [credits, setCredits] = useState<CreditRow[]>([])
@@ -152,6 +156,7 @@ export function useCredits(enabled = true) {
         const requestId = ++loadSeqRef.current
         if (!enabled) {
             setCredits([])
+            setGlobalSummary(null)
             setInstallments([])
             setPayments([])
             setSummary({})
@@ -165,10 +170,14 @@ export function useCredits(enabled = true) {
         setLoading(true)
         setError(null)
         try {
-            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems } = await fetchTenantCreditsData()
+            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems, globalSummary: loadedSummary, timeZone: loadedTimeZone } = await fetchTenantCreditsData()
 
             // Llego una carga mas nueva mientras esta viajaba: se descarta.
             if (requestId !== loadSeqRef.current) return
+            if (currentOrganizationRef.current !== organizationId) return
+            setLoadedOrganizationId(organizationId)
+            setGlobalSummary(loadedSummary)
+            setTimeZone(loadedTimeZone)
 
             const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
                 acc[c.id] = c.customer_code ?? ''
@@ -238,6 +247,7 @@ export function useCredits(enabled = true) {
 
         } catch (err) {
             if (requestId !== loadSeqRef.current) return
+            if (currentOrganizationRef.current !== organizationId) return
             const message = err instanceof Error ? err.message : 'Error al cargar los créditos.'
             console.error('[useCredits] loadData error:', err)
             setError(message)
@@ -246,7 +256,7 @@ export function useCredits(enabled = true) {
             // la pantalla diria "listo" con una consulta todavia en curso.
             if (requestId === loadSeqRef.current) setLoading(false)
         }
-    }, [enabled])
+    }, [enabled, organizationId])
 
     const refreshData = useCallback(() => {
         startTransition(() => {
@@ -302,81 +312,47 @@ export function useCredits(enabled = true) {
         }
     }, [enabled, supabase, scheduleRefresh])
     const markInstallmentPaid = useCallback(async (
-        installmentId: string,
-        method: string,
-        amount: number,
-        notes?: string
+        installmentId: string, method: string, amount: number, notes?: string,
+        options?: { creditId?: string; reference?: string; recover?: boolean },
     ): Promise<MarkInstallmentPaidResult> => {
         const current = installments.find(i => i.id === installmentId)
-        if (!current) {
-            return { success: false, error: 'Cuota no encontrada.' }
+        const credit = credits.find(c => c.id === current?.credit_id)
+        if (!hasCurrentData || !current || !credit || !organizationId || !user?.id) return { success: false, error: 'Esperá a que se valide la organización y el crédito.' }
+        if (!config.supabase.isConfigured) return { success: false, error: 'El cobro requiere conexión con la base de datos.' }
+        const scope = organizationId + ':' + user.id + ':' + credit.customer_id
+        try {
+            const result = options?.recover
+                ? await retryCollectionAttempt(scope)
+                : await runCollectionAttempt(scope, '/api/credits', {
+                    installmentId, method, amount, notes, branchId,
+                    creditId: options?.creditId, reference: options?.reference,
+                })
+            // The committed receipt is authority even if refreshing the screen fails.
+            void loadData()
+            return { success: true, appliedAmount: result.collection.appliedAmount, installmentId, collection: result.collection }
+        } catch (cause) {
+            return { success: false, error: cause instanceof Error ? cause.message : 'No se pudo confirmar el cobro.', uncertain: cause instanceof CollectionAttemptError && cause.uncertain }
         }
-
-        const now = new Date().toISOString()
-        const baseAmount = Number(current.amount || 0)
-        const currentPaidRaw = Number(current.amount_paid || 0)
-        const currentPaid = Number.isFinite(currentPaidRaw)
-            ? Math.max(0, Math.min(baseAmount, currentPaidRaw))
-            : 0
-        const outstanding = Math.max(baseAmount - currentPaid, 0)
-        const requestedAmount = Number.isFinite(amount) ? Number(amount) : outstanding
-        const selectedAmount = Math.max(0, Math.min(requestedAmount, outstanding))
-
-        if (selectedAmount <= 0) {
-            return { success: false, error: 'La cuota ya no tiene saldo pendiente.' }
+    }, [hasCurrentData, installments, credits, organizationId, user?.id, branchId, loadData])
+    const hasPendingCreditPayment = useCallback((creditId: string) => {
+        const credit = credits.find(c => c.id === creditId)
+        if (!organizationId || !user?.id || !credit) return false
+        try { return !!pendingCollectionAttempt(organizationId + ':' + user.id + ':' + credit.customer_id) } catch { return true }
+    }, [credits, organizationId, user?.id])
+    const pendingCreditPayments: Array<{ creditId: string; installmentId: string; customerName: string }> = []
+    if (hasCurrentData && organizationId && user?.id) {
+        for (const credit of credits) {
+            try {
+                const attempt = pendingCollectionAttempt(organizationId + ':' + user.id + ':' + credit.customer_id)
+                if (attempt?.endpoint !== '/api/credits') continue
+                const original = installments.find(row => row.id === attempt.payload.installmentId)
+                if (original?.credit_id !== credit.id) continue
+                pendingCreditPayments.push({ creditId: credit.id, installmentId: original.id,
+                    customerName: credit.customer_name || credit.customer_code || 'Cliente' })
+            } catch { /* Corrupt attempts fail closed; never replace their key. */ }
         }
+    }
 
-        const accumulated = Math.min(baseAmount, currentPaid + selectedAmount)
-        const isFullyPaid = accumulated >= baseAmount
-        const nextStatus: InstallmentRow['status'] = isFullyPaid
-            ? 'paid'
-            : (isInstallmentLate(current) ? 'late' : 'pending')
-
-        if (!config.supabase.isConfigured) {
-            // Actualizacion optimista (entorno sin Supabase)
-            setInstallments(prev =>
-                prev.map(i => (
-                    i.id === installmentId
-                        ? { ...i, status: nextStatus, paid_at: isFullyPaid ? now : i.paid_at, payment_method: method, amount_paid: accumulated }
-                        : i
-                ))
-            )
-            setPayments(prev => ([{
-                id: `p-${Date.now()}`,
-                credit_id: current.credit_id,
-                installment_id: installmentId,
-                amount: selectedAmount,
-                payment_method: method as PaymentRow['payment_method'],
-                created_at: now
-            }, ...prev]))
-            return { success: true, appliedAmount: selectedAmount, installmentId }
-        }
-
-        const response = await fetch('/api/credits', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                installmentId,
-                method,
-                amount: selectedAmount,
-                notes
-            })
-        })
-
-        const payload = await response.json().catch(() => null)
-
-        if (!response.ok || payload?.success === false) {
-            const message = payload?.error || 'No se pudo registrar el pago.'
-            console.error('Error al registrar el pago:', payload)
-            return { success: false, error: message }
-        }
-
-        await loadData()
-        return { success: true, appliedAmount: selectedAmount, installmentId }
-    }, [installments, loadData])
-
-
-    // Derived Data Helpers
     const creditById = useMemo(() => {
         const map: Record<string, CreditRow> = {}
         for (const c of credits) { map[c.id] = c }
@@ -386,11 +362,12 @@ export function useCredits(enabled = true) {
     const remainingByCredit = useMemo(() => {
         const map: Record<string, number> = {}
         if (Object.keys(summary).length > 0) {
-            for (const key of Object.keys(summary)) { map[key] = Number(summary[key].saldo_pendiente || 0) }
+            for (const key of Object.keys(summary)) { map[key] = ['completed', 'cancelled'].includes(creditById[key]?.status) ? 0 : Number(summary[key].saldo_pendiente || 0) }
             return map
         }
         // Fallback calculation
         for (const i of installments) {
+            if (['completed', 'cancelled'].includes(creditById[i.credit_id]?.status)) continue
             if (i.status === 'pending' || i.status === 'late') {
                 const installmentAmount = Number(i.amount || 0)
                 const paidAmount = Math.max(0, Number(i.amount_paid || 0))
@@ -398,7 +375,7 @@ export function useCredits(enabled = true) {
             }
         }
         return map
-    }, [installments, summary])
+    }, [installments, summary, creditById])
 
     const paidByCredit = useMemo(() => {
         const map: Record<string, number> = {}
@@ -421,18 +398,19 @@ export function useCredits(enabled = true) {
 
     const filteredInstallments = useMemo(() => {
         return installments.filter(i => {
+            if (['cancelled', 'cancelado', 'canceled'].includes(creditById[i.credit_id]?.status) || (creditById[i.credit_id]?.status === 'completed' && i.status !== 'paid')) return false
             if (filterValues.status) {
                 if (filterValues.status === 'late') {
-                    if (!isInstallmentLate(i)) return false
+                    if (!isInstallmentLate(i, timeZone)) return false
                 } else {
                     if (i.status !== filterValues.status) return false
                 }
             }
             if (filterValues.creditId && !String(i.credit_id).toLowerCase().includes(String(filterValues.creditId).toLowerCase())) return false
             if (filterValues.minAmount && Number(i.amount) < Number(filterValues.minAmount)) return false
-            if (filterValues.fromDate && startOfLocalDay(i.due_date) < startOfLocalDay(filterValues.fromDate)) return false
+            if (filterValues.fromDate && (creditCalendarDate(i.due_date, timeZone) ?? '') < filterValues.fromDate) return false
             if (filterValues.toDate) {
-                if (startOfLocalDay(i.due_date) > endOfLocalDay(filterValues.toDate)) return false
+                if ((creditCalendarDate(i.due_date, timeZone) ?? '') > filterValues.toDate) return false
             }
             if (filterValues.customerName) {
                 const name = creditById[i.credit_id]?.customer_name || ''
@@ -440,27 +418,31 @@ export function useCredits(enabled = true) {
             }
             return true
         })
-    }, [installments, filterValues, creditById])
+    }, [installments, filterValues, creditById, timeZone])
 
     return {
-        loading,
+        loading: loading || !hasCurrentData,
+        globalSummary: hasCurrentData ? globalSummary : null,
+        timeZone,
         isPending,
         error,
         refreshData,
-        credits,
-        installments,
-        payments,
-        summary,
-        installmentsProgress,
+        credits: hasCurrentData ? credits : [],
+        installments: hasCurrentData ? installments.filter(row => !['cancelled', 'completed'].includes(creditById[row.credit_id]?.status) || row.status === 'paid') : [],
+        payments: hasCurrentData ? payments : [],
+        summary: hasCurrentData ? summary : {},
+        installmentsProgress: hasCurrentData ? installmentsProgress : {},
         filterValues,
         setFilterValues,
         markInstallmentPaid,
-        creditById,
-        remainingByCredit,
-        paidByCredit,
-        getNextPendingInstallment,
-        filteredInstallments,
-        sales,
-        saleItems
+        hasPendingCreditPayment,
+        pendingCreditPayments,
+        creditById: hasCurrentData ? creditById : {},
+        remainingByCredit: hasCurrentData ? remainingByCredit : {},
+        paidByCredit: hasCurrentData ? paidByCredit : {},
+        getNextPendingInstallment: hasCurrentData ? getNextPendingInstallment : () => undefined,
+        filteredInstallments: hasCurrentData ? filteredInstallments : [],
+        sales: hasCurrentData ? sales : [],
+        saleItems: hasCurrentData ? saleItems : []
     }
 }

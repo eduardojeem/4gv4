@@ -129,14 +129,17 @@ function baseFalsa(tablas: Record<string, { data?: unknown[]; error?: unknown }>
         eq: (col: string, val: unknown) => FakeQueryBuilder
         in: (col: string, val: unknown) => FakeQueryBuilder
         order: () => FakeQueryBuilder
+        range: (from:number,to:number) => FakeQueryBuilder
         then: (resolve: (v: unknown) => unknown) => unknown
       }
+      let bounds: [number,number] | null = null
       const builder: FakeQueryBuilder = {
         select: () => builder,
         eq: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },
         in: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },
         order: () => builder,
-        then: (resolve: (v: unknown) => unknown) => resolve({ data: respuesta.data ?? [], error: respuesta.error ?? null }),
+        range: (from,to) => { bounds=[from,to]; return builder },
+        then: (resolve: (v: unknown) => unknown) => resolve({ data: bounds ? (respuesta.data ?? []).slice(bounds[0],bounds[1]+1) : respuesta.data ?? [], error: respuesta.error ?? null }),
       }
       return builder
     },
@@ -144,6 +147,17 @@ function baseFalsa(tablas: Record<string, { data?: unknown[]; error?: unknown }>
 }
 
 describe('las deudas del cliente', () => {
+  it('excludes completed credits and ignores a legacy late flag during the due day', async () => {
+    const db = baseFalsa({ repairs: { data: [] }, customer_credits: { data: [
+      { id: 'active', status: 'active' }, { id: 'done', status: 'completed' },
+    ] }, credit_installments: { data: [
+      { id: 'today', credit_id: 'active', amount: 100, amount_paid: 25, status: 'late', due_date: '2026-10-11' },
+    ] } })
+    const result = await loadCustomerDebts(db, { organizationId: ORG, customerId: 'c1', branchId: BRANCH,
+      timeZone: 'America/Asuncion', now: new Date('2026-10-11T12:00:00Z') })
+    expect(result.debts[0].isOverdue).toBe(false)
+    expect(db.consultas.find(row => row.tabla === 'credit_installments')?.filtros).toContainEqual(['credit_id', ['active']])
+  })
   const reparacion = (extra: Record<string, unknown>) => ({
     id: 'r1', ticket_number: 'T-1', status: 'listo', branch_id: BRANCH, pricing_mode: 'automatic',
     labor_cost: 0, final_cost: 300, estimated_cost: 300, discount_amount: 0, paid_amount: 100,

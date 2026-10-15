@@ -241,6 +241,75 @@ const sanitizeCloneStylesForHtml2Canvas = (clonedDoc: Document): void => {
   })
 }
 
+/** Funciones de color que html2canvas no sabe leer. */
+const UNSUPPORTED_COLOR = /\b(?:oklch|oklab|lch|lab|color-mix|color)\(/i
+
+const COLOR_PROPERTIES = [
+  'color',
+  'background-color',
+  'border-top-color',
+  'border-right-color',
+  'border-bottom-color',
+  'border-left-color',
+  'outline-color',
+  'text-decoration-color',
+  'fill',
+  'stroke',
+] as const
+
+let colorProbe: CanvasRenderingContext2D | null | undefined
+
+/** El navegador si entiende `lab()`: se pinta un pixel y se lee como RGB. */
+const toRgb = (value: string): string => {
+  if (colorProbe === undefined) {
+    colorProbe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+  }
+  if (!colorProbe) return 'rgb(0, 0, 0)'
+  colorProbe.clearRect(0, 0, 1, 1)
+  colorProbe.fillStyle = '#000'
+  colorProbe.fillStyle = value
+  colorProbe.fillRect(0, 0, 1, 1)
+  const [r, g, b, a] = colorProbe.getImageData(0, 0, 1, 1).data
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`
+}
+
+/**
+ * Pasa a RGB los colores ya calculados del ticket clonado.
+ *
+ * Limpiar las etiquetas <style> no alcanzaba: Tailwind llega por hojas
+ * enlazadas y el navegador devuelve sus colores calculados como `lab()` u
+ * `oklch()`. html2canvas los lee de ahi, no del CSS, y fallaba con
+ * "unsupported color function lab": Descargar y Compartir no armaban la imagen.
+ */
+const normalizeComputedColorsForHtml2Canvas = (clonedDoc: Document, root?: HTMLElement): void => {
+  const view = clonedDoc.defaultView
+  const target = root ?? clonedDoc.body
+  if (!view || !target) return
+
+  const elements = [target, ...Array.from(target.querySelectorAll<HTMLElement>('*'))]
+  const updates: Array<[HTMLElement, string, string]> = []
+
+  for (const el of elements) {
+    const computed = view.getComputedStyle(el)
+    for (const property of COLOR_PROPERTIES) {
+      const value = computed.getPropertyValue(property)
+      if (value && UNSUPPORTED_COLOR.test(value)) updates.push([el, property, toRgb(value)])
+    }
+    // Sombras y degradados con esos colores no se pueden traducir uno a uno: en
+    // un ticket no aportan nada, asi que se quitan.
+    if (UNSUPPORTED_COLOR.test(computed.getPropertyValue('box-shadow'))) updates.push([el, 'box-shadow', 'none'])
+    if (UNSUPPORTED_COLOR.test(computed.getPropertyValue('background-image'))) updates.push([el, 'background-image', 'none'])
+  }
+
+  // Se escribe despues de leer todo, para no recalcular estilos en cada vuelta.
+  for (const [el, property, value] of updates) el.style.setProperty(property, value, 'important')
+}
+
+const prepareCloneForHtml2Canvas = (clonedDoc: Document, root?: HTMLElement): void => {
+  sanitizeCloneStylesForHtml2Canvas(clonedDoc)
+  normalizeComputedColorsForHtml2Canvas(clonedDoc, root)
+}
+
 // Imprimir ticket - Captura el contenido del modal directamente
 /**
  * Imprime cuando la ventana termino de cargar, no a ciegas.
@@ -347,6 +416,8 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
+
+          ${HIGH_CONTRAST_PRINT_CSS}
         </style>
       </head>
       <body>
@@ -403,11 +474,12 @@ export const generatePrintHTML = (
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
-      cash: '💵 Efectivo',
-      card: '💳 Tarjeta',
-      transfer: '🏦 Transferencia',
-      credit: '📝 Crédito',
-      store_credit: '💰 Saldo a favor'
+      // Sin emojis: la impresora termica no los tiene y salen como cuadrados.
+      cash: 'Efectivo',
+      card: 'Tarjeta',
+      transfer: 'Transferencia',
+      credit: 'Crédito',
+      store_credit: 'Saldo a favor'
     }
     return labels[method as keyof typeof labels] || method
   }
@@ -777,6 +849,8 @@ export const generatePrintHTML = (
           margin-top: 8px;
           color: #999;
         }
+
+        ${HIGH_CONTRAST_PRINT_CSS}
       </style>
     </head>
     <body>
@@ -786,11 +860,10 @@ export const generatePrintHTML = (
           ? `<img src="${companyLogoUrl}" class="logo-img" alt="${company.name}"${monochromeLogo ? ' style="filter: grayscale(100%) contrast(240%);"' : ''} />`
           : `<div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>`}
         <h1>${company.name}</h1>
-        <div class="subtitle">Reparación y Service</div>
         ${'ruc' in company && company.ruc ? `<p style="font-weight: bold; font-size: 10px;">RUC: ${company.ruc}</p>` : ''}
-        <p>${company.address}</p>
-        <p>☎ ${company.phone}</p>
-        ${company.email ? `<p>📧 ${company.email}</p>` : ''}
+        ${company.address ? `<p>${company.address}</p>` : ''}
+        ${company.phone ? `<p>Tel: ${company.phone}</p>` : ''}
+        ${company.email ? `<p>${company.email}</p>` : ''}
       </div>
 
       ${receiptData.isReprint ? `
@@ -808,39 +881,36 @@ export const generatePrintHTML = (
       <!-- Información de la venta -->
       <div class="info-section">
         <div class="info-row">
-          <span class="label">📅 Fecha:</span>
-          <span class="value">${receiptData.date}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">⏰ Hora:</span>
-          <span class="value">${receiptData.time}</span>
+          <span class="label">Fecha:</span>
+          <span class="value">${receiptData.date} ${receiptData.time}</span>
         </div>
         ${receiptData.cashRegister ? `
           <div class="info-row">
-            <span class="label">🏪 Caja:</span>
+            <span class="label">Caja:</span>
             <span class="value">${receiptData.cashRegister}</span>
           </div>
         ` : ''}
         ${receiptData.shift ? `
           <div class="info-row">
-            <span class="label">🕐 Turno:</span>
+            <span class="label">Turno:</span>
             <span class="value">${receiptData.shift}</span>
           </div>
         ` : ''}
         <div class="info-row">
-          <span class="label">👤 Cajero:</span>
+          <span class="label">Cajero:</span>
           <span class="value">${receiptData.cashier}</span>
         </div>
         ${receiptData.customer ? `
           <div class="separator"></div>
           <div class="info-row">
-            <span class="label">👥 Cliente:</span>
+            <span class="label">Cliente:</span>
             <span class="value">${receiptData.customer.name}</span>
           </div>
+          ${receiptData.customer.phone?.trim() ? `
           <div class="info-row">
-            <span class="label">📱 Teléfono:</span>
+            <span class="label">Teléfono:</span>
             <span class="value">${receiptData.customer.phone}</span>
-          </div>
+          </div>` : ''}
         ` : ''}
       </div>
 
@@ -855,7 +925,7 @@ export const generatePrintHTML = (
           <div class="item-header">
             <span class="item-name">
               ${item.name}
-              ${item.isService ? `<span class="tag-service">🔧 SERVICIO</span>` : ''}
+              ${item.isService ? `<span class="tag-service">SERVICIO</span>` : ''}
             </span>
             <span class="item-price">${formatCurrency(item.price * item.quantity)}</span>
           </div>
@@ -865,7 +935,7 @@ export const generatePrintHTML = (
           </div>
           ${item.discount && item.discount > 0 ? `
             <div class="item-discount">
-              <span>✨ Descuento:</span>
+              <span>Descuento:</span>
               <span>-${formatCurrency(item.discount)}</span>
             </div>
           ` : ''}
@@ -887,7 +957,7 @@ export const generatePrintHTML = (
             </div>
             ${receiptData.totalDiscount > 0 ? `
               <div class="total-row discount">
-                <span>✨ Descuento:</span>
+                <span>Descuento:</span>
                 <span>-${formatCurrency(receiptData.totalDiscount)}</span>
               </div>
             ` : ''}
@@ -905,7 +975,7 @@ export const generatePrintHTML = (
                 <span>${formatCurrency(receiptData.tax)}</span>
               </div>
             ` : ''}
-            <div class="total-row final${creditInfo ? ' financed' : ''}">
+            <div class="total-row final pc-total${creditInfo ? ' financed' : ''}">
                <span>${creditInfo ? 'TOTAL CON FINANCIACIÓN:' : 'TOTAL:'}</span>
                <span>${formatCurrency(creditInfo ? settledNow + creditInfo.financedTotal : totalAmount)}</span>
             </div>
@@ -930,7 +1000,7 @@ export const generatePrintHTML = (
         `).join('')}
         ${!creditInfo && receiptData.change && receiptData.change > 0 ? `
           <div class="payment-item change">
-            <span>💰 Cambio:</span>
+            <span>Cambio:</span>
             <span>${formatCurrency(receiptData.change)}</span>
           </div>
         ` : ''}
@@ -940,13 +1010,13 @@ export const generatePrintHTML = (
             <div class="payment-item"><span>Saldo financiado:</span><strong>${formatCurrency(financedBalance)}</strong></div>
           </div>
         ` : ''}
-        <div class="payment-status">✅ ${paymentState}</div>
+        <div class="payment-status">${paymentState}</div>
       </div>
 
       ${receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 ? `
         <div class="separator"></div>
         <div class="loyalty-box">
-          <div class="text">🎉 ¡Ganaste ${receiptData.loyaltyPoints} puntos de lealtad! 🎉</div>
+          <div class="text">¡Ganaste ${receiptData.loyaltyPoints} puntos de lealtad!</div>
         </div>
       ` : ''}
 
@@ -954,8 +1024,6 @@ export const generatePrintHTML = (
       <div class="footer">
         <div class="thanks">¡Gracias por su compra!</div>
         <div>Conserve este ticket como comprobante</div>
-        <div class="contact">📱 Consultas: ${company.phone}</div>
-        <div class="contact">📧 ${company.email}</div>
         <div class="separator"></div>
         ${documentKind === 'internal' ? `<div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
           <strong style="display: block; margin-bottom: 2px; color: #666;">DOCUMENTO NO FISCAL</strong>
@@ -963,7 +1031,6 @@ export const generatePrintHTML = (
           tributaria ante la DNIT. No sustituye factura legal.<br>
           Solicite su factura con timbrado vigente si la necesita.
         </div>` : ''}
-        <div class="id">ID: ${receiptData.receiptNumber}</div>
         ${receiptData.isReprint
           ? `<div class="id"><strong>REIMPRESIÓN</strong> del ${receiptData.date} ${receiptData.time}</div>
              <div class="id">Reimpreso: ${new Date().toLocaleString('es-PY')}</div>`
@@ -995,8 +1062,8 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
       backgroundColor: '#ffffff',
       logging: false,
       useCORS: true,
-      onclone: (clonedDoc: Document) => {
-        sanitizeCloneStylesForHtml2Canvas(clonedDoc)
+      onclone: (clonedDoc: Document, clonedElement: HTMLElement) => {
+        prepareCloneForHtml2Canvas(clonedDoc, clonedElement)
       }
     })
 
@@ -1045,28 +1112,96 @@ const PAYMENT_LABELS: Record<PaymentSplit['method'], string> = {
   store_credit: 'Saldo a favor',
 }
 
+/** Lo minimo del emisor que necesita el texto: el nombre basta, el telefono suma. */
+type ShareCompany = string | Pick<CompanyInfo, 'name'> & Partial<Pick<CompanyInfo, 'phone'>>
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  weekly: 'semanales',
+  biweekly: 'quincenales',
+  monthly: 'mensuales',
+}
+
 /**
- * El ticket en texto, para WhatsApp o para pegar: productos, total, cómo pagó
- * y, si fue a crédito, las cuotas. Antes el texto solo decía número y total.
+ * El ticket en texto, para WhatsApp o para pegar.
+ *
+ * Usa el formato propio de WhatsApp (*negrita*, _cursiva_) y va por secciones
+ * —productos, pago, credito— para que en el telefono se lea de un vistazo:
+ * cuanto pago, como y, si fue a credito, cuanto le queda y cuando vence.
  */
-export function buildReceiptShareText(receiptData: ReceiptData, companyName: string): string {
-  const lines = [
-    `*${companyName}*`,
-    `Ticket ${receiptData.receiptNumber} · ${receiptData.date} ${receiptData.time}`,
-    '',
-    ...receiptData.items.map((item) => `${item.quantity} × ${item.name} — ${formatCurrency(item.price * item.quantity - (item.discount ?? 0))}`),
-    '',
-    ...(receiptData.totalDiscount > 0 ? [`Descuento: -${formatCurrency(receiptData.totalDiscount)}`] : []),
-    `*Total: ${formatCurrency(receiptData.total)}*`,
-    ...receiptData.payments.map((payment) => `${PAYMENT_LABELS[payment.method] ?? payment.method}: ${formatCurrency(payment.amount)}`),
-    ...(receiptData.change && receiptData.change > 0 ? [`Vuelto: ${formatCurrency(receiptData.change)}`] : []),
-    ...(receiptData.creditInfo
-      ? [`Crédito: ${receiptData.creditInfo.installmentCount} cuotas de ${formatCurrency(receiptData.creditInfo.installmentAmount)}${receiptData.creditInfo.firstDueDate ? ` · primera el ${formatPosCreditDueDate(receiptData.creditInfo.firstDueDate)}` : ''}`]
+export function buildReceiptShareText(receiptData: ReceiptData, company: ShareCompany): string {
+  const companyName = typeof company === 'string' ? company : company.name
+  const companyPhone = typeof company === 'string' ? '' : company.phone?.trim() ?? ''
+  const creditInfo = receiptData.creditInfo
+  const summary = buildReceiptPaymentSummary(receiptData)
+  const firstName = receiptData.customer?.name?.trim().split(/\s+/)[0]
+
+  const items = receiptData.items.flatMap((item) => {
+    const discount = item.discount ?? 0
+    const lineTotal = item.price * item.quantity - discount
+    return [
+      `• ${item.quantity} × ${item.name} — *${formatCurrency(lineTotal)}*`,
+      ...(item.quantity > 1 ? [`   _${formatCurrency(item.price)} c/u_`] : []),
+      ...(discount > 0 ? [`   _Descuento: -${formatCurrency(discount)}_`] : []),
+    ]
+  })
+
+  const totals = [
+    ...(receiptData.totalDiscount > 0
+      ? [`Subtotal: ${formatCurrency(receiptData.subtotal)}`, `Descuento: -${formatCurrency(receiptData.totalDiscount)}`]
       : []),
-    '',
-    `¡Gracias por tu compra!`,
+    creditInfo
+      ? `*Total con financiación: ${formatCurrency(summary.collectedToday + creditInfo.financedTotal)}*`
+      : `*Total: ${formatCurrency(receiptData.total)}*`,
   ]
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+
+  // La linea "credito" del pago no es dinero que entro: se explica abajo.
+  const payments = [
+    ...receiptData.payments
+      .filter((payment) => payment.method !== 'credit')
+      .map((payment) => {
+        const detail = payment.cardLast4 ? ` (****${payment.cardLast4})` : payment.reference ? ` (ref. ${payment.reference})` : ''
+        return `• ${PAYMENT_LABELS[payment.method] ?? payment.method}${detail}: ${formatCurrency(payment.amount)}`
+      }),
+    ...(summary.change !== null ? [`• Vuelto: ${formatCurrency(summary.change)}`] : []),
+    `✅ *${summary.paymentState}*`,
+  ]
+
+  const credit = creditInfo
+    ? [
+        '*Crédito*',
+        `• Total financiado: ${formatCurrency(creditInfo.financedTotal)}`,
+        `• ${creditInfo.installmentCount} cuotas ${FREQUENCY_LABELS[creditInfo.frequency] ?? ''} de ${formatCurrency(creditInfo.installmentAmount)}`.replace(/\s{2,}/g, ' '),
+        ...(creditInfo.lastInstallmentAmount !== undefined && creditInfo.lastInstallmentAmount !== creditInfo.installmentAmount
+          ? [`• Última cuota: ${formatCurrency(creditInfo.lastInstallmentAmount)}`]
+          : []),
+        creditInfo.firstPayment
+          ? `• Primera cuota pagada: ${formatCurrency(creditInfo.firstPayment.amount)}`
+          : `• Primera cuota: *${formatPosCreditDueDate(creditInfo.firstDueDate)}*`,
+        `• *Saldo pendiente: ${formatCurrency(summary.financedBalance)}*`,
+      ]
+    : []
+
+  const sections = [
+    [
+      `*${companyName}*`,
+      `🧾 Ticket *${receiptData.receiptNumber}* · ${receiptData.date} ${receiptData.time}`,
+      ...(receiptData.isReprint ? ['_Reimpresión_'] : []),
+    ],
+    [firstName ? `Hola ${firstName}, gracias por tu compra. Este es el detalle:` : 'Gracias por tu compra. Este es el detalle:'],
+    ['*Productos*', ...items],
+    totals,
+    ['*Pago*', ...payments],
+    credit,
+    [
+      ...(companyPhone ? [`Consultas: ${companyPhone}`] : []),
+      '_Comprobante interno, no válido como factura._',
+    ],
+  ]
+
+  return sections
+    .filter((lines) => lines.length > 0)
+    .map((lines) => lines.join('\n'))
+    .join('\n\n')
 }
 
 /** Teléfono para wa.me: solo dígitos y, si empieza con 0 (0981…), con el 595 de Paraguay. */
@@ -1077,23 +1212,23 @@ export function whatsappNumber(phone: string | undefined | null): string | null 
 }
 
 /** Enlace para mandar el ticket por WhatsApp: al cliente si tiene teléfono; si no, para elegir el contacto. */
-export function receiptWhatsAppHref(receiptData: ReceiptData, companyName: string): string {
+export function receiptWhatsAppHref(receiptData: ReceiptData, company: ShareCompany): string {
   const number = whatsappNumber(receiptData.customer?.phone)
-  const text = encodeURIComponent(buildReceiptShareText(receiptData, companyName))
+  const text = encodeURIComponent(buildReceiptShareText(receiptData, company))
   return number ? `https://wa.me/${number}?text=${text}` : `https://wa.me/?text=${text}`
 }
 
 export const sendReceiptByWhatsApp = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
-  const companyName = companyInfo?.name || config.company.name
-  window.open(receiptWhatsAppHref(receiptData, companyName), '_blank', 'noopener,noreferrer')
+  const company = { name: companyInfo?.name || config.company.name, phone: companyInfo?.phone }
+  window.open(receiptWhatsAppHref(receiptData, company), '_blank', 'noopener,noreferrer')
 }
 
 const isShareCancelled = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
 
 // Compartir el ticket: como imagen si el dispositivo lo permite; si no, como texto.
 export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
-  const companyName = companyInfo?.name || config.company.name
-  const shareText = buildReceiptShareText(receiptData, companyName)
+  const company = { name: companyInfo?.name || config.company.name, phone: companyInfo?.phone }
+  const shareText = buildReceiptShareText(receiptData, company)
   const title = `Ticket ${receiptData.receiptNumber}`
 
   try {
@@ -1105,8 +1240,8 @@ export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: Compa
         backgroundColor: '#ffffff',
         logging: false,
         useCORS: true,
-        onclone: (clonedDoc: Document) => {
-          sanitizeCloneStylesForHtml2Canvas(clonedDoc)
+        onclone: (clonedDoc: Document, clonedElement: HTMLElement) => {
+          prepareCloneForHtml2Canvas(clonedDoc, clonedElement)
         }
       })
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
@@ -1170,11 +1305,15 @@ const showShareModal = (text: string): void => {
 
   content.innerHTML = `
     <h3 style="margin-top: 0;">Compartir Ticket</h3>
-    <textarea readonly style="width: 100%; height: 150px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">${text}</textarea>
+    <textarea readonly style="width: 100%; height: 220px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px;"></textarea>
     <div style="text-align: right;">
       <button onclick="this.closest('[style*=fixed]').remove()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Cerrar</button>
     </div>
   `
+  // Como valor y no dentro del HTML: un nombre de producto con "<" rompia el
+  // contenido o inyectaba marcado.
+  const textarea = content.querySelector('textarea')
+  if (textarea) textarea.value = text
 
   modal.appendChild(content)
   document.body.appendChild(modal)
@@ -1190,3 +1329,4 @@ import { config } from './config'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
 import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
+import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
