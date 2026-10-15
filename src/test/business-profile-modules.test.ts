@@ -54,7 +54,8 @@ describe('dependencias entre módulos', () => {
 
   it('se valida en la configuración y al guardar', () => {
     const tarjeta = readFileSync(resolve(process.cwd(), 'src/components/admin/settings/BusinessProfileCard.tsx'), 'utf8')
-    expect(tarjeta).toContain('disabled={!dirty || saving || dependencyProblems.length > 0}')
+    expect(tarjeta).toContain('const canSave = dirty && !saving && dependencyProblems.length === 0')
+    expect(tarjeta).toContain('disabled={!canSave}')
     expect(tarjeta).toContain('modulesForVerticalChange(enabled, getSuggestedModules(nextVertical, nextModel), entitled)')
     const api = readFileSync(resolve(process.cwd(), 'src/app/api/admin/organization-profile/route.ts'), 'utf8')
     expect(api).toContain("code: 'MODULE_DEPENDENCY'")
