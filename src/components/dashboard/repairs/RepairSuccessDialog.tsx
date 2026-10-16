@@ -253,6 +253,7 @@ export function RepairSuccessDialog({
       <RepairReceiptSettingsDialog
         open={showSettings}
         onOpenChange={setShowSettings}
+        company={data?.company}
         onSettingsSaved={(newSettings) => {
           setPaperFormat(newSettings.paperFormat)
         }}

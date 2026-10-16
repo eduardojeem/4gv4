@@ -60,7 +60,8 @@ import { PatternDrawer } from './PatternDrawer'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
 import { RepairWarrantyCase } from './RepairWarrantyCase'
 import { DeviceHistoryTimeline } from './DeviceHistoryTimeline'
-import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
+import { printRepairReceipt, printRepairReceiptWhenReady, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
+import { buildRepairPrintPayload, fetchRepairVerificationHash } from '@/lib/repairs/print-payload'
 import {
   getWarrantyStatus,
   getDaysRemaining,
@@ -289,36 +290,19 @@ export function RepairDetailDialog({
     const controller = new AbortController()
 
     if (activeRepair && open) {
-      const ticketNum = activeRepair.ticketNumber || activeRepair.id
-      const customerName = activeRepair.customer?.name || 'Cliente'
-      const dateObj = new Date(activeRepair.createdAt)
-
-      fetch('/api/repairs/sign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          ticketNumber: ticketNum,
-          customerName: customerName,
-          date: dateObj.toISOString()
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setVerificationHash(data.hash)
-        }
-      })
-      .catch(err => {
-        if (err?.name !== 'AbortError') {
-            logger.error('Failed to fetch verification hash', { error: err })
-          }
+      // Firmado con el mismo número que se imprime: antes se firmaba con el id
+      // completo y se imprimía el id corto, y el QR no validaba.
+      void fetchRepairVerificationHash(activeRepair, controller.signal).then((hash) => {
+        if (hash && !controller.signal.aborted) setVerificationHash(hash)
       })
     } else {
       setVerificationHash(undefined)
     }
     return () => controller.abort()
-  }, [activeRepair, open])
+    // Solo lo que entra en la firma: antes se volvía a pedir con cada edición
+    // del detalle (descripción, adjuntos, pagos).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRepair?.id, activeRepair?.ticketNumber, activeRepair?.customer?.name, activeRepair?.createdAt, open])
 
   React.useEffect(() => {
     if (!open) {
@@ -605,70 +589,32 @@ export function RepairDetailDialog({
     }
   }
 
-  const getPrintPayload = (): RepairPrintPayload => {
+  const getPrintPayload = (hash: string | undefined = verificationHash): RepairPrintPayload => {
     if (!repair) throw new Error("No repair")
-    // Campos opcionales que el tipo Repair['customer'] no declara.
-    const extraCustomerFields = (repair.customer || {}) as Partial<{
-      address: string
-      city: string
-      country: string
-      document: string
-    }>
-    return {
-      ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
-      date: new Date(repair.createdAt || new Date()),
-      priority: repair.priority,
-      urgency: repair.urgency,
-      customer: {
-        id: repair.customer?.id || '',
-        name: repair.customer?.name || 'Cliente',
-        customerCode: repair.customer?.customerCode || '',
-        phone: repair.customer?.phone || '',
-        alternate_phone: repair.customer?.alternate_phone || null,
-        alternate_phone_label: repair.customer?.alternate_phone_label || null,
-        email: repair.customer?.email || '',
-        address: extraCustomerFields.address,
-        city: extraCustomerFields.city,
-        country: extraCustomerFields.country,
-        document: extraCustomerFields.document,
-      },
-      devices: [{
-        typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
-        brand: repair.brand,
-        model: repair.model,
-        serialNumber: repair.serialNumber,
-        imei: repair.imei || repair.serialNumber,
-        accessType: repair.accessType,
-        accessPassword: repair.accessPassword,
-        issue: repair.issue,
-        description: repair.description,
-        technician: repair.technician?.name || 'Sin asignar',
-        estimatedCost: repair.estimatedCost,
-        finalCost: repair.finalCost,
-        paidAmount: repair.paidAmount,
-        ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
-      }],
-      finalCost: repair.finalCost || undefined,
-      estimatedCost: repair.estimatedCost,
-      paidAmount: repair.paidAmount,
-      warrantyMonths: repair.warrantyMonths,
-      warrantyType: repair.warrantyType,
-      warrantyNotes: repair.warrantyNotes,
-      company: {
-        name: settings.companyName,
-        phone: settings.companyPhone,
-        address: settings.companyAddress,
-        email: settings.companyEmail,
-        logo: settings.companyLogo || undefined,
-      },
-      verificationHash
-    }
+    return buildRepairPrintPayload(repair, {
+      name: settings.companyName,
+      phone: settings.companyPhone,
+      address: settings.companyAddress,
+      email: settings.companyEmail,
+      logo: settings.companyLogo || undefined,
+    }, hash)
   }
 
   const handlePrint = (type: 'customer' | 'technician' | 'technician_detailed') => {
     if (!repair) return
-    const payload = getPrintPayload()
-    printRepairReceipt(type, payload)
+    // Si se imprime antes de que llegue la firma, se espera: antes salía sin QR
+    // y sin avisar. La ventana se abre igual en el mismo clic.
+    if (type === 'customer' && !verificationHash) {
+      void printRepairReceiptWhenReady(
+        type,
+        fetchRepairVerificationHash(repair).then((hash) => {
+          if (hash) setVerificationHash(hash)
+          return getPrintPayload(hash)
+        })
+      )
+      return
+    }
+    printRepairReceipt(type, getPrintPayload())
   }
 
   const handleShare = async (
@@ -696,14 +642,11 @@ export function RepairDetailDialog({
         toast.success(`WhatsApp abierto para enviar a ${targetLabel}`)
       }
     } else if (method === 'whatsapp-pdf') {
-       // Opción para abrir el diálogo de impresión directamente,
-       // sugiriendo al usuario guardar como PDF y enviarlo
-       // Ya que compartir archivos directamente a WhatsApp Web no es posible vía API
-       // y Web Share API tiene soporte limitado en escritorio.
-       toast.info('Se abrirá la vista de impresión. Guarda como PDF y envíalo por WhatsApp.')
-       setTimeout(() => {
-          handlePrint('customer')
-       }, 1500)
+      // WhatsApp Web no recibe archivos por enlace: se abre la impresión para
+      // guardarla como PDF. En el mismo clic: con la espera de antes (1,5 s) el
+      // navegador la bloqueaba como ventana emergente y no se abría nada.
+      handlePrint('customer')
+      toast.info('En la ventana de impresión elegí «Guardar como PDF» y adjuntalo en WhatsApp.')
     } else if (method === 'copy') {
       try {
         await navigator.clipboard.writeText(shareText)
@@ -716,7 +659,9 @@ export function RepairDetailDialog({
         navigator.share({
           title: `Reparación ${payload.ticketNumber}`,
           text: shareText,
-        }).catch(() => {
+        }).catch((error) => {
+          // Cerrar el menú de compartir no es un error.
+          if (error instanceof DOMException && error.name === 'AbortError') return
           toast.error('No se pudo compartir')
         })
       } else {
@@ -950,7 +895,7 @@ export function RepairDetailDialog({
                   )}
                   <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
                     <FileText className="mr-2 h-4 w-4 text-rose-500" />
-                    PDF para WhatsApp
+                    Guardar PDF para WhatsApp
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => handlePrint('customer')}>
@@ -959,7 +904,11 @@ export function RepairDetailDialog({
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handlePrint('technician')}>
                     <Wrench className="mr-2 h-4 w-4" />
-                    Ficha de taller
+                    Ficha técnica simple
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePrint('technician_detailed')}>
+                    <FileCheck2 className="mr-2 h-4 w-4" />
+                    Ficha de laboratorio (completa)
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {activeRepair.status === 'entregado' && (
@@ -979,7 +928,7 @@ export function RepairDetailDialog({
                   )}
                   <DropdownMenuItem onClick={() => handleShare('copy')}>
                     <Copy className="mr-2 h-4 w-4" />
-                    Copiar resumen
+                    Copiar texto
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -993,7 +942,7 @@ export function RepairDetailDialog({
                 <DropdownMenuContent align="end" className="min-w-64 rounded-2xl shadow-xl">
                   <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
                     <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
-                    Enviar Texto por WhatsApp
+                    Enviar texto por WhatsApp
                   </DropdownMenuItem>
                   {repair.customer?.alternate_phone && (
                     <DropdownMenuItem
@@ -1011,12 +960,12 @@ export function RepairDetailDialog({
                   )}
                   <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
                     <FileText className="mr-2 h-4 w-4 text-rose-500" />
-                    PDF para WhatsApp
+                    Guardar PDF para WhatsApp
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => handleShare('copy')}>
                     <Copy className="mr-2 h-4 w-4" />
-                    Copiar Texto
+                    Copiar texto
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleShare('native')}>
                     <Share2 className="mr-2 h-4 w-4" />
@@ -1052,7 +1001,9 @@ export function RepairDetailDialog({
                     <div>
                       <p className="font-semibold">Comprobante para el cliente</p>
                       <p className="text-xs text-muted-foreground">
-                        Recibo con datos del equipo, costo y garantía
+                        {activeRepair.status === 'entregado'
+                          ? 'Comprobante de entrega con costo final y garantía'
+                          : 'Orden de servicio con datos del equipo, costo y garantía'}
                       </p>
                     </div>
                   </DropdownMenuItem>

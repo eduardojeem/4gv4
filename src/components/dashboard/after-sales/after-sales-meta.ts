@@ -1,5 +1,6 @@
 import type { ElementType } from 'react'
 import { format } from 'date-fns'
+import { formatCurrency, getCurrencyFractionDigits, getLocaleConfig } from '@/lib/currency'
 import { es } from 'date-fns/locale'
 import {
     ArrowLeftRight,
@@ -72,9 +73,31 @@ export const NEXT_ACTIONS: Record<CaseStatus, Array<{ status: CaseStatus; label:
     cancelled: [],
 }
 
+/**
+ * En la moneda de la organización. Antes era siempre guaraníes: una tienda que
+ * factura en dólares veía «Gs.» en cada reintegro.
+ */
 export function formatMoney(value: number | null | undefined) {
-    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 })
-        .format(Number(value) || 0)
+    return formatCurrency(Number(value) || 0)
+}
+
+/**
+ * Lee un monto escrito a mano. Antes se borraba todo lo que no fuera dígito:
+ * en una moneda con centavos «12.50» se leía como 1250.
+ */
+export function parseMoneyInput(value: string): number {
+    const { currency, locale } = getLocaleConfig()
+    const fractionDigits = getCurrencyFractionDigits(currency)
+    if (fractionDigits === 0) return Number(value.replace(/[^\d]/g, '')) || 0
+    const decimal = new Intl.NumberFormat(locale).format(1.5).replace(/\d/g, '')
+    const normalized = value
+        .split(decimal)
+        .map((part) => part.replace(/[^\d]/g, ''))
+    const integer = normalized[0] || '0'
+    const fraction = normalized.length > 1 ? normalized.slice(1).join('') : ''
+    const parsed = Number(`${integer}.${fraction || '0'}`)
+    const factor = 10 ** fractionDigits
+    return Number.isFinite(parsed) ? Math.round(parsed * factor) / factor : 0
 }
 
 export function formatDate(value?: string | null) {

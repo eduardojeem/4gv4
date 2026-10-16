@@ -42,6 +42,7 @@ import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteD
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
 import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
+import { refreshReceiptSettings } from '@/lib/repair-receipt'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairDeliveryDialog, type RepairDeliveryConfirmPayload } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { RepairQualityCheckDialog } from '@/components/dashboard/repairs/RepairQualityCheckDialog'
@@ -104,6 +105,12 @@ function RepairsPageContent() {
   const { user } = useAuth()
   const canManageRepairs = user?.role === 'super_admin' || user?.role === 'admin' || Boolean(user?.permissions?.includes('repairs.manage'))
   const canDeliverRepairs = canManageRepairs || Boolean(user?.permissions?.includes('repairs.deliver'))
+  // La fila y el detalle imprimen con la copia de la configuración guardada en
+  // este navegador. Se trae del servidor al abrir Reparaciones: antes solo se
+  // actualizaba al abrir el formulario o el diálogo de configuración, y en una
+  // computadora que solo imprimía desde el listado salía la vieja o la de fábrica.
+  useEffect(() => { void refreshReceiptSettings() }, [])
+
   const repairListCompanyInfo = useMemo(() => ({
     name: sharedSettings.companyName,
     phone: sharedSettings.companyPhone,
@@ -1232,6 +1239,7 @@ function RepairsPageContent() {
       <RepairReceiptSettingsDialog
         open={showReceiptSettingsDialog}
         onOpenChange={setShowReceiptSettingsDialog}
+        company={repairListCompanyInfo}
       />
     </div>
     </RepairHelpActionsProvider>

@@ -18,6 +18,8 @@ export interface RepairReceiptSettings {
   showHash: boolean
   showCustomerSignature: boolean
   legalText: string
+  /** Días tras la notificación para considerar abandonado el equipo. 0 = no se imprime. */
+  abandonmentDays: number
   defaultWarrantyMonths: number
   defaultWarrantyType: WarrantyType
   defaultWarrantyNotes: string
@@ -26,6 +28,30 @@ export interface RepairReceiptSettings {
 export const RECEIPT_LEGAL_TEXT_MAX = 3000
 export const RECEIPT_LOGO_HEIGHT_MIN = 24
 export const RECEIPT_LOGO_HEIGHT_MAX = 96
+export const RECEIPT_ABANDONMENT_DAYS_MAX = 365
+
+/**
+ * Cláusulas que el comprobante agrega solas. Viven acá para que los botones de
+ * «insertar cláusula» del diálogo y el comprobante usen el mismo texto: antes
+ * tenían redacciones distintas y, si se insertaba una, salía impresa dos veces.
+ */
+export const abandonmentClause = (days: number) =>
+  `Pasados ${days} días de la notificación de retiro, el equipo se considerará abandonado.`
+export const PICKUP_CLAUSE = 'Es indispensable presentar este comprobante para retirar el equipo y para reclamar la garantía.'
+export const DAMAGE_EXCLUSION_CLAUSE = 'La garantía no cubre golpes, caídas ni daños por líquidos posteriores a la entrega.'
+export const DATA_LOSS_CLAUSE = 'El taller no se responsabiliza por la pérdida de datos: se recomienda hacer una copia de seguridad antes de dejar el equipo.'
+
+/**
+ * Si un texto ya trata el tema de una cláusula, aunque con otras palabras. La
+ * comparación exacta no alcanzaba: «humedad» y «líquidos» decían lo mismo y se
+ * imprimían las dos.
+ */
+export const CLAUSE_TOPICS = {
+  abandonment: /abandon/i,
+  pickup: /presentar (este|el) comprobante/i,
+  damage: /humedad|l[ií]quido|golpe|ca[ií]da/i,
+  dataLoss: /p[eé]rdida (de|o da[nñ]o de) (datos|informaci[oó]n)/i,
+} as const
 
 export const DEFAULT_RECEIPT_SETTINGS: RepairReceiptSettings = {
   paperFormat: '80mm',
@@ -38,10 +64,15 @@ export const DEFAULT_RECEIPT_SETTINGS: RepairReceiptSettings = {
   showImei: true,
   showHash: true,
   showCustomerSignature: true,
-  legalText: 'Declaro haber leído y aceptado los términos y condiciones del servicio técnico. Autorizo la revisión y/o reparación de los equipos detallados. La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.',
+  // Antes decía «declaro haber leído los términos y condiciones», pero esos
+  // términos no estaban en el papel: ahora el texto es la condición misma.
+  legalText: `Autorizo la revisión y reparación de los equipos detallados y acepto las condiciones de este comprobante. ${DATA_LOSS_CLAUSE}`,
+  abandonmentDays: 90,
   defaultWarrantyMonths: 3,
   defaultWarrantyType: 'full',
-  defaultWarrantyNotes: 'Garantía sobre piezas sustituidas y mano de obra. No cubre golpes, caídas ni humedad posteriores a la entrega.',
+  // Lo que cubre ya lo dice el tipo de garantía; la nota de fábrica decía
+  // «piezas y mano de obra» aunque se eligiera «solo mano de obra».
+  defaultWarrantyNotes: DAMAGE_EXCLUSION_CLAUSE,
 }
 
 const fields = {
@@ -59,6 +90,9 @@ const fields = {
   showCustomerSignature: z.boolean(),
   legalText: z.string().trim()
     .max(RECEIPT_LEGAL_TEXT_MAX, `El texto legal admite hasta ${RECEIPT_LEGAL_TEXT_MAX} caracteres.`),
+  abandonmentDays: z.number().int('El plazo de abandono va en días enteros.')
+    .min(0, `El plazo de abandono va de 0 a ${RECEIPT_ABANDONMENT_DAYS_MAX} días.`)
+    .max(RECEIPT_ABANDONMENT_DAYS_MAX, `El plazo de abandono va de 0 a ${RECEIPT_ABANDONMENT_DAYS_MAX} días.`),
   defaultWarrantyMonths: z.number({ message: 'La duración de la garantía debe ser un número de meses.' }).int('La duración de la garantía va en meses enteros.')
     .min(WARRANTY_MONTHS_MIN, `La garantía va de ${WARRANTY_MONTHS_MIN} a ${WARRANTY_MONTHS_MAX} meses.`)
     .max(WARRANTY_MONTHS_MAX, `La garantía va de ${WARRANTY_MONTHS_MIN} a ${WARRANTY_MONTHS_MAX} meses.`),
@@ -85,6 +119,7 @@ export const RepairReceiptSettingsSchema = z.object({
   showHash: fields.showHash.optional(),
   showCustomerSignature: fields.showCustomerSignature.optional(),
   legalText: fields.legalText.optional(),
+  abandonmentDays: fields.abandonmentDays.optional(),
   defaultWarrantyMonths: fields.defaultWarrantyMonths.optional(),
   defaultWarrantyType: fields.defaultWarrantyType.optional(),
   defaultWarrantyNotes: fields.defaultWarrantyNotes.optional(),

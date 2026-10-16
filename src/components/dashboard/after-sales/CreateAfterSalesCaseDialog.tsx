@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
-import { REQUEST_META, formatMoney, type RequestType, type SourceType } from './after-sales-meta'
+import { REQUEST_META, formatMoney, parseMoneyInput, type RequestType, type SourceType } from './after-sales-meta'
 import { ProductThumb } from '@/components/suppliers/order-ui'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
@@ -419,7 +419,7 @@ export function CreateAfterSalesCaseDialog({
 
     const parsedRefund = useMemo(() => {
         if (!showRefund) return null
-        const value = Number(refundAmount.replace(/[^\d]/g, ''))
+        const value = parseMoneyInput(refundAmount)
         return Number.isFinite(value) && value > 0 ? value : null
     }, [refundAmount, showRefund])
 
@@ -435,7 +435,7 @@ export function CreateAfterSalesCaseDialog({
         trimmedReason.length >= 3 &&
         !submitting &&
         (!hasItems || Boolean(selectedItem)) &&
-        (!showReplacement || Boolean(replacement)) &&
+        (!showReplacement || Boolean(replacement && replacement.stock >= replacementQty && replacement.stock > 0)) &&
         !isWarrantyBlocked
 
     const handleSubmit = async () => {
@@ -492,17 +492,17 @@ export function CreateAfterSalesCaseDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl rounded-2xl p-0 overflow-hidden border border-slate-200 dark:border-white/10 dark:bg-[#0d1117] shadow-2xl">
-                {/* Modern Header */}
-                <div className="bg-gradient-to-r from-blue-600/10 via-slate-50 to-white dark:from-blue-950/40 dark:via-[#161b22] dark:to-[#0d1117] border-b border-slate-200/80 dark:border-white/10 px-6 py-4">
+            <DialogContent className="max-w-2xl rounded-2xl p-0 overflow-hidden border shadow-2xl">
+                {/* Colores del tema: antes tenía un fondo oscuro fijo que no seguía al resto del panel. */}
+                <div className="border-b bg-muted/40 px-6 py-4">
                     <DialogHeader className="space-y-1">
                         <div className="flex items-center gap-2.5">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-500/30">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
                                 <ShieldAlert className="h-5 w-5" />
                             </span>
                             <div>
                                 <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white">
-                                    Registrar Nuevo Reclamo
+                                    Registrar nuevo reclamo
                                 </DialogTitle>
                                 <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
                                     Apertura de caso de posventa auditado con validación de garantías y plazos.
@@ -522,7 +522,7 @@ export function CreateAfterSalesCaseDialog({
                                     1. Comprobante de origen <span className="text-rose-500">*</span>
                                 </Label>
                                 {originOptions.length > 1 && !pickedOrigin && (
-                                    <div className="flex rounded-lg border border-slate-200 dark:border-white/10 p-0.5 bg-white dark:bg-[#161b22]">
+                                    <div className="flex rounded-lg border border-slate-200 dark:border-white/10 p-0.5 bg-white dark:bg-card">
                                         {originOptions.map((opt) => {
                                             const Icon = opt.icon
                                             return (
@@ -556,7 +556,7 @@ export function CreateAfterSalesCaseDialog({
                                             <p className="font-mono text-xs font-bold text-slate-900 dark:text-white">
                                                 {pickedOrigin.label}
                                             </p>
-                                            <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                                                 {pickedOrigin.subtitle}
                                                 {pickedOrigin.device ? ` · ${pickedOrigin.device}` : ''}
                                                 {typeof pickedOrigin.amount === 'number' ? ` · ${formatMoney(pickedOrigin.amount)}` : ''}
@@ -613,13 +613,13 @@ export function CreateAfterSalesCaseDialog({
                                                         setSelectedItemId(result.items[0].id)
                                                     }
                                                 }}
-                                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-2.5 text-left transition-all hover:border-blue-400 hover:bg-blue-50/40 dark:border-white/10 dark:bg-[#161b22] dark:hover:bg-white/5"
+                                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-2.5 text-left transition-all hover:border-blue-400 hover:bg-blue-50/40 dark:border-white/10 dark:bg-card dark:hover:bg-white/5"
                                             >
                                                 <div className="min-w-0">
                                                     <p className="font-mono text-xs font-semibold text-slate-900 dark:text-white">
                                                         {result.label}
                                                     </p>
-                                                    <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                                                         {result.subtitle}
                                                         {result.device ? ` · ${result.device}` : ''}
                                                     </p>
@@ -634,7 +634,7 @@ export function CreateAfterSalesCaseDialog({
                                                         <Badge
                                                             variant="outline"
                                                             className={cn(
-                                                                'text-[10px] h-4.5',
+                                                                'text-xs h-4.5',
                                                                 result.warrantyExpired
                                                                     ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300'
                                                                     : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
@@ -654,9 +654,9 @@ export function CreateAfterSalesCaseDialog({
 
                     {/* Resumen del comprobante cuando ya se conoce */}
                     {!needsOrigin && (effectiveReference || effectiveCustomerName || effectiveSubject) && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs dark:border-white/10 dark:bg-[#161b22]">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs dark:border-white/10 dark:bg-card">
                             <div className="flex items-center gap-2 min-w-0">
-                                <Badge variant="outline" className="text-[11px] font-semibold">
+                                <Badge variant="outline" className="text-xs font-semibold">
                                     {effectiveSourceType === 'repair' ? 'Reparación' : 'Venta'}
                                 </Badge>
                                 {effectiveReference && (
@@ -671,7 +671,7 @@ export function CreateAfterSalesCaseDialog({
                                 )}
                             </div>
                             {effectiveSubject && (
-                                <span className="text-[11px] text-muted-foreground truncate max-w-xs">
+                                <span className="text-xs text-muted-foreground truncate max-w-xs">
                                     {effectiveSubject}
                                 </span>
                             )}
@@ -685,7 +685,7 @@ export function CreateAfterSalesCaseDialog({
                                 <div className="space-y-2">
                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center justify-between">
                                         <span>2. Producto reclamado <span className="text-rose-500">*</span></span>
-                                        <span className="text-[11px] font-normal text-slate-400 lowercase">
+                                        <span className="text-xs font-normal text-slate-400 lowercase">
                                             {effectiveItems!.length} item{effectiveItems!.length === 1 ? '' : 's'} en el comprobante
                                         </span>
                                     </Label>
@@ -712,7 +712,7 @@ export function CreateAfterSalesCaseDialog({
                                                         'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-all relative overflow-hidden',
                                                         isSelected
                                                             ? 'border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-blue-950/40'
-                                                            : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-[#161b22] dark:hover:bg-white/5'
+                                                            : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-card dark:hover:bg-white/5'
                                                     )}
                                                 >
                                                     <ProductThumb url={item.imageUrl} name={item.name} size={42} />
@@ -727,7 +727,7 @@ export function CreateAfterSalesCaseDialog({
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                                        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                                                             <span>Cant: {item.quantity} u.</span>
                                                             {item.unitPrice ? (
                                                                 <span className="font-mono font-medium">{formatMoney(item.unitPrice)}</span>
@@ -736,7 +736,7 @@ export function CreateAfterSalesCaseDialog({
                                                         <Badge
                                                             variant="outline"
                                                             className={cn(
-                                                                'text-[10px] px-1.5 py-0 h-4 mt-0.5',
+                                                                'text-xs px-1.5 py-0 h-4 mt-0.5',
                                                                 itemWarranty.badgeVariant === 'expired'
                                                                     ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300'
                                                                     : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
@@ -771,7 +771,7 @@ export function CreateAfterSalesCaseDialog({
                                                     'flex flex-col gap-1 rounded-xl border p-3 text-left transition-all',
                                                     active
                                                         ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 dark:border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
-                                                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-[#161b22] dark:hover:bg-white/5'
+                                                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-card dark:hover:bg-white/5'
                                                 )}
                                             >
                                                 <div className="flex items-center gap-2">
@@ -787,7 +787,7 @@ export function CreateAfterSalesCaseDialog({
                                                         {meta.label}
                                                     </span>
                                                 </div>
-                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mt-0.5">
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mt-0.5">
                                                     {meta.hint}
                                                 </p>
                                             </button>
@@ -805,7 +805,7 @@ export function CreateAfterSalesCaseDialog({
                                             <p className="font-bold text-amber-900 dark:text-amber-200">
                                                 Plazo de garantía / devolución vencido
                                             </p>
-                                            <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                                            <p className="text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
                                                 {warrantyEvaluation.label}. Para continuar y registrar este expediente, debes autorizar expresamente la excepción comercial.
                                             </p>
                                         </div>
@@ -826,7 +826,7 @@ export function CreateAfterSalesCaseDialog({
                             ) : warrantyEvaluation.label ? (
                                 <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
                                     <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                    <span className="text-[11px] font-medium">{warrantyEvaluation.label}</span>
+                                    <span className="text-xs font-medium">{warrantyEvaluation.label}</span>
                                 </div>
                             ) : null}
 
@@ -852,7 +852,7 @@ export function CreateAfterSalesCaseDialog({
                                             }}
                                             className="w-28 rounded-xl text-xs h-9 font-mono"
                                         />
-                                        <span className="text-[11px] text-slate-400">
+                                        <span className="text-xs text-slate-400">
                                             (Máximo permitido: {selectedItem?.quantity ?? maxQuantity ?? 1} u.)
                                         </span>
                                     </div>
@@ -865,34 +865,35 @@ export function CreateAfterSalesCaseDialog({
                                     <Label className="text-xs font-bold uppercase tracking-wider text-violet-900 dark:text-violet-300 flex items-center justify-between">
                                         <span>Producto de reemplazo <span className="text-rose-500">*</span></span>
                                         {replacement && (
-                                            <span className="text-[11px] font-normal text-violet-700 dark:text-violet-400">
+                                            <span className="text-xs font-normal text-violet-700 dark:text-violet-400">
                                                 Stock actual: {replacement.stock} u.
                                             </span>
                                         )}
                                     </Label>
 
                                     {replacement ? (
-                                        <div className="flex items-center justify-between gap-3 rounded-xl border border-violet-400 bg-white p-2.5 dark:border-violet-600 dark:bg-[#161b22]">
+                                        <div className="flex items-center justify-between gap-3 rounded-xl border border-violet-400 bg-white p-2.5 dark:border-violet-600 dark:bg-card">
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <ProductThumb url={replacement.imageUrl} name={replacement.name} size={40} />
                                                 <div className="min-w-0">
                                                     <p className="truncate text-xs font-bold text-slate-900 dark:text-white">
                                                         {replacement.name}
                                                     </p>
-                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                                                         {formatMoney(replacement.price)} c/u
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <div className="flex items-center gap-1">
-                                                    <Label className="text-[11px] text-slate-500">Cant:</Label>
+                                                    <Label className="text-xs text-slate-500">Cant:</Label>
                                                     <Input
                                                         type="number"
                                                         min={1}
-                                                        max={replacement.stock || 1}
+                                                        max={Math.max(1, replacement.stock)}
                                                         value={replacementQty}
-                                                        onChange={(event) => setReplacementQty(Math.max(1, Number(event.target.value) || 1))}
+                                                        // No más de lo que hay en stock: antes no se topaba.
+                                                        onChange={(event) => setReplacementQty(Math.min(Math.max(1, replacement.stock), Math.max(1, Number(event.target.value) || 1)))}
                                                         className="h-7 w-14 rounded-lg text-xs font-mono text-center"
                                                     />
                                                 </div>
@@ -915,7 +916,7 @@ export function CreateAfterSalesCaseDialog({
                                                     value={replacementQuery}
                                                     onChange={(event) => setReplacementQuery(event.target.value)}
                                                     placeholder="Buscar producto de reemplazo en el catálogo..."
-                                                    className="h-9 pl-9 text-xs rounded-xl bg-white dark:bg-[#161b22]"
+                                                    className="h-9 pl-9 text-xs rounded-xl bg-white dark:bg-card"
                                                 />
                                             </div>
                                             <div className="max-h-40 space-y-1.5 overflow-y-auto pr-0.5">
@@ -930,7 +931,7 @@ export function CreateAfterSalesCaseDialog({
                                                         type="button"
                                                         onClick={() => setReplacement(product)}
                                                         disabled={product.stock <= 0}
-                                                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-2 text-left transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#161b22]"
+                                                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-2 text-left transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-card"
                                                     >
                                                         <div className="flex items-center gap-2 min-w-0">
                                                             <ProductThumb url={product.imageUrl} name={product.name} size={32} />
@@ -943,7 +944,7 @@ export function CreateAfterSalesCaseDialog({
                                                                 {formatMoney(product.price)}
                                                             </span>
                                                             <span className={cn(
-                                                                'block text-[10px]',
+                                                                'block text-xs',
                                                                 product.stock > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
                                                             )}>
                                                                 {product.stock > 0 ? `Stock: ${product.stock}` : 'Sin stock'}
@@ -984,7 +985,7 @@ export function CreateAfterSalesCaseDialog({
                                             value={refundAmount}
                                             onChange={(event) => setRefundAmount(event.target.value)}
                                             placeholder="0"
-                                            className="h-9 w-40 rounded-xl text-xs font-mono bg-white dark:bg-[#161b22]"
+                                            className="h-9 w-40 rounded-xl text-xs font-mono bg-white dark:bg-card"
                                         />
                                         {selectedItem?.unitPrice ? (
                                             <Button
@@ -998,7 +999,7 @@ export function CreateAfterSalesCaseDialog({
                                             </Button>
                                         ) : null}
                                     </div>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
                                         Opcional. El monto final y el método de pago se confirman al resolver y cerrar el caso.
                                     </p>
                                 </div>
@@ -1017,7 +1018,7 @@ export function CreateAfterSalesCaseDialog({
                                     rows={3}
                                     className="rounded-xl text-xs leading-relaxed resize-none"
                                 />
-                                <div className="flex justify-between text-[11px] text-slate-400">
+                                <div className="flex justify-between text-xs text-slate-400">
                                     <span>{trimmedReason.length < 3 ? 'Mínimo 3 caracteres requeridos' : 'Motivo válido'}</span>
                                     <span>{reason.length}/1000</span>
                                 </div>
@@ -1042,7 +1043,7 @@ export function CreateAfterSalesCaseDialog({
                 </div>
 
                 {/* Modern Footer */}
-                <DialogFooter className="bg-slate-50 dark:bg-[#161b22] px-6 py-3.5 border-t border-slate-200/80 dark:border-white/10 flex flex-row items-center justify-between">
+                <DialogFooter className="bg-slate-50 dark:bg-card px-6 py-3.5 border-t border-slate-200/80 dark:border-white/10 flex flex-row items-center justify-between">
                     <Button
                         type="button"
                         variant="outline"

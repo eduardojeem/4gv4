@@ -84,10 +84,12 @@ describe('el comprobante impreso', () => {
     vi.unstubAllEnvs()
   })
 
-  it('muestra el hash firmado por el servidor', () => {
+  // El hash ya no se imprime como texto de 64 caracteres que nadie podía usar:
+  // va dentro de un QR que abre el seguimiento de la reparación.
+  it('muestra el QR de seguimiento firmado por el servidor', () => {
     const html = imprimir(payload('a1b2c3d4e5f60718'))
-    expect(html).toContain('Hash de verificación')
-    expect(html).toContain('a1b2c3d4e5f60718')
+    expect(html).toContain('aria-label="QR de seguimiento"')
+    expect(html).toContain('Seguí tu reparación')
   })
 
   /**
@@ -101,6 +103,6 @@ describe('el comprobante impreso', () => {
     let html = ''
     expect(() => { html = imprimir(payload()) }).not.toThrow()
     expect(html).toContain('R-260913-0001')
-    expect(html).not.toContain('Hash de verificación')
+    expect(html).not.toContain('QR de seguimiento')
   })
 })

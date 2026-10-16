@@ -436,6 +436,41 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
   }
 }
 
+/**
+ * Imprime un ticket cuyos datos todavía hay que pedir. La ventana se abre en el
+ * mismo clic —si se abre después de esperar, el navegador la bloquea como
+ * emergente— y el ticket se escribe cuando llegan los datos.
+ */
+export const printReceiptWhenReady = async (
+  receiptData: Promise<ReceiptData | null>,
+  companyInfo?: CompanyInfo,
+): Promise<boolean> => {
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('Por favor, permita las ventanas emergentes para imprimir')
+    return false
+  }
+  try {
+    printWindow.document.title = 'Preparando ticket…'
+  } catch {}
+
+  let data: ReceiptData | null
+  try {
+    data = await receiptData
+  } catch (error) {
+    printWindow.close()
+    throw error
+  }
+  if (!data || printWindow.closed) {
+    printWindow.close()
+    return false
+  }
+  printWindow.document.write(generatePrintHTML(data, companyInfo))
+  printWindow.document.close()
+  printWhenReady(printWindow)
+  return true
+}
+
 // Fallback: Imprimir usando HTML generado
 const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   const printWindow = window.open('', '_blank')
@@ -454,12 +489,14 @@ const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInf
 
 // Generar HTML para impresión con diseño mejorado
 export const generatePrintHTML = (
-  receiptData: ReceiptData,
+  rawReceiptData: ReceiptData,
   companyInfo?: CompanyInfo,
   documentKind: ReceiptDocumentKind = 'internal',
 ): string => {
-
-  const company = companyInfo || config.company
+  // Nombres de productos, clientes y referencias entran escapados: el ticket se
+  // escribe en una ventana del mismo origen que la app.
+  const receiptData = escapeHtmlDeep(rawReceiptData)
+  const company = escapeHtmlDeep(companyInfo || config.company)
 
   // El config global lo llama `logo` y CompanyInfo `logoUrl`: se acepta
   // cualquiera de los dos para que el ticket no dependa de cual llego.
@@ -1330,3 +1367,4 @@ import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
 import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
 import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
+import { escapeHtmlDeep } from '@/lib/html-escape'

@@ -60,6 +60,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { statusConfig as repairStatusConfig } from '@/config/repair-constants'
+import { formatWarrantyMonths, isWarrantyType, WARRANTY_TYPE_PRINT_LABELS } from '@/lib/repairs/warranty'
 import { normalizeAfterSalesCase } from '@/lib/after-sales/compat'
 import { ProductThumb } from '@/components/suppliers/order-ui'
 import { CreateAfterSalesCaseDialog } from './CreateAfterSalesCaseDialog'
@@ -72,9 +74,10 @@ import {
   NEXT_ACTIONS,
   REQUEST_META,
   STATUS_META,
-  formatDate,
-  formatMoney,
-  type CaseStatus,
+    formatDate,
+    formatMoney,
+    parseMoneyInput,
+    type CaseStatus,
   type RequestType,
 } from './after-sales-meta'
 
@@ -112,6 +115,8 @@ interface AfterSalesCase {
     replacement_quantity?: number | null
     price_difference?: number | null
     customers?: { name: string | null; phone: string | null; email?: string | null } | null
+    /** La línea de venta reclamada, para topar el reintegro por lo que valen esas unidades. */
+    sale_item?: { quantity: number; subtotal: number } | null
     generated_repair?: {
         ticket_number: string | null
         status?: string | null
@@ -128,22 +133,45 @@ const RESTOCK_OPTIONS: Array<{
     {
         value: 'sellable',
         label: 'Vuelve al stock',
-        hint: 'El producto esta sano y se puede volver a vender.',
+        hint: 'El producto está sano y se puede volver a vender.',
         activeClass: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300',
     },
     {
         value: 'quarantine',
         label: 'Vuelve con falla',
-        hint: 'Ingresa como mercaderia defectuosa; no se suma al stock vendible.',
+        hint: 'Ingresa como mercadería defectuosa; no se suma al stock vendible.',
         activeClass: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
     },
     {
         value: 'none',
         label: 'No vuelve nada',
-        hint: 'El cliente se queda con el producto.',
+        hint: 'El producto no se reingresa: se lo queda el cliente o se descarta.',
         activeClass: 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
     },
 ]
+
+/** Destino de stock que se propone según el tipo de reclamo. */
+function defaultRestockFor(requestType: RequestType): 'sellable' | 'quarantine' | 'none' {
+    if (requestType === 'product_warranty') return 'quarantine'
+    if (requestType === 'exchange' || requestType === 'return') return 'sellable'
+    return 'none'
+}
+
+/** El estado del retrabajo con el nombre que usa el taller, no el código crudo. */
+function repairStatusLabel(status?: string | null) {
+    if (!status) return 'Sin estado'
+    return repairStatusConfig[status as keyof typeof repairStatusConfig]?.label ?? status
+}
+
+const RESOLUTION_SUGGESTIONS = {
+    cash: ['Reintegro en efectivo entregado en caja'],
+    store_credit: ['Saldo a favor acreditado para futuras compras'],
+    none: [
+        'Cambio de producto realizado y entregado conforme',
+        'Garantía técnica completada y equipo entregado',
+        'Devolución aprobada y mercadería recibida',
+    ],
+} as const
 
 export function AfterSalesDashboard() {
     const subscription = useSubscriptionStatus() as { effectiveModules?: string[]; tieneTaller?: boolean }
@@ -230,6 +258,23 @@ export function AfterSalesDashboard() {
         }
     }, [searchParams])
 
+    // Los totales no dependen de la página ni de los filtros: se piden al entrar
+    // y después de cada acción. Antes se pedían con cada página o búsqueda.
+    const loadSummary = useCallback(async () => {
+        try {
+            const summaryRes = await fetch('/api/after-sales/summary', { cache: 'no-store' })
+            if (!summaryRes.ok) return
+            const summaryPayload = await summaryRes.json().catch(() => null)
+            if (summaryPayload?.success && summaryPayload.data) setTotals(summaryPayload.data)
+        } catch {
+            /* los totales son accesorios: la lista manda */
+        }
+    }, [])
+
+    useEffect(() => {
+        void loadSummary()
+    }, [loadSummary])
+
     const loadCases = useCallback(async (options?: { isSilent?: boolean; pageOverride?: number; limitOverride?: number }) => {
         const targetPage = options?.pageOverride ?? page
         const targetLimit = options?.limitOverride ?? pageSize
@@ -238,18 +283,6 @@ export function AfterSalesDashboard() {
             setLoading(true)
         }
         try {
-            try {
-                const summaryRes = await fetch('/api/after-sales/summary', { cache: 'no-store' })
-                if (summaryRes.ok) {
-                    const summaryPayload = await summaryRes.json().catch(() => null)
-                    if (summaryPayload?.success && summaryPayload.data) {
-                        setTotals(summaryPayload.data)
-                    }
-                }
-            } catch {
-                /* los totales son accesorios: la lista manda */
-            }
-
             const params = new URLSearchParams()
             params.set('page', String(targetPage))
             params.set('limit', String(targetLimit))
@@ -303,17 +336,10 @@ export function AfterSalesDashboard() {
         return cases.filter((item) => item.source_type !== 'repair')
     }, [cases, tieneTaller])
 
-    const visibleCases = useMemo(() => {
-        const term = debouncedSearch.trim().toLowerCase()
-        return cases.filter((item) => {
-            if (!tieneTaller && item.source_type === 'repair') return false
-            if (statusFilter !== 'all' && item.status !== statusFilter) return false
-            if (typeFilter !== 'all' && item.request_type !== typeFilter) return false
-            if (!term) return true
-            return [item.case_number, item.reason, item.notes]
-                .some((field) => (field || '').toLowerCase().includes(term))
-        })
-    }, [cases, debouncedSearch, statusFilter, typeFilter, tieneTaller])
+    // Filtros y búsqueda los resuelve el servidor. Antes se volvía a filtrar acá
+    // solo por número, motivo y notas, y se descartaban los casos que el
+    // servidor había encontrado por cliente, venta o ticket.
+    const visibleCases = effectiveCases
 
     const summary = useMemo(() => totals ?? {
         open: effectiveCases.filter((item) => item.status === 'open').length,
@@ -377,7 +403,7 @@ export function AfterSalesDashboard() {
             setRejectionReason('')
             setResolutionNotes('')
             setReworkConsent(false)
-            await loadCases({ isSilent: true })
+            await Promise.all([loadCases({ isSilent: true }), loadSummary()])
         } catch (error) {
             toast.error('No se pudo actualizar el caso', {
                 description: error instanceof Error ? error.message : 'Intenta nuevamente.',
@@ -387,14 +413,24 @@ export function AfterSalesDashboard() {
         }
     }
 
-    const parsedRefund = Number((refundAmount || '').replace(/[^\d]/g, '')) || 0
+    const parsedRefund = parseMoneyInput(refundAmount || '')
     const needsRefundMethod = confirming?.status === 'completed' && parsedRefund > 0
     const isWarrantyApproval =
         confirming?.status === 'approved' && confirming.item.request_type === 'repair_warranty'
 
+    // Lo que valen las unidades reclamadas, no el total de toda la venta: en una
+    // venta de cinco productos, devolver uno dejaba reintegrar los cinco.
+    const claimedValue = confirming?.item.sale_item && confirming.item.sale_item.quantity > 0
+        ? (confirming.item.sale_item.subtotal / confirming.item.sale_item.quantity) * (confirming.item.quantity || 1)
+        : null
     const originalTotal = confirming?.item.source_type === 'sale'
-        ? Number(confirming.item.sales?.total_amount) || null
+        ? claimedValue ?? (Number(confirming.item.sales?.total_amount) || null)
         : Number(confirming?.item.repairs?.final_cost) || null
+
+    const openCaseAction = (item: AfterSalesCase, action: { status: CaseStatus; label: string }) => {
+        setRestockAction(defaultRestockFor(item.request_type))
+        setConfirming({ item, status: action.status, label: action.label })
+    }
 
     const refundExceedsOriginal = Boolean(originalTotal !== null && originalTotal > 0 && parsedRefund > originalTotal)
 
@@ -417,9 +453,9 @@ export function AfterSalesDashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                     <SectionGuideButton guide={AFTER_SALES_GUIDE} />
-                    <Button variant="default" size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setIsCreateDialogOpen(true)}>
+                    <Button variant="default" size="sm" className="gap-1.5" onClick={() => setIsCreateDialogOpen(true)}>
                         <Plus className="h-4 w-4" />
-                        Nuevo Reclamo
+                        Nuevo reclamo
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void loadCases()} disabled={loading}>
                         <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
@@ -433,7 +469,7 @@ export function AfterSalesDashboard() {
                 {([
                     {
                         key: 'open' as const,
-                        label: 'Casos Abiertos',
+                        label: 'Casos abiertos',
                         value: String(summary.open),
                         hint: 'Esperando resolución técnica',
                         filter: 'open' as const,
@@ -444,7 +480,7 @@ export function AfterSalesDashboard() {
                     },
                     {
                         key: 'approved' as const,
-                        label: 'Casos Aprobados',
+                        label: 'Casos aprobados',
                         value: String(summary.approved),
                         hint: 'Listos para completar cierre',
                         filter: 'approved' as const,
@@ -540,7 +576,7 @@ export function AfterSalesDashboard() {
                     <Input
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Buscar por número o motivo…"
+                        placeholder="Buscar por número, cliente, venta, ticket o motivo…"
                         className="h-9 pl-9"
                         aria-label="Buscar casos de posventa"
                     />
@@ -599,8 +635,8 @@ export function AfterSalesDashboard() {
                                 ? "bg-primary text-primary-foreground font-bold shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
                                 : "text-muted-foreground hover:text-foreground"
                         )}
-                        title="Vista Lista"
-                        aria-label="Vista Lista"
+                        title="Vista lista"
+                        aria-label="Vista lista"
                         aria-pressed={caseViewMode === 'list'}
                     >
                         <List className="h-3.5 w-3.5" />
@@ -617,8 +653,8 @@ export function AfterSalesDashboard() {
                                 ? "bg-primary text-primary-foreground font-bold shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
                                 : "text-muted-foreground hover:text-foreground"
                         )}
-                        title="Vista Tarjetas"
-                        aria-label="Vista Tarjetas"
+                        title="Vista tarjetas"
+                        aria-label="Vista tarjetas"
                         aria-pressed={caseViewMode === 'card'}
                     >
                         <LayoutGrid className="h-3.5 w-3.5" />
@@ -635,8 +671,8 @@ export function AfterSalesDashboard() {
                                 ? "bg-primary text-primary-foreground font-bold shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
                                 : "text-muted-foreground hover:text-foreground"
                         )}
-                        title="Vista Tabla"
-                        aria-label="Vista Tabla"
+                        title="Vista tabla"
+                        aria-label="Vista tabla"
                         aria-pressed={caseViewMode === 'table'}
                     >
                         <Table2 className="h-3.5 w-3.5" />
@@ -689,7 +725,7 @@ export function AfterSalesDashboard() {
                             </Badge>
                         )}
                         {search.trim() && (
-                            <Badge variant="outline">Busqueda: {search.trim()}</Badge>
+                            <Badge variant="outline">Búsqueda: {search.trim()}</Badge>
                         )}
                         <span className="text-blue-800/80 dark:text-blue-300/80">
                             {pagination.total} caso{pagination.total === 1 ? '' : 's'} encontrado{pagination.total === 1 ? '' : 's'}
@@ -712,7 +748,7 @@ export function AfterSalesDashboard() {
                             <TableHeader>
                                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                                     <TableHead className="font-bold text-xs w-[140px]">Caso</TableHead>
-                                    <TableHead className="font-bold text-xs w-[170px]">Tipo y Origen</TableHead>
+                                    <TableHead className="font-bold text-xs w-[170px]">Tipo y origen</TableHead>
                                     <TableHead className="font-bold text-xs">Cliente</TableHead>
                                     <TableHead className="font-bold text-xs">Producto / Equipo</TableHead>
                                     <TableHead className="font-bold text-xs max-w-[200px]">Motivo</TableHead>
@@ -734,7 +770,7 @@ export function AfterSalesDashboard() {
                                                 <span className="font-mono text-xs font-bold text-foreground block">
                                                     {item.case_number || 'Sin número'}
                                                 </span>
-                                                <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                                <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                                     <Clock className="h-2.5 w-2.5 shrink-0" />
                                                     {formatDate(item.created_at)}
                                                 </span>
@@ -742,10 +778,10 @@ export function AfterSalesDashboard() {
 
                                             <TableCell className="align-middle">
                                                 <div className="flex flex-col gap-1 items-start">
-                                                    <Badge variant="outline" className={cn('text-[10px] font-semibold', requestMeta.className)}>
+                                                    <Badge variant="outline" className={cn('text-xs font-semibold', requestMeta.className)}>
                                                         {requestMeta.label}
                                                     </Badge>
-                                                    <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                                                    <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
                                                         {item.source_type === 'repair' ? <Wrench className="h-2.5 w-2.5" /> : <ShoppingBag className="h-2.5 w-2.5" />}
                                                         {item.source_type === 'repair'
                                                             ? `Rep. #${item.repairs?.ticket_number ?? '—'}`
@@ -759,7 +795,7 @@ export function AfterSalesDashboard() {
                                                     {item.customers?.name || 'Cliente no registrado'}
                                                 </span>
                                                 {item.customers?.phone && (
-                                                    <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
+                                                    <span className="text-xs font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
                                                         <Phone className="h-2.5 w-2.5" />
                                                         {item.customers.phone}
                                                     </span>
@@ -778,7 +814,7 @@ export function AfterSalesDashboard() {
                                                         </div>
                                                         <div className="min-w-0">
                                                             <span className="text-xs font-medium text-foreground truncate block">{item.products.name}</span>
-                                                            <span className="text-[10px] text-muted-foreground font-mono">{item.quantity} un.</span>
+                                                            <span className="text-xs text-muted-foreground font-mono">{item.quantity} un.</span>
                                                         </div>
                                                     </div>
                                                 ) : item.repairs?.device_brand || item.repairs?.device_model ? (
@@ -786,7 +822,7 @@ export function AfterSalesDashboard() {
                                                         <span className="text-xs font-medium text-foreground truncate block">
                                                             {[item.repairs.device_brand, item.repairs.device_model].filter(Boolean).join(' ')}
                                                         </span>
-                                                        <span className="text-[10px] text-muted-foreground truncate block">
+                                                        <span className="text-xs text-muted-foreground truncate block">
                                                             {item.repairs.problem_description || 'Sin descripción'}
                                                         </span>
                                                     </div>
@@ -812,7 +848,7 @@ export function AfterSalesDashboard() {
                                             </TableCell>
 
                                             <TableCell className="align-middle">
-                                                <Badge variant="outline" className={cn('text-[10px] font-bold', statusMeta.className)}>
+                                                <Badge variant="outline" className={cn('text-xs font-bold', statusMeta.className)}>
                                                     {statusMeta.label}
                                                 </Badge>
                                             </TableCell>
@@ -838,21 +874,10 @@ export function AfterSalesDashboard() {
                                                                 size="sm"
                                                                 className={cn(
                                                                     'h-7 px-2 text-xs font-medium gap-1 shadow-2xs',
-                                                                    action.status === 'approved' && 'bg-blue-600 hover:bg-blue-700 text-white',
-                                                                    action.status === 'completed' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
                                                                     action.destructive && 'text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive'
                                                                 )}
                                                                 disabled={isPending}
-                                                                onClick={() => {
-                                                                    setRestockAction(
-                                                                        item.request_type === 'product_warranty'
-                                                                            ? 'quarantine'
-                                                                            : item.request_type === 'exchange' || item.request_type === 'return'
-                                                                                ? 'sellable'
-                                                                                : 'none'
-                                                                    )
-                                                                    setConfirming({ item, status: action.status, label: action.label })
-                                                                }}
+                                                                onClick={() => openCaseAction(item, action)}
                                                                 title={action.label}
                                                             >
                                                                 <ActionIcon className="h-3 w-3" />
@@ -893,13 +918,13 @@ export function AfterSalesDashboard() {
                                                     <span className="font-mono text-sm font-bold text-foreground truncate block">
                                                         {item.case_number || 'Sin número'}
                                                     </span>
-                                                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
                                                         <Clock className="h-3 w-3 shrink-0" />
                                                         {formatDate(item.created_at)}
                                                     </span>
                                                 </div>
                                             </div>
-                                            <Badge variant="outline" className={cn('text-[10px] shrink-0 font-bold', statusMeta.className)}>
+                                            <Badge variant="outline" className={cn('text-xs shrink-0 font-bold', statusMeta.className)}>
                                                 {statusMeta.label}
                                             </Badge>
                                         </div>
@@ -909,7 +934,7 @@ export function AfterSalesDashboard() {
                                             <Badge
                                                 variant="outline"
                                                 className={cn(
-                                                    'text-[10px] gap-1 font-semibold',
+                                                    'text-xs gap-1 font-semibold',
                                                     item.source_type === 'repair'
                                                         ? 'border-blue-200 bg-blue-50/80 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300'
                                                         : 'border-violet-200 bg-violet-50/80 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-300'
@@ -920,7 +945,7 @@ export function AfterSalesDashboard() {
                                                     ? `Reparación #${item.repairs?.ticket_number ?? '—'}`
                                                     : `Venta #${item.sales?.code ?? '—'}`}
                                             </Badge>
-                                            <Badge variant="outline" className={cn('text-[10px] font-medium', requestMeta.className)}>
+                                            <Badge variant="outline" className={cn('text-xs font-medium', requestMeta.className)}>
                                                 {requestMeta.label}
                                             </Badge>
                                         </div>
@@ -937,7 +962,7 @@ export function AfterSalesDashboard() {
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-xs font-semibold text-foreground truncate">{item.products.name}</p>
-                                                    <p className="text-[10px] text-muted-foreground font-mono">
+                                                    <p className="text-xs text-muted-foreground font-mono">
                                                         {item.quantity} un.{item.products.sku ? ` · SKU: ${item.products.sku}` : ''}
                                                     </p>
                                                 </div>
@@ -951,7 +976,7 @@ export function AfterSalesDashboard() {
                                                     <p className="text-xs font-semibold text-foreground truncate">
                                                         {[item.repairs.device_brand, item.repairs.device_model].filter(Boolean).join(' ')}
                                                     </p>
-                                                    <p className="text-[10px] text-muted-foreground truncate">
+                                                    <p className="text-xs text-muted-foreground truncate">
                                                         {item.repairs.problem_description || 'Sin descripción'}
                                                     </p>
                                                 </div>
@@ -960,7 +985,7 @@ export function AfterSalesDashboard() {
 
                                         {/* Motivo */}
                                         <div className="rounded-lg bg-muted/30 p-2.5 border border-border/30">
-                                            <p className="text-[11px] font-medium text-foreground line-clamp-2 leading-relaxed">
+                                            <p className="text-xs font-medium text-foreground line-clamp-2 leading-relaxed">
                                                 <span className="text-muted-foreground font-normal">Motivo: </span>
                                                 {item.reason}
                                             </p>
@@ -969,7 +994,7 @@ export function AfterSalesDashboard() {
                                         {/* Reintegro si aplica */}
                                         {item.refund_amount != null && (
                                             <div className="flex items-center justify-between text-xs p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50">
-                                                <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium">
+                                                <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                                                     {item.refund_method === 'cash' ? 'Reintegro en caja' : item.refund_method === 'store_credit' ? 'Saldo a favor' : 'Reintegro'}
                                                 </span>
                                                 <span className="font-bold text-xs text-emerald-700 dark:text-emerald-300 tabular-nums">
@@ -986,7 +1011,7 @@ export function AfterSalesDashboard() {
                                                     {item.customers.name}
                                                 </span>
                                                 {item.customers.phone && (
-                                                    <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1 shrink-0">
+                                                    <span className="text-xs font-mono text-muted-foreground flex items-center gap-1 shrink-0">
                                                         <Phone className="h-2.5 w-2.5" />
                                                         {item.customers.phone}
                                                     </span>
@@ -1015,21 +1040,10 @@ export function AfterSalesDashboard() {
                                                     size="sm"
                                                     className={cn(
                                                         'h-8 px-2.5 gap-1 text-xs font-medium shadow-xs',
-                                                        action.status === 'approved' && 'bg-blue-600 hover:bg-blue-700 text-white',
-                                                        action.status === 'completed' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
                                                         action.destructive && 'text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive'
                                                     )}
                                                     disabled={isPending}
-                                                    onClick={() => {
-                                                        setRestockAction(
-                                                            item.request_type === 'product_warranty'
-                                                                ? 'quarantine'
-                                                                : item.request_type === 'exchange' || item.request_type === 'return'
-                                                                    ? 'sellable'
-                                                                    : 'none'
-                                                        )
-                                                        setConfirming({ item, status: action.status, label: action.label })
-                                                    }}
+                                                    onClick={() => openCaseAction(item, action)}
                                                 >
                                                     <ActionIcon className="h-3.5 w-3.5" />
                                                     <span className="hidden sm:inline">{action.label}</span>
@@ -1077,7 +1091,7 @@ export function AfterSalesDashboard() {
                                                     <Badge
                                                         variant="outline"
                                                         className={cn(
-                                                            'gap-1 text-[11px] font-medium',
+                                                            'gap-1 text-xs font-medium',
                                                             item.source_type === 'repair'
                                                                 ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300'
                                                                 : 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-300'
@@ -1095,10 +1109,10 @@ export function AfterSalesDashboard() {
                                                             </>
                                                         )}
                                                     </Badge>
-                                                    <Badge variant="outline" className={cn('text-[11px]', requestMeta.className)}>
+                                                    <Badge variant="outline" className={cn('text-xs', requestMeta.className)}>
                                                         {requestMeta.label}
                                                     </Badge>
-                                                    <Badge variant="outline" className={cn('text-[11px]', statusMeta.className)}>
+                                                    <Badge variant="outline" className={cn('text-xs', statusMeta.className)}>
                                                         {statusMeta.label}
                                                     </Badge>
                                                 </div>
@@ -1127,7 +1141,7 @@ export function AfterSalesDashboard() {
                                                     </span>
                                                     {item.status === 'open' && ageInDays(item.created_at) >= 7 && (
                                                         <span className={cn(
-                                                            'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
+                                                            'rounded-full px-2 py-0.5 text-xs font-semibold tracking-wide uppercase',
                                                             ageInDays(item.created_at) >= 15
                                                                 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
                                                                 : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
@@ -1150,7 +1164,7 @@ export function AfterSalesDashboard() {
                                                     <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                                                     {formatMoney(item.refund_amount)}
                                                 </div>
-                                                <div className="text-[10px] text-muted-foreground mt-0.5">
+                                                <div className="text-xs text-muted-foreground mt-0.5">
                                                     {item.refund_method === 'cash' ? 'Caja' : item.refund_method === 'store_credit' ? 'Saldo a favor' : 'Reintegro'}
                                                 </div>
                                             </div>
@@ -1159,12 +1173,12 @@ export function AfterSalesDashboard() {
 
                                     <div className="mt-3 flex w-full flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
                                         {actions.length === 0 ? (
-                                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                            <span className="text-xs text-muted-foreground flex items-center gap-1">
                                                 <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/70" />
                                                 Este caso ya está {statusMeta.label.toLowerCase()} y no admite más cambios.
                                             </span>
                                         ) : (
-                                            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                                            <span className="text-xs text-muted-foreground hidden sm:inline">
                                                 {item.status === 'open' ? 'Pendiente de evaluación técnica.' : 'Aprobado: listo para aplicar reintegro o stock.'}
                                             </span>
                                         )}
@@ -1187,21 +1201,10 @@ export function AfterSalesDashboard() {
                                                         size="sm"
                                                         className={cn(
                                                             'h-8 flex-1 gap-1.5 text-xs font-medium sm:flex-none shadow-xs',
-                                                            action.status === 'approved' && 'bg-blue-600 hover:bg-blue-700 text-white',
-                                                            action.status === 'completed' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
                                                             action.destructive && 'text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive'
                                                         )}
                                                         disabled={isPending}
-                                                        onClick={() => {
-                                                            setRestockAction(
-                                                                item.request_type === 'product_warranty'
-                                                                    ? 'quarantine'
-                                                                    : item.request_type === 'exchange' || item.request_type === 'return'
-                                                                        ? 'sellable'
-                                                                        : 'none'
-                                                            )
-                                                            setConfirming({ item, status: action.status, label: action.label })
-                                                        }}
+                                                        onClick={() => openCaseAction(item, action)}
                                                     >
                                                         <ActionIcon className="h-3.5 w-3.5" />
                                                         {action.label}
@@ -1337,7 +1340,7 @@ export function AfterSalesDashboard() {
                                         )}
                                         {selectedCase.repairs?.problem_description && (
                                             <div className="rounded-lg bg-background/60 p-2 border border-blue-100 dark:border-blue-900/30">
-                                                <dt className="text-[11px] text-muted-foreground mb-0.5">Falla informada originalmente:</dt>
+                                                <dt className="text-xs text-muted-foreground mb-0.5">Falla informada originalmente:</dt>
                                                 <dd className="font-medium leading-relaxed">{selectedCase.repairs.problem_description}</dd>
                                             </div>
                                         )}
@@ -1357,7 +1360,7 @@ export function AfterSalesDashboard() {
                                             <div className="flex justify-between gap-3">
                                                 <dt className="text-muted-foreground">Garantía otorgada</dt>
                                                 <dd className="font-medium">
-                                                    {selectedCase.repairs.warranty_months} meses ({selectedCase.repairs.warranty_type === 'labor' ? 'mano de obra' : selectedCase.repairs.warranty_type === 'parts' ? 'repuestos' : 'completa'})
+                                                    {formatWarrantyMonths(selectedCase.repairs.warranty_months)} ({WARRANTY_TYPE_PRINT_LABELS[isWarrantyType(selectedCase.repairs.warranty_type) ? selectedCase.repairs.warranty_type : 'full']})
                                                 </dd>
                                             </div>
                                         ) : null}
@@ -1367,9 +1370,9 @@ export function AfterSalesDashboard() {
                                                 <dd className="font-semibold">
                                                     {formatDate(selectedCase.repairs.warranty_expires_at)}
                                                     {new Date(selectedCase.repairs.warranty_expires_at).getTime() < Date.now() ? (
-                                                        <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">Vencida</Badge>
+                                                        <Badge variant="destructive" className="ml-2 text-xs px-1.5 py-0">Vencida</Badge>
                                                     ) : (
-                                                        <Badge variant="outline" className="ml-2 border-emerald-500 text-emerald-700 bg-emerald-50 text-[10px] px-1.5 py-0">Vigente</Badge>
+                                                        <Badge variant="outline" className="ml-2 border-emerald-500 text-emerald-700 bg-emerald-50 text-xs px-1.5 py-0">Vigente</Badge>
                                                     )}
                                                 </dd>
                                             </div>
@@ -1384,13 +1387,13 @@ export function AfterSalesDashboard() {
                                                     {selectedCase.generated_repair.ticket_number}
                                                 </Badge>
                                             </div>
-                                            <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
-                                                Estado en taller: <span className="font-semibold uppercase">{selectedCase.generated_repair.status}</span>
+                                            <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                                                Estado en taller: <span className="font-semibold">{repairStatusLabel(selectedCase.generated_repair.status)}</span>
                                                 {selectedCase.generated_repair.status !== 'entregado' && ' · Aún no entregado al cliente.'}
                                             </p>
                                         </div>
                                     ) : selectedCase.status === 'open' ? (
-                                        <p className="border-t border-blue-200/60 pt-2 text-[11px] text-blue-700 dark:border-blue-900/40 dark:text-blue-300">
+                                        <p className="border-t border-blue-200/60 pt-2 text-xs text-blue-700 dark:border-blue-900/40 dark:text-blue-300">
                                             Al aprobar este reclamo se creará automáticamente la orden de retrabajo sin costo en taller.
                                         </p>
                                     ) : null}
@@ -1414,7 +1417,7 @@ export function AfterSalesDashboard() {
                                             <dd className="flex min-w-0 items-center gap-2 text-right font-medium">
                                                 <span className="min-w-0 truncate font-semibold">
                                                     {selectedCase.products?.name || 'Producto no identificado'}
-                                                    {selectedCase.products?.sku ? <span className="opacity-70 text-[11px]"> · {selectedCase.products.sku}</span> : null}
+                                                    {selectedCase.products?.sku ? <span className="opacity-70 text-xs"> · {selectedCase.products.sku}</span> : null}
                                                 </span>
                                                 {selectedCase.products?.name && (
                                                     <ProductThumb
@@ -1428,7 +1431,7 @@ export function AfterSalesDashboard() {
 
                                         {selectedCase.replacement_product && (
                                             <div className="rounded-lg bg-background/60 p-2.5 border border-violet-100 dark:border-violet-900/30">
-                                                <dt className="text-[11px] text-muted-foreground mb-1">Producto de cambio entregado:</dt>
+                                                <dt className="text-xs text-muted-foreground mb-1">Producto de cambio entregado:</dt>
                                                 <dd className="flex min-w-0 items-center justify-between gap-2">
                                                     <span className="font-semibold text-xs truncate">
                                                         {selectedCase.replacement_product.name}
@@ -1498,7 +1501,7 @@ export function AfterSalesDashboard() {
                                 <div className="grid gap-3 sm:grid-cols-2 lg:col-span-2">
                                     {selectedCase.refund_amount != null && (
                                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                                            <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
                                                 <Banknote className="h-3.5 w-3.5" />
                                                 Reintegro aplicado
                                             </p>
@@ -1517,7 +1520,7 @@ export function AfterSalesDashboard() {
 
                                     {selectedCase.restock_action && (
                                         <div className="rounded-xl border bg-muted/40 p-3.5">
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                                                 <PackageCheck className="h-3.5 w-3.5" />
                                                 Destino de mercadería
                                             </p>
@@ -1533,7 +1536,7 @@ export function AfterSalesDashboard() {
                                                     ? `${selectedCase.quantity} u. devueltas disponibles para venta.`
                                                     : selectedCase.restock_action === 'quarantine'
                                                         ? 'Aislado del stock vendible para revisión o descarte.'
-                                                        : 'El producto quedó en poder del cliente o fue descartado.'}
+                                                        : 'No se reingresó al inventario.'}
                                             </p>
                                         </div>
                                     )}
@@ -1559,7 +1562,7 @@ export function AfterSalesDashboard() {
                             </div>
 
                             <DialogFooter className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t lg:col-span-2">
-                                <p className="mr-auto max-w-md text-left text-[11px] text-muted-foreground">
+                                <p className="mr-auto max-w-md text-left text-xs text-muted-foreground">
                                     {selectedCase.status === 'open'
                                         ? selectedCase.request_type === 'repair_warranty'
                                             ? 'Aprobar crea la reparación de retrabajo sin costo en taller. Rechazar finaliza el reclamo.'
@@ -1580,21 +1583,12 @@ export function AfterSalesDashboard() {
                                             size="sm"
                                             className={cn(
                                                 'gap-1.5 text-xs font-medium',
-                                                action.status === 'approved' && 'bg-blue-600 hover:bg-blue-700 text-white',
-                                                action.status === 'completed' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
                                                 action.destructive && 'text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive'
                                             )}
                                             onClick={() => {
                                                 const currentCase = selectedCase
-                                                setRestockAction(
-                                                    currentCase.request_type === 'product_warranty'
-                                                        ? 'quarantine'
-                                                        : currentCase.request_type === 'exchange' || currentCase.request_type === 'return'
-                                                            ? 'sellable'
-                                                            : 'none'
-                                                )
                                                 setSelectedCase(null)
-                                                setConfirming({ item: currentCase, status: action.status, label: action.label })
+                                                openCaseAction(currentCase, action)
                                             }}
                                         >
                                             <ActionIcon className="h-3.5 w-3.5" />
@@ -1621,7 +1615,9 @@ export function AfterSalesDashboard() {
                     setReworkConsent(false)
                 }}
             >
-                <AlertDialogContent className="max-w-lg">
+                {/* Con destino, monto, método y notas no entraba en una pantalla baja:
+                    el botón de confirmar quedaba afuera sin forma de llegar. */}
+                <AlertDialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
                     <AlertDialogHeader>
                         <AlertDialogTitle>
                             {confirming ? `${confirming.label} caso ${confirming.item.case_number || ''}` : ''}
@@ -1630,10 +1626,12 @@ export function AfterSalesDashboard() {
                             {confirming?.status === 'completed'
                                 ? 'Finalizar el caso asienta las operaciones comerciales (devolución de mercadería y/o reintegro de dinero).'
                                 : isWarrantyApproval
-                                    ? 'Se creará automáticamente una nueva orden de servicio de garantía en taller con costo 0 Gs.'
+                                    ? 'Se creará automáticamente una orden de garantía en el taller, sin costo para el cliente.'
                                     : confirming?.status === 'approved'
                                         ? 'El caso queda aprobado y habilitado para ser completado.'
-                                        : 'El reclamo quedará rechazado con motivo asentado y no podrá modificarse.'}
+                                        : confirming?.status === 'cancelled'
+                                            ? 'El caso se cierra sin efectos: no mueve stock ni dinero, y no podrá modificarse.'
+                                            : 'El reclamo quedará rechazado con motivo asentado y no podrá modificarse.'}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
 
@@ -1684,7 +1682,7 @@ export function AfterSalesDashboard() {
                                                 )}
                                             >
                                                 <span className="font-medium">{option.label}</span>
-                                                <span className="mt-0.5 block text-[11px] opacity-80">{option.hint}</span>
+                                                <span className="mt-0.5 block text-xs opacity-80">{option.hint}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1705,13 +1703,13 @@ export function AfterSalesDashboard() {
                                     </label>
                                     {originalTotal !== null && originalTotal > 0 && (
                                         <span className="text-xs text-muted-foreground">
-                                            Total origen: <span className="font-semibold text-foreground">{formatMoney(originalTotal)}</span>
+                                            {claimedValue !== null ? 'Valor reclamado' : 'Total origen'}: <span className="font-semibold text-foreground">{formatMoney(originalTotal)}</span>
                                         </span>
                                     )}
                                 </div>
                                 <Input
                                     id="refund-amount"
-                                    inputMode="numeric"
+                                    inputMode="decimal"
                                     value={refundAmount}
                                     onChange={(event) => setRefundAmount(event.target.value)}
                                     placeholder="0"
@@ -1720,10 +1718,10 @@ export function AfterSalesDashboard() {
                                 {refundExceedsOriginal ? (
                                     <p className="text-xs font-medium text-destructive flex items-center gap-1">
                                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                        El monto a reintegrar ({formatMoney(parsedRefund)}) supera el total original de la operación ({formatMoney(originalTotal!)}).
+                                        El monto a reintegrar ({formatMoney(parsedRefund)}) supera {claimedValue !== null ? 'lo que valen las unidades reclamadas' : 'el total original de la operación'} ({formatMoney(originalTotal!)}).
                                     </p>
                                 ) : (
-                                    <p className="text-[11px] text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         Dejalo vacío o en 0 si no corresponde devolver dinero al cliente.
                                     </p>
                                 )}
@@ -1755,7 +1753,7 @@ export function AfterSalesDashboard() {
                                                 <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                                                 Por caja
                                             </div>
-                                            <span className="mt-1 block text-[11px] opacity-80">
+                                            <span className="mt-1 block text-xs opacity-80">
                                                 Registra una salida de efectivo en la caja registradora abierta.
                                             </span>
                                         </button>
@@ -1773,7 +1771,7 @@ export function AfterSalesDashboard() {
                                                 <CreditCard className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                                                 Saldo a favor
                                             </div>
-                                            <span className="mt-1 block text-[11px] opacity-80">
+                                            <span className="mt-1 block text-xs opacity-80">
                                                 Queda disponible como crédito del cliente para futuras compras.
                                             </span>
                                         </button>
@@ -1785,9 +1783,9 @@ export function AfterSalesDashboard() {
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
                                     <label htmlFor="resolution-notes" className="text-sm font-medium">
-                                        Notas de resolución / Comprobante
+                                        Notas de resolución
                                     </label>
-                                    <span className="text-[11px] text-muted-foreground">Opcional</span>
+                                    <span className="text-xs text-muted-foreground">Opcional</span>
                                 </div>
                                 <Textarea
                                     id="resolution-notes"
@@ -1798,18 +1796,17 @@ export function AfterSalesDashboard() {
                                     maxLength={500}
                                 />
                                 <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {/* Las sugerencias siguen el método elegido: antes se podía
+                                        elegir saldo a favor y la sugerencia decía «en efectivo». */}
                                     {[
-                                        'Reintegro en efectivo entregado en caja',
-                                        'Saldo a favor acreditado para compras',
-                                        'Cambio de producto realizado y entregado conforme',
-                                        'Garantía técnica completada y equipo entregado',
-                                        'Devolución aprobada y mercadería recibida',
+                                        ...(parsedRefund > 0 && refundMethod ? RESOLUTION_SUGGESTIONS[refundMethod] : []),
+                                        ...RESOLUTION_SUGGESTIONS.none,
                                     ].map((suggestion) => (
                                         <button
                                             key={suggestion}
                                             type="button"
                                             onClick={() => setResolutionNotes(suggestion)}
-                                            className="rounded-md border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                                            className="rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                                         >
                                             {suggestion}
                                         </button>
@@ -1839,14 +1836,14 @@ export function AfterSalesDashboard() {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 text-[11px]"
+                                        className="h-7 text-xs"
                                         onClick={() => setRejectionReason(reason)}
                                     >
                                         {reason}
                                     </Button>
                                 ))}
                             </div>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 El motivo quedará guardado en el historial y notas del caso.
                             </p>
                         </div>

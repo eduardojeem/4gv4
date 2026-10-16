@@ -1,15 +1,20 @@
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
 import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
+import QRCode from 'qrcode'
 import {
+  abandonmentClause,
+  CLAUSE_TOPICS,
+  DAMAGE_EXCLUSION_CLAUSE,
   DEFAULT_RECEIPT_SETTINGS,
   normalizeRepairReceiptSettings,
+  PICKUP_CLAUSE,
   type RepairReceiptSettings,
   type RepairReceiptSettingsPatch,
 } from '@/lib/repairs/receipt-settings'
+import { escapeHtmlDeep } from '@/lib/html-escape'
 import {
   formatWarrantyMonths,
-  hasClause,
   resolveWarranty,
   WARRANTY_TYPE_PRINT_LABELS,
 } from '@/lib/repairs/warranty'
@@ -255,73 +260,53 @@ export interface RepairPrintPayload {
   accessories?: string
   company?: CompanyInfo
   verificationHash?: string
+  /**
+   * Lo que cobra la orden tal como lo muestra la pantalla (resultado de
+   * getRepairFinancialPresentation). Si viene, manda sobre los costos sueltos:
+   * antes una orden «sin reparar · sin costo» se imprimía con el presupuesto
+   * entero como saldo.
+   */
+  financial?: {
+    total: number | null
+    paid: number
+    balance: number | null
+    label?: string
+    isUnrepaired?: boolean
+  }
+  /** «intake» al dejar el equipo; «delivery» cuando ya se entregó. */
+  stage?: 'intake' | 'delivery'
+  deliveredAt?: Date
+  deliveryOutcome?: 'repaired' | 'withdrawn' | 'unrepairable'
+  warrantyExpiresAt?: Date
+  /** Si es una copia de una orden guardada: cuándo se imprimió. */
+  copyPrintedAt?: Date
+}
+
+const DELIVERY_OUTCOME_LABELS: Record<NonNullable<RepairPrintPayload['deliveryOutcome']>, string> = {
+  repaired: 'Reparado',
+  withdrawn: 'Retirado sin reparar',
+  unrepairable: 'Sin reparación posible',
 }
 
 /**
- * Genera un número de ticket simple basado en fecha y milisegundos.
- * Ejemplo: `R-250921-123456`
+ * Totales de la orden, iguales en el papel y en WhatsApp. Si la orden trae el
+ * resumen de la pantalla, se usa ese; si no (la orden recién creada), se suman
+ * los costos como antes.
  */
-export const generateRepairTicketNumber = (): string => {
-  const now = new Date()
-  const year = now.getFullYear().toString().slice(-2)
-  const month = (now.getMonth() + 1).toString().padStart(2, '0')
-  const day = now.getDate().toString().padStart(2, '0')
-  const time = now.getTime().toString().slice(-6)
-  return `R-${year}${month}${day}-${time}`
-}
-
-/**
- * Genera un número de ticket persistente por año, basado en localStorage.
- * Formato: `R-YYYY-000001`. Reinicia el contador cada año.
- */
-export const generatePersistentRepairTicketNumber = (): string => {
-  try {
-    const now = new Date()
-    const year = now.getFullYear()
-    const key = `repairTicketCounter:${year}`
-    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null
-    let current = raw ? parseInt(raw, 10) : 0
-    if (Number.isNaN(current)) current = 0
-    current += 1
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(key, String(current))
+function printableTotals(payload: RepairPrintPayload) {
+  if (payload.financial) {
+    const { total, paid, balance, label, isUnrepaired } = payload.financial
+    return {
+      totalCost: total ?? 0,
+      paidAmount: paid,
+      pendingBalance: balance ?? 0,
+      hasBudget: total !== null && total > 0,
+      // Sin reparar o sin costo: la pantalla ya dice cómo quedó.
+      outcomeLabel: isUnrepaired || (total === 0 && label) ? label : undefined,
     }
-    return `R-${year}-${String(current).padStart(6, '0')}`
-  } catch {
-    return generateRepairTicketNumber()
   }
-}
-
-/**
- * Obtiene la próxima numeración sin incrementarla (solo vista previa).
- */
-export const previewPersistentRepairTicketNumber = (): string => {
-  try {
-    const now = new Date()
-    const year = now.getFullYear()
-    const key = `repairTicketCounter:${year}`
-    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null
-    let current = raw ? parseInt(raw, 10) : 0
-    if (Number.isNaN(current)) current = 0
-    const next = current + 1
-    return `R-${year}-${String(next).padStart(6, '0')}`
-  } catch {
-    return generateRepairTicketNumber()
-  }
-}
-
-/**
- * Genera un texto formateado para compartir por WhatsApp o copiar.
- */
-export const generateRepairShareText = (payload: RepairPrintPayload): string => {
-  const company = payload.company || FALLBACK_COMPANY
-  const ticketNumber = payload.ticketNumber || 'N/A'
-  const dateObj = payload.date || new Date()
-  const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
-  
   let totalCost = payload.finalCost ?? payload.estimatedCost ?? 0
   let paidAmount = payload.paidAmount ?? payload.deposit ?? 0
-
   if (payload.devices.length > 0) {
     if (totalCost === 0) {
       totalCost = payload.devices.reduce((sum, d) => sum + (d.finalCost ?? d.estimatedCost ?? 0), 0)
@@ -330,10 +315,68 @@ export const generateRepairShareText = (payload: RepairPrintPayload): string => 
       paidAmount = payload.devices.reduce((sum, d) => sum + (d.paidAmount ?? d.deposit ?? 0), 0)
     }
   }
+  return {
+    totalCost,
+    paidAmount,
+    pendingBalance: Math.max(0, totalCost - paidAmount),
+    hasBudget: totalCost > 0,
+    outcomeLabel: undefined as string | undefined,
+  }
+}
 
-  const pendingBalance = Math.max(0, totalCost - paidAmount)
+/** Números de orden reales: los de la orden y los de cada equipo, sin repetir. */
+function orderNumbers(payload: RepairPrintPayload): string[] {
+  const numbers = [payload.ticketNumber, ...payload.devices.map((device) => device.ticketNumber)]
+    .filter((value): value is string => Boolean(value && value.trim()))
+  return [...new Set(numbers)]
+}
 
-  let text = `*${company.name || 'Servicio Técnico'}* - Comprobante de Recepción\n`
+/**
+ * QR de seguimiento en SVG, armado en el momento y sin pedir nada afuera.
+ *
+ * Reemplaza al hash de 64 caracteres impreso como texto, que nadie podía usar:
+ * el cliente lo escanea y abre el estado de su reparación, y el taller valida
+ * que el comprobante es auténtico.
+ */
+function trackingQrSvg(ticketNumber: string, hash: string, sizePx: number): string {
+  try {
+    // La misma URL que arma generateRepairTrackingURL; no se importa de
+    // repair-qr para que el comprobante no dependa de ese modulo (ver
+    // repair-qr-server-only.test).
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const url = `${origin}/mis-reparaciones/${encodeURIComponent(ticketNumber)}?verify=${encodeURIComponent(hash)}`
+    const qr = QRCode.create(url, { errorCorrectionLevel: 'M' })
+    const count = qr.modules.size
+    const margin = 2
+    const total = count + margin * 2
+    let path = ''
+    for (let row = 0; row < count; row++) {
+      for (let col = 0; col < count; col++) {
+        if (qr.modules.get(row, col)) path += `M${col + margin} ${row + margin}h1v1h-1z`
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" width="${sizePx}" height="${sizePx}" shape-rendering="crispEdges" role="img" aria-label="QR de seguimiento"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Genera un texto formateado para compartir por WhatsApp o copiar.
+ */
+export const generateRepairShareText = (
+  payload: RepairPrintPayload,
+  settings: RepairReceiptSettings = getReceiptSettings()
+): string => {
+  const company = payload.company || FALLBACK_COMPANY
+  const ticketNumber = orderNumbers(payload).join(', ') || 'Sin número'
+  const dateObj = payload.date || new Date()
+  const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
+  
+  const { totalCost, paidAmount, pendingBalance, outcomeLabel } = printableTotals(payload)
+  const isDelivery = payload.stage === 'delivery'
+
+  let text = `*${company.name || 'Servicio Técnico'}* - ${isDelivery ? 'Comprobante de Entrega' : 'Comprobante de Recepción'}\n`
   text += `═══════════════════════════════\n`
   text += `📄 *N° de Orden / Ticket:* ${ticketNumber}\n`
   text += `📅 *Fecha:* ${date}\n`
@@ -357,30 +400,37 @@ export const generateRepairShareText = (payload: RepairPrintPayload): string => 
     if (d.accessories || payload.accessories) {
       text += `• *Accesorios:* ${d.accessories || payload.accessories}\n`
     }
-    if (d.estimatedCost) {
+    if (d.estimatedCost && payload.devices.length > 1) {
       text += `• *Presupuesto:* ${formatCurrency(d.estimatedCost)}\n`
     }
   })
   
   text += `═══════════════════════════════\n`
   text += `💰 *RESUMEN DE PAGO*\n`
-  text += `• *Presupuesto Total:* ${formatCurrency(totalCost)}\n`
-  if (paidAmount > 0) {
-    text += `• *Anticipo / Seña:* -${formatCurrency(paidAmount)}\n`
-    text += `• *Saldo al Retirar:* *${formatCurrency(pendingBalance)}*\n`
+  if (outcomeLabel) {
+    text += `• *Resultado:* ${outcomeLabel}\n`
+    if (paidAmount > 0) text += `• *Pagado:* ${formatCurrency(paidAmount)}\n`
+  } else if (totalCost <= 0) {
+    // Sin presupuesto todavía: «Gs. 0» se leía como «no hay nada que pagar».
+    text += `• *Presupuesto:* a definir tras el diagnóstico\n`
+    if (paidAmount > 0) text += `• *Seña pagada:* ${formatCurrency(paidAmount)}\n`
   } else {
-    text += `• *Saldo al Retirar:* *${formatCurrency(totalCost)}*\n`
+    text += `• *Presupuesto Total:* ${formatCurrency(totalCost)}\n`
+    if (paidAmount > 0) text += `• *Anticipo / Seña:* -${formatCurrency(paidAmount)}\n`
+    text += `• *Saldo al Retirar:* *${formatCurrency(pendingBalance)}*\n`
   }
   
-  if (payload.warrantyMonths && payload.warrantyMonths > 0) {
-    text += `\n🛡️ *Garantía:* ${formatWarrantyMonths(payload.warrantyMonths)}`
-    if (payload.warrantyType) {
-      text += `, ${WARRANTY_TYPE_PRINT_LABELS[payload.warrantyType]}`
-    }
-    if (payload.warrantyNotes) {
-      text += ` (${payload.warrantyNotes})`
+  // La misma regla que el papel: si la orden no dice nada, la del taller. Antes
+  // el comprobante imprimía «3 meses» y el WhatsApp no mencionaba la garantía.
+  const warranty = resolveWarranty(payload, settings)
+  if (warranty.months > 0) {
+    text += `\n🛡️ *Garantía:* ${formatWarrantyMonths(warranty.months)}, ${WARRANTY_TYPE_PRINT_LABELS[warranty.type]}`
+    if (warranty.notes) {
+      text += ` (${warranty.notes})`
     }
     text += `\n`
+  } else {
+    text += `\n🛡️ *Garantía:* esta reparación no incluye garantía\n`
   }
 
   if (company.address) text += `\n📍 *Ubicación:* ${company.address}\n`
@@ -439,21 +489,60 @@ export const printRepairReceipt = (
 }
 
 /**
+ * Igual que printRepairReceipt, pero con datos que todavía hay que pedir (la
+ * firma del QR). La ventana se abre en el mismo clic —después de esperar, el
+ * navegador la bloquea como emergente— y el comprobante se escribe al llegar.
+ */
+export const printRepairReceiptWhenReady = async (
+  type: RepairReceiptType,
+  payload: Promise<RepairPrintPayload>,
+  paperOverride?: '80mm' | '58mm' | 'A4',
+  settingsOverride?: RepairReceiptSettings
+): Promise<void> => {
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('Por favor, permita las ventanas emergentes para imprimir los comprobantes.')
+    return
+  }
+  try {
+    printWindow.document.title = 'Preparando comprobante…'
+  } catch {}
+
+  const ready = await payload
+  if (printWindow.closed) return
+  printWindow.document.write(generateRepairReceiptHTML(type, ready, paperOverride, settingsOverride))
+  printWindow.document.close()
+  try {
+    printWindow.focus()
+  } catch {}
+}
+
+/**
  * Construye el HTML auto-contenido para impresión.
  */
-const generateRepairReceiptHTML = (
+export const generateRepairReceiptHTML = (
   type: RepairReceiptType,
-  payload: RepairPrintPayload,
+  rawPayload: RepairPrintPayload,
   paperOverride?: '80mm' | '58mm' | 'A4',
   settingsOverride?: RepairReceiptSettings
 ): string => {
+  // El QR se arma con los datos crudos (no es HTML); todo lo demas, escapado.
+  const rawNumbers = orderNumbers(rawPayload)
+  const qrTicket = rawPayload.ticketNumber || (rawNumbers.length === 1 ? rawNumbers[0] : '')
+  const payload = escapeHtmlDeep(rawPayload)
   const company = payload.company || FALLBACK_COMPANY
-  const ticketNumber = payload.ticketNumber || generateRepairTicketNumber()
+  // Nunca un numero inventado: antes, con varios equipos, se imprimia uno al
+  // azar que no existia en el sistema.
+  const numbers = orderNumbers(payload)
+  const ticketNumber = numbers.join(', ')
+  const orderLabel = numbers.length === 0 ? '' : numbers.length === 1 ? `Orden N° ${numbers[0]}` : `Órdenes N° ${ticketNumber}`
+  const showDeviceNumbers = numbers.length > 1
+  const deviceNumber = (d: RepairDevicePrintItem) => (showDeviceNumbers && d.ticketNumber ? ` · N° ${d.ticketNumber}` : '')
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
   const time = dateObj.toLocaleTimeString(config.locale || 'es-PY')
   
-  const settings = settingsOverride || getReceiptSettings()
+  const settings = escapeHtmlDeep(settingsOverride || getReceiptSettings())
   const paperPref = paperOverride || settings.paperFormat || '80mm'
   const isA4 = paperPref === 'A4'
   const pageSizeValue = isA4 ? 'A4' : `${paperPref} auto`
@@ -462,19 +551,15 @@ const generateRepairReceiptHTML = (
   const basePadding = isA4 ? '10mm' : '3mm'
 
   // Cálculo financiero
-  let totalCost = payload.finalCost ?? payload.estimatedCost ?? 0
-  let paidAmount = payload.paidAmount ?? payload.deposit ?? 0
-
-  if (payload.devices.length > 0) {
-    if (totalCost === 0) {
-      totalCost = payload.devices.reduce((sum, d) => sum + (d.finalCost ?? d.estimatedCost ?? 0), 0)
-    }
-    if (paidAmount === 0) {
-      paidAmount = payload.devices.reduce((sum, d) => sum + (d.paidAmount ?? d.deposit ?? 0), 0)
-    }
-  }
-
-  const pendingBalance = Math.max(0, totalCost - paidAmount)
+  const { totalCost, paidAmount, pendingBalance, hasBudget, outcomeLabel } = printableTotals(payload)
+  const isDelivery = payload.stage === 'delivery'
+  const shortDate = (value?: Date) => (value ? value.toLocaleDateString(config.locale || 'es-PY') : '')
+  const copyNote = payload.copyPrintedAt
+    ? `Copia impresa el ${payload.copyPrintedAt.toLocaleString(config.locale || 'es-PY')}`
+    : ''
+  const costLabel = (amount?: number) => (amount && amount > 0 ? formatCurrency(amount) : 'A presupuestar')
+  const priorityLabel = `${payload.priority === 'high' ? 'ALTA' : payload.priority === 'medium' ? 'MEDIA' : 'NORMAL'}${payload.urgency === 'urgent' ? ' · URGENTE' : ''}`
+  const orderBadge = orderLabel ? `<div style="text-align: center;"><span class="ticket-badge">${orderLabel}</span></div>` : ''
 
   // Estilos modernos unificados
   const modernStyles = `
@@ -674,7 +759,7 @@ const generateRepairReceiptHTML = (
     }
 
     .legal-text {
-      font-size: 9.5px;
+      font-size: 10.5px;
       color: #6b7280;
       text-align: justify;
       margin-top: 8px;
@@ -713,29 +798,29 @@ const generateRepairReceiptHTML = (
   if (type === 'technician') {
     const techDevicesHTML = payload.devices.map((d) => `
       <div class="device-card">
-        <div class="device-header">📱 ${d.brand} ${d.model} (${d.typeLabel})</div>
+        <div class="device-header">${d.brand} ${d.model} (${d.typeLabel})${deviceNumber(d)}</div>
         ${(d.imei || d.serialNumber) ? `<div class="device-sub"><strong>IMEI/SN:</strong> ${d.imei || d.serialNumber}</div>` : ''}
-        
+
         <div class="problem-box">
-          <strong>🔧 Falla Reportada:</strong><br/>
+          <strong>Falla reportada:</strong><br/>
           ${d.issue || 'Sin falla especificada'}
         </div>
 
         ${(d.accessories || payload.accessories) ? `
           <div style="font-size: 11px; margin: 4px 0; color: #374151;">
-            <strong>🔌 Accesorios:</strong> ${d.accessories || payload.accessories}
+            <strong>Accesorios:</strong> ${d.accessories || payload.accessories}
           </div>
         ` : ''}
 
         ${d.description ? `
           <div style="font-size: 11px; margin: 4px 0; color: #4b5563;">
-            <strong>📝 Observaciones:</strong> ${d.description}
+            <strong>Observaciones:</strong> ${d.description}
           </div>
         ` : ''}
 
         <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #d1d5db;">
-          <span>👨‍🔧 ${d.technician || 'Sin asignar'}</span>
-          <span>💰 Est: ${formatCurrency(d.estimatedCost || 0)}</span>
+          <span>Técnico: ${d.technician || 'Sin asignar'}</span>
+          <span>Presup.: ${costLabel(d.estimatedCost)}</span>
         </div>
       </div>
     `).join('')
@@ -746,7 +831,7 @@ const generateRepairReceiptHTML = (
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Ficha Simple - ${ticketNumber}</title>
+        <title>Ficha simple${ticketNumber ? ` - ${ticketNumber}` : ''}</title>
         <style>${modernStyles}</style>
       </head>
       <body>
@@ -759,11 +844,9 @@ const generateRepairReceiptHTML = (
           <div class="date-time">${date} • ${time}</div>
         </div>
         
-        <div style="text-align: center;">
-          <span class="ticket-badge">TICKET: ${ticketNumber}</span>
-        </div>
-        
-        <div class="title">📋 FICHA TÉCNICA (INTERNA)</div>
+        ${orderBadge}
+
+        <div class="title">FICHA TÉCNICA (INTERNA)</div>
         
         <div class="section-card">
           <div class="info-row">
@@ -782,7 +865,7 @@ const generateRepairReceiptHTML = (
           </div>` : ''}
           <div class="info-row">
             <span class="info-label">Prioridad:</span>
-            <span class="info-value">${payload.priority === 'high' ? '🔴 ALTA' : payload.priority === 'medium' ? '🟡 MEDIA' : '🟢 NORMAL'} ${payload.urgency === 'urgent' ? '• ⚡ URGENTE' : ''}</span>
+            <span class="info-value">${priorityLabel}</span>
           </div>
         </div>
 
@@ -791,7 +874,7 @@ const generateRepairReceiptHTML = (
         </div>
 
         <div class="footer">
-          <div>Uso Interno de Laboratorio • ${company.name || 'Taller'}</div>
+          <div>Uso interno del laboratorio · ${company.name || 'Taller'}</div>
         </div>
       </body>
     </html>
@@ -804,36 +887,34 @@ const generateRepairReceiptHTML = (
   if (type === 'technician_detailed') {
     const detailedDevicesHTML = payload.devices.map((d) => `
       <div class="device-card">
-        <div class="device-header">📱 ${d.brand} ${d.model} (${d.typeLabel})</div>
+        <div class="device-header">${d.brand} ${d.model} (${d.typeLabel})${deviceNumber(d)}</div>
         ${(d.imei || d.serialNumber) ? `<div class="device-sub"><strong>IMEI/SN:</strong> ${d.imei || d.serialNumber}</div>` : ''}
-        
-        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; padding: 6px; margin: 6px 0; font-size: 11.5px;">
-          <strong>🔑 Desbloqueo / Clave:</strong> ${d.accessType ? d.accessType.toUpperCase() : 'PIN/CLAVE'}<br/>
-          <span style="font-size: 13px; font-weight: 800; color: #92400e; letter-spacing: 0.5px;">
-            ${d.accessPassword ? `[ ${d.accessPassword} ]` : '• Sin clave / No informada'}
-          </span>
+
+        <div style="border: 1px solid #000; border-radius: 4px; padding: 6px; margin: 6px 0; font-size: 11.5px;">
+          <strong>Desbloqueo:</strong> ${d.accessType ? d.accessType.toUpperCase() : 'PIN/CLAVE'}
+          · ${d.accessPassword ? 'ver talón al pie (cortar y no dejar pegado al equipo)' : 'sin clave / no informada'}
         </div>
 
         <div class="problem-box">
-          <strong>🔧 Falla Reportada:</strong><br/>
+          <strong>Falla reportada:</strong><br/>
           ${d.issue || 'Sin especificar'}
         </div>
 
         ${(d.accessories || payload.accessories) ? `
           <div style="font-size: 11px; margin: 4px 0; color: #374151;">
-            <strong>🔌 Accesorios Recibidos:</strong> ${d.accessories || payload.accessories}
+            <strong>Accesorios recibidos:</strong> ${d.accessories || payload.accessories}
           </div>
         ` : ''}
 
         ${d.description ? `
           <div style="font-size: 11px; margin: 4px 0; color: #4b5563;">
-            <strong>📝 Estado Físico / Obs:</strong> ${d.description}
+            <strong>Estado físico / obs.:</strong> ${d.description}
           </div>
         ` : ''}
 
         <!-- Checklist de Banco -->
         <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; margin: 8px 0; background: #fff;">
-          <div style="font-size: 11px; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">✔ Checklist de Banco:</div>
+          <div style="font-size: 11px; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">Checklist de banco:</div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 10.5px; color: #334155;">
             <div>[ ] Enciende</div>
             <div>[ ] Touch / Display</div>
@@ -846,15 +927,31 @@ const generateRepairReceiptHTML = (
 
         <!-- Área de Notas Manuales del Técnico -->
         <div style="border: 1px dashed #9ca3af; border-radius: 4px; padding: 6px; margin: 8px 0; height: 50px; font-size: 10px; color: #9ca3af;">
-          🛠️ Notas de Banco / Repuestos utilizados:
+          Notas de banco / repuestos utilizados:
         </div>
 
         <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #d1d5db;">
-          <span>👨‍🔧 Técnico: ${d.technician || 'Sin asignar'}</span>
-          <span>💰 Presup: ${formatCurrency(d.estimatedCost || 0)}</span>
+          <span>Técnico: ${d.technician || 'Sin asignar'}</span>
+          <span>Presup.: ${costLabel(d.estimatedCost)}</span>
         </div>
       </div>
     `).join('')
+
+    // La clave impresa en la hoja que queda pegada al equipo la podía leer
+    // cualquiera. Va en un talón al final, para cortarlo y que lo guarde el técnico.
+    const devicesWithPassword = payload.devices.filter((d) => d.accessPassword)
+    const passwordStub = devicesWithPassword.length > 0 ? `
+        <div style="margin-top: 14px; border-top: 2px dashed #000; padding-top: 2px; text-align: center; font-size: 10px; font-weight: 800; letter-spacing: 1px;">
+          - - - CORTAR ACÁ · TALÓN PARA EL TÉCNICO · NO DEJAR PEGADO AL EQUIPO - - -
+        </div>
+        <div class="section-card">
+          <div class="section-title">Claves de desbloqueo</div>
+          ${devicesWithPassword.map((d) => `
+          <div class="info-row">
+            <span class="info-label">${d.brand} ${d.model}${d.ticketNumber ? ` (${d.ticketNumber})` : ''} · ${d.accessType ? d.accessType.toUpperCase() : 'PIN/CLAVE'}</span>
+            <span class="info-value" style="font-size: 14px; letter-spacing: 0.5px;">${d.accessPassword}</span>
+          </div>`).join('')}
+        </div>` : ''
 
     return `
     <!DOCTYPE html>
@@ -862,7 +959,7 @@ const generateRepairReceiptHTML = (
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Ficha Completa - ${ticketNumber}</title>
+        <title>Ficha completa${ticketNumber ? ` - ${ticketNumber}` : ''}</title>
         <style>${modernStyles}</style>
       </head>
       <body>
@@ -875,11 +972,9 @@ const generateRepairReceiptHTML = (
           <div class="date-time">${date} • ${time}</div>
         </div>
         
-        <div style="text-align: center;">
-          <span class="ticket-badge">TICKET: ${ticketNumber}</span>
-        </div>
-        
-        <div class="title">🔬 FICHA DE LABORATORIO (COMPLETA)</div>
+        ${orderBadge}
+
+        <div class="title">FICHA DE LABORATORIO (COMPLETA)</div>
         
         <div class="section-card">
           <div class="info-row">
@@ -903,7 +998,7 @@ const generateRepairReceiptHTML = (
           </div>` : ''}
           <div class="info-row">
             <span class="info-label">Prioridad:</span>
-            <span class="info-value">${payload.priority === 'high' ? '🔴 ALTA' : payload.priority === 'medium' ? '🟡 MEDIA' : '🟢 NORMAL'} ${payload.urgency === 'urgent' ? '• ⚡ URGENTE' : ''}</span>
+            <span class="info-value">${priorityLabel}</span>
           </div>
         </div>
 
@@ -912,58 +1007,62 @@ const generateRepairReceiptHTML = (
         </div>
 
         <div class="footer">
-          <div>Uso Interno de Laboratorio • ${company.name || 'Taller'}</div>
-          <div style="margin-top: 2px;">Generado automáticamente</div>
+          <div>Uso interno del laboratorio · ${company.name || 'Taller'}</div>
         </div>
+        ${passwordStub}
       </body>
     </html>
     `
   }
 
-  const legalText = settings.legalText || 'Declaro haber leído y aceptado los términos y condiciones del servicio técnico. Autorizo la revisión y/o reparación de los equipos detallados. La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.'
+  // Vacío es una decisión: antes se volvía a imprimir el texto de fábrica.
+  const legalText = settings.legalText.trim()
   // Una orden con garantía propia manda aunque sea 0; la del taller solo cubre
   // a las que no dicen nada. Ver resolveWarranty.
   const warranty = resolveWarranty(payload, settings)
   const warrantyNotes = warranty.notes
-  // Estas tres salían siempre, aunque ya estuvieran en el texto legal o en las
-  // notas: quien las había agregado con los botones las veía impresas dos veces.
+  // Las cláusulas fijas se saltean si el texto legal o las notas ya tratan el
+  // tema, aunque con otras palabras: antes «humedad» y «líquidos» salían las dos.
   const alreadyPrinted = `${legalText}\n${warrantyNotes}`
   const standardClauses = [
-    'Pasados los 90 días de la notificación, el equipo se considerará abandonado.',
-    ...(warranty.months > 0 ? ['La garantía no cubre daños por humedad, golpes o mal uso posterior a la entrega.'] : []),
-    'Es indispensable presentar este comprobante para el retiro y reclamo de garantía.',
-  ].filter((clause) => !hasClause(alreadyPrinted, clause))
+    // Abandono y presentar el comprobante son de la recepción: al entregar ya no aplican.
+    ...(!isDelivery && settings.abandonmentDays > 0 && !CLAUSE_TOPICS.abandonment.test(alreadyPrinted) ? [abandonmentClause(settings.abandonmentDays)] : []),
+    ...(warranty.months > 0 && !CLAUSE_TOPICS.damage.test(alreadyPrinted) ? [DAMAGE_EXCLUSION_CLAUSE] : []),
+    ...(!isDelivery && !CLAUSE_TOPICS.pickup.test(alreadyPrinted) ? [PICKUP_CLAUSE] : []),
+  ]
+  const qrSvg = settings.showHash && rawPayload.verificationHash && qrTicket
+    ? trackingQrSvg(qrTicket, rawPayload.verificationHash, isA4 ? 120 : 96)
+    : ''
 
   // HTML para comprobante del cliente (estructura original fiel y configurable)
   const customerDevicesHTML = payload.devices.map((d) => `
     <div class="device-card">
       <div class="device-title">
-        <span class="device-icon">📱</span>
-        <span class="device-name">${d.brand} ${d.model}</span>
+        <span class="device-name">${d.brand} ${d.model}${deviceNumber(d)}</span>
       </div>
       <div class="device-type">${d.typeLabel}</div>
       ${(settings.showImei && (d.imei || d.serialNumber)) ? `<div style="font-size: 11px; color: #4b5563; margin-bottom: 6px;"><strong>IMEI/SN:</strong> ${d.imei || d.serialNumber}</div>` : ''}
       
       <div class="problem-section">
-        <div class="problem-label">🔧 Problema Reportado</div>
+        <div class="problem-label">Problema reportado</div>
         <div class="problem-text">${d.issue || '-'}</div>
       </div>
 
       ${(settings.showAccessories && (d.accessories || payload.accessories)) ? `
       <div class="notes-section">
-        <div class="notes-label">🔌 Accesorios Recibidos</div>
+        <div class="notes-label">Accesorios recibidos</div>
         <div class="notes-text">${d.accessories || payload.accessories}</div>
       </div>` : ''}
       
       ${d.description ? `
       <div class="notes-section">
-        <div class="notes-label">📝 Descripción</div>
+        <div class="notes-label">Descripción</div>
         <div class="notes-text">${d.description}</div>
       </div>` : ''}
       
-      ${typeof d.estimatedCost === 'number' ? `
+      ${payload.devices.length > 1 || !settings.showFinancialBreakdown ? `
       <div class="tech-info">
-        <div class="cost-item">💰 Presupuesto / Costo Estimado: ${formatCurrency(d.estimatedCost)}</div>
+        <div class="cost-item">Presupuesto: ${costLabel(d.estimatedCost)}</div>
       </div>` : ''}
     </div>
   `).join('')
@@ -974,11 +1073,11 @@ const generateRepairReceiptHTML = (
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Comprobante ${ticketNumber}</title>
+      <title>Comprobante${ticketNumber ? ` ${ticketNumber}` : ''}</title>
       <style>
         ${modernStyles}
         .legal-text {
-            font-size: 9px;
+            font-size: 10.5px;
             color: #6b7280;
             text-align: justify;
             margin-top: 10px;
@@ -1001,21 +1100,34 @@ const generateRepairReceiptHTML = (
         ${(company.logo && settings.showLogo) ? `<img src="${company.logo}" class="company-logo" alt="Logo" />` : ''}
         <div class="company-name">${company.name || 'Servicio Técnico'}</div>
         <div class="company-info">
-            ${company.address ? `📍 ${company.address}<br/>` : ''}
-            ${company.phone ? `📞 ${company.phone}` : ''} 
-            ${company.email ? `• 📧 ${company.email}` : ''}
+            ${company.address ? `${company.address}<br/>` : ''}
+            ${[company.phone ? `Tel: ${company.phone}` : '', company.email || ''].filter(Boolean).join(' · ')}
         </div>
-        <div class="date-time" style="margin-top: 4px;">${date} • ${time}</div>
+        <div class="date-time" style="margin-top: 4px;">Ingreso: ${date} • ${time}</div>
       </div>
       
-      <div style="text-align: center;">
-        <span class="ticket-badge">Ticket (${ticketNumber})</span>
-      </div>
-      
-      <div class="title" style="text-align: center;">🧾 ORDEN DE SERVICIO</div>
+      ${orderBadge}
+
+      <div class="title" style="text-align: center;">${isDelivery ? 'COMPROBANTE DE ENTREGA' : 'ORDEN DE SERVICIO'}</div>
+      ${isDelivery ? `
+      <div class="section-card">
+        <div class="section-title">Entrega</div>
+        <div class="info-grid">
+          ${payload.deliveredAt ? `
+          <div class="info-row">
+            <span class="info-label">Fecha de entrega:</span>
+            <span class="info-value">${shortDate(payload.deliveredAt)}</span>
+          </div>` : ''}
+          ${payload.deliveryOutcome ? `
+          <div class="info-row">
+            <span class="info-label">Resultado:</span>
+            <span class="info-value">${DELIVERY_OUTCOME_LABELS[payload.deliveryOutcome]}</span>
+          </div>` : ''}
+        </div>
+      </div>` : ''}
       
       <div class="section-card">
-        <div class="section-title">👤 Datos del Cliente</div>
+        <div class="section-title">Datos del cliente</div>
         <div class="info-grid">
           <div class="info-row">
             <span class="info-label">Cliente:</span>
@@ -1054,57 +1166,59 @@ const generateRepairReceiptHTML = (
         </div>
       </div>
 
-      <div class="section-card">
-        <div class="section-title">📅 Detalles de Recepción</div>
-        <div class="info-grid">
-          <div class="info-row">
-            <span class="info-label">Fecha:</span>
-            <span class="info-value">${date}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Hora:</span>
-            <span class="info-value">${time}</span>
-          </div>
-        </div>
-      </div>
-
       <div style="margin: 12px 0;">
-        <div class="section-title" style="margin-bottom: 8px;">📱 Equipos Recibidos (${payload.devices.length})</div>
+        <div class="section-title" style="margin-bottom: 8px;">Equipos recibidos (${payload.devices.length})</div>
         ${customerDevicesHTML}
       </div>
 
       <!-- Resumen de Pago: Presupuesto, Anticipo/Seña y Saldo al Retirar -->
       ${settings.showFinancialBreakdown ? `
       <div class="section-card" style="border: 1.5px solid #111827;">
-        <div class="section-title">💰 Resumen de Pago</div>
+        <div class="section-title">Resumen de pago</div>
         <div class="info-grid">
+          ${outcomeLabel ? `
+          <div class="info-row pc-total" style="font-size: 13px; font-weight: 800; padding: 4px; margin-top: 4px;">
+            <span class="info-label">Resultado:</span>
+            <span class="info-value">${outcomeLabel}</span>
+          </div>
+          ${paidAmount > 0 ? `
           <div class="info-row">
-            <span class="info-label">Presupuesto Total:</span>
+            <span class="info-label">Pagado:</span>
+            <span class="info-value">${formatCurrency(paidAmount)}</span>
+          </div>` : ''}
+          ` : hasBudget ? `
+          <div class="info-row">
+            <span class="info-label">${isDelivery ? 'Costo final:' : 'Presupuesto total:'}</span>
             <span class="info-value">${formatCurrency(totalCost)}</span>
           </div>
           ${paidAmount > 0 ? `
-          <div class="info-row" style="color: #059669;">
-            <span class="info-label">Seña / Anticipo Pagado:</span>
+          <div class="info-row">
+            <span class="info-label">${isDelivery ? 'Pagado:' : 'Seña / anticipo pagado:'}</span>
             <span class="info-value">-${formatCurrency(paidAmount)}</span>
-          </div>
+          </div>` : ''}
           <div class="info-row pc-total" style="font-size: 13px; font-weight: 800; padding: 4px; margin-top: 4px;">
-            <span class="info-label">Saldo al Retirar:</span>
+            <span class="info-label">${isDelivery ? 'Saldo pendiente:' : 'Saldo al retirar:'}</span>
             <span class="info-value">${formatCurrency(pendingBalance)}</span>
           </div>
           ` : `
           <div class="info-row pc-total" style="font-size: 13px; font-weight: 800; padding: 4px; margin-top: 4px;">
-            <span class="info-label">Saldo al Retirar:</span>
-            <span class="info-value">${formatCurrency(totalCost)}</span>
+            <span class="info-label">Presupuesto:</span>
+            <span class="info-value">A definir tras el diagnóstico</span>
           </div>
+          ${paidAmount > 0 ? `
+          <div class="info-row">
+            <span class="info-label">Seña pagada:</span>
+            <span class="info-value">${formatCurrency(paidAmount)}</span>
+          </div>` : ''}
           `}
         </div>
       </div>` : ''}
 
       <div class="warranty-box">
-        <div class="warranty-title">🛡️ Garantía y Términos</div>
+        <div class="warranty-title">Garantía y condiciones</div>
         <div class="warranty-text">
           ${warranty.months > 0 ? `
-          • <strong>Garantía:</strong> ${formatWarrantyMonths(warranty.months)} (${WARRANTY_TYPE_PRINT_LABELS[warranty.type]}).<br/>
+          • <strong>Garantía:</strong> ${formatWarrantyMonths(warranty.months)} (${WARRANTY_TYPE_PRINT_LABELS[warranty.type]})${isDelivery && payload.warrantyExpiresAt ? `, vigente hasta el ${shortDate(payload.warrantyExpiresAt)}` : ''}.<br/>
           ${warrantyNotes ? `• ${warrantyNotes.replace(/\n/g, '<br/>')}<br/>` : ''}
           ` : `
           • Esta reparación no incluye garantía.<br/>
@@ -1113,30 +1227,46 @@ const generateRepairReceiptHTML = (
         </div>
       </div>
 
-      <div class="legal-text">
-        ${legalText}
+      ${legalText && !isDelivery ? `<div class="legal-text">${legalText.replace(/\n/g, '<br/>')}</div>` : ''}
+
+      ${isDelivery && (settings.showCustomerSignature || settings.showDeliveryControl) ? `
+      <div style="margin-top: 14px; display: flex; gap: 6px; break-inside: avoid;">
+        <div style="flex: 1; height: 50px; border: 1px solid #111827; border-radius: 4px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700;">Firma y sello del taller</span>
+        </div>
+        <div style="flex: 1; height: 50px; border: 1px solid #111827; border-radius: 4px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; text-align: center;">
+          <span style="font-size: 10px; font-weight: 700;">Recibí conforme (cliente)</span>
+        </div>
       </div>
+      <div style="display: flex; gap: 8px; font-size: 10.5px; margin-top: 6px;">
+        <span style="flex: 1;">Aclaración: ____________________</span>
+        <span style="flex: 1;">C.I.: ______________</span>
+      </div>` : ''}
 
       <!-- 1. Firma del Cliente al Ingreso -->
-      ${settings.showCustomerSignature ? `
+      ${!isDelivery && settings.showCustomerSignature ? `
       <div style="margin-top: 14px;">
-        <div style="width: 100%; height: 50px; border: 1px solid #111827; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
-          <div style="font-size: 10.5px; font-weight: 600; color: #6b7280;">Firma del Cliente (Ingreso / Aceptación)</div>
+        <div style="width: 100%; height: 50px; border: 1px solid #111827; border-radius: 6px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;">
+          <div style="font-size: 10.5px; font-weight: 600; color: #6b7280;">Firma del cliente (ingreso y aceptación)</div>
+        </div>
+        <div style="display: flex; gap: 8px; font-size: 10.5px; margin-top: 6px;">
+          <span style="flex: 1;">Aclaración: ____________________</span>
+          <span style="flex: 1;">C.I.: ______________</span>
         </div>
       </div>` : ''}
       
       <!-- 2. Bloque de Control de Entrega y Activación de Garantía -->
-      ${settings.showDeliveryControl ? `
+      ${!isDelivery && settings.showDeliveryControl ? `
       <div style="margin-top: 12px; border: 1.5px dashed #0f172a; border-radius: 6px; padding: 8px; background: #fafafa; break-inside: avoid;">
         <div style="font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase; margin-bottom: 2px;">
-          🛡️ Control de Entrega y Activación de Garantía
+          Control de entrega y activación de garantía
         </div>
-        <div style="font-size: 9.5px; color: #4b5563; margin-bottom: 6px;">
+        <div style="font-size: 10px; color: #4b5563; margin-bottom: 6px;">
           (A sellar y firmar por el taller al momento del retiro para habilitar la garantía)
         </div>
         
         <div style="display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 6px;">
-          <span><strong>Fecha de Entrega:</strong> ___ / ___ / 202_</span>
+          <span><strong>Fecha de entrega:</strong> ___ / ___ / _____</span>
           <span><strong>Entregado por:</strong> _______________</span>
         </div>
 
@@ -1149,23 +1279,23 @@ const generateRepairReceiptHTML = (
           </div>
         </div>
 
-        <div style="font-size: 8.5px; color: #6b7280; text-align: center; margin-top: 4px; font-style: italic;">
-          📌 Este comprobante sellado y firmado al retirar constituye su Certificado Oficial de Garantía.
+        <div style="font-size: 10px; color: #6b7280; text-align: center; margin-top: 4px;">
+          Este comprobante sellado y firmado al retirar es su certificado de garantía.
         </div>
       </div>` : ''}
 
-      ${settings.showHash && payload.verificationHash ? `
-      <div style="margin-top: 10px; padding: 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center;">
-        <div style="font-size: 9.5px; color: #6b7280; line-height: 1.3;">
-          <strong>Hash de verificación:</strong><br/>
-          <code style="font-size: 8.5px; color: #111827; letter-spacing: 0.5px;">${payload.verificationHash}</code>
+      ${qrSvg ? `
+      <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px; break-inside: avoid;">
+        ${qrSvg}
+        <div style="font-size: 10.5px; line-height: 1.35;">
+          <strong>Seguí tu reparación</strong><br/>
+          Escaneá el código para ver el estado del equipo. También sirve para validar este comprobante.
         </div>
       </div>` : ''}
 
       <div class="footer">
         <div>Gracias por confiar en <strong>${company.name || 'nuestro servicio técnico'}</strong></div>
-        ${company.address ? `<div style="margin-top: 2px;">${company.address}</div>` : ''}
-        ${company.phone ? `<div style="margin-top: 2px;">${company.phone}</div>` : ''}
+        ${copyNote ? `<div style="margin-top: 2px;">${copyNote}</div>` : ''}
       </div>
     </body>
   </html>

@@ -33,7 +33,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/currency'
-import { printReceipt } from '@/lib/receipt-utils'
+import { printReceipt, printReceiptWhenReady } from '@/lib/receipt-utils'
 import { buildReprintReceiptData, type StoredSale } from '@/lib/after-sales/sale-receipt'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { cn } from '@/lib/utils'
@@ -193,11 +193,16 @@ export function SourcesBrowser() {
     async function handleReprint(row: SourceRow) {
         setBusyRowId(row.id)
         try {
-            const data = await fetchDetail(row)
-            if (data.type !== 'sale') return
-            printReceipt(buildReprintReceiptData(data.sale), companyInfo)
+            // La ventana se abre en el mismo clic y se completa cuando llega la
+            // venta: abrirla después de cargarla hacía que el navegador la
+            // bloqueara y no se imprimía nada.
+            const printed = await printReceiptWhenReady(
+                fetchDetail(row).then((data) => (data.type === 'sale' ? buildReprintReceiptData(data.sale) : null)),
+                companyInfo,
+            )
+            if (!printed) return
             toast.success('Reimpresión enviada', {
-                description: `${data.sale.code ?? row.label} · marcado como REIMPRESIÓN`,
+                description: `${row.label} · marcado como REIMPRESIÓN`,
             })
         } catch (err) {
             toast.error('No se pudo reimprimir', {
@@ -389,7 +394,7 @@ export function SourcesBrowser() {
                                             <Badge
                                                 variant="outline"
                                                 className={cn(
-                                                    "text-[10px] font-medium h-5 px-1.5",
+                                                    "text-xs font-medium h-5 px-1.5",
                                                     sourceType === 'sale'
                                                         ? "border-violet-200 bg-violet-50/50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-300"
                                                         : "border-blue-200 bg-blue-50/50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300"
@@ -401,7 +406,7 @@ export function SourcesBrowser() {
                                             {row.warrantyExpired === true && (
                                                 <Badge
                                                     variant="outline"
-                                                    className="gap-1 border-amber-300/70 bg-amber-50 text-[10px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 h-5 px-1.5"
+                                                    className="gap-1 border-amber-300/70 bg-amber-50 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 h-5 px-1.5"
                                                 >
                                                     <AlertTriangle className="h-3 w-3" /> Garantía vencida
                                                 </Badge>
@@ -409,13 +414,13 @@ export function SourcesBrowser() {
                                             {row.warrantyExpired === false && sourceType === 'repair' && (
                                                 <Badge
                                                     variant="outline"
-                                                    className="gap-1 border-emerald-300/70 bg-emerald-50 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 h-5 px-1.5"
+                                                    className="gap-1 border-emerald-300/70 bg-emerald-50 text-xs font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 h-5 px-1.5"
                                                 >
                                                     <ShieldCheck className="h-3 w-3" /> En garantía
                                                 </Badge>
                                             )}
                                             {sourceType === 'repair' && row.status && (
-                                                <Badge variant="secondary" className="text-[10px] font-normal capitalize h-5 px-1.5">
+                                                <Badge variant="secondary" className="text-xs font-normal capitalize h-5 px-1.5">
                                                     {row.status}
                                                 </Badge>
                                             )}
@@ -446,14 +451,14 @@ export function SourcesBrowser() {
                                                 {row.items.slice(0, 3).map((it, idx) => (
                                                     <span
                                                         key={it.id || idx}
-                                                        className="inline-flex items-center text-[11px] rounded-md bg-muted/60 px-1.5 py-0.5 text-muted-foreground border border-border/40 font-normal"
+                                                        className="inline-flex items-center text-xs rounded-md bg-muted/60 px-1.5 py-0.5 text-muted-foreground border border-border/40 font-normal"
                                                     >
                                                         {it.quantity > 1 ? `${it.quantity}x ` : ''}
                                                         <span className="max-w-[140px] truncate">{it.name}</span>
                                                     </span>
                                                 ))}
                                                 {row.items.length > 3 && (
-                                                    <span className="text-[10px] text-muted-foreground/80 font-medium">
+                                                    <span className="text-xs text-muted-foreground/80 font-medium">
                                                         +{row.items.length - 3} más
                                                     </span>
                                                 )}
@@ -466,7 +471,7 @@ export function SourcesBrowser() {
                                 <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
                                     {typeof row.amount === 'number' && (
                                         <div className="text-left sm:text-right">
-                                            <span className="block text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">Monto</span>
+                                            <span className="block text-xs uppercase font-semibold tracking-wider text-muted-foreground">Monto</span>
                                             <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(row.amount)}</span>
                                         </div>
                                     )}
