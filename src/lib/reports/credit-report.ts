@@ -12,6 +12,8 @@ export type CreditReportInstallment = {
   amountPaid: number | null
   status: string
   dueDate: string
+  principalComponent?: number | null
+  interestComponent?: number | null
 }
 
 export type CreditReportPayment = {
@@ -95,6 +97,8 @@ export function buildCreditReport({
     return Number.isFinite(createdAt) && createdAt >= from.getTime() && createdAt <= to.getTime()
   })
   const scheduledByCredit = new Map<string, number>()
+  const capitalByCredit = new Map<string, number>()
+  const missingComponents = new Set<string>()
   const remainingByCredit = new Map<string, number>()
   const overdueCreditIds = new Set<string>()
   const overdueCustomerIds = new Set<string>()
@@ -109,6 +113,12 @@ export function buildCreditReport({
     const amount = safeAmount(installment.amount)
     const remaining = remainingInstallment(installment)
     scheduledByCredit.set(installment.creditId, (scheduledByCredit.get(installment.creditId) || 0) + amount)
+    const capital = installment.principalComponent, interest = installment.interestComponent
+    if (capital == null || interest == null || !Number.isFinite(capital) || !Number.isFinite(interest) || capital < 0 || interest < 0 || Math.abs(capital + interest - amount) > 0.01) {
+      missingComponents.add(installment.creditId)
+    } else {
+      capitalByCredit.set(installment.creditId, (capitalByCredit.get(installment.creditId) || 0) + capital)
+    }
     remainingByCredit.set(installment.creditId, (remainingByCredit.get(installment.creditId) || 0) + remaining)
 
     const dueDate = installment.dueDate.slice(0, 10)
@@ -123,7 +133,10 @@ export function buildCreditReport({
     }
   }
 
-  const principalGranted = periodCredits.reduce((sum, credit) => sum + safeAmount(credit.principal), 0)
+  const principalGranted = periodCredits.reduce((sum, credit) => sum + (
+    !missingComponents.has(credit.id) && capitalByCredit.has(credit.id)
+      ? capitalByCredit.get(credit.id)! : safeAmount(credit.principal)
+  ), 0)
   const financedTotal = periodCredits.reduce((sum, credit) => {
     const scheduled = scheduledByCredit.get(credit.id) || 0
     return sum + (scheduled > 0 ? scheduled : safeAmount(credit.principal))

@@ -111,8 +111,8 @@ export function totalFinanciado(credits: CreditHistoryTicketInput['credits']) {
 }
 
 function financiadoDe(credit: CreditHistoryTicketInput['credits'][number]) {
-  if (credit.principal > 0) return credit.principal
-  return (credit.installments ?? []).reduce((s, i) => s + i.amount, 0)
+  if (credit.installments?.length) return credit.installments.reduce((s, i) => s + i.amount, 0)
+  return credit.principal
 }
 
 /**

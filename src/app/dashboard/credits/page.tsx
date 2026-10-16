@@ -22,6 +22,7 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 import { OrganizationModuleGate } from '@/components/admin/OrganizationModuleGate'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { daysUntilCreditDue, creditCalendarDate } from '@/lib/credits/calendar'
+import { reconcileCredit } from '@/lib/credits/financials'
 import { getCreditDisplayInfo, getInstallmentDisplayInfo } from '@/lib/credits/display'
 import { CreditExportModal } from '@/components/dashboard/credits/CreditExportModal'
 
@@ -97,6 +98,7 @@ function CreditsDashboardContent() {
   const [dialogCreditId, setDialogCreditId] = useState<string | null>(null)
   const [dialogInstallmentId, setDialogInstallmentId] = useState<string | null>(null)
   const [dialogInitialAmount, setDialogInitialAmount] = useState<number>(0)
+  const [dialogInitialMethod, setDialogInitialMethod] = useState<PaymentMethod>('cash')
   const [dialogPaymentScope, setDialogPaymentScope] = useState<'installment' | 'credit'>('installment')
 
   // Detail Dialog State
@@ -225,6 +227,7 @@ function CreditsDashboardContent() {
   }, [filteredInstallments, creditById, isInstallmentLate, timeZone])
 
   const openPaymentDialogForInstallment = (installment: InstallmentRow, scope: 'installment' | 'credit' = 'installment') => {
+    setDialogInitialMethod('cash')
     const outstanding = getInstallmentOutstanding(installment)
     setDialogCreditId(installment.credit_id)
     setDialogInstallmentId(installment.id)
@@ -286,12 +289,11 @@ function CreditsDashboardContent() {
 
   // Pago directo desde el bloque de próximas cuotas (con método/monto elegidos inline)
   const handleQuickPayInstallment = async (installmentId: string, method: string, amount: number) => {
-    const result = await markInstallmentPaid(installmentId, method, amount)
-    if (result.success === false) {
-      console.error('No se pudo registrar el pago:', result.error)
-      return { success: false, error: result.error }
-    }
-    return { success: true }
+    const installment = installments.find(row => row.id === installmentId)
+    if (!installment) return { success: false, error: 'La cuota ya no está disponible. Actualizá la cartera.' }
+    openPaymentDialogForInstallment(installment)
+    setDialogInitialMethod(method as PaymentMethod)
+    setDialogInitialAmount(amount)
   }
 
   const handleViewDetail = (creditId: string) => {
@@ -391,6 +393,11 @@ function CreditsDashboardContent() {
   return (
     <RouteGuard route="/dashboard/credits" redirectTo="/dashboard">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {credits.some(credit => reconcileCredit(credit, installments.filter(row => row.credit_id === credit.id)).needsReview) && (
+        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          Hay créditos que requieren conciliación: su total o cantidad de cuotas no coincide con la cabecera. Los saldos se calculan desde las cuotas y los pagos registrados; revisá el contrato antes de corregir la deuda.
+        </div>
+      )}
       {/* Header con Título y Acciones Rápidas */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pb-2 border-b border-border/40">
         <div className="flex items-center gap-3">
@@ -1124,6 +1131,7 @@ function CreditsDashboardContent() {
         onOpenChange={handlePaymentDialogOpenChange}
         onConfirm={handleConfirmPayment}
         initialAmount={dialogInitialAmount}
+        initialMethod={dialogInitialMethod}
         maxPaymentAmount={
           dialogPaymentScope === 'credit' && selectedDialogCreditId
             ? getCreditOutstanding(selectedDialogCreditId)
@@ -1142,8 +1150,8 @@ function CreditsDashboardContent() {
           interestRate: creditById[selectedDialogCreditId]?.interest_rate || 0,
           termMonths: creditById[selectedDialogCreditId]?.term_months || 0,
           remainingBalance: remainingByCredit[selectedDialogCreditId] || 0,
-          totalCreditAmount: creditById[selectedDialogCreditId]?.principal || 0,
-          totalInstallments: creditById[selectedDialogCreditId]?.term_months || installments.filter(i => i.credit_id === selectedDialogCreditId).length,
+          totalCreditAmount: installments.filter(i => i.credit_id === selectedDialogCreditId).reduce((sum, row) => sum + Number(row.amount), 0),
+          totalInstallments: installments.filter(i => i.credit_id === selectedDialogCreditId).length,
           paidInstallmentsCount: installments.filter(i => i.credit_id === selectedDialogCreditId && i.status === 'paid').length,
           pendingInstallmentsCount: installments.filter(i => i.credit_id === selectedDialogCreditId && i.status !== 'paid').length,
           nextInstallmentNumber: selectedDialogInstallment?.installment_number,

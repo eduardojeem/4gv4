@@ -32,7 +32,7 @@ export function CreditCard({ credit }: CreditCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   
   const installmentViews = credit.installments
-    .map((installment) => ({ installment, view: getCustomerInstallmentView(installment) }))
+    .map((installment) => ({ installment, view: getCustomerInstallmentView(installment, new Date(), credit.timeZone) }))
     .sort((a, b) => a.installment.installment_number - b.installment.installment_number)
   const paidCount = installmentViews.filter(({ view }) => view.status === 'paid').length
   const totalAmount = credit.installments.reduce((sum, i) => sum + i.amount, 0)

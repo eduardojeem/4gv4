@@ -8,6 +8,8 @@ export async function loadCustomerCreditPortal(userId: string, organizationSlug:
   const admin = createAdminSupabase()
   const organization = await resolvePublicOrganizationBySlug(organizationSlug, admin)
   if (!organization) return null
+  const { data: settings, error: settingsError } = await admin.from('organization_settings').select('timezone').eq('organization_id', organization.id).maybeSingle()
+  if (settingsError) throw settingsError
 
   const { data: customerRows, error: customerError } = await admin
     .from('customers')
@@ -42,6 +44,7 @@ export async function loadCustomerCreditPortal(userId: string, organizationSlug:
   }
 
   const credits: CustomerCreditItem[] = (creditRows || []).map((credit) => ({
+    timeZone: settings?.timezone || 'America/Asuncion',
     id: credit.id,
     principal: Number(credit.principal || 0),
     term_months: Number(credit.term_months || 0),
