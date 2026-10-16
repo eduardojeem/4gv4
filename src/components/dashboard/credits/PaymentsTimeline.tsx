@@ -6,10 +6,14 @@ import { Search, CheckCircle, Receipt, Printer } from 'lucide-react'
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
-import { createCreditPaymentReceiptPdf, getCreditCurrentBalance } from '@/lib/credits/payment-receipt'
+import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 import { printPdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { toast } from 'sonner'
+import { createSnapshotReceiptPdf } from '@/lib/credits/receipt-snapshot'
+import { collectionResultSchema } from '@/lib/credits/collection-contract'
+import { historicalCollectionReceipt } from '@/lib/credits/historical-receipt'
+import { createGlobalPaymentReceiptPdf } from '@/lib/credits/global-payment-receipt'
 
 const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
   cash:     { label: 'Efectivo',     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   dot: 'bg-green-500' },
@@ -84,42 +88,25 @@ export function PaymentsTimeline({
 
   const printPaymentReceipt = async (payment: PaymentRow) => {
     try {
-    const credit = creditById[payment.credit_id]
-    const installment = installments.find((row) => row.id === payment.installment_id)
-    const creditInstallments = installments.filter((row) => row.credit_id === payment.credit_id)
-    const paidCount = creditInstallments.filter((row) => row.status === 'paid').length
-    const pendingCount = creditInstallments.filter((row) => row.status !== 'paid').length
-    const nextPending = creditInstallments.find((row) => row.status !== 'paid')
-    const display = getCreditDisplayInfo(credit, installments, sales, saleItems)
-
-    const result = await createCreditPaymentReceiptPdf({
-      paymentId: payment.id,
-      paymentDate: payment.created_at,
-      paymentAmount: Number(payment.amount || 0),
-      paymentMethod: payment.payment_method,
-      notes: payment.notes,
-      customerName: credit?.customer_name || 'Cliente',
-      customerId: credit?.customer_id,
-      customerCode: credit?.customer_code,
-      creditId: payment.credit_id,
-      creditCode: display.creditCode,
-      creditTypeLabel: display.creditTypeLabel,
-      originLabel: display.originLabel,
-      creditLabel: display.creditLabel,
-      saleCode: display.saleCode,
-      productSummary: display.productSummary,
-      totalCreditAmount: credit?.principal,
-      totalInstallments: credit?.term_months || creditInstallments.length,
-      paidInstallmentsCount: paidCount,
-      pendingInstallmentsCount: pendingCount,
-      installmentNumber: installment?.installment_number,
-      installmentDueDate: installment?.due_date,
-      installmentAmount: installment?.amount,
-      currentCreditBalance: getCreditCurrentBalance(installments, payment.credit_id),
-      nextDueDate: nextPending?.due_date,
-      nextDueAmount: nextPending?.amount,
-      ...issuer,
-    }, { format })
+      const response = await fetch('/api/credits/receipts?paymentId=' + encodeURIComponent(payment.id), { cache: 'no-store' })
+      const body = await response.json()
+      if (!response.ok || !body.success) throw new Error(body.error || 'No se pudo recuperar el comprobante guardado.')
+      const credit = creditById[payment.credit_id]
+      let result
+      if (body.collection) {
+        const collection = collectionResultSchema.parse(body.collection)
+        result = collection.receipt
+          ? await createSnapshotReceiptPdf(collection.receipt, format)
+          : await createGlobalPaymentReceiptPdf({ ...historicalCollectionReceipt(collection, credit?.customer_name || 'Cliente'), ...issuer }, { format })
+      } else {
+        result = await createCreditPaymentReceiptPdf({
+          paymentId: payment.id, receiptNumber: 'HIST-' + payment.id.slice(0, 10).toUpperCase(),
+          paymentDate: payment.created_at, paymentAmount: Number(payment.amount), paymentMethod: payment.payment_method,
+          notes: payment.notes, customerName: credit?.customer_name || 'Cliente', creditId: payment.credit_id,
+          historicalNote: 'Constancia de pago histórico. No se conserva el comprobante original ni el saldo a esa fecha. Datos de identificación actuales.',
+          ...issuer,
+        }, { format })
+      }
 
       await printPdfDocument(result.doc)
     } catch (error) {

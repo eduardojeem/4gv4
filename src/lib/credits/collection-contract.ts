@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { collectPaymentRequestSchema } from '@/lib/customers/collect-payment'
+import { receiptSnapshotSchema } from './receipt-snapshot'
 
 export const collectionRequestSchema = collectPaymentRequestSchema.safeExtend({
   amount: z.number().finite().positive().max(1_000_000_000).multipleOf(0.01),
@@ -22,10 +23,12 @@ export const collectionResultSchema = z.object({
   paymentMethod: z.enum(['cash', 'card', 'transfer']).optional(),
   reference: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  receipt: receiptSnapshotSchema.optional(),
   creditBalances: z.record(z.string(), z.object({
     remainingBalance: money, paidInstallments: z.number().int().nonnegative(),
     pendingInstallments: z.number().int().nonnegative(),
     nextDueDate: z.string().nullable(), nextDueAmount: money.nullable(),
+    totalFinanced: money.optional(), totalPaid: money.optional(),
   })).optional(),
   allocations: z.array(z.object({
     debtId: z.string().uuid(), type: z.enum(['repair', 'installment']),

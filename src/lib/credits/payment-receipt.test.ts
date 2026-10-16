@@ -122,6 +122,7 @@ describe('credit payment receipt helpers', () => {
       paymentAmount: 250000,
       currentCreditBalance: 1000000,
       totalCreditAmount: 1500000,
+      totalPaidAmount: 500000,
       pendingInstallmentsCount: 4,
       nextDueDate: '2026-10-01',
       nextDueAmount: 250000,

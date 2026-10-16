@@ -33,6 +33,6 @@ describe('customer credit portal security boundary', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/lib/credits/customer-portal.server.ts'), 'utf8')
     expect(source).toContain('resolvePublicOrganizationBySlug(organizationSlug, admin)')
     expect(source).toContain(".eq('profile_id', userId)")
-    expect(source.match(/\.eq\('organization_id', organization\.id\)/g)).toHaveLength(2)
+    expect(source.match(/\.eq\('organization_id', organization\.id\)/g)).toHaveLength(3)
   })
 })

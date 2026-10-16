@@ -25,6 +25,8 @@ type InstallmentRow = {
   amount_paid: number | null
   status: string | null
   due_date: string
+  principal_component: number | null
+  interest_component: number | null
 }
 
 type PaymentRow = {
@@ -107,7 +109,7 @@ export const GET = withTenantAuth({ permission: 'analytics.read', module: 'credi
       const [batchInstallments, batchPayments] = await Promise.all([
         fetchAllPages<InstallmentRow>((from, to) => supabase
           .from('credit_installments')
-          .select('id, credit_id, amount, amount_paid, status, due_date')
+          .select('id, credit_id, amount, amount_paid, status, due_date, principal_component, interest_component')
           .in('credit_id', creditIdBatch)
           .order('id', { ascending: true })
           .range(from, to)),
@@ -138,6 +140,8 @@ export const GET = withTenantAuth({ permission: 'analytics.read', module: 'credi
         amountPaid: installment.amount_paid === null ? null : Number(installment.amount_paid || 0),
         status: String(installment.status || 'pending'),
         dueDate: String(installment.due_date || ''),
+        principalComponent: installment.principal_component == null ? null : Number(installment.principal_component),
+        interestComponent: installment.interest_component == null ? null : Number(installment.interest_component),
       })),
       payments: payments.map((payment) => ({
         creditId: String(payment.credit_id),

@@ -40,6 +40,7 @@ import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationCont
 import { useAuth } from '@/hooks/use-auth'
 import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt, CollectionAttemptError } from '@/lib/credits/collection-attempt'
 import { createGlobalPaymentReceiptPdf } from '@/lib/credits/global-payment-receipt'
+import { createSnapshotReceiptPdf, type ReceiptSnapshot } from '@/lib/credits/receipt-snapshot'
 import { printPdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { CreditPaperPicker } from '@/components/dashboard/credits/CreditPaperPicker'
@@ -99,6 +100,7 @@ function newIdempotencyKey() {
 }
 
 interface PaymentResult {
+  receipt?: ReceiptSnapshot
   receiptNumber: string
   totalAmount: number
   appliedAllocations: Array<{
@@ -413,6 +415,7 @@ export function CustomerGlobalPaymentModal({
       const text = (value: unknown) => typeof value === 'string' ? value : null
       const coveredIds = new Set(collection.allocations.filter(row => row.appliedAmount > 0).map(row => row.debtId))
       setPaymentResult({
+        receipt: collection.receipt,
         receiptNumber: collection.receiptNumber,
         totalAmount: collection.appliedAmount + collection.excessToStoreCredit,
         appliedAllocations: collection.allocations.map(row => ({
@@ -449,7 +452,7 @@ export function CustomerGlobalPaymentModal({
     if (!paymentResult || !customer || printing) return
     setPrinting(true)
     try {
-      const { doc } = await createGlobalPaymentReceiptPdf({
+      const { doc } = paymentResult.receipt ? await createSnapshotReceiptPdf(paymentResult.receipt, paperFormat) : await createGlobalPaymentReceiptPdf({
         ...paymentResult,
         paidAt: paymentResult.timestamp,
         allocations: paymentResult.appliedAllocations,

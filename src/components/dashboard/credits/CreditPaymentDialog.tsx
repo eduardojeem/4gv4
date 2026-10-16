@@ -24,6 +24,7 @@ import { formatCurrency as formatCurrencyBase, formatThousands, parseThousands, 
 const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
+import { createSnapshotReceiptPdf } from '@/lib/credits/receipt-snapshot'
 import type { CollectionResult } from '@/lib/credits/collection-contract'
 import { downloadPdfDocument, printPdfDocument, sharePdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
@@ -41,6 +42,7 @@ interface CreditPaymentDialogProps {
     onConfirm: (method: PaymentMethod, amount: number, reference?: string, notes?: string, recover?: boolean) => Promise<PaymentConfirmResult>
     hasPendingAttempt?: boolean
     initialAmount?: number
+    initialMethod?: PaymentMethod
     maxPaymentAmount?: number
     allowFullDebtPayment?: boolean
     totalDebtAmount?: number
@@ -82,6 +84,7 @@ function CreditPaymentDialogContent({
     onOpenChange,
     onConfirm,
     initialAmount,
+    initialMethod = 'cash',
     maxPaymentAmount,
     allowFullDebtPayment = false,
     totalDebtAmount,
@@ -89,7 +92,7 @@ function CreditPaymentDialogContent({
     hasPendingAttempt = false,
 }: CreditPaymentDialogProps) {
     const { format, changeFormat, issuer } = useCreditPrinting()
-    const [method, setMethod] = useState<PaymentMethod>('cash')
+    const [method, setMethod] = useState<PaymentMethod>(initialMethod)
     const [amount, setAmount] = useState<string>(() => initialAmount === undefined ? '' : String(initialAmount))
     const [cashTendered, setCashTendered] = useState<string>('')
     const [reference, setReference] = useState<string>('')
@@ -135,6 +138,10 @@ function CreditPaymentDialogContent({
             setError(`El monto no puede exceder ${formatCurrency(effectiveMaxAmount)}`)
             return
         }
+        if (!needsRecovery && method !== 'cash' && !reference.trim()) {
+            setError('Ingresá el comprobante de la transferencia o cupón de la tarjeta.')
+            return
+        }
 
         setSubmitting(true)
         setError('')
@@ -176,10 +183,14 @@ function CreditPaymentDialogContent({
 
     const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
     const canPayFullDebt = allowFullDebtPayment && typeof totalDebtAmount === 'number' && totalDebtAmount > 0
-    const isValid = !!amount && !error && parseFloat(amount) > 0
+    const isValid = !!amount && !error && parseFloat(amount) > 0 && (method === 'cash' || !!reference.trim())
 
     const generateReceiptDoc = async () => {
         if (!paymentDone) return null
+        if (paymentDone.collection?.receipt) {
+            const result = await createSnapshotReceiptPdf(paymentDone.collection.receipt, format)
+            return { doc: result.doc, receiptNum: result.receiptNumber }
+        }
 
         // Los conteos llegan por props, calculados sobre el estado que tenia la
         // pagina antes de este cobro. Imprimirlos tal cual le entrega al cliente
@@ -207,7 +218,8 @@ function CreditPaymentDialogContent({
             creditLabel: creditInfo?.creditLabel,
             saleCode: creditInfo?.saleCode,
             productSummary: creditInfo?.productSummary,
-            totalCreditAmount: creditInfo?.totalCreditAmount ?? creditInfo?.principal,
+            totalCreditAmount: persistedBalance?.totalFinanced ?? creditInfo?.totalCreditAmount,
+            totalPaidAmount: persistedBalance?.totalPaid,
             totalInstallments: creditInfo?.totalInstallments ?? creditInfo?.termMonths,
             paidInstallmentsCount: persistedBalance?.paidInstallments,
             pendingInstallmentsCount: persistedBalance?.pendingInstallments,
@@ -483,7 +495,7 @@ function CreditPaymentDialogContent({
                                         <Label htmlFor="method" className="text-sm font-medium">
                                             Método de Pago *
                                         </Label>
-                                        <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
+                                        <Select value={method} onValueChange={(v) => { setMethod(v as PaymentMethod); setError('') }}>
                                             <SelectTrigger id="method" className="min-h-11 w-full text-base md:text-sm">
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -608,10 +620,9 @@ function CreditPaymentDialogContent({
 
                                 <div className="space-y-2">
                                     <Label htmlFor="reference" className="text-sm font-medium">
-                                        Número de Referencia
-                                        <span className="text-muted-foreground font-normal ml-1">(opcional)</span>
+                                        {method === 'card' ? 'Número de cupón *' : method === 'transfer' ? 'Número de comprobante *' : 'Número de Referencia (opcional)'}
                                     </Label>
-                                    <Input id="reference" className="min-h-11 font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => setReference(e.target.value)} maxLength={50} />
+                                    <Input id="reference" required={method !== 'cash'} className="min-h-11 font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => { setReference(e.target.value); setError('') }} maxLength={120} />
                                     <p className="text-xs text-muted-foreground">Número de transacción, comprobante o referencia del pago</p>
                                 </div>
 

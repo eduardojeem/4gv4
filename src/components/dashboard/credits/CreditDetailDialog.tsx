@@ -42,6 +42,7 @@ import { customerTypeLabel } from '@/lib/i18n/labels'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { canAmendCredit } from '@/lib/credits/amendment-contract'
 import { CreditAmendmentPanel } from './CreditAmendmentPanel'
+import { reconcileCredit } from '@/lib/credits/financials'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface InstallmentItem {
@@ -260,8 +261,8 @@ export function CreditDetailDialog({
 
     const totalAmount = paidAmount + remainingBalance
     const progressPct = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0
-    const endDate = new Date(credit.start_date)
-    endDate.setMonth(endDate.getMonth() + credit.term_months)
+    const plan = reconcileCredit(credit, installments)
+    const endDateLabel = plan.lastDue?.toLocaleDateString(getDisplayLocale()) ?? 'Sin vencimientos registrados'
 
     const initials = credit.customer_name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
     const gradient = avatarGradient(credit.customer_name)
@@ -293,9 +294,9 @@ export function CreditDetailDialog({
         tsv += row('Estado', STATUS_LABEL[credit.status] ?? credit.status)
         tsv += row('Principal', credit.principal)
         tsv += row('Tasa', `${credit.interest_rate}%`)
-        tsv += row('Plazo', `${credit.term_months} meses`)
+        tsv += row('Plazo', `${plan.count} cuotas`)
         tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale()))
-        tsv += row('Fin estimado', endDate.toLocaleDateString(getDisplayLocale()))
+        tsv += row('Último vencimiento', endDateLabel)
         tsv += row('Pagado', paidAmount)
         tsv += row('Pendiente', remainingBalance)
         tsv += row('Progreso', `${progressPct}%`)
@@ -339,9 +340,9 @@ export function CreditDetailDialog({
             ['ID', formatCreditId(credit.id)],['Cliente', credit.customer_name],
             ['Estado', STATUS_LABEL[credit.status] ?? credit.status],
             ['Principal', formatCurrency(credit.principal)],['Tasa', `${credit.interest_rate}%`],
-            ['Plazo', `${credit.term_months} meses`],
+            ['Plazo', `${plan.count} cuotas`],
             ['Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale())],
-            ['Fin estimado', endDate.toLocaleDateString(getDisplayLocale())],
+            ['Último vencimiento', endDateLabel],
             ['Pagado', formatCurrency(paidAmount)],['Pendiente', formatCurrency(remainingBalance)],
             ['Progreso', `${progressPct}%`],
         ], theme:'grid', headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
@@ -461,6 +462,7 @@ export function CreditDetailDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="w-[calc(100vw-1rem)] max-w-[96rem] max-h-[92vh] overflow-y-auto p-0 gap-0 sm:w-[calc(100vw-2rem)] sm:max-w-[96rem]">
+                {plan.needsReview && <p role="alert" className="m-4 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">Requiere conciliación. Cabecera: {formatCurrency(credit.principal)} / {credit.term_months} cuotas. Plan registrado: {formatCurrency(plan.scheduled)} / {plan.count} cuotas. Los pagos y la deuda no se modificaron.</p>}
 
                 {/* ── Hero header ── */}
                 <div className="relative px-6 pt-6 pb-5 border-b border-border/60 bg-gradient-to-br from-blue-50/60 to-slate-50/40 dark:from-blue-900/10 dark:to-slate-800/20">
@@ -564,7 +566,7 @@ export function CreditDetailDialog({
                         {[
                             { label: 'Principal', value: formatCurrency(credit.principal), Icon: DollarSign, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' },
                             { label: 'Tasa de interés', value: `${credit.interest_rate}%`, Icon: Percent, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' },
-                            { label: 'Plazo', value: `${credit.term_months} m.`, Icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
+                            { label: 'Plan', value: `${plan.count} cuotas`, Icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
                             { label: 'Progreso', value: `${progressPct}%`, Icon: TrendingUp, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' },
                         ].map(({ label, value, Icon, color, bg }) => (
                             <div key={label} className={`rounded-xl border p-3 ${bg}`}>
@@ -642,8 +644,8 @@ export function CreditDetailDialog({
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
                             <Clock className="h-4 w-4 text-orange-600 shrink-0" />
                             <div>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Fin estimado</p>
-                                <p className="text-sm font-semibold">{endDate.toLocaleDateString(getDisplayLocale(), { day:'2-digit', month:'long', year:'numeric' })}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Último vencimiento</p>
+                                <p className="text-sm font-semibold">{endDateLabel}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
