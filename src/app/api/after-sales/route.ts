@@ -80,7 +80,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
          repairs:repairs!repair_id(ticket_number, device_brand, device_model, warranty_type, warranty_months, warranty_expires_at, problem_description, delivered_at, final_cost),
          sales:sales!sale_id(code, total_amount, created_at),
          products:products!product_id(name, sku, image_url),
-         customers:customers!customer_id(name, phone)`,
+         customers:customers!customer_id(name, phone, email)`,
         { count: 'exact' }
       )
       .eq('organization_id', organization.id)
@@ -100,7 +100,25 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (search) {
       const sanitized = search.replace(/[%_,()]/g, '')
       if (sanitized) {
-        query = query.or(`case_number.ilike.%${sanitized}%,reason.ilike.%${sanitized}%,notes.ilike.%${sanitized}%`)
+        // También por cliente, código de venta y ticket de reparación: antes solo
+        // se buscaba en número, motivo y notas, y quien llegaba con el ticket o
+        // el nombre del cliente no encontraba el caso.
+        const term = `%${sanitized}%`
+        const [customerHits, saleHits, repairHits] = await Promise.all([
+          supabase.from('customers').select('id').eq('organization_id', organization.id).ilike('name', term).limit(50),
+          supabase.from('sales').select('id').eq('organization_id', organization.id).ilike('code', term).limit(50),
+          supabase.from('repairs').select('id').eq('organization_id', organization.id).ilike('ticket_number', term).limit(50),
+        ])
+        const ids = (rows: { id: string }[] | null) => (rows ?? []).map((row) => row.id).join(',')
+        const filters = [
+          `case_number.ilike.${term}`,
+          `reason.ilike.${term}`,
+          `notes.ilike.${term}`,
+        ]
+        if (ids(customerHits.data)) filters.push(`customer_id.in.(${ids(customerHits.data)})`)
+        if (ids(saleHits.data)) filters.push(`sale_id.in.(${ids(saleHits.data)})`)
+        if (ids(repairHits.data)) filters.push(`repair_id.in.(${ids(repairHits.data)})`)
+        query = query.or(filters.join(','))
       }
     }
 
@@ -136,6 +154,21 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       replacementById = new Map((replacements ?? []).map((row) => [row.id, { name: row.name, image_url: row.image_url }]))
     }
 
+    // La línea de venta reclamada: con su precio se topa el reintegro por lo que
+    // valen las unidades devueltas y no por el total de toda la venta.
+    const saleItemIds = Array.from(
+      new Set(rows.map((row) => row.sale_item_id).filter((value): value is string => Boolean(value)))
+    )
+    let saleItemById = new Map<string, { quantity: number; subtotal: number }>()
+    if (saleItemIds.length > 0) {
+      const { data: saleItems } = await supabase
+        .from('sale_items')
+        .select('id, quantity, subtotal')
+        .in('id', saleItemIds)
+
+      saleItemById = new Map((saleItems ?? []).map((row) => [row.id, { quantity: Number(row.quantity) || 0, subtotal: Number(row.subtotal) || 0 }]))
+    }
+
     let generatedById = new Map<string, { ticket_number: string | null; status: string | null }>()
     if (generatedIds.length > 0) {
       const { data: generated } = await supabase
@@ -153,6 +186,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       ...row,
       generated_repair: row.generated_repair_id ? generatedById.get(row.generated_repair_id) ?? null : null,
       replacement_product: row.replacement_product_id ? replacementById.get(row.replacement_product_id) ?? null : null,
+      sale_item: row.sale_item_id ? saleItemById.get(row.sale_item_id) ?? null : null,
     }))
 
     return NextResponse.json({
@@ -251,6 +285,47 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
           },
           { status: 409 }
         )
+      }
+    }
+
+    // Lo ya reclamado de la línea, sumando los casos que no se rechazaron ni
+    // cancelaron. Antes solo se impedían dos casos abiertos a la vez: con la
+    // devolución anterior ya completada se podía abrir otra por la misma
+    // cantidad, y reintegrar dinero y sumar stock más de una vez.
+    if (input.source_type === 'sale' && input.sale_id && input.sale_item_id) {
+      const { data: saleItem, error: itemError } = await supabase
+        .from('sale_items')
+        .select('quantity')
+        .eq('id', input.sale_item_id)
+        .eq('sale_id', input.sale_id)
+        .maybeSingle()
+
+      if (itemError) throw itemError
+      if (!saleItem) {
+        return NextResponse.json({ success: false, error: 'El producto no pertenece a esa venta.' }, { status: 404 })
+      }
+
+      const { data: previousCases, error: previousError } = await supabase
+        .from('after_sales_cases')
+        .select('quantity, status')
+        .eq('organization_id', organization.id)
+        .eq('sale_item_id', input.sale_item_id)
+
+      if (previousError) throw previousError
+      const closedWithoutEffect = [...getAfterSalesStatusAliases('rejected'), ...getAfterSalesStatusAliases('cancelled')]
+      const alreadyClaimed = (previousCases ?? [])
+        .filter((row) => !closedWithoutEffect.includes(String(row.status)))
+        .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)
+      const sold = Number(saleItem.quantity) || 0
+
+      if (alreadyClaimed + input.quantity > sold) {
+        const left = Math.max(0, sold - alreadyClaimed)
+        return NextResponse.json({
+          success: false,
+          error: left === 0
+            ? `Ya se reclamaron las ${sold} unidades vendidas de este producto.`
+            : `Ya se reclamaron ${alreadyClaimed} de ${sold} unidades: quedan ${left} por reclamar.`,
+        }, { status: 409 })
       }
     }
 

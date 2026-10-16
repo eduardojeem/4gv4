@@ -100,7 +100,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('after_sales_cases')
-      .select('status, request_type, case_number, repair_id, sale_id, customer_id, product_id, quantity, refund_amount, replacement_product_id, replacement_quantity, generated_repair_id, notes')
+      .select('status, request_type, case_number, repair_id, sale_id, sale_item_id, customer_id, product_id, quantity, refund_amount, replacement_product_id, replacement_quantity, generated_repair_id, notes')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -143,10 +143,37 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
       }
     }
 
-    if ('notes' in validation.data) {
-      patch.notes = nextStatus === 'rejected'
-        ? [current.notes?.trim(), `Motivo de rechazo: ${validation.data.notes?.trim()}`].filter(Boolean).join('\n\n')
-        : validation.data.notes || null
+    // Las notas se suman, no se reemplazan: completar un caso con una nota de
+    // resolución borraba lo que se había anotado al abrirlo.
+    if ('notes' in validation.data && validation.data.notes?.trim()) {
+      const prefix = nextStatus === 'rejected'
+        ? 'Motivo de rechazo: '
+        : nextStatus === 'completed'
+          ? 'Resolución: '
+          : nextStatus === 'cancelled'
+            ? 'Cancelación: '
+            : ''
+      patch.notes = [current.notes?.trim(), `${prefix}${validation.data.notes.trim()}`].filter(Boolean).join('\n\n')
+    }
+
+    // El reintegro no puede superar lo que valen las unidades reclamadas.
+    const requestedRefund = Number(validation.data.refund_amount ?? 0)
+    if (nextStatus === 'completed' && requestedRefund > 0 && current.sale_item_id) {
+      const { data: saleItem } = await supabase
+        .from('sale_items')
+        .select('quantity, subtotal')
+        .eq('id', current.sale_item_id)
+        .maybeSingle()
+      const soldQuantity = Number(saleItem?.quantity) || 0
+      if (saleItem && soldQuantity > 0) {
+        const cap = (Number(saleItem.subtotal) / soldQuantity) * (Number(current.quantity) || 1)
+        if (requestedRefund > cap + 0.005) {
+          return NextResponse.json({
+            success: false,
+            error: 'El reintegro supera lo que valen las unidades reclamadas.',
+          }, { status: 400 })
+        }
+      }
     }
     if ('refund_amount' in validation.data) patch.refund_amount = validation.data.refund_amount ?? null
     if ('refund_method' in validation.data) patch.refund_method = validation.data.refund_method ?? null
