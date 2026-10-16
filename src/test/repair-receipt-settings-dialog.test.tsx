@@ -101,7 +101,7 @@ describe('el diálogo del comprobante', () => {
     render(<RepairReceiptSettingsDialog open onOpenChange={onOpenChange} />)
     await waitFor(() => expect(screen.getByText('Configuración sincronizada')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('switch', { name: /Código de verificación/ }))
+    fireEvent.click(screen.getByRole('switch', { name: /Código QR de seguimiento/ }))
     expect(screen.getByText('1 cambio pendiente de guardar')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Guardar configuración/ }))
 
@@ -119,5 +119,35 @@ describe('el diálogo del comprobante', () => {
     rerender(<RepairReceiptSettingsDialog open={false} onOpenChange={() => {}} />)
     await new Promise((r) => setTimeout(r, 20))
     expect(fetchMock.mock.calls.length).toBe(pedidos)
+  })
+
+  it('muestra una vista previa en vivo con los datos de la empresa', async () => {
+    servidor(true)
+    render(<RepairReceiptSettingsDialog open onOpenChange={() => {}} company={{ name: 'Taller Uno', phone: '021 111' }} />)
+    await waitFor(() => expect(screen.getByText('Configuración sincronizada')).toBeInTheDocument())
+
+    const vista = screen.getByTitle('Vista previa del comprobante') as HTMLIFrameElement
+    expect(vista.getAttribute('srcdoc')).toContain('Taller Uno')
+    expect(vista.getAttribute('srcdoc')).toContain('aria-label="QR de seguimiento"')
+    // Sin scripts: el HTML del comprobante pide imprimir al cargar.
+    expect(vista.getAttribute('sandbox')).not.toContain('allow-scripts')
+
+    fireEvent.click(screen.getByRole('switch', { name: /Código QR de seguimiento/ }))
+    expect(vista.getAttribute('srcdoc')).not.toContain('aria-label="QR de seguimiento"')
+  })
+
+  it('los días de abandono se pueden borrar para reescribir', async () => {
+    servidor(true)
+    render(<RepairReceiptSettingsDialog open onOpenChange={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Configuración sincronizada')).toBeInTheDocument())
+    abrirPestana(/Términos/)
+
+    const dias = await screen.findByLabelText(/Días para considerar abandonado/)
+    fireEvent.change(dias, { target: { value: '' } })
+    expect(dias).toHaveValue(null)
+    fireEvent.blur(dias)
+    expect(dias).toHaveValue(90)
+    fireEvent.change(dias, { target: { value: '30' } })
+    expect(screen.getByText(/Pasados 30 días/)).toBeInTheDocument()
   })
 })

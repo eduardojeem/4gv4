@@ -19,13 +19,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
-import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
+import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { WarrantyBadge } from './WarrantyBadge'
-import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
+import { printRepairReceipt, printRepairReceiptWhenReady, RepairPrintPayload } from '@/lib/repair-receipt'
+import { buildRepairPrintPayload, fetchRepairVerificationHash } from '@/lib/repairs/print-payload'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
@@ -37,13 +38,6 @@ interface RepairPrintCompanyInfo {
   address: string
   email: string
   logo?: string
-}
-
-type RepairCustomerDetails = Repair['customer'] & {
-  address?: string
-  city?: string
-  country?: string
-  document?: string
 }
 
 interface RepairRowProps {
@@ -72,7 +66,6 @@ export const RepairRow = memo<RepairRowProps>(
     const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
     const resolvedCompanyInfo = companyInfo || DEFAULT_COMPANY_INFO
-    const customerDetails = repair.customer as RepairCustomerDetails
     
     // Safely handle date formatting with validation
     const timeAgo = (() => {
@@ -110,42 +103,16 @@ export const RepairRow = memo<RepairRowProps>(
     })
     const pendingAmount = financial.balance ?? 0
 
-    const getPrintPayload = (): RepairPrintPayload => {
-      return {
-        ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
-        date: new Date(repair.createdAt),
-        priority: repair.priority,
-        urgency: repair.urgency,
-        customer: {
-          id: repair.customer.id,
-          name: repair.customer.name,
-          customerCode: repair.customer.customerCode,
-          phone: repair.customer.phone,
-          email: repair.customer.email,
-          address: customerDetails.address,
-          city: customerDetails.city,
-          country: customerDetails.country,
-          document: customerDetails.document,
-        },
-        devices: [{
-          typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
-          brand: repair.brand,
-          model: repair.model,
-          issue: repair.issue,
-          description: repair.description,
-          technician: repair.technician?.name || 'Sin asignar',
-          estimatedCost: repair.estimatedCost,
-          ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
-        }],
-        company: {
-          name: resolvedCompanyInfo.name,
-          phone: resolvedCompanyInfo.phone,
-          address: resolvedCompanyInfo.address,
-          email: resolvedCompanyInfo.email,
-          logo: resolvedCompanyInfo.logo,
-        }
-      }
-    }
+    // El mismo armado que el detalle: antes la fila dejaba afuera la garantía de
+    // la orden, lo pagado, el IMEI y el QR.
+    const getPrintPayload = (verificationHash?: string): RepairPrintPayload =>
+      buildRepairPrintPayload(repair, {
+        name: resolvedCompanyInfo.name,
+        phone: resolvedCompanyInfo.phone,
+        address: resolvedCompanyInfo.address,
+        email: resolvedCompanyInfo.email,
+        logo: resolvedCompanyInfo.logo,
+      }, verificationHash)
 
     return (
       <TableRow
@@ -297,7 +264,10 @@ export const RepairRow = memo<RepairRowProps>(
                 Comprobantes
               </DropdownMenuLabel>
               <DropdownMenuItem
-                onClick={() => printRepairReceipt('customer', getPrintPayload())}
+                onClick={() => void printRepairReceiptWhenReady(
+                  'customer',
+                  fetchRepairVerificationHash(repair).then((hash) => getPrintPayload(hash))
+                )}
                 className="dark:hover:bg-muted/50"
               >
                 <Printer className="mr-2 h-4 w-4" />
