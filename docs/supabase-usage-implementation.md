@@ -43,5 +43,6 @@ La serie mensual admite hasta 400 días y el POS hasta 20 años, con error expl�
 - Fixtures SQL de Inicio y clientes aprobados con más de 1.000 ventas, sucursales no asignadas/inactivas/ajenas, registros antiguos sin sucursal y límites de calendario. La RPC del POS se ejecuta en PGlite dentro de las pruebas anteriores.
 - TypeScript sin emisión y ESLint de los archivos cambiados aprobados.
 - Compilación de producción `next build --webpack`: código de salida 0; 283 páginas estáticas generadas. Se ejecutó con la configuración existente del proyecto, sin publicar el resultado.
+- Integrado en `C:\proyecto\mitiendapy` mediante avance directo al commit `fde14956`. Se conservaron los SHA-256 de los 32 archivos previamente pendientes; 16 pruebas de caché, Inicio y POS volvieron a pasar desde ese proyecto principal.
 
 El detalle de devoluciones filtra sus fuentes antes de devolver los casos, usando el patrón documentado de [filtros OR sobre recursos embebidos de PostgREST](https://docs.postgrest.org/en/v13/references/api/resource_embedding.html#or-filtering-across-embedded-resources). La forma de la consulta tiene pruebas de contrato; queda pendiente comprobarla con una sesión autenticada después del despliegue.
