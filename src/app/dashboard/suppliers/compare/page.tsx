@@ -43,7 +43,7 @@ import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideBu
 import type { SectionGuideData } from '@/components/dashboard/common/SectionGuideModal'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
 import { ProductThumb } from '@/components/suppliers/order-ui'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -522,7 +522,7 @@ export default function PriceComparisonPage() {
           // Corrección clave: El valor a comparar es el costo de compra del proveedor
           unitprice: purchasePrice > 0 ? purchasePrice : salePrice,
           saleprice: salePrice,
-          currency: 'PYG',
+          currency: getLocaleConfig().currency,
           supplier_id: String(p.supplier_id || supplierObj?.id || ''),
           stock: p.stock_quantity == null ? null : Number(p.stock_quantity),
           minStock: p.min_stock == null ? null : Number(p.min_stock),
@@ -747,7 +747,7 @@ export default function PriceComparisonPage() {
       name: offer.name,
       suppliersku: offer.suppliersku || offer.internalsku,
       unitprice: offer.unitprice,
-      currency: offer.currency || 'PYG',
+      currency: offer.currency || getLocaleConfig().currency,
       stock: offer.stock,
       minStock: offer.minStock,
       imageUrl: offer.imageUrl,

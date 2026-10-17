@@ -151,7 +151,7 @@ export function filterDashboardNavGroups({
       items: group.items.filter((item) => {
         if (!isNavigationModuleAvailable(item.module, effectiveModules)) return false
         if (item.verticals?.length && businessVertical && !item.verticals.includes(businessVertical)) return false
-        if (!canRoleAccessSection(role, item.href)) return false
+        if (!canRoleAccessSection(role, item.href, hasPermission)) return false
         return item.permission ? hasPermission(item.permission) : true
       }),
     }))

@@ -3,58 +3,18 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
-import {
-  isLegacyAfterSalesStatus,
-  normalizeAfterSalesCase,
-  normalizeAfterSalesRequestType,
-  normalizeAfterSalesStatus,
-  serializeAfterSalesStatus,
-  type AfterSalesStatus,
-} from '@/lib/after-sales/compat'
-import {
-  AfterSalesResolutionError,
-  applyRefund,
-  applyReplacement,
-  applyRestock,
-  createWarrantyRepair,
-  defaultRestockAction,
-  resolveCaseBranch,
-  type RestockAction,
-} from '@/lib/after-sales/resolution'
-
-type CaseStatus = AfterSalesStatus
-
-/**
- * Transiciones validas de un caso de posventa. `rejected`, `completed` y
- * `cancelled` son terminales: un caso cerrado no se reabre, se crea uno nuevo.
- */
-const ALLOWED_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
-  open: ['approved', 'rejected', 'cancelled'],
-  approved: ['completed', 'cancelled'],
-  rejected: [],
-  completed: [],
-  cancelled: [],
-}
-
-const STATUS_LABELS: Record<CaseStatus, string> = {
-  open: 'abierto',
-  approved: 'aprobado',
-  rejected: 'rechazado',
-  completed: 'completado',
-  cancelled: 'cancelado',
-}
+import { normalizeAfterSalesCase } from '@/lib/after-sales/compat'
+import { mutateAfterSalesCase } from '@/lib/after-sales/resolution'
 
 const updateCaseSchema = z.object({
-  status: z.enum(['approved', 'rejected', 'completed', 'cancelled']).optional(),
-  notes: z.string().trim().max(2000).optional().nullable(),
-  refund_amount: z.number().min(0).optional().nullable(),
-  refund_method: z.enum(['cash', 'store_credit']).optional().nullable(),
-  restock_action: z.enum(['sellable', 'quarantine', 'none']).optional().nullable(),
-})
+ status: z.enum(['approved','rejected','completed','cancelled']).optional(),
+ notes: z.string().trim().max(2000).optional().nullable(),
+ refund_amount: z.number().min(0).max(9999999999).optional().nullable(),
+ refund_method: z.enum(['cash','store_credit']).optional().nullable(),
+ restock_action: z.enum(['sellable','quarantine','none']).optional().nullable(),
+}).strict().refine(data => Object.keys(data).length > 0, 'No hay cambios para aplicar.')
 
-const SELECT_COLUMNS =
-  'id, case_number, source_type, request_type, status, customer_id, repair_id, sale_id, sale_item_id, product_id, quantity, reason, notes, refund_amount, refund_method, restock_action, generated_repair_id, approved_at, resolved_at, created_by, resolved_by, created_at, updated_at'
+const SELECT_COLUMNS = 'id, case_number, source_type, request_type, status, customer_id, repair_id, sale_id, sale_item_id, product_id, quantity, reason, notes, refund_amount, refund_method, restock_action, generated_repair_id, approved_at, resolved_at, created_by, resolved_by, created_at, updated_at'
 
 async function getRouteId(routeContext: unknown) {
   const params = (routeContext as { params?: { id?: string } | Promise<{ id?: string }> } | undefined)?.params
@@ -88,223 +48,14 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 })
 
 export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }, async (request, { user, organization }, routeContext) => {
-  try {
-    const id = await getRouteId(routeContext)
-    if (!id) return NextResponse.json({ success: false, error: 'Caso inválido.' }, { status: 400 })
-
-    const validation = updateCaseSchema.safeParse(await request.json())
-    if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
-    }
-
-    const supabase = await createClient()
-    const { data: current, error: currentError } = await supabase
-      .from('after_sales_cases')
-      .select('status, request_type, case_number, repair_id, sale_id, sale_item_id, customer_id, product_id, quantity, refund_amount, replacement_product_id, replacement_quantity, generated_repair_id, notes')
-      .eq('id', id)
-      .eq('organization_id', organization.id)
-      .maybeSingle()
-
-    if (currentError) throw currentError
-    if (!current) return NextResponse.json({ success: false, error: 'Caso no encontrado.' }, { status: 404 })
-
-    const currentStatus = normalizeAfterSalesStatus(current.status)
-    const currentRequestType = normalizeAfterSalesRequestType(current.request_type)
-    const nextStatus = validation.data.status
-    const now = new Date().toISOString()
-    const patch: Record<string, unknown> = { updated_at: now }
-
-    if (nextStatus === 'rejected' && (!validation.data.notes || validation.data.notes.trim().length < 5)) {
-      return NextResponse.json(
-        { success: false, error: 'Indicá el motivo del rechazo.' },
-        { status: 400 }
-      )
-    }
-
-    if (nextStatus) {
-      if (!currentStatus) {
-        return NextResponse.json({ success: false, error: 'El estado actual del caso no es válido.' }, { status: 409 })
-      }
-      if (!ALLOWED_TRANSITIONS[currentStatus]?.includes(nextStatus)) {
-        return NextResponse.json({
-          success: false,
-          error: ALLOWED_TRANSITIONS[currentStatus]?.length === 0
-            ? `El caso ya está ${STATUS_LABELS[currentStatus]} y no admite más cambios.`
-            : `No se puede pasar de ${STATUS_LABELS[currentStatus]} a ${STATUS_LABELS[nextStatus]}.`,
-        }, { status: 409 })
-      }
-
-      patch.status = serializeAfterSalesStatus(nextStatus, isLegacyAfterSalesStatus(current.status))
-      if (nextStatus === 'approved') patch.approved_at = now
-      // Todo cierre deja constancia de quien y cuando lo resolvio.
-      if (['rejected', 'completed', 'cancelled'].includes(nextStatus)) {
-        patch.resolved_at = now
-        patch.resolved_by = user.id
-      }
-    }
-
-    // Las notas se suman, no se reemplazan: completar un caso con una nota de
-    // resolución borraba lo que se había anotado al abrirlo.
-    if ('notes' in validation.data && validation.data.notes?.trim()) {
-      const prefix = nextStatus === 'rejected'
-        ? 'Motivo de rechazo: '
-        : nextStatus === 'completed'
-          ? 'Resolución: '
-          : nextStatus === 'cancelled'
-            ? 'Cancelación: '
-            : ''
-      patch.notes = [current.notes?.trim(), `${prefix}${validation.data.notes.trim()}`].filter(Boolean).join('\n\n')
-    }
-
-    // El reintegro no puede superar lo que valen las unidades reclamadas.
-    const requestedRefund = Number(validation.data.refund_amount ?? 0)
-    if (nextStatus === 'completed' && requestedRefund > 0 && current.sale_item_id) {
-      const { data: saleItem } = await supabase
-        .from('sale_items')
-        .select('quantity, subtotal')
-        .eq('id', current.sale_item_id)
-        .maybeSingle()
-      const soldQuantity = Number(saleItem?.quantity) || 0
-      if (saleItem && soldQuantity > 0) {
-        const cap = (Number(saleItem.subtotal) / soldQuantity) * (Number(current.quantity) || 1)
-        if (requestedRefund > cap + 0.005) {
-          return NextResponse.json({
-            success: false,
-            error: 'El reintegro supera lo que valen las unidades reclamadas.',
-          }, { status: 400 })
-        }
-      }
-    }
-    if ('refund_amount' in validation.data) patch.refund_amount = validation.data.refund_amount ?? null
-    if ('refund_method' in validation.data) patch.refund_method = validation.data.refund_method ?? null
-    if ('restock_action' in validation.data) patch.restock_action = validation.data.restock_action ?? null
-
-    // Los efectos van ANTES de persistir el estado: si crear el retrabajo o
-    // mover la plata falla, el caso queda como estaba y se puede reintentar.
-    // Al reves quedaria aprobado sin reparacion, o completado sin reintegro.
-    let sideEffect: {
-      warrantyRepair?: { repairId: string; ticketNumber: string | null }
-      refund?: { method: string; amount: number }
-      restock?: { restocked: number; action: RestockAction }
-      replacement?: { dispatched: number }
-      loyaltyPointsReversed?: number
-    } = {}
-
-    try {
-      if (nextStatus === 'approved' && currentRequestType === 'repair_warranty' && current.repair_id) {
-        const created = await createWarrantyRepair({
-          supabase,
-          organizationId: organization.id,
-          userId: user.id,
-          caseId: id,
-          parentRepairId: current.repair_id,
-          reason: (validation.data.notes || '').trim() || 'Reclamo de garantía.',
-        })
-        patch.generated_repair_id = created.repairId
-        sideEffect = { ...sideEffect, warrantyRepair: created }
-      }
-
-      if (nextStatus === 'completed') {
-        // La mercaderia se mueve antes que la plata: si el reingreso falla, no
-        // queremos haber sacado el efectivo de la caja.
-        const restockAction = (validation.data.restock_action
-          ?? defaultRestockAction(currentRequestType ?? String(current.request_type))) as RestockAction
-
-        const restocked = await applyRestock({
-          supabase,
-          productId: current.product_id,
-          quantity: Number(current.quantity || 1),
-          action: restockAction,
-          caseLabel: current.case_number || id.slice(0, 8),
-        })
-
-        patch.restock_action = restockAction
-        if (restocked) sideEffect = { ...sideEffect, restock: { ...restocked, action: restockAction } }
-
-        // En un cambio entra una unidad y sale otra.
-        const dispatched = await applyReplacement({
-          supabase,
-          productId: current.replacement_product_id,
-          quantity: current.replacement_quantity,
-          caseLabel: current.case_number || id.slice(0, 8),
-        })
-        if (dispatched) sideEffect = { ...sideEffect, replacement: dispatched }
-
-        const amount = Number(validation.data.refund_amount ?? current.refund_amount ?? 0)
-        const method = validation.data.refund_method
-
-        if (amount > 0) {
-          if (!method) {
-            return NextResponse.json(
-              { success: false, error: 'Indicá cómo se devuelve el dinero: por caja o como saldo a favor.' },
-              { status: 400 }
-            )
-          }
-
-          const branchId = await resolveCaseBranch({
-            supabase,
-            organizationId: organization.id,
-            repairId: current.repair_id,
-            saleId: current.sale_id,
-          })
-
-          const applied = await applyRefund({
-            supabase,
-            organizationId: organization.id,
-            userId: user.id,
-            caseId: id,
-            caseNumber: current.case_number,
-            customerId: current.customer_id,
-            branchId,
-            amount,
-            method,
-          })
-          patch.refund_amount = amount
-          patch.refund_method = applied.method
-          sideEffect = { ...sideEffect, refund: applied }
-
-          // Devolución con reintegro: se descuentan los puntos que sumó esa compra,
-          // en proporción y una sola vez por caso. No frena la devolución si falla.
-          if (current.sale_id && current.customer_id) {
-            const { data: reversed, error: reversalError } = await supabase.rpc('reverse_loyalty_points_for_refund', {
-              p_organization_id: organization.id,
-              p_customer_id: current.customer_id,
-              p_sale_id: current.sale_id,
-              p_refund_amount: amount,
-              p_idempotency_key: `refund:${id}`,
-            })
-            if (reversalError && !isLoyaltyModuleMissing(reversalError)) {
-              logger.warn('No se pudieron descontar los puntos de la devolución', { caseId: id, error: reversalError.message })
-            }
-            const reversedPoints = Math.abs(Number((reversed as { points?: unknown } | null)?.points) || 0)
-            if (reversedPoints > 0) sideEffect = { ...sideEffect, loyaltyPointsReversed: reversedPoints }
-          }
-        }
-      }
-    } catch (effectError) {
-      if (effectError instanceof AfterSalesResolutionError) {
-        return NextResponse.json({ success: false, error: effectError.message }, { status: effectError.status })
-      }
-      throw effectError
-    }
-
-    if (Object.keys(patch).length === 1) {
-      return NextResponse.json({ success: false, error: 'No hay cambios para aplicar.' }, { status: 400 })
-    }
-
-    const { data, error } = await supabase
-      .from('after_sales_cases')
-      .update(patch)
-      .eq('id', id)
-      .eq('organization_id', organization.id)
-      .select(SELECT_COLUMNS)
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json({ success: true, data: normalizeAfterSalesCase(data), ...sideEffect })
-  } catch (error) {
-    logger.error('After-sales update API error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo actualizar el caso.' }, { status: 500 })
-  }
+ try {
+  const id = z.string().uuid().safeParse(await getRouteId(routeContext))
+  if (!id.success) return NextResponse.json({ success: false, error: 'Caso inválido.' }, { status: 400 })
+  const parsed = updateCaseSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ success: false, error: 'Revisá los datos del caso.', details: parsed.error.issues }, { status: 400 })
+  return await mutateAfterSalesCase(user.id, organization.id, parsed.data, id.data)
+ } catch (error) {
+  logger.error('After-sales atomic update failed', { error })
+  return NextResponse.json({ success: false, error: 'No se pudo actualizar el caso.' }, { status: 500 })
+ }
 })

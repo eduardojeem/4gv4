@@ -70,11 +70,19 @@ export function mapOrganizationRoleToDashboardRole(role: OrganizationRole): User
   }
 }
 
-export function canRoleAccessSection(role: UserRole | undefined, path: string): boolean {
+export function canRoleAccessSection(role: UserRole | undefined, path: string, hasPermission?: (permission: string) => boolean): boolean {
   if (!role || role === 'cliente') return false
   if (!isRestricted(role)) return true
   if (path === '/dashboard') return true
   if (!path.startsWith('/dashboard')) return false
+
+  // These routes follow the active membership permissions, not the legacy UI role.
+  if (path === '/dashboard/repairs/analytics' || path.startsWith('/dashboard/repairs/analytics/')) {
+    return hasPermission?.('analytics.read') === true
+  }
+  if (path === '/dashboard/repairs/technicians' || path.startsWith('/dashboard/repairs/technicians/')) {
+    return hasPermission?.('repairs.orders.assign') === true
+  }
 
   // Check if explicitly blocked for restricted roles
   const isBlocked = BLOCKED_SECTIONS.some(

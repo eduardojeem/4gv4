@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { CalendarClock, CheckCircle2, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -26,18 +27,35 @@ export function ExpirationsBoard() {
   const [tracked, setTracked] = useState(0)
   const [loading, setLoading] = useState(true)
 
+  const { scope, currentScope } = useTenantScope()
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const requestRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => { requestRef.current++; abortRef.current?.abort() }, [])
+
   const load = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const request = ++requestRef.current
     setLoading(true)
+    setError(null)
     try {
-      const response = await fetch('/api/inventory/expirations?days=60', { cache: 'no-store' })
+      const response = await fetch('/api/inventory/expirations?days=60', { cache: 'no-store', signal: controller.signal })
       const body = await response.json().catch(() => ({}))
+      if (request !== requestRef.current || currentScope.current !== scope) return
+      setLoadedScope(scope)
+      if (!response.ok || typeof body.available !== 'boolean' || (body.available && !Array.isArray(body.batches))) throw new Error('No se pudieron cargar los vencimientos.')
       setAvailable(body.available !== false)
       setRows(Array.isArray(body.batches) ? body.batches : [])
       setTracked(Number(body.tracked) || 0)
+    } catch {
+      if (request === requestRef.current && currentScope.current === scope) { setLoadedScope(scope); setError('No se pudieron cargar los vencimientos. Reintentá la consulta.') }
     } finally {
-      setLoading(false)
+      if (request === requestRef.current && currentScope.current === scope) setLoading(false)
     }
-  }, [])
+  }, [scope, currentScope])
   useEffect(() => { void load() }, [load])
 
   const grouped = useMemo(() => SECTIONS.map((section) => ({ ...section, rows: rows.filter((row) => row.status === section.status) })), [rows])
@@ -58,6 +76,11 @@ export function ExpirationsBoard() {
     await load()
   }
 
+  if (loadedScope !== scope) return <p role="status" className="p-10 text-sm text-muted-foreground">Cargando vencimientos…</p>
+  if (error && loadedScope === scope) return <div role="alert" className="space-y-3 p-4 text-destructive"><p>{error}</p><Button variant="outline" onClick={() => void load()}>Reintentar</Button></div>
+
+  if (!available) return <div className="space-y-3 p-4"><p>Lotes y vencimientos todavía no están activados en la base de datos. Pedile al administrador de la plataforma que aplique la actualización.</p><Button variant="outline" onClick={() => void load()}>Actualizar</Button></div>
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -70,11 +93,7 @@ export function ExpirationsBoard() {
         </Button>
       </div>
 
-      {!available && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          Lotes y vencimientos todavía no están activados en la base de datos. Pedile al administrador de la plataforma que aplique la actualización.
-        </p>
-      )}
+
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {grouped.map((section) => (

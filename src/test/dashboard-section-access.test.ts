@@ -1,3 +1,4 @@
+import { roleHasPermission } from '@/lib/saas/permissions'
 import { describe, expect, it } from 'vitest'
 import {
   canRoleAccessSection,
@@ -34,5 +35,21 @@ describe('dashboard section access', () => {
     expect(canRoleAccessSection('tecnico', '/dashboard/categories')).toBe(true)
     expect(canRoleAccessSection('tecnico', '/dashboard/reports')).toBe(false)
     expect(canRoleAccessSection('tecnico', '/dashboard/orders')).toBe(false)
+  })
+})
+
+
+describe('active membership permissions override only the matching operational sections', () => {
+  it('admits managers to analytics and technician assignment without settings', () => {
+    const can = (permission: string) => roleHasPermission('manager', permission as Parameters<typeof roleHasPermission>[1])
+    expect(canRoleAccessSection('vendedor', '/dashboard/repairs/analytics', can)).toBe(true)
+    expect(canRoleAccessSection('vendedor', '/dashboard/repairs/technicians', can)).toBe(true)
+    expect(canRoleAccessSection('vendedor', '/dashboard/settings', can)).toBe(false)
+    expect(canRoleAccessSection('vendedor', '/dashboard/repairs/settings', can)).toBe(false)
+  })
+  it('keeps cashiers out of analytics and assignment', () => {
+    const can = (permission: string) => roleHasPermission('cashier', permission as Parameters<typeof roleHasPermission>[1])
+    expect(canRoleAccessSection('vendedor', '/dashboard/repairs/analytics', can)).toBe(false)
+    expect(canRoleAccessSection('vendedor', '/dashboard/repairs/technicians', can)).toBe(false)
   })
 })

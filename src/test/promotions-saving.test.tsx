@@ -15,6 +15,11 @@ import { usePromotions } from '@/hooks/use-promotions'
  * durante 24 horas— el cambio no aparecía nunca.
  */
 
+vi.mock('@/hooks/use-tenant-scope', () => {
+  const currentScope = { current: 'user:org' }
+  return { useTenantScope: () => ({ scope: 'user:org', currentScope }) }
+})
+
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
 const PROMO = {
@@ -38,6 +43,8 @@ function servidor(respuestas: Array<{ ok?: boolean; body: unknown }>) {
   const fetchFalso = vi.fn(async (url: string, init?: RequestInit) => {
     llamadas.push({ url: String(url), method: init?.method ?? 'GET' })
     const siguiente = respuestas.shift() ?? { body: { promotions: [] } }
+    const body = siguiente.body as { promotions?: unknown[]; pagination?: unknown }
+    if (body.promotions && !body.pagination) body.pagination = { total: body.promotions.length }
     return {
       ok: siguiente.ok !== false,
       json: async () => siguiente.body,

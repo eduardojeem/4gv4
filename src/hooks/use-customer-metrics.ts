@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
 import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
@@ -52,6 +54,7 @@ const EMPTY_METRICS: Record<string, CustomerMetrics> = {}
 export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
   const activeOrganization = useOptionalActiveOrganization()
   const organizationId = activeOrganization?.organization?.id ?? null
+  const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
   const timeRange = options?.timeRange || '6months'
   const includeInactive = options?.includeInactive ?? true
   const segmentBy = options?.segmentBy || 'segment'
@@ -78,33 +81,48 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   }).length
 
   // Ingresos reales por mes desde la tabla `sales` (clave "YYYY-M").
-  // Si la consulta falla, monthlyData cae al estimado homogéneo anterior.
+  // Una consulta fallida deja la serie no disponible; nunca reparte totales históricos.
   const months = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
+  const monthlyKey = `${scope}:${organizationId ?? ''}:${months}`
+  const [loadedMonthlyKey, setLoadedMonthlyKey] = useState<string | null>(null)
   const [realMonthly, setRealMonthly] = useState<Map<string, { revenue: number; count: number }> | null>(null)
 
+  const [monthlyError, setMonthlyError] = useState<string | null>(null)
+  const [monthlyLoading, setMonthlyLoading] = useState(true)
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
+    const isCurrent = () => !controller.signal.aborted && currentScope.current === scope
+    setRealMonthly(null)
+    setMonthlyLoading(true)
+    setMonthlyError(null)
     const fetchSales = async () => {
       if (!organizationId) {
         setRealMonthly(null)
+        setMonthlyLoading(false)
+        setMonthlyError('No hay una organización activa.')
         return
       }
+      if (organizationId !== scopeOrganizationId) return
       try {
+        const end = new Date()
         const start = new Date()
-        start.setMonth(start.getMonth() - (months - 1))
         start.setDate(1)
+        start.setMonth(start.getMonth() - (months - 1))
         start.setHours(0, 0, 0, 0)
 
         const supabase = createClient()
-        const { data, error } = await supabase
+        const { data, error } = await completeDashboardQuery(supabase
           .from('sales')
-          .select('total_amount, created_at, status')
+          .select('id, total_amount, created_at, status', { count: 'exact' })
           .eq('organization_id', organizationId)
           .gte('created_at', start.toISOString())
+          .lte('created_at', end.toISOString()), controller.signal)
 
-        if (cancelled) return
+        if (!isCurrent()) return
         if (error || !data) {
           setRealMonthly(null)
+          setMonthlyError('No se pudieron cargar las ventas mensuales.')
+          setMonthlyLoading(false)
           return
         }
 
@@ -122,22 +140,26 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
           cur.count += 1
           map.set(key, cur)
         }
+        setLoadedMonthlyKey(monthlyKey)
         setRealMonthly(map)
+        setMonthlyLoading(false)
       } catch {
-        if (!cancelled) setRealMonthly(null)
+        if (isCurrent()) { setRealMonthly(null); setMonthlyLoading(false); setMonthlyError('No se pudieron cargar las ventas mensuales.') }
       }
     }
     fetchSales()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [months, organizationId])
+  }, [months, organizationId, monthlyKey, scope, currentScope, scopeOrganizationId])
 
   const monthlyData = useMemo(() => {
+    if (!realMonthly || loadedMonthlyKey !== monthlyKey) return []
     const now = new Date()
     const data: Array<{ monthShort: string; totalRevenue: number; avgOrderValue: number; newCustomers: number }> = []
     for (let i = months - 1; i >= 0; i--) {
       const d = new Date(now)
+      d.setDate(1)
       d.setMonth(now.getMonth() - i)
       const monthShort = d.toLocaleString('es-ES', { month: 'short' })
       const newCustomers = customers.filter(c => {
@@ -149,29 +171,23 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
       }).length
 
       const real = realMonthly?.get(`${d.getFullYear()}-${d.getMonth()}`)
-      let totalRevenueMonth: number
-      let avgOrderValue: number
-      if (realMonthly) {
-        // Datos reales de ventas del mes
-        totalRevenueMonth = real?.revenue || 0
-        avgOrderValue = real && real.count > 0 ? real.revenue / real.count : 0
-      } else {
-        // Fallback: distribución homogénea del revenue estimado
-        totalRevenueMonth = totalRevenue / months
-        avgOrderValue = totalCustomers > 0 ? totalRevenueMonth / Math.max(1, totalCustomers / months) : 0
-      }
+      const totalRevenueMonth = real?.revenue ?? 0
+      const avgOrderValue = real && real.count > 0 ? real.revenue / real.count : 0
       data.push({ monthShort, totalRevenue: totalRevenueMonth, avgOrderValue, newCustomers })
     }
     return data
-  }, [customers, totalRevenue, totalCustomers, months, realMonthly])
+  }, [customers, months, realMonthly, loadedMonthlyKey, monthlyKey])
 
   const segmentDistribution = useMemo(() => {
-    const map: Record<string, number> = {}
+    const map: Record<string, { value: number; revenue: number }> = {}
     customers.forEach(c => {
       const key = (c[segmentBy] as string | undefined) || 'desconocido'
-      map[key] = (map[key] || 0) + 1
+      const entry = map[key] ?? { value: 0, revenue: 0 }
+      entry.value++
+      entry.revenue += c.lifetime_value ?? 0
+      map[key] = entry
     })
-    return Object.entries(map).map(([name, value]) => ({ name, value }))
+    return Object.entries(map).map(([name, entry]) => ({ name, ...entry }))
   }, [customers, segmentBy])
 
   const topCustomers = useMemo(() => {
@@ -189,7 +205,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     const summary = creditSummaries[c.id]
     const summaryPending = summary ? Number(summary.total_pending ?? summary.current_balance ?? 0) : 0
     const customerPending = Number(c.current_balance || c.pending_amount || 0)
-    return Math.max(0, summaryPending || customerPending)
+    return Math.max(0, summary ? summaryPending : customerPending)
   }, [creditSummaries])
 
   const totalDebt = customers.reduce((sum, c) => sum + getCustomerDebt(c), 0)
@@ -229,6 +245,8 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     suspendedCustomers: includeInactive ? suspendedCustomers : undefined,
     vipCustomers,
     monthlyData,
+    monthlyError,
+    monthlyLoading,
     segmentDistribution,
     debtDistribution,
     topCustomers

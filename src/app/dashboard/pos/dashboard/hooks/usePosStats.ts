@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DateRange } from 'react-day-picker'
 import { calculateProfit, calculateSalesCost, type ProfitResult, type SaleItemRow } from '../lib/pos-profit'
+import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
+import { withBranchFilter } from '@/lib/branches/client'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useBranch } from '@/contexts/branch-context'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
@@ -213,7 +216,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
     })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
-    const { selectedBranch } = useBranch()
+    const { selectedBranch, selectedBranchId } = useBranch()
+    const branchId = selectedBranchId ?? selectedBranch?.id ?? null
     // La organizacion salia solo de la sucursal seleccionada. Sin sucursal
     // —falla la carga de sucursales o la organizacion no tiene ninguna activa—
     // la consulta nunca corria y `loading` quedaba en true: «Cargando
@@ -224,12 +228,17 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
     // consultas a la vez; si la de 30 dias terminaba ultima, pisaba a la de hoy
     // y el dashboard mostraba 30 dias con la etiqueta «Hoy».
     const requestRef = useRef(0)
+    const abortRef = useRef<AbortController | null>(null)
+    const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
 
     const supabase = useMemo(() => createClient(), [])
 
     const fetchStats = useCallback(async () => {
+        abortRef.current?.abort()
+        const controller = new AbortController()
+        abortRef.current = controller
         const requestId = ++requestRef.current
-        const esVigente = () => requestId === requestRef.current
+        const esVigente = () => requestId === requestRef.current && currentScope.current === scope
         const bounds = rangeBounds(dateRange)
 
         if (!bounds || !dateRange?.from) {
@@ -244,6 +253,10 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             return
         }
 
+        if (organizationLoading || (scopeOrganizationId && organizationId !== scopeOrganizationId)) {
+            setLoading(true)
+            return
+        }
         setLoading(true)
         setError(null)
 
@@ -261,7 +274,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     net:subtotal_amount,
                     payment_method,
                     customer:customers!customer_id(name)
-                `)
+                `, { count: 'exact' })
                 .eq('organization_id', organizationId)
                 .or(COUNTED_SALES_FILTER)
                 .gte('created_at', from)
@@ -281,7 +294,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     origin_type,
                     label,
                     installments:credit_installments(amount, amount_paid)
-                `)
+                `, { count: 'exact' })
                 .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
@@ -319,7 +332,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     final_cost,
                     estimated_cost,
                     paid_amount
-                `)
+                `, { count: 'exact' })
                 .eq('organization_id', organizationId)
                 .gte('created_at', from)
                 .lte('created_at', to)
@@ -341,8 +354,9 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     parts_cost,
                     labor_cost,
                     payment_status
-                `)
+                `, { count: 'exact' })
                 .eq('organization_id', organizationId)
+                .eq('status', 'entregado')
                 .gte('delivered_at', from)
                 .lte('delivered_at', to)
 
@@ -354,7 +368,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     final_cost,
                     estimated_cost,
                     paid_amount
-                `)
+                `, { count: 'exact' })
                 .eq('organization_id', organizationId)
                 .eq('status', 'listo')
 
@@ -368,29 +382,17 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // 8. Fetch Refunds
             const afterSalesPromise = supabase
                 .from('after_sales_cases')
-                .select('id, source_type, refund_amount, status, request_type, sale_id')
+                .select('id, source_type, refund_amount, status, request_type, sale_id, sale:sales!sale_id(branch_id), repair:repairs!repair_id(branch_id)', { count: 'exact' })
                 .eq('organization_id', organizationId)
                 .not('refund_amount', 'is', null)
                 .gte('resolved_at', from)
                 .lte('resolved_at', to)
 
-            // 9. Fetch Sale Items (for calculating costs)
-            void (supabase
-                .from('sale_items')
-                .select(`
-                    id,
-                    sale_id,
-                    product_id,
-                    quantity,
-                    subtotal,
-                    product:products(
-                        id,
-                        average_cost
-                    )
-                `)
-                .eq('organization_id', organizationId)
-                .gte('created_at', from)
-                .lte('created_at', to));
+            // Apply the same header branch to every directly attributable primary query.
+            for (const query of [salesPromise, creditsPromise, recentPromise, repairsCreatedPromise,
+                repairsDeliveredPromise, repairsReadyPromise, repairsActivePromise]) {
+                withBranchFilter(query, branchId)
+            }
 
             // Execute parallel primary queries
             const [
@@ -399,26 +401,30 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 { data: recentData, error: recentError },
                 { data: repairsCreatedData, error: repairsCreatedError },
                 { data: repairsDeliveredData, error: repairsDeliveredError },
-                { data: repairsReadyData },
-                { count: repairsActiveCount },
-                { data: afterSalesData, error: _afterSalesError }
+                { data: repairsReadyData, error: repairsReadyError },
+                { count: repairsActiveCount, error: repairsActiveError },
+                { data: afterSalesData, error: afterSalesError }
             ] = await Promise.all([
-                salesPromise,
-                creditsPromise,
+                completeDashboardQuery(salesPromise, controller.signal),
+                completeDashboardQuery(creditsPromise, controller.signal),
                 recentPromise,
-                repairsCreatedPromise,
-                repairsDeliveredPromise,
-                repairsReadyPromise,
+                completeDashboardQuery(repairsCreatedPromise, controller.signal),
+                completeDashboardQuery(repairsDeliveredPromise, controller.signal),
+                completeDashboardQuery(repairsReadyPromise, controller.signal),
                 repairsActivePromise,
-                afterSalesPromise
+                completeDashboardQuery(afterSalesPromise, controller.signal)
             ])
 
+            if (!esVigente()) return
             if (salesError) throw salesError
 
             // Los errores parciales ya no se descartan en silencio: se juntan
             // para que la UI muestre que ese bloque no tiene datos reales, en
             // lugar de dibujar un cero indistinguible de un dato verdadero.
             const warnings: string[] = []
+            if (repairsReadyError) warnings.push('No se pudieron cargar las reparaciones listas.')
+            if (repairsActiveError) warnings.push('No se pudieron cargar las reparaciones activas.')
+            if (afterSalesError) warnings.push('No se pudieron cargar los reembolsos; la ganancia puede estar incompleta.')
             if (recentError) warnings.push('No se pudieron cargar las transacciones recientes.')
             if (creditError) warnings.push('No se pudieron cargar los créditos.')
             if (repairsCreatedError) warnings.push('No se pudieron cargar las reparaciones del período.')
@@ -429,24 +435,27 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             let itemsData: PosSaleItem[] = []
             let costUnavailable = false
 
-            if (saleIds.length > 0) {
-                const { data: items, error: itemsError } = await supabase
+            for (let offset = 0; offset < saleIds.length; offset += 100) {
+                const { data: items, error: itemsError } = await completeDashboardQuery(supabase
                     .from('sale_items')
                     .select(`
+                        id,
                         quantity,
                         subtotal,
                         sale_id,
                         product:products(name, purchase_price)
-                    `)
-                    .in('sale_id', saleIds)
+                    `, { count: 'exact' })
+                    .in('sale_id', saleIds.slice(offset, offset + 100)), controller.signal)
 
                 if (itemsError) {
                     // Sin items no hay costo. Antes esto dejaba totalCost en 0
                     // y la ganancia salia igual a la facturacion.
                     costUnavailable = true
+                    itemsData = []
                     warnings.push('No se pudo calcular el costo de mercadería: la ganancia y el margen no están disponibles.')
+                    break
                 } else {
-                    itemsData = (items || []) as PosSaleItem[]
+                    itemsData.push(...((items || []) as PosSaleItem[]))
                 }
             }
 
@@ -521,7 +530,12 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
             
             // Procesar reembolsos resueltos
-            const afterSales = afterSalesData || []
+            const afterSales = (afterSalesData || []).filter(item => {
+                if (!branchId || branchId === 'all') return true
+                const sale = item.sale as unknown as { branch_id?: string } | null
+                const repair = item.repair as unknown as { branch_id?: string } | null
+                return sale?.branch_id === branchId || repair?.branch_id === branchId
+            })
             const repairRefundsAmount = afterSales
                 .filter(c => c.source_type === 'repair' && (c.status === 'resolved' || c.status === 'approved'))
                 .reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
@@ -682,10 +696,12 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
         } finally {
             if (esVigente()) setLoading(false)
         }
-    }, [dateRange, supabase, organizationId, organizationLoading])
+    }, [dateRange, supabase, organizationId, organizationLoading, branchId, scope, currentScope, scopeOrganizationId])
 
     useEffect(() => {
         fetchStats()
+        const requests = requestRef
+        return () => { requests.current++; abortRef.current?.abort() }
     }, [fetchStats])
 
     return { stats, loading, error, refetch: fetchStats }

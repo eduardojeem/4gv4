@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import {
   User, Shield, Calendar, Clock, CheckCircle2, Activity, Bell, Lock,
   Pencil, Save, X, Wrench, Star
@@ -74,6 +75,32 @@ export default function TechnicianProfilePage() {
     statusUpdates: true,
     weeklyReport: false,
   })
+
+  const { organizationId, userId } = useTenantScope()
+  const notificationKey = userId && organizationId
+    ? `technician-notifications:${organizationId}:${userId}` : null
+  const [loadedNotificationKey, setLoadedNotificationKey] = useState<string | null>(null)
+  const [notificationStorageError, setNotificationStorageError] = useState(false)
+
+  useEffect(() => {
+    const defaults = { newAssignments: true, statusUpdates: true, weeklyReport: false }
+    setNotifications(defaults)
+    setNotificationStorageError(false)
+    if (!notificationKey) { setLoadedNotificationKey(null); return }
+    try {
+      const stored = JSON.parse(localStorage.getItem(notificationKey) || 'null')
+      if (stored && Object.keys(defaults).every(key => typeof stored[key] === 'boolean')) {
+        setNotifications({ newAssignments: stored.newAssignments, statusUpdates: stored.statusUpdates, weeklyReport: stored.weeklyReport })
+      }
+    } catch { setNotificationStorageError(true) }
+    setLoadedNotificationKey(notificationKey)
+  }, [notificationKey])
+
+  useEffect(() => {
+    if (!notificationKey || loadedNotificationKey !== notificationKey) return
+    try { localStorage.setItem(notificationKey, JSON.stringify(notifications)) }
+    catch { setNotificationStorageError(true) }
+  }, [notificationKey, loadedNotificationKey, notifications])
 
   // Sync formData when user loads
   useEffect(() => {
@@ -359,13 +386,14 @@ export default function TechnicianProfilePage() {
                     <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc}</p>
                   </div>
                   <Switch
+                    disabled={!notificationKey || loadedNotificationKey !== notificationKey}
                     checked={notifications[item.key]}
                     onCheckedChange={v => setNotifications(n => ({ ...n, [item.key]: v }))}
                   />
                 </div>
               ))}
               <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-2">
-                Las preferencias de notificación se guardan localmente por ahora.
+                {notificationStorageError ? 'No se pudieron guardar las preferencias en este navegador.' : notificationKey ? 'Preferencias guardadas en este navegador para tu cuenta y negocio.' : 'Selecciona un negocio para guardar preferencias.'} Estas opciones son preferencias visuales y todavía no activan envíos de notificaciones.
               </p>
             </TabsContent>
 

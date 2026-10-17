@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -25,7 +26,12 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const requestRef = useRef<AbortController | null>(null)
+
   const refresh = useCallback(async () => {
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
     setIsLoading(true)
     setError(null)
 
@@ -33,11 +39,14 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
       const response = await fetch('/api/organization-context', {
         cache: 'no-store',
         credentials: 'same-origin',
+        signal: controller.signal,
       })
       const payload = await response.json().catch(() => null) as {
         activeOrganization?: ActiveOrganizationPayload
         error?: string
       } | null
+
+      if (controller.signal.aborted) return
 
       if (!response.ok || !payload?.activeOrganization) {
         if (response.status === 401 || response.status === 403) {
@@ -48,17 +57,24 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
 
       setOrganization(payload.activeOrganization)
     } catch (cause) {
+      if (controller.signal.aborted) return
       setError(cause instanceof Error ? cause.message : 'No se pudo cargar la organización activa')
     } finally {
-      setIsLoading(false)
+      if (requestRef.current === controller) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void refresh()
-    const handleOrganizationChange = () => void refresh()
+    const handleOrganizationChange = () => {
+      setOrganization(null)
+      void refresh()
+    }
     window.addEventListener('organization:changed', handleOrganizationChange)
-    return () => window.removeEventListener('organization:changed', handleOrganizationChange)
+    return () => {
+      requestRef.current?.abort()
+      window.removeEventListener('organization:changed', handleOrganizationChange)
+    }
   }, [refresh])
 
   const value = useMemo(

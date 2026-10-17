@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { mutateAfterSalesCase } from '@/lib/after-sales/resolution'
 import {
   getAfterSalesRequestTypeAliases,
   getAfterSalesSourceTypeAliases,
@@ -205,159 +206,13 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
   }
 })
 
-export const POST = withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }, async (request, { user, organization }) => {
-  try {
-    const validation = createCaseSchema.safeParse(await request.json())
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { success: false, error: validation.error.issues[0]?.message || 'Error de validación', details: validation.error.issues },
-        { status: 400 }
-      )
-    }
-
-    const input = validation.data
-    const supabase = await createClient()
-
-    // El origen debe pertenecer a la organizacion: sin esto se podria abrir un
-    // caso contra la venta o reparacion de otro inquilino.
-    if (input.source_type === 'repair' && input.repair_id) {
-      const { data: repair, error } = await supabase
-        .from('repairs')
-        .select('id')
-        .eq('id', input.repair_id)
-        .eq('organization_id', organization.id)
-        .maybeSingle()
-
-      if (error) throw error
-      if (!repair) {
-        return NextResponse.json({ success: false, error: 'La reparación no pertenece a tu organización.' }, { status: 404 })
-      }
-    }
-
-    if (input.source_type === 'sale' && input.sale_id) {
-      const { data: sale, error } = await supabase
-        .from('sales')
-        .select('id')
-        .eq('id', input.sale_id)
-        .eq('organization_id', organization.id)
-        .maybeSingle()
-
-      if (error) throw error
-      if (!sale) {
-        return NextResponse.json({ success: false, error: 'La venta no pertenece a tu organización.' }, { status: 404 })
-      }
-    }
-
-    // Sin esto, cada click en "Reclamar garantia" abre un caso nuevo: el mismo
-    // equipo terminaba con media docena de casos abiertos y, al aprobarlos,
-    // media docena de retrabajos.
-    const sourceColumn = input.source_type === 'repair' ? 'repair_id' : 'sale_id'
-    const sourceValue = input.source_type === 'repair' ? input.repair_id : input.sale_id
-
-    if (sourceValue) {
-      let openQuery = supabase
-        .from('after_sales_cases')
-        .select('id, case_number, status')
-        .eq('organization_id', organization.id)
-        .eq(sourceColumn, sourceValue)
-        // Acotado al mismo tipo: una venta puede tener a la vez una devolucion
-        // y una garantia, pero no dos garantias iguales sobre lo mismo.
-        .in('request_type', getAfterSalesRequestTypeAliases(input.request_type))
-        .in('status', [...getAfterSalesStatusAliases('open'), ...getAfterSalesStatusAliases('approved')])
-
-      // Y acotado a la LINEA de venta: una venta de tres productos puede tener
-      // un cambio por cada uno. Sin esto, reclamar el segundo producto rebotaba
-      // contra el caso del primero.
-      if (input.sale_item_id) {
-        openQuery = openQuery.eq('sale_item_id', input.sale_item_id)
-      }
-
-      const { data: openCase, error: openError } = await openQuery.limit(1).maybeSingle()
-
-      if (openError) throw openError
-      if (openCase) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Ya hay un caso ${getAfterSalesStatusAliases('open').includes(String(openCase.status)) ? 'abierto' : 'aprobado'} (${openCase.case_number || openCase.id.slice(0, 8)}) de este tipo para este producto. Resolvé ese antes de abrir otro.`,
-            data: openCase,
-          },
-          { status: 409 }
-        )
-      }
-    }
-
-    // Lo ya reclamado de la línea, sumando los casos que no se rechazaron ni
-    // cancelaron. Antes solo se impedían dos casos abiertos a la vez: con la
-    // devolución anterior ya completada se podía abrir otra por la misma
-    // cantidad, y reintegrar dinero y sumar stock más de una vez.
-    if (input.source_type === 'sale' && input.sale_id && input.sale_item_id) {
-      const { data: saleItem, error: itemError } = await supabase
-        .from('sale_items')
-        .select('quantity')
-        .eq('id', input.sale_item_id)
-        .eq('sale_id', input.sale_id)
-        .maybeSingle()
-
-      if (itemError) throw itemError
-      if (!saleItem) {
-        return NextResponse.json({ success: false, error: 'El producto no pertenece a esa venta.' }, { status: 404 })
-      }
-
-      const { data: previousCases, error: previousError } = await supabase
-        .from('after_sales_cases')
-        .select('quantity, status')
-        .eq('organization_id', organization.id)
-        .eq('sale_item_id', input.sale_item_id)
-
-      if (previousError) throw previousError
-      const closedWithoutEffect = [...getAfterSalesStatusAliases('rejected'), ...getAfterSalesStatusAliases('cancelled')]
-      const alreadyClaimed = (previousCases ?? [])
-        .filter((row) => !closedWithoutEffect.includes(String(row.status)))
-        .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)
-      const sold = Number(saleItem.quantity) || 0
-
-      if (alreadyClaimed + input.quantity > sold) {
-        const left = Math.max(0, sold - alreadyClaimed)
-        return NextResponse.json({
-          success: false,
-          error: left === 0
-            ? `Ya se reclamaron las ${sold} unidades vendidas de este producto.`
-            : `Ya se reclamaron ${alreadyClaimed} de ${sold} unidades: quedan ${left} por reclamar.`,
-        }, { status: 409 })
-      }
-    }
-
-    const { data, error: insertError } = await supabase
-      .from('after_sales_cases')
-      .insert({
-        organization_id: organization.id,
-        source_type: input.source_type,
-        request_type: input.request_type,
-        status: 'open',
-        repair_id: input.repair_id ?? null,
-        sale_id: input.sale_id ?? null,
-        sale_item_id: input.sale_item_id ?? null,
-        product_id: input.product_id ?? null,
-        customer_id: input.customer_id ?? null,
-        quantity: input.quantity,
-        reason: input.reason,
-        notes: input.notes || null,
-        refund_amount: input.refund_amount ?? null,
-        replacement_product_id: input.replacement_product_id ?? null,
-        replacement_quantity: input.replacement_quantity ?? null,
-        price_difference: input.price_difference ?? null,
-        created_by: user.id,
-      })
-      .select(SELECT_COLUMNS)
-      .single()
-
-    if (insertError) throw insertError
-
-    return NextResponse.json({ success: true, data: normalizeAfterSalesCase(data) }, { status: 201 })
-  } catch (error) {
-    logger.error('After-sales API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo registrar el caso de posventa.' }, { status: 500 })
-  }
+export const POST = withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }, async (request, { organization, user }) => {
+ try {
+  const parsed = createCaseSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ success: false, error: 'Revisá los datos del caso.', details: parsed.error.issues }, { status: 400 })
+  return await mutateAfterSalesCase(user.id, organization.id, parsed.data)
+ } catch (error) {
+  logger.error('After-sales atomic create failed', { error })
+  return NextResponse.json({ success: false, error: 'No se pudo registrar el caso de posventa.' }, { status: 500 })
+ }
 })

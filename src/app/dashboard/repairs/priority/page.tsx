@@ -1,4 +1,7 @@
 ﻿"use client";
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useBranch } from '@/contexts/branch-context'
+import { defaultPriorityConfig } from '@/services/repair-priority'
 import { logger } from '@/lib/logger'
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -23,6 +26,9 @@ type RepairRow = {
 };
 
 export default function RepairsPriorityPage() {
+  const { scope, currentScope } = useTenantScope();
+  const { selectedBranchId } = useBranch();
+  const [error, setError] = useState<string | null>(null);
   const [repairs, setRepairs] = useState<RepairOrder[]>([]);
   const [loading, setLoading] = useState(true);
   // La configuración se edita en /dashboard/repairs/settings y se lee de
@@ -36,9 +42,22 @@ export default function RepairsPriorityPage() {
     }
   });
 
-  const queue = useMemo(() => sortRepairsByPriority(repairs, config), [repairs, config]);
+  // Historical value and complexity have no measured source; exclude their weights.
+  const measuredConfig = useMemo(() => ({
+    ...(config || defaultPriorityConfig),
+    weights: {
+      ...(config?.weights || defaultPriorityConfig.weights),
+      historicalValueWeight: 0,
+      technicalComplexityWeight: 0,
+    },
+  }), [config]);
+  const queue = useMemo(() => sortRepairsByPriority(repairs, measuredConfig), [repairs, measuredConfig]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const requestScope = scope;
+    setRepairs([]);
+    setError(null);
     const fetchRepairs = async () => {
       setLoading(true);
 
@@ -47,21 +66,27 @@ export default function RepairsPriorityPage() {
       // dependía solo de RLS y podía traer reparaciones de otras empresas.
       let data: RepairRow[] | null = null;
       try {
-        const response = await fetch('/api/repairs', {
-          cache: 'no-store',
-          headers: branchHeaders(),
-        });
-
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null) as { error?: string } | null;
-          throw new Error(payload?.error || 'No se pudieron cargar las reparaciones');
+        const all: RepairRow[] = [];
+        // Filter active work in the API before pagination, then load every page.
+        for (let page = 1; ; page++) {
+          const response = await fetch(`/api/repairs?chargeable=true&page=${page}&pageSize=100`, {
+            cache: 'no-store', headers: branchHeaders(selectedBranchId), signal: controller.signal,
+          });
+          const payload = await response.json() as { repairs?: RepairRow[]; pagination?: { total?: number }; error?: string };
+          if (controller.signal.aborted || currentScope.current !== requestScope) return;
+          if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar las reparaciones');
+          const batch = payload.repairs ?? [];
+          all.push(...batch);
+          const total = payload.pagination?.total;
+          if (typeof total !== 'number') throw new Error('Falta la cobertura de la cola. Reintentá.');
+          if (all.length >= total) break;
+          if (!batch.length) throw new Error('La cola cambió durante la carga. Reintentá.');
         }
-
-        const payload = await response.json() as { repairs?: RepairRow[] };
-        data = (payload.repairs ?? [])
-          .filter((item) => ACTIVE_REPAIR_STATUSES.has(String(item.status ?? '') as RepairStatus))
+        data = all.filter((item) => ACTIVE_REPAIR_STATUSES.has(String(item.status ?? '') as RepairStatus))
           .sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')));
       } catch (error) {
+        if (controller.signal.aborted || currentScope.current !== requestScope) return;
+        setError(error instanceof Error ? error.message : 'No se pudo cargar la cola');
         logger.error('Error fetching repairs', { error })
         setLoading(false);
         return;
@@ -77,9 +102,6 @@ export default function RepairsPriorityPage() {
           deviceType: item.device_type,
           issueDescription: item.issue_description,
           urgency: mapPriorityToUrgency(item.priority),
-          // Valores calculados o por defecto ya que no están en BD actualmente
-          historicalValue: 0, // TODO: Implementar cálculo basado en historial de cliente
-          technicalComplexity: 1, // TODO: Implementar lógica de complejidad
           createdAt: item.created_at,
           updatedAt: item.updated_at,
           stage: item.status,
@@ -90,8 +112,9 @@ export default function RepairsPriorityPage() {
     };
 
     // Sin Realtime: repairs no está en la publicación supabase_realtime.
-    fetchRepairs();
-  }, []);
+    void fetchRepairs();
+    return () => controller.abort();
+  }, [scope, currentScope, selectedBranchId]);
 
   if (loading && repairs.length === 0) {
     return <div className="p-6">Cargando cola de prioridades...</div>;
@@ -102,14 +125,15 @@ export default function RepairsPriorityPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Cola de Trabajo</h1>
-          <p className="text-muted-foreground">Priorización inteligente basada en urgencia, tiempo de espera y valor.</p>
+          <p className="text-muted-foreground">Prioridad por urgencia y tiempo de espera. Valor histórico y complejidad sin datos: excluidos del cálculo.</p>
         </div>
         <Button asChild>
           <Link href="/dashboard/repairs/settings">Configurar</Link>
         </Button>
       </div>
+      {error && <p role="alert" className="text-destructive">{error} Recargá para reintentar.</p>}
       <Card className="p-4">
-        {repairs.length === 0 ? (
+        {error ? null : repairs.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             No hay reparaciones pendientes en la cola.
           </div>
@@ -133,7 +157,7 @@ export default function RepairsPriorityPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-mono font-bold text-primary">
-                    {calculatePriorityScore(r, config).toFixed(3)}
+                    {calculatePriorityScore(r, measuredConfig).toFixed(3)}
                   </div>
                   <div className="text-xs text-muted-foreground">score</div>
                 </div>

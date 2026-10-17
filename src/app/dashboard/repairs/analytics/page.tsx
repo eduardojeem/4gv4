@@ -21,9 +21,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AnalyticsOverview } from '@/components/dashboard/repairs/analytics/AnalyticsOverview'
 import { AnalyticsTechnicians } from '@/components/dashboard/repairs/analytics/AnalyticsTechnicians'
 import { RepairPerformanceMetrics } from '@/components/dashboard/repairs/analytics/RepairPerformanceMetrics'
+import { useRepairs } from '@/contexts/RepairsContext'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 import { generateAnalyticsPDF } from '@/lib/repairs/analytics-pdf'
 import { useBranch } from '@/contexts/branch-context'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { roleHasPermission } from '@/lib/saas/permissions'
 import { useAuth } from '@/contexts/auth-context'
 
 function AnalyticsLoading() {
@@ -54,11 +57,14 @@ function AnalyticsLoading() {
 }
 
 export default function RepairsAnalyticsPage() {
-  const { user, isAdmin, loading: authLoading } = useAuth()
-  const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
+  const { hasPermission, loading: authLoading } = useAuth()
+  const active = useOptionalActiveOrganization()
+  const canAccess = active ? Boolean(active.organization && roleHasPermission(active.organization.role, 'analytics.read')) : hasPermission('analytics.read')
   const [activeTab, setActiveTab] = useState('overview')
   const [isExportingPDF, setIsExportingPDF] = useState(false)
-  const analyticsData = useRepairAnalytics('6m')
+  const [timeRange, setTimeRange] = useState('6months')
+  const analyticsData = useRepairAnalytics(timeRange)
+  const { refreshRepairs } = useRepairs()
   const { selectedBranch } = useBranch()
 
   const handleExportPDF = async () => {
@@ -102,6 +108,9 @@ export default function RepairsAnalyticsPage() {
       </div>
     )
   }
+
+  if (analyticsData.error) return <div role="alert" className="space-y-3 p-6 text-destructive"><p>No se pudo cargar la lista completa de reparaciones. Las analíticas no están disponibles.</p><Button variant="outline" onClick={() => void refreshRepairs()}>Reintentar</Button></div>
+  if (analyticsData.isLoading) return <AnalyticsLoading />
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6 md:p-8 w-full max-w-7xl mx-auto print:p-0 print:gap-4">
@@ -213,7 +222,7 @@ export default function RepairsAnalyticsPage() {
         <div>
           <TabsContent value="overview" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
             <Suspense fallback={<AnalyticsLoading />}>
-              <AnalyticsOverview />
+              <AnalyticsOverview timeRange={timeRange} onTimeRangeChange={setTimeRange} />
             </Suspense>
           </TabsContent>
 
@@ -225,7 +234,7 @@ export default function RepairsAnalyticsPage() {
 
           <TabsContent value="technicians" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
             <Suspense fallback={<AnalyticsLoading />}>
-              <AnalyticsTechnicians />
+              <AnalyticsTechnicians timeRange={timeRange} onTimeRangeChange={setTimeRange} />
             </Suspense>
           </TabsContent>
         </div>

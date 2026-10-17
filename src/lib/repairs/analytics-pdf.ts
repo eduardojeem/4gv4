@@ -2,15 +2,17 @@ import jsPDF from 'jspdf'
 import autoTable, { type Table } from 'jspdf-autotable'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { formatCurrency } from '@/lib/currency'
 
 export interface RepairAnalyticsData {
+  periodLabel?: string
   metrics?: {
     totalRepairs?: number
     completedRepairs?: number
     inProgressRepairs?: number
     avgRepairTime?: number
     completionRate?: number
-    onTimeRate?: number
+    onTimeRate?: number | null
     urgentRepairs?: number
     totalRevenue?: number
   }
@@ -39,10 +41,13 @@ export function generateAnalyticsPDF(analyticsData: RepairAnalyticsData, organiz
   doc.text(`Empresa: ${organizationName}`, 14, 30)
   doc.text(`Fecha de reporte: ${format(new Date(), "dd 'de' MMMM, yyyy", { locale: es })}`, 14, 35)
 
+  doc.text(`Ingresadas: ${analyticsData.periodLabel ?? 'Período seleccionado'}`, 14, 40)
+  doc.text('Ingresos: valor acordado de las entregadas de ese grupo.', 14, 45)
+
   // Métricas Principales
   doc.setFontSize(14)
   doc.setTextColor(40)
-  doc.text('Resumen de Rendimiento', 14, 50)
+  doc.text('Resumen de Rendimiento', 14, 55)
 
   const metrics = analyticsData.metrics || {}
   
@@ -52,13 +57,13 @@ export function generateAnalyticsPDF(analyticsData: RepairAnalyticsData, organiz
     ['En Proceso', String(metrics.inProgressRepairs || 0)],
     ['Tiempo Promedio (días)', String(Math.round(metrics.avgRepairTime || 0))],
     ['Tasa de Completado', `${Math.round(metrics.completionRate || 0)}%`],
-    ['Entregas a Tiempo', `${Math.round(metrics.onTimeRate || 0)}%`],
+    ['Entregas a Tiempo', metrics.onTimeRate == null ? 'No disponible (sin fecha prometida)' : `${Math.round(metrics.onTimeRate)}%`],
     ['Reparaciones Urgentes', String(metrics.urgentRepairs || 0)],
-    ['Ingresos Totales', `$${(metrics.totalRevenue || 0).toLocaleString()}`],
+    ['Ingresos por entregadas del grupo', formatCurrency(metrics.totalRevenue ?? 0)],
   ]
 
   autoTable(doc, {
-    startY: 55,
+    startY: 60,
     head: [['Métrica', 'Valor']],
     body: summaryBody,
     theme: 'striped',

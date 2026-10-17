@@ -167,8 +167,7 @@ const ChartTooltip = memo(function ChartTooltip({ active, payload, label }: Cust
   )
 })
 
-export function AnalyticsOverview({ className }: { className?: string }) {
-  const [timeRange, setTimeRange] = useState('6months')
+export function AnalyticsOverview({ className, timeRange = '6months', onTimeRangeChange }: { className?: string; timeRange?: string; onTimeRangeChange?: (value: string) => void }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const analytics = useRepairAnalytics(timeRange)
@@ -224,12 +223,12 @@ export function AnalyticsOverview({ className }: { className?: string }) {
             Período de Análisis
           </h2>
           <p className="text-xs text-muted-foreground">
-            Visualizando métricas consolidadas del taller.
+            Reparaciones ingresadas en el período; ingresos por las entregadas de ese grupo.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <Select value={timeRange} onValueChange={onTimeRangeChange}>
             <SelectTrigger className="w-[160px] h-8 text-xs bg-card border-border/70 rounded-xl">
               <SelectValue />
             </SelectTrigger>

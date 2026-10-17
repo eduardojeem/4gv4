@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Building2, TrendingUp, Package, DollarSign } from 'lucide-react'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -752,7 +752,7 @@ export default function SuppliersPage() {
             name: orderSeedProduct.name,
             suppliersku: orderSeedProduct.sku || '',
             unitprice: orderSeedProduct.purchasePrice,
-            currency: 'PYG',
+            currency: getLocaleConfig().currency,
             stock: orderSeedProduct.stock,
             minStock: orderSeedProduct.minStock,
             imageUrl: orderSeedProduct.imageUrl,

@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, Globe, Loader2, Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -66,21 +67,39 @@ export function AgendaBoard() {
   const [view, setView] = useState<View>('day')
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
+  const { scope, currentScope } = useTenantScope()
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const requestRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => { setDialog(null) }, [scope])
+  useEffect(() => () => { requestRef.current++; abortRef.current?.abort() }, [])
+
   const load = useCallback(async (target: string | null, mode: View) => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const request = ++requestRef.current
     setLoading(true)
+    setError(null)
     try {
       const params = new URLSearchParams({ days: mode === 'week' ? '7' : '1' })
       if (target) params.set('date', target)
-      const response = await fetch(`/api/agenda?${params}`, { cache: 'no-store' })
+      const response = await fetch(`/api/agenda?${params}`, { cache: 'no-store', signal: controller.signal })
       const body = await response.json().catch(() => null)
+      if (request !== requestRef.current || currentScope.current !== scope) return
+      setLoadedScope(scope)
+      if (!response.ok || !body || typeof body.available !== 'boolean' || (body.available && (!Array.isArray(body.appointments) || !Array.isArray(body.professionals) || !body.settings || !body.timeZone || !body.date))) throw new Error('No se pudo cargar la agenda.')
       if (body) {
         setData(body)
         if (!target && body.date) setDate(body.date)
       }
+    } catch {
+      if (request === requestRef.current && currentScope.current === scope) { setLoadedScope(scope); setError('No se pudo cargar la agenda. Reintentá la consulta.') }
     } finally {
-      setLoading(false)
+      if (request === requestRef.current && currentScope.current === scope) setLoading(false)
     }
-  }, [])
+  }, [scope, currentScope])
 
   useEffect(() => { void load(date, view) }, [load, date, view])
   const reloadBoard = useCallback(() => { void load(date, view) }, [load, date, view])
@@ -117,7 +136,8 @@ export function AgendaBoard() {
     })
   }
 
-  if (loading && !data) {
+  if (error && loadedScope === scope) return <div role="alert" className="space-y-3 p-4 text-destructive"><p>{error}</p><Button variant="outline" onClick={reloadBoard}>Reintentar</Button></div>
+  if (loadedScope !== scope || (loading && !data)) {
     return <p className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando agenda…</p>
   }
   if (!data || !data.available || !date) {
