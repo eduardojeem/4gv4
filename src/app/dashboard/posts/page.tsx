@@ -115,16 +115,22 @@ export default function PostsPage() {
       if (error) throw error
 
       if (data) {
+        // Posts remains the global public blog; profile RLS governs available author names.
+        const authorIds = [...new Set(data.map(item => item.user_id).filter((id): id is string => Boolean(id)))]
+        const { data: profiles } = authorIds.length
+          ? await supabase.from('profiles').select('id, full_name, avatar_url').in('id', authorIds)
+          : { data: [] }
+        const authors = new Map((profiles || []).map(profile => [profile.id, profile]))
         const mappedPosts: Post[] = data.map((item) => ({
           id: item.id,
           title: item.title,
           content: item.content,
           excerpt: item.excerpt || '',
-          // TODO: Integrar con tabla de perfiles real cuando exista
+          // Unavailable or restricted profiles do not imply administrator authorship.
           author: {
-            name: 'Admin', 
-            avatar: '',
-            role: 'Admin'
+            name: (item.user_id && authors.get(item.user_id)?.full_name) || 'Autor no disponible',
+            avatar: (item.user_id && authors.get(item.user_id)?.avatar_url) || '',
+            role: 'Autor'
           },
           category: item.category || 'General',
           tags: item.tags || [],

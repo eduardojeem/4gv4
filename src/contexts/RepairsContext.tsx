@@ -1,12 +1,12 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react'
+import { createContext, useContext, useState, useRef, useEffect, ReactNode, useCallback, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
-import { logger } from '@/lib/logger'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 
 // ============================================================================
 // Types
@@ -113,6 +113,8 @@ interface RepairsProviderProps {
 }
 
 export function RepairsProvider({ children }: RepairsProviderProps) {
+    const { scope, currentScope } = useTenantScope()
+    const abortRef = useRef<AbortController | null>(null)
     const [repairs, setRepairs] = useState<Repair[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<Error | null>(null)
@@ -121,94 +123,48 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const shouldLoadRepairs = pathname.startsWith('/dashboard/repairs') || pathname.startsWith('/dashboard/technician')
 
 
-    const fetchRepairsWithCustomerFallback = useCallback(async () => {
-        // La API topea pageSize en 100 y solo se pedía la página 1: todo lo
-        // que quedara después de esas 100 reparaciones más recientes quedaba
-        // invisible para siempre (ni con scroll, ni con los filtros, ni
-        // buscándola por nombre, porque el filtrado corre en memoria sobre lo
-        // que ya se cargó). El mismo problema que hubo con clientes, mismo
-        // arreglo: paginar hasta traer todo, con un techo de seguridad.
-        const PAGE_SIZE = 100
-        const MAX_PAGES = 20
-        const raw: unknown[] = []
-        let total = 0
-
-        for (let page = 1; page <= MAX_PAGES; page++) {
-            try {
-                const response = await fetch(`/api/repairs?page=${page}&pageSize=${PAGE_SIZE}`, {
-                    headers: branchHeaders(selectedBranchId),
-                    cache: 'no-store',
-                })
-                const payload = await response.json().catch(() => null) as {
-                    repairs?: unknown[]
-                    pagination?: { total?: number }
-                    error?: string
-                } | null
-
-                if (!response.ok) {
-                    if (page === 1) {
-                        return {
-                            data: [],
-                            total: 0,
-                            error: new Error(payload?.error || 'No se pudieron cargar las reparaciones'),
-                        }
-                    }
-                    logger.warn('Stopped paginating repairs after a failed page', { page, loaded: raw.length })
-                    break
-                }
-
-                const batch = payload?.repairs || []
-                raw.push(...batch)
-                total = payload?.pagination?.total ?? raw.length
-                if (batch.length < PAGE_SIZE || raw.length >= total) break
-            } catch (pageError) {
-                if (page === 1) throw pageError
-                // Páginas siguientes: se conserva lo ya cargado en vez de
-                // perder todo por un fallo puntual de red.
-                logger.warn('Stopped paginating repairs after a request error', {
-                    page,
-                    loaded: raw.length,
-                    error: pageError instanceof Error ? pageError.message : String(pageError),
-                })
-                break
-            }
-        }
-
-        if (total > raw.length) {
-            logger.warn('Repair list truncated by page cap', { loaded: raw.length, total })
-        }
-
-        return { data: raw, total, error: null }
-    }, [selectedBranchId])
-
-    // Fetch all repairs
     const fetchRepairs = useCallback(async () => {
+        abortRef.current?.abort()
+        const controller = new AbortController()
+        abortRef.current = controller
+        const requestScope = scope
+        setIsLoading(true)
+        setError(null)
         try {
-            setIsLoading((prev) => (repairs.length === 0 ? true : prev))
-            setError(null)
-
-            const { data, error: fetchError } = await fetchRepairsWithCustomerFallback()
-
-            if (fetchError) throw fetchError
-
-            // Transform data to match Repair interface
-            const transformedData = (data || []).map((repair) => {
+            const raw: unknown[] = []
+            for (let page = 1; ; page++) {
+                const response = await fetch(`/api/repairs?page=${page}&pageSize=100`, {
+                    headers: branchHeaders(selectedBranchId), cache: 'no-store', signal: controller.signal,
+                })
+                const payload = await response.json() as { repairs?: unknown[]; pagination?: { total?: number }; error?: string }
+                if (controller.signal.aborted || currentScope.current !== requestScope) return
+                if (!response.ok) throw new Error(payload.error || `No se pudo cargar la página ${page}. Reintentá.`)
+                const batch = payload.repairs ?? []
+                raw.push(...batch)
+                const total = payload.pagination?.total
+                if (typeof total !== 'number') throw new Error('Falta la cobertura de reparaciones. Reintentá.')
+                if (raw.length >= total) break
+                if (!batch.length) throw new Error('La lista cambió durante la carga. Reintentá para ver todas las reparaciones.')
+            }
+            const transformed = raw.map((repair) => {
                 const mapped = mapSupabaseRepairToUi(repair as SupabaseRepairPayload)
                 return { ...mapped, dbStatus: mapped.status }
             })
-
-            setRepairs(transformedData)
+            setRepairs(transformed)
         } catch (err) {
+            if (controller.signal.aborted || currentScope.current !== requestScope) return
             const error = err as Error
+            setRepairs([])
             setError(error)
-            toast.error('Error al cargar reparaciones: ' + error.message)
+            toast.error('No se cargó la lista completa de reparaciones: ' + error.message)
         } finally {
-            setIsLoading(false)
+            if (abortRef.current === controller && currentScope.current === requestScope) setIsLoading(false)
         }
-    }, [fetchRepairsWithCustomerFallback, repairs.length])
+    }, [scope, currentScope, selectedBranchId])
 
     // Create repair
     const createRepair = useCallback(async (data: RepairFormData): Promise<Repair | null> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
 
@@ -276,6 +232,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo crear la reparación')
             }
 
+            if (currentScope.current !== requestScope) return null
             const mapped = mapSupabaseRepairToUi(payload?.repair as unknown as Parameters<typeof mapSupabaseRepairToUi>[0])
             const transformedRepair = { ...mapped, dbStatus: mapped.status }
 
@@ -288,13 +245,14 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al crear reparación: ' + error.message)
             return null
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Update repair
     const updateRepair = useCallback(async (
         id: string,
         data: RepairUpdateData
     ): Promise<Repair | null> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
 
@@ -319,6 +277,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(body?.error || 'No se pudo actualizar la reparacion')
             }
 
+            if (currentScope.current !== requestScope) return null
             const mapped = mapSupabaseRepairToUi(body.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
@@ -333,10 +292,11 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar reparación: ' + error.message)
             return null
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Delete repair
     const deleteRepair = useCallback(async (id: string): Promise<boolean> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
 
@@ -350,6 +310,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo eliminar la reparacion')
             }
 
+            if (currentScope.current !== requestScope) return false
             setRepairs(prev => prev.filter(repair => repair.id !== id))
             toast.success('Reparación eliminada exitosamente')
             return true
@@ -359,13 +320,14 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al eliminar reparación: ' + error.message)
             return false
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Update status
     const updateStatus = useCallback(async (
         id: string,
         status: RepairStatus
     ): Promise<boolean> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
 
@@ -387,6 +349,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error('No se pudo recargar la reparacion')
             }
 
+            if (currentScope.current !== requestScope) return false
             const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
@@ -413,7 +376,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar estado: ' + error.message)
             return false
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Deliver repair with outcome
     const deliverRepair = useCallback(async (
@@ -421,6 +384,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         outcome: RepairDeliveryOutcome,
         note?: string
     ): Promise<boolean> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
             const response = await fetch(`/api/repairs/${id}/delivery`, {
@@ -442,6 +406,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo registrar la entrega')
             }
 
+            if (currentScope.current !== requestScope) return false
             const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
             setRepairs(prev => prev.map(r => r.id === id ? transformed : r))
@@ -454,13 +419,14 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al registrar entrega: ' + error.message)
             return false
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Assign technician
     const assignTechnician = useCallback(async (
         repairId: string,
         technicianId: string
     ): Promise<boolean> => {
+        const requestScope = currentScope.current
         try {
             setError(null)
 
@@ -478,6 +444,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo asignar tecnico')
             }
 
+            if (currentScope.current !== requestScope) return false
             const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
@@ -493,7 +460,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al asignar técnico: ' + error.message)
             return false
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Add images to repair
     const addImages = useCallback(async (
@@ -501,6 +468,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         urls: string[],
         imageType: string = 'general'
     ): Promise<boolean> => {
+        const requestScope = currentScope.current
         try {
             if (!urls || urls.length === 0) return true
             const response = await fetch(`/api/repairs/${repairId}/images`, {
@@ -517,6 +485,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudieron agregar imagenes')
             }
 
+            if (currentScope.current !== requestScope) return false
             const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
             setRepairs(prev => prev.map(r => r.id === repairId ? transformed : r))
@@ -528,7 +497,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al agregar imágenes: ' + error.message)
             return false
         }
-    }, [selectedBranchId])
+    }, [selectedBranchId, currentScope])
 
     // Get repairs by status
     const getRepairsByStatus = useCallback((status: RepairStatus): Repair[] => {
@@ -576,8 +545,10 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
     // Initial fetch
     useEffect(() => {
-        if (!shouldLoadRepairs) return
-        fetchRepairs()
+        setRepairs([])
+        setError(null)
+        if (shouldLoadRepairs) void fetchRepairs()
+        return () => abortRef.current?.abort()
     }, [fetchRepairs, shouldLoadRepairs])
 
     // Sin suscripción Realtime: repairs no está en la publicación

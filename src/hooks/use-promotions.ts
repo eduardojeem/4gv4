@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { toast } from 'sonner'
 import { parseISO, isAfter, isBefore, differenceInDays } from 'date-fns'
 import type { Promotion, PromotionFilters, PromotionStats } from '@/types/promotion'
@@ -19,8 +20,11 @@ import type { Promotion, PromotionFilters, PromotionStats } from '@/types/promot
  * pero solo para reconciliar, y sin vaciar nada.
  */
 export function usePromotions() {
+  const { scope, currentScope } = useTenantScope()
+  const abortRef = useRef<AbortController | null>(null)
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [filters, setFilters] = useState<PromotionFilters>({
     search: '',
@@ -34,27 +38,47 @@ export function usePromotions() {
    * que no se la vacía ni se avisa del error con un toast encima del de éxito.
    */
   const fetchPromotions = useCallback(async ({ silencioso = false } = {}) => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const requestScope = scope
+    setError(null)
     if (silencioso) setIsRefreshing(true)
     else setLoading(true)
     try {
-      const response = await fetch('/api/promotions?limit=100', { cache: 'no-store' })
-      const result = await response.json()
-
-      if (!response.ok) throw new Error(result.error || 'No se pudieron cargar promociones')
-      setPromotions(result.promotions || [])
+      const all: Promotion[] = []
+      for (let page = 1; ; page++) {
+        const response = await fetch(`/api/promotions?limit=100&page=${page}`, { cache: 'no-store', signal: controller.signal })
+        const result = await response.json()
+        if (controller.signal.aborted || currentScope.current !== requestScope) return
+        if (!response.ok) throw new Error(result.error || 'No se pudieron cargar promociones')
+        const batch: Promotion[] = result.promotions || []
+        all.push(...batch)
+        const total = result.pagination?.total
+        if (typeof total !== 'number') throw new Error('Falta la cobertura de promociones. Reintentá la carga.')
+        if (all.length >= total) break
+        if (batch.length === 0) throw new Error('La lista de promociones cambió durante la carga. Reintentá.')
+      }
+      setPromotions(all)
     } catch (error) {
+      if (controller.signal.aborted || currentScope.current !== requestScope) return
+      setError('No se cargó la lista completa de promociones. Reintentá para ver los totales.')
+      setPromotions([])
       console.error('Error fetching promotions:', error)
-      if (!silencioso) toast.error('Error al cargar promociones')
+      if (!silencioso) toast.error('Error al cargar promociones; reintentá para ver los totales completos')
     } finally {
-      setLoading(false)
-      setIsRefreshing(false)
+      if (abortRef.current === controller && currentScope.current === requestScope) {
+        setLoading(false)
+        setIsRefreshing(false)
+      }
     }
-  }, [])
+  }, [scope, currentScope])
 
-  // Initial load
   useEffect(() => {
-    fetchPromotions()
-  }, [fetchPromotions])
+    setPromotions([])
+    void fetchPromotions()
+    return () => abortRef.current?.abort()
+  }, [fetchPromotions, currentScope])
 
   // Filtered promotions
   const filteredPromotions = useMemo(() => {
@@ -173,6 +197,7 @@ export function usePromotions() {
 
   // CRUD operations
   const createPromotion = useCallback(async (data: Omit<Promotion, 'id' | 'created_at' | 'updated_at'>) => {
+    const requestScope = currentScope.current
     try {
       const response = await fetch('/api/promotions', {
         method: 'POST',
@@ -181,6 +206,7 @@ export function usePromotions() {
       })
       const result = await response.json()
 
+      if (currentScope.current !== requestScope) return false
       if (!response.ok) throw new Error(result.error || 'No se pudo crear la promocion')
 
       // La API devuelve la promoción creada: se agrega arriba, que es donde la
@@ -198,9 +224,10 @@ export function usePromotions() {
       toast.error(error instanceof Error ? error.message : 'Error al crear la promoción')
       return false
     }
-  }, [fetchPromotions])
+  }, [fetchPromotions, currentScope])
 
   const updatePromotion = useCallback(async (id: string, data: Partial<Promotion>) => {
+    const requestScope = currentScope.current
     try {
       const response = await fetch(`/api/promotions/${id}`, {
         method: 'PUT',
@@ -209,6 +236,7 @@ export function usePromotions() {
       })
       const result = await response.json()
 
+      if (currentScope.current !== requestScope) return false
       if (!response.ok) throw new Error(result.error || 'No se pudo actualizar la promocion')
 
       // Lo que quedó guardado reemplaza a la fila vieja en el acto. Sólo si la
@@ -227,13 +255,15 @@ export function usePromotions() {
       toast.error(error instanceof Error ? error.message : 'Error al actualizar la promoción')
       return false
     }
-  }, [fetchPromotions])
+  }, [fetchPromotions, currentScope])
 
   const deletePromotion = useCallback(async (id: string) => {
+    const requestScope = currentScope.current
     try {
       const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
       const result = await response.json()
 
+      if (currentScope.current !== requestScope) return false
       if (!response.ok) throw new Error(result.error || 'No se pudo eliminar la promocion')
 
       setPromotions(prev => prev.filter(promo => promo.id !== id))
@@ -244,7 +274,7 @@ export function usePromotions() {
       toast.error('Error al eliminar la promoción')
       return false
     }
-  }, [])
+  }, [currentScope])
 
   const togglePromotionStatus = useCallback(async (id: string, isActive: boolean) => {
     return updatePromotion(id, { is_active: !isActive })
@@ -320,6 +350,7 @@ export function usePromotions() {
   }, [createPromotion])
 
   const bulkUpdateStatus = useCallback(async (promotionIds: string[], isActive: boolean) => {
+    const requestScope = currentScope.current
     try {
       await Promise.all(promotionIds.map(async (id) => {
         const response = await fetch(`/api/promotions/${id}`, {
@@ -331,6 +362,7 @@ export function usePromotions() {
         if (!response.ok) throw new Error(result.error || 'No se pudo actualizar una promocion')
       }))
       
+      if (currentScope.current !== requestScope) return false
       const elegidas = new Set(promotionIds)
       setPromotions(prev => prev.map(promo => (elegidas.has(promo.id) ? { ...promo, is_active: isActive } : promo)))
       toast.success(`${promotionIds.length} promociones ${isActive ? 'activadas' : 'desactivadas'}`)
@@ -340,10 +372,11 @@ export function usePromotions() {
       toast.error('Error al actualizar promociones')
       return false
     }
-  }, [])
+  }, [currentScope])
 
   const bulkDeletePromotions = useCallback(async (promotionIds: string[]) => {
     if (promotionIds.length === 0) return false
+    const requestScope = currentScope.current
     try {
       await Promise.all(promotionIds.map(async (id) => {
         const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
@@ -353,6 +386,7 @@ export function usePromotions() {
         }
       }))
 
+      if (currentScope.current !== requestScope) return false
       const borradas = new Set(promotionIds)
       setPromotions(prev => prev.filter(promo => !borradas.has(promo.id)))
       toast.success(`${promotionIds.length} promociones eliminadas`)
@@ -362,7 +396,7 @@ export function usePromotions() {
       toast.error('Error al eliminar promociones')
       return false
     }
-  }, [])
+  }, [currentScope])
 
   // Validation functions
   const validatePromotionCode = useCallback(async (code: string, excludeId?: string) => {
@@ -485,6 +519,7 @@ export function usePromotions() {
     promotions: filteredPromotions,
     allPromotions: promotions,
     loading,
+    error,
     /** Hay una consulta de reconciliación en curso, con datos ya en pantalla. */
     isRefreshing,
     stats,

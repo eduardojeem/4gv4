@@ -1,3 +1,4 @@
+import { roleHasPermission, type OrganizationRole, type Permission } from '@/lib/saas/permissions'
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
@@ -401,6 +402,7 @@ export async function proxy(request: NextRequest) {
           { data: null }
         )
         if (orgRows && orgRows.length > 0) {
+          organizationRoleFromSnapshot = orgRows[0].role
           effectiveRole = mapOrganizationRoleToDashboardRole(
             orgRows[0].role as Parameters<typeof mapOrganizationRoleToDashboardRole>[0]
           )
@@ -429,7 +431,7 @@ export async function proxy(request: NextRequest) {
 
     // Restricción por sección para roles limitados (vendedor/tecnico).
     // Misma fuente de verdad que el guard client-side, aplicada server-side.
-    if (!canRoleAccessSection(effectiveRole, pathname)) {
+    if (!canRoleAccessSection(effectiveRole, pathname, (permission) => Boolean(organizationRoleFromSnapshot && roleHasPermission(organizationRoleFromSnapshot as OrganizationRole, permission as Permission)))) {
       return redirectWithCookies(request, supabaseResponse, '/dashboard')
     }
   }

@@ -1,3 +1,4 @@
+import { deliveredRepairRevenue, deliveryPromiseOutcome } from '@/lib/repairs/analytics-values'
 
 import { useMemo } from 'react'
 import { useRepairs } from '@/contexts/RepairsContext'
@@ -14,7 +15,7 @@ export interface AnalyticsMetrics {
   completionRate: number
   avgRepairTime: number
   onTimeDeliveries: number
-  onTimeRate: number
+  onTimeRate: number | null
 }
 
 export interface MonthlyData {
@@ -33,27 +34,21 @@ export interface TechnicianPerformance {
   revenue: number
   avgTime: number
   efficiency: number
+  totalTime: number
+  timedCount: number
 }
 
 export function useRepairAnalytics(timeRange: string) {
-  const { repairs } = useRepairs()
+  const { repairs: allRepairs, isLoading, error } = useRepairs()
 
   return useMemo(() => {
-    if (!repairs.length) {
-      return {
-        metrics: {} as AnalyticsMetrics,
-        monthlyData: [] as MonthlyData[],
-        statusAnalysis: [],
-        technicianAnalysis: [] as TechnicianPerformance[],
-        deviceTypeAnalysis: [],
-        priorityAnalysis: [],
-        dailyTrend: []
-      }
-    }
-
     const now = new Date()
-    const monthCount = timeRange === '12months' ? 12 : 6
-
+    const monthCount = timeRange === '12months' ? 12 : timeRange === '3months' ? 3 : 6
+    const periodStart = startOfMonth(subMonths(now, monthCount - 1))
+    const repairs = allRepairs.filter(repair => {
+      const created = new Date(repair.createdAt)
+      return created >= periodStart && created <= now
+    })
     // Pre-calcular fechas una sola vez
     const monthRanges = Array.from({ length: monthCount }, (_, i) => {
       const monthDate = subMonths(now, monthCount - 1 - i)
@@ -74,7 +69,7 @@ export function useRepairAnalytics(timeRange: string) {
     const technicianStats = new Map<string, TechnicianPerformance>()
     const statusStats = new Map<string, { name: string; count: number; revenue: number }>()
     const deviceStats = new Map<string, { name: string; count: number; revenue: number }>()
-    const priorityStats = new Map<string, { name: string; count: number; avgTime: number; totalTime: number }>()
+    const priorityStats = new Map<string, { name: string; count: number; avgTime: number; totalTime: number; timedCount: number }>()
 
     // Labels maps para evitar recálculos
     const statusLabels = new Map([
@@ -117,6 +112,7 @@ export function useRepairAnalytics(timeRange: string) {
     let onTimeDeliveries = 0
     let totalRepairTime = 0
     let completedWithTime = 0
+    let completedWithPromise = 0
 
     // Procesar todas las reparaciones en una sola iteración
     repairs.forEach(repair => {
@@ -127,7 +123,7 @@ export function useRepairAnalytics(timeRange: string) {
       const deviceType = repair.deviceType || 'unknown'
       const priority = repair.priority || 'medium'
       const technicianName = repair.technician?.name || 'Sin asignar'
-      const revenue = repair.finalCost || repair.estimatedCost || 0
+      const revenue = deliveredRepairRevenue(repair)
 
       // Agregar a mes correspondiente
       const monthRepairs = repairsByMonth.get(monthKey)
@@ -151,8 +147,10 @@ export function useRepairAnalytics(timeRange: string) {
           totalRepairTime += repairTime
           completedWithTime++
           
-          if (repairTime <= 7) {
-            onTimeDeliveries++
+          const onTime = deliveryPromiseOutcome(repair)
+          if (onTime !== null) {
+            completedWithPromise++
+            if (onTime) onTimeDeliveries++
           }
         }
       }
@@ -181,9 +179,10 @@ export function useRepairAnalytics(timeRange: string) {
 
       // Estadísticas por prioridad
       const priorityKey = priorityLabels.get(priority) || priority
-      const priorityStat = priorityStats.get(priorityKey) || { name: priorityKey, count: 0, avgTime: 0, totalTime: 0 }
+      const priorityStat = priorityStats.get(priorityKey) || { name: priorityKey, count: 0, avgTime: 0, totalTime: 0, timedCount: 0 }
       priorityStat.count++
-      if (repair.completedAt && repair.createdAt) {
+      if (status === 'entregado' && repair.completedAt && repair.createdAt) {
+        priorityStat.timedCount++
         const days = differenceInDays(new Date(repair.completedAt), new Date(repair.createdAt))
         priorityStat.totalTime += days
       }
@@ -196,22 +195,29 @@ export function useRepairAnalytics(timeRange: string) {
         completedRepairs: 0,
         revenue: 0,
         avgTime: 0,
-        efficiency: 0
+        efficiency: 0,
+        totalTime: 0,
+        timedCount: 0
       }
       techStat.totalRepairs++
       if (status === 'entregado') {
         techStat.completedRepairs++
         techStat.revenue += revenue
+        if (repair.completedAt && repair.createdAt) {
+          techStat.totalTime += differenceInDays(new Date(repair.completedAt), new Date(repair.createdAt))
+          techStat.timedCount++
+        }
       }
       technicianStats.set(technicianName, techStat)
     })
 
     // Calcular promedios y eficiencias
     priorityStats.forEach(stat => {
-      stat.avgTime = stat.count > 0 ? stat.totalTime / stat.count : 0
+      stat.avgTime = stat.timedCount > 0 ? stat.totalTime / stat.timedCount : 0
     })
 
     technicianStats.forEach(tech => {
+      tech.avgTime = tech.timedCount > 0 ? tech.totalTime / tech.timedCount : 0
       tech.efficiency = tech.totalRepairs > 0 ? (tech.completedRepairs / tech.totalRepairs) * 100 : 0
     })
 
@@ -220,17 +226,18 @@ export function useRepairAnalytics(timeRange: string) {
       const monthRepairs = repairsByMonth.get(range.key) || []
       const completedRepairs = completedByMonth.get(range.key) || []
       
-      const revenue = completedRepairs.reduce((sum: number, r) => sum + (r.finalCost || r.estimatedCost || 0), 0)
+      const revenue = completedRepairs.reduce((sum: number, r) => sum + deliveredRepairRevenue(r), 0)
       
+      const timedRepairs = completedRepairs.filter(r => r.completedAt && r.createdAt)
       let avgRepairTime = 0
-      if (completedRepairs.length > 0) {
-        const totalTime = completedRepairs.reduce((sum: number, r) => {
+      if (timedRepairs.length > 0) {
+        const totalTime = timedRepairs.reduce((sum: number, r) => {
           if (r.completedAt && r.createdAt) {
             return sum + differenceInDays(new Date(r.completedAt), new Date(r.createdAt))
           }
           return sum
         }, 0)
-        avgRepairTime = totalTime / completedRepairs.length
+        avgRepairTime = totalTime / timedRepairs.length
       }
       
       return {
@@ -255,7 +262,7 @@ export function useRepairAnalytics(timeRange: string) {
         date: format(date, 'dd/MM'),
         repairs: dayRepairs.length,
         completed: dayRepairs.filter(r => r.dbStatus === 'entregado').length,
-        revenue: dayRepairs.reduce((sum, r) => sum + (r.finalCost || r.estimatedCost || 0), 0)
+        revenue: dayRepairs.filter(r => r.dbStatus === 'entregado').reduce((sum, r) => sum + deliveredRepairRevenue(r), 0)
       }
     })
 
@@ -266,14 +273,17 @@ export function useRepairAnalytics(timeRange: string) {
       inProgressRepairs,
       urgentRepairs,
       totalRevenue,
-      avgRepairValue: totalRepairs > 0 ? totalRevenue / totalRepairs : 0,
+      avgRepairValue: completedRepairs > 0 ? totalRevenue / completedRepairs : 0,
       completionRate: totalRepairs > 0 ? (completedRepairs / totalRepairs) * 100 : 0,
       avgRepairTime: completedWithTime > 0 ? totalRepairTime / completedWithTime : 0,
       onTimeDeliveries,
-      onTimeRate: completedWithTime > 0 ? (onTimeDeliveries / completedWithTime) * 100 : 0
+      onTimeRate: completedWithPromise > 0 ? (onTimeDeliveries / completedWithPromise) * 100 : null
     }
 
     return {
+      isLoading,
+      error,
+      periodLabel: `${format(periodStart, 'dd/MM/yyyy')} – ${format(now, 'dd/MM/yyyy')}`,
       metrics,
       monthlyData,
       statusAnalysis: Array.from(statusStats.values()),
@@ -282,5 +292,5 @@ export function useRepairAnalytics(timeRange: string) {
       priorityAnalysis: Array.from(priorityStats.values()),
       dailyTrend
     }
-  }, [repairs, timeRange])
+  }, [allRepairs, timeRange, isLoading, error])
 }

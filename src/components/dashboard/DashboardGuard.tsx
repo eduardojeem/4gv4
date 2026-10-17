@@ -1,5 +1,8 @@
 'use client'
 
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
+import { mapOrganizationRoleToDashboardRole } from '@/lib/auth/section-access'
 import { useAuth } from '@/contexts/auth-context'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -20,7 +23,11 @@ interface DashboardGuardProps {
  * y muestra un estado estable de acceso denegado.
  */
 export function DashboardGuard({ children }: DashboardGuardProps) {
-  const { user, loading } = useAuth()
+  const { user, loading, hasPermission } = useAuth()
+  const active = useOptionalActiveOrganization()
+  const organizationRole = active?.organization?.role
+  const dashboardRole = organizationRole ? mapOrganizationRoleToDashboardRole(organizationRole) : user?.role
+  const can = (permission: string) => organizationRole ? roleHasPermission(organizationRole, permission as Permission) : hasPermission(permission)
   const router = useRouter()
   const pathname = usePathname()
   const [onboardingResolved, setOnboardingResolved] = useState(false)
@@ -30,7 +37,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   // Control de acceso por sección (rol vendedor/tecnico). Cierra el acceso por URL
   // directa, no solo lo oculta del menú.
   const isSectionDenied = Boolean(
-    user && !isInactiveUser && !canRoleAccessSection(user.role, pathname)
+    user && !isInactiveUser && !canRoleAccessSection(dashboardRole, pathname, can)
   )
   const canRequireOnboarding = Boolean(
     user &&
@@ -85,7 +92,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     !loading && canRequireOnboarding && !onboardingResolved && !getCachedOnboardingStatus()
   )
 
-  if (loading || checkingOnboarding) {
+  if (loading || checkingOnboarding || active?.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">

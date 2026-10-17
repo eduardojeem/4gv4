@@ -26,6 +26,7 @@ import {
   Coins,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
+import { deliveredRepairRevenue, deliveryPromiseOutcome } from '@/lib/repairs/analytics-values'
 import { useRepairs } from '@/contexts/RepairsContext'
 import type { Repair } from '@/types/repairs'
 import { format, subDays, isWithinInterval, differenceInDays } from 'date-fns'
@@ -144,7 +145,7 @@ const ChartTooltip = memo(function ChartTooltip({ active, payload, label }: { ac
 })
 
 export function RepairPerformanceMetrics({ className }: RepairPerformanceMetricsProps) {
-  const { repairs, isLoading } = useRepairs()
+  const { repairs, isLoading, error } = useRepairs()
   const [timeFrame, setTimeFrame] = useState('week')
 
   const performanceMetrics = useMemo(() => {
@@ -197,16 +198,17 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         currentMetrics.inProgressRepairs++
       }
       if (r.urgency === 'urgent') currentMetrics.urgentRepairs++
-      currentMetrics.revenue += r.finalCost || r.estimatedCost || 0
+      currentMetrics.revenue += deliveredRepairRevenue(r)
     })
 
     previousPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado') previousMetrics.completedRepairs++
-      previousMetrics.revenue += r.finalCost || r.estimatedCost || 0
+      previousMetrics.revenue += deliveredRepairRevenue(r)
     })
 
     const completedWithTime: Repair[] = []
     let totalRepairTime = 0
+    let completedWithPromise = 0
 
     currentPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado' && r.completedAt && r.createdAt) {
@@ -214,8 +216,10 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         completedWithTime.push(r)
         totalRepairTime += repairTime
 
-        if (repairTime <= 7) {
-          currentMetrics.onTimeDeliveries++
+        const onTime = deliveryPromiseOutcome(r)
+        if (onTime !== null) {
+          completedWithPromise++
+          if (onTime) currentMetrics.onTimeDeliveries++
         }
       }
     })
@@ -238,7 +242,7 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     const dailyTrend = []
     for (let i = 6; i >= 0; i--) {
       const date = subDays(now, i)
-      const dayRepairs = repairs.filter((r) => {
+      const dayRepairs = currentPeriodRepairs.filter((r) => {
         const repairDate = new Date(r.createdAt)
         return format(repairDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
       })
@@ -247,11 +251,11 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         date: format(date, 'dd/MM'),
         repairs: dayRepairs.length,
         completed: dayRepairs.filter((r) => r.dbStatus === 'entregado').length,
-        revenue: dayRepairs.reduce((sum, r) => sum + (r.finalCost || r.estimatedCost || 0), 0),
+        revenue: dayRepairs.reduce((sum, r) => sum + (deliveredRepairRevenue(r)), 0),
       })
     }
 
-    const technicianPerformance = repairs.reduce((acc, repair) => {
+    const technicianPerformance = currentPeriodRepairs.reduce((acc, repair) => {
       if (!repair.technician?.name) return acc
 
       const techName = repair.technician.name
@@ -296,11 +300,13 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
       completionRate: currentMetrics.totalRepairs > 0
         ? (currentMetrics.completedRepairs / currentMetrics.totalRepairs) * 100
         : 0,
-      onTimeRate: completedWithTime.length > 0
-        ? (currentMetrics.onTimeDeliveries / completedWithTime.length) * 100
-        : 0,
+      onTimeRate: completedWithPromise > 0
+        ? (currentMetrics.onTimeDeliveries / completedWithPromise) * 100
+        : null,
     }
   }, [repairs, timeFrame])
+
+  if (error) return <p role="alert" className="p-6 text-destructive">No se pudo cargar el rendimiento del taller.</p>
 
   if (isLoading) {
     return <div className="p-8 text-center text-xs text-muted-foreground">Cargando métricas de rendimiento…</div>
@@ -414,23 +420,23 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
                 variant="outline"
                 className={cn(
                   'text-[11px] font-semibold',
-                  performanceMetrics.onTimeRate >= 70
+                  (performanceMetrics.onTimeRate ?? 0) >= 70
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                     : 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400',
                 )}
               >
-                {performanceMetrics.onTimeRate >= 70 ? 'Plazo Saludable' : 'Alerta Demoras'}
+                {performanceMetrics.onTimeRate === null ? 'Sin fechas de compromiso' : performanceMetrics.onTimeRate >= 70 ? 'Plazo Saludable' : 'Alerta Demoras'}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4 space-y-3">
             <div className="flex items-baseline justify-between">
               <span className="text-3xl font-bold tracking-tight tabular-nums text-foreground">
-                {Math.round(performanceMetrics.onTimeRate)}%
+                {performanceMetrics.onTimeRate === null ? 'No disponible' : `${Math.round(performanceMetrics.onTimeRate)}%`}
               </span>
-              <span className="text-xs text-muted-foreground font-medium">Meta: ≤ 7 días</span>
+              <span className="text-xs text-muted-foreground font-medium">Según fecha prometida</span>
             </div>
-            <Progress value={performanceMetrics.onTimeRate} className="h-2 bg-muted/60" />
+            <Progress value={performanceMetrics.onTimeRate ?? 0} className="h-2 bg-muted/60" />
             <p className="text-[11px] text-muted-foreground">
               Órdenes cerradas dentro de la ventana de compromiso al cliente.
             </p>

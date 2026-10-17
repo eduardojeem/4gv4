@@ -1,343 +1,107 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Category, Brand, DEFAULT_CATEGORIES, DEFAULT_BRANDS } from '@/lib/types/catalog'
-import { Supplier } from '@/lib/types/supplier'
+import { useCallback, useEffect, useState } from 'react'
+import { useAuth } from '@/contexts/auth-context'
+import { createClient } from '@/lib/supabase/client'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 
-interface CatalogData {
-  categories: Category[]
-  brands: Brand[]
-  suppliers: Supplier[]
+export interface CatalogRecord {
+  id: string
+  name: string
+  is_active?: boolean | null
+  [key: string]: unknown
 }
+export interface CatalogData { categories: CatalogRecord[]; brands: CatalogRecord[]; suppliers: CatalogRecord[] }
+const empty = (): CatalogData => ({ categories: [], brands: [], suppliers: [] })
 
-interface CatalogSyncOptions {
-  autoSave?: boolean
-  storageKey?: string
-  onDataChange?: (data: CatalogData) => void
-}
-
-const DEFAULT_STORAGE_KEY = 'catalog-data'
-
-const toFullCategory = (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Category => {
-  const now = new Date().toISOString()
-  return {
-    ...category,
-    id: crypto.randomUUID(),
-    createdAt: now,
-    updatedAt: now
+/** Categories API is unpaginated; explicitly page its tenant-filtered RLS source. */
+export async function fetchCatalogCategories(organizationId: string, signal?: AbortSignal): Promise<CatalogRecord[]> {
+  if (!organizationId) throw new Error('No hay una organización activa')
+  const supabase = createClient()
+  const rows: CatalogRecord[] = []
+  const ids = new Set<string>()
+  const pageSize = 100
+  for (let page = 0; ; page++) {
+    let query = supabase.from('categories')
+      .select('id,name,description,parent_id,global_category_id,is_active,created_at,updated_at', { count: 'exact' })
+      .eq('organization_id', organizationId)
+      .order('id', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1)
+    if (signal) query = query.abortSignal(signal)
+    const { data, count, error } = await query
+    if (signal?.aborted) throw new DOMException('Consulta cancelada', 'AbortError')
+    if (error) throw new Error('No se pudieron cargar todas las categorías. Vuelve a actualizar.')
+    if (typeof count !== 'number' || !data) throw new Error('No se pudo verificar la cobertura de categorías')
+    for (const row of data) {
+      if (ids.has(row.id)) throw new Error('El catálogo cambió durante la carga; vuelve a actualizar')
+      ids.add(row.id)
+      rows.push(row)
+    }
+    if (rows.length === count) return rows
+    if (!data.length || rows.length > count) throw new Error('Catálogo incompleto; vuelve a actualizar')
   }
 }
 
-const toFullBrand = (brand: Omit<Brand, 'id' | 'createdAt' | 'updatedAt'>): Brand => {
-  const now = new Date().toISOString()
-  return {
-    ...brand,
-    id: crypto.randomUUID(),
-    createdAt: now,
-    updatedAt: now
+/** Read the same tenant-protected APIs as the maintained catalog screens. */
+export async function fetchCatalogCollection(kind: 'brands' | 'suppliers', signal?: AbortSignal): Promise<CatalogRecord[]> {
+  const rows: CatalogRecord[] = []
+  const ids = new Set<string>()
+  let expected: number | null = null
+  let page = kind === 'suppliers' ? 0 : 1
+  while (true) {
+    const response = await fetch(`/api/${kind}?page=${page}&limit=100&pageSize=100`, { cache: 'no-store', signal })
+    const result = await response.json()
+    if (!response.ok || !result.success || !Array.isArray(result.data)) throw new Error(result.error || `No se pudieron cargar ${kind}`)
+    if (!Number.isInteger(result.count) || result.count < 0 || expected !== null && result.count !== expected) throw new Error('No se pudo verificar el catálogo completo; vuelve a actualizar')
+    expected = result.count
+    for (const row of result.data) {
+      if (!row.id || ids.has(row.id)) throw new Error('El catálogo cambió durante la carga; vuelve a actualizar')
+      ids.add(row.id)
+      rows.push(row)
+    }
+    if (rows.length === expected) break
+    if (!result.data.length || rows.length > expected!) throw new Error('Catálogo incompleto; vuelve a actualizar')
+    page += 1
   }
+  return rows
 }
 
-export function useCatalogSync(options: CatalogSyncOptions = {}) {
-  const {
-    autoSave = true,
-    storageKey = DEFAULT_STORAGE_KEY,
-    onDataChange
-  } = options
-
-  const [catalogData, setCatalogData] = useState<CatalogData>({
-    categories: DEFAULT_CATEGORIES.map(toFullCategory),
-    brands: DEFAULT_BRANDS.map(toFullBrand),
-    suppliers: []
-  })
-
+export function useCatalogSync() {
+  const { user, loading } = useAuth()
+  const { scope: tenantScope, currentScope, organizationId } = useTenantScope()
+  const scope = user?.id && organizationId ? tenantScope : null
+  const [snapshot, setSnapshot] = useState<{ scope: string; data: CatalogData } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Cargar datos del localStorage al inicializar
+  const [revision, setRevision] = useState(0)
   useEffect(() => {
-    try {
-      const savedData = localStorage.getItem(storageKey)
-      if (savedData) {
-        const parsedData = JSON.parse(savedData)
-        setCatalogData({
-          categories: parsedData.categories || DEFAULT_CATEGORIES.map(toFullCategory),
-          brands: parsedData.brands || DEFAULT_BRANDS.map(toFullBrand),
-          suppliers: parsedData.suppliers || []
-        })
-      }
-    } catch (err) {
-      console.error('Error loading catalog data:', err)
-      setError('Error al cargar los datos del catálogo')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [storageKey])
-
-  // Guardar datos automáticamente cuando cambien
-  useEffect(() => {
-    if (!isLoading && autoSave) {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(catalogData))
-        onDataChange?.(catalogData)
-      } catch (err) {
-        console.error('Error saving catalog data:', err)
-        setError('Error al guardar los datos del catálogo')
-      }
-    }
-  }, [catalogData, autoSave, storageKey, isLoading, onDataChange])
-
-  // Funciones para manejar categorías
-  const addCategory = useCallback((category: Category) => {
-    setCatalogData(prev => ({
-      ...prev,
-      categories: [...prev.categories, category]
-    }))
-  }, [])
-
-  const updateCategory = useCallback((categoryId: string, updates: Partial<Category>) => {
-    setCatalogData(prev => ({
-      ...prev,
-      categories: prev.categories.map(cat =>
-        cat.id === categoryId ? { ...cat, ...updates } : cat
-      )
-    }))
-  }, [])
-
-  const deleteCategory = useCallback((categoryId: string) => {
-    setCatalogData(prev => ({
-      ...prev,
-      categories: prev.categories.filter(cat => cat.id !== categoryId)
-    }))
-  }, [])
-
-  // Funciones para manejar marcas
-  const addBrand = useCallback((brand: Brand) => {
-    setCatalogData(prev => ({
-      ...prev,
-      brands: [...prev.brands, brand]
-    }))
-  }, [])
-
-  const updateBrand = useCallback((brandId: string, updates: Partial<Brand>) => {
-    setCatalogData(prev => ({
-      ...prev,
-      brands: prev.brands.map(brand =>
-        brand.id === brandId ? { ...brand, ...updates } : brand
-      )
-    }))
-  }, [])
-
-  const deleteBrand = useCallback((brandId: string) => {
-    setCatalogData(prev => ({
-      ...prev,
-      brands: prev.brands.filter(brand => brand.id !== brandId)
-    }))
-  }, [])
-
-  // Funciones para manejar proveedores
-  const addSupplier = useCallback((supplier: Supplier) => {
-    setCatalogData(prev => ({
-      ...prev,
-      suppliers: [...prev.suppliers, supplier]
-    }))
-  }, [])
-
-  const updateSupplier = useCallback((supplierId: string, updates: Partial<Supplier>) => {
-    setCatalogData(prev => ({
-      ...prev,
-      suppliers: prev.suppliers.map(supplier =>
-        supplier.id === supplierId ? { ...supplier, ...updates } : supplier
-      )
-    }))
-  }, [])
-
-  const deleteSupplier = useCallback((supplierId: string) => {
-    setCatalogData(prev => ({
-      ...prev,
-      suppliers: prev.suppliers.filter(supplier => supplier.id !== supplierId)
-    }))
-  }, [])
-
-  // Funciones de utilidad
-  const getCategoryOptions = useCallback(() => {
-    return catalogData.categories
-      .filter(cat => cat.isActive)
-      .map(cat => ({
-        value: cat.id,
-        label: cat.name,
-        subcategories: cat.subcategories || []
-      }))
-  }, [catalogData.categories])
-
-  const getBrandOptions = useCallback(() => {
-    return catalogData.brands
-      .filter(brand => brand.isActive)
-      .map(brand => ({
-        value: brand.id,
-        label: brand.name,
-        country: brand.country
-      }))
-  }, [catalogData.brands])
-
-  const getSupplierOptions = useCallback(() => {
-    return catalogData.suppliers
-      .filter(supplier => supplier.status === 'active')
-      .map(supplier => ({
-        value: supplier.id,
-        label: supplier.name,
-        category: supplier.categories[0] || '',
-        categories: supplier.categories,
-        email: supplier.email
-      }))
-  }, [catalogData.suppliers])
-
-  // Función para buscar elementos
-  const searchItems = useCallback((query: string, type: 'categories' | 'brands' | 'suppliers') => {
-    const searchTerm = query.toLowerCase()
-
-    switch (type) {
-      case 'categories':
-        return catalogData.categories.filter(cat =>
-          cat.name.toLowerCase().includes(searchTerm) ||
-          cat.description.toLowerCase().includes(searchTerm) ||
-          cat.subcategories?.some(sub => sub.toLowerCase().includes(searchTerm))
-        )
-      case 'brands':
-        return catalogData.brands.filter(brand =>
-          brand.name.toLowerCase().includes(searchTerm) ||
-          brand.description.toLowerCase().includes(searchTerm) ||
-          brand.country?.toLowerCase().includes(searchTerm)
-        )
-      case 'suppliers':
-        return catalogData.suppliers.filter(supplier =>
-          supplier.name.toLowerCase().includes(searchTerm) ||
-          supplier.email.toLowerCase().includes(searchTerm) ||
-          supplier.categories.some(category => category.toLowerCase().includes(searchTerm))
-        )
-      default:
-        return []
-    }
-  }, [catalogData])
-
-  // Función para obtener estadísticas
-  const getStats = useCallback(() => {
-    return {
-      categories: {
-        total: catalogData.categories.length,
-        active: catalogData.categories.filter(cat => cat.isActive).length,
-        withProducts: catalogData.categories.filter(cat => cat.productCount > 0).length
-      },
-      brands: {
-        total: catalogData.brands.length,
-        active: catalogData.brands.filter(brand => brand.isActive).length,
-        withProducts: catalogData.brands.filter(brand => brand.productCount > 0).length
-      },
-      suppliers: {
-        total: catalogData.suppliers.length,
-        active: catalogData.suppliers.filter(supplier => supplier.status === 'active').length,
-        withOrders: catalogData.suppliers.filter(supplier => supplier.total_orders > 0).length
-      }
-    }
-  }, [catalogData])
-
-  // Función para exportar datos
-  const exportData = useCallback(() => {
-    const dataToExport = {
-      ...catalogData,
-      exportedAt: new Date().toISOString(),
-      version: '1.0'
-    }
-
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-      type: 'application/json'
+    const controller = new AbortController()
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return
+      setSnapshot(null)
+      setError(null)
+      setIsLoading(Boolean(scope) || loading)
     })
-
-    const url = URL.createObjectURL(blob)
+    if (loading || !scope) return () => controller.abort()
+    Promise.all([fetchCatalogCategories(organizationId!, controller.signal), fetchCatalogCollection('brands', controller.signal), fetchCatalogCollection('suppliers', controller.signal)])
+      .then(([categories, brands, suppliers]) => {
+        if (!controller.signal.aborted && currentScope.current === scope) setSnapshot({ scope, data: { categories, brands, suppliers } })
+      })
+      .catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Error al cargar el catálogo') })
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
+    return () => controller.abort()
+  }, [scope, loading, revision, currentScope, organizationId])
+  const catalogData = snapshot?.scope === scope ? snapshot.data : empty()
+  const ready = Boolean(scope && snapshot?.scope === scope && !error && !isLoading)
+  const refresh = useCallback(() => setRevision(value => value + 1), [])
+  const exportData = () => {
+    if (!ready || currentScope.current !== scope) throw new Error('El catálogo todavía no está disponible')
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...catalogData, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `catalog-data-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
+    link.download = `catalogo-${new Date().toISOString().slice(0, 10)}.json`
     link.click()
-    document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }, [catalogData])
-
-  // Función para importar datos
-  const importData = useCallback((file: File) => {
-    return new Promise<void>((resolve, reject) => {
-      const reader = new FileReader()
-
-      reader.onload = (e) => {
-        try {
-          const importedData = JSON.parse(e.target?.result as string)
-
-          // Validar estructura de datos
-          if (!importedData.categories || !importedData.brands || !importedData.suppliers) {
-            throw new Error('Formato de archivo inválido')
-          }
-
-          setCatalogData({
-            categories: importedData.categories,
-            brands: importedData.brands,
-            suppliers: importedData.suppliers
-          })
-
-          resolve()
-        } catch (_err) {
-          reject(new Error('Error al procesar el archivo'))
-        }
-      }
-
-      reader.onerror = () => reject(new Error('Error al leer el archivo'))
-      reader.readAsText(file)
-    })
-  }, [])
-
-  // Función para resetear datos
-  const resetData = useCallback(() => {
-    setCatalogData({
-      categories: DEFAULT_CATEGORIES.map(toFullCategory),
-      brands: DEFAULT_BRANDS.map(toFullBrand),
-      suppliers: []
-    })
-  }, [])
-
-  return {
-    // Datos
-    catalogData,
-    categories: catalogData.categories,
-    brands: catalogData.brands,
-    suppliers: catalogData.suppliers,
-
-    // Estado
-    isLoading,
-    error,
-
-    // Funciones CRUD
-    addCategory,
-    updateCategory,
-    deleteCategory,
-    addBrand,
-    updateBrand,
-    deleteBrand,
-    addSupplier,
-    updateSupplier,
-    deleteSupplier,
-
-    // Funciones de utilidad
-    getCategoryOptions,
-    getBrandOptions,
-    getSupplierOptions,
-    searchItems,
-    getStats,
-
-    // Funciones de importación/exportación
-    exportData,
-    importData,
-    resetData,
-
-    // Función para limpiar errores
-    clearError: () => setError(null)
   }
+  return { ...catalogData, catalogData, ready, isLoading: loading || isLoading, error, refresh, exportData }
 }

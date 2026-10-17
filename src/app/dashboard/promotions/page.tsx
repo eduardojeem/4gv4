@@ -152,6 +152,8 @@ export default function PromotionsPage() {
   const {
     promotions,
     loading,
+    error,
+    fetchPromotions,
     stats,
     filters,
     createPromotion,
@@ -206,7 +208,18 @@ export default function PromotionsPage() {
       if (customEvent.detail) setOrgSlug(customEvent.detail)
     }
     window.addEventListener('website-slug-updated', handleSlugUpdate)
-    return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
+      return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
+  }, [])
+
+  useEffect(() => {
+    const resetTenantForms = () => {
+      setDialogOpen(false)
+      setEditingPromotion(null)
+      setDuplicatingPromotion(null)
+      setDeletingPromotion(null)
+    }
+    window.addEventListener('organization:changed', resetTenantForms)
+    return () => window.removeEventListener('organization:changed', resetTenantForms)
   }, [])
 
   const offersSectionEnabled = websiteSettings?.offers_section?.enabled ?? true
@@ -293,6 +306,19 @@ export default function PromotionsPage() {
         handleEdit(promotion)
       }
     : undefined
+
+  if (error) {
+    return (
+      <OrganizationModuleGate module="promotions">
+        <div className="p-6 space-y-3">
+          <h1 className="text-2xl font-bold">Promociones</h1>
+          <p role="alert" className="text-destructive">{error}</p>
+          <p className="text-muted-foreground">Los indicadores no están disponibles hasta completar la carga.</p>
+          <Button onClick={() => void fetchPromotions()} disabled={loading}>Reintentar</Button>
+        </div>
+      </OrganizationModuleGate>
+    )
+  }
 
   return (
     <RouteGuard route="/dashboard/promotions">

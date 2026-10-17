@@ -18,9 +18,7 @@ import {
   Download,
   Settings, BarChart3,
   PieChart as PieChartIcon, Activity,
-  Target, ArrowUpRight,
-  ArrowDownRight,
-  Minus, CreditCard
+  Target, CreditCard
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
@@ -35,7 +33,7 @@ export interface MainMetricItem {
   value: number
   format: 'number' | 'currency' | 'percentage'
   icon: React.ReactNode
-  change: number
+  change: number | null
   color: string
 }
 
@@ -82,7 +80,7 @@ export function AnalyticsDashboard({
       value: metrics.totalCustomers,
       format: 'number' as const,
       icon: <Users className="h-5 w-5" />,
-      change: 12.5,
+      change: null,
       color: 'text-blue-600'
     },
     {
@@ -91,7 +89,7 @@ export function AnalyticsDashboard({
       value: metrics.totalRevenue,
       format: 'currency' as const,
       icon: <DollarSign className="h-5 w-5" />,
-      change: 8.2,
+      change: null,
       color: 'text-green-600'
     },
     {
@@ -100,7 +98,7 @@ export function AnalyticsDashboard({
       value: metrics.totalDebt || 0,
       format: 'currency' as const,
       icon: <CreditCard className="h-5 w-5" />,
-      change: -4.5,
+      change: null,
       color: 'text-rose-600'
     },
     {
@@ -109,16 +107,16 @@ export function AnalyticsDashboard({
       value: metrics.avgCustomerValue,
       format: 'currency' as const,
       icon: <Target className="h-5 w-5" />,
-      change: -2.1,
+      change: null,
       color: 'text-purple-600'
     },
     {
       id: 'retentionRate',
-      title: 'Tasa de Retención',
+      title: 'Clientes activos (%)',
       value: metrics.retentionRate,
       format: 'percentage' as const,
       icon: <Activity className="h-5 w-5" />,
-      change: 5.3,
+      change: null,
       color: 'text-orange-600'
     }
   ], [metrics])
@@ -148,6 +146,8 @@ export function AnalyticsDashboard({
   // Modo interactivo (por defecto)
   return (
     <div className="space-y-6">
+      {metrics.monthlyError && <p role="alert" className="text-sm text-destructive">{metrics.monthlyError} Las series mensuales no están disponibles.</p>}
+      {metrics.monthlyLoading && <p role="status" className="text-sm text-muted-foreground">Cargando series mensuales…</p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -235,22 +235,7 @@ export function AnalyticsDashboard({
                       {metric.title}
                     </p>
                     <div className="flex items-center text-xs font-semibold">
-                      {metric.change > 0 ? (
-                        <span className="flex items-center text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
-                          <ArrowUpRight className="h-3 w-3 mr-0.5" />
-                          {Math.abs(metric.change)}%
-                        </span>
-                      ) : metric.change < 0 ? (
-                        <span className="flex items-center text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded-md">
-                          <ArrowDownRight className="h-3 w-3 mr-0.5" />
-                          {Math.abs(metric.change)}%
-                        </span>
-                      ) : (
-                        <span className="flex items-center text-slate-500 bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
-                          <Minus className="h-3 w-3 mr-0.5" />
-                          0%
-                        </span>
-                      )}
+                      {showComparisonsState && <span className="text-xs text-muted-foreground">Comparación no disponible</span>}
                     </div>
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
@@ -478,7 +463,7 @@ export function AnalyticsDashboard({
                   {metrics.segmentDistribution.map((segment, _index) => {
                     const count = segment.value
                     const percentage = metrics.totalCustomers > 0 ? (count / metrics.totalCustomers) * 100 : 0
-                    const revenue = metrics.totalRevenue * (percentage / 100)
+                    const revenue = segment.revenue
                     const avgValue = count > 0 ? revenue / count : 0
                     return (
                     <div key={segment.name} className="space-y-2">
@@ -507,30 +492,11 @@ export function AnalyticsDashboard({
               <CardHeader>
                 <CardTitle>Predicciones y Tendencias</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Análisis predictivo basado en datos históricos
+                  Disponibilidad del análisis predictivo
                 </p>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {formatters.percentage(metrics.retentionRate + 5)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Retención Proyectada</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatters.currency(metrics.totalRevenue * 1.15)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Ingresos Proyectados</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {Math.round(metrics.totalCustomers * 1.08)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Clientes Proyectados</p>
-                  </div>
-                </div>
+                <p className="text-sm text-muted-foreground">Predicciones no disponibles: no hay un modelo validado para proyectar ingresos, retención o clientes.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -551,6 +517,8 @@ function SimpleAnalyticsView({
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Resumen de Analíticas</h3>
+      {metrics.monthlyError && <p role="alert">{metrics.monthlyError}</p>}
+      {metrics.monthlyLoading && <p role="status">Cargando series mensuales…</p>}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {mainMetrics.map((metric) => (
           <Card key={metric.id}>
@@ -587,9 +555,9 @@ function RealtimeAnalyticsView({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Activity className="h-5 w-5 text-green-500" />
-        <h3 className="text-lg font-semibold">Métricas en Tiempo Real</h3>
+        <h3 className="text-lg font-semibold">Métricas de la última consulta</h3>
         <Badge variant="outline" className="text-green-600 border-green-600">
-          En vivo
+          Datos de la última consulta
         </Badge>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

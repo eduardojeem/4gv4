@@ -123,9 +123,9 @@ export const GET = withTenantAuth({ permission: 'promotions.read', module: 'prom
     const supabase = await createClient()
     let query = supabase
       .from('promotions')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('organization_id', organization.id)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
 
     if (active !== null) {
       query = query.eq('is_active', active === 'true')
@@ -135,39 +135,20 @@ export const GET = withTenantAuth({ permission: 'promotions.read', module: 'prom
       query = query.eq('type', type)
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      logger.error('Failed to fetch promotions', { error: error.message })
-      throw error
-    }
-
-    let rows = (data || []) as PromotionRow[]
-
-    if (category) {
-      rows = rows.filter((row) => Array.isArray(row.applicable_categories) && row.applicable_categories.includes(category))
-    }
-
-    if (productId) {
-      rows = rows.filter((row) => Array.isArray(row.applicable_products) && row.applicable_products.includes(productId))
-    }
-
+    if (category) query = query.contains('applicable_categories', [category])
+    if (productId) query = query.contains('applicable_products', [productId])
     if (currentDate) {
       const date = new Date(currentDate)
       if (Number.isFinite(date.getTime())) {
-        rows = rows.filter((row) => {
-          const start = row.start_date ? new Date(row.start_date) : null
-          const end = row.end_date ? new Date(row.end_date) : null
-          const startsBefore = !start || start.getTime() <= date.getTime()
-          const endsAfter = !end || end.getTime() >= date.getTime()
-          return startsBefore && endsAfter
-        })
+        const iso = date.toISOString()
+        query = query.or(`start_date.is.null,start_date.lte.${iso}`).or(`end_date.is.null,end_date.gte.${iso}`)
       }
     }
-
-    const total = rows.length
     const offset = (page - 1) * limit
-    const promotions = rows.slice(offset, offset + limit).map(mapPromotionRow)
+    const { data, error, count } = await query.range(offset, offset + limit - 1)
+    if (error) throw error
+    const total = count ?? 0
+    const promotions = ((data || []) as PromotionRow[]).map(mapPromotionRow)
 
     return NextResponse.json({
       promotions,

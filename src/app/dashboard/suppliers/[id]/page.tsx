@@ -22,7 +22,7 @@ import { SupplierNotes } from '@/components/suppliers/SupplierNotes'
 import { SupplierOrdersList } from '@/components/suppliers/SupplierOrdersList'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
 import { SupplierModal } from '@/components/dashboard/supplier-modal'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -654,7 +654,7 @@ export default function SupplierDetailPage() {
                     name: orderSeedProduct.name,
                     suppliersku: orderSeedProduct.sku || '',
                     unitprice: orderSeedProduct.purchasePrice,
-                    currency: 'PYG',
+                    currency: getLocaleConfig().currency,
                     stock: orderSeedProduct.stock,
                     minStock: orderSeedProduct.minStock,
                     imageUrl: orderSeedProduct.imageUrl,

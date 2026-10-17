@@ -13,16 +13,20 @@ const guard = { permission: 'pos.sales.create', module: 'pos' } as const
 
 export const GET = withTenantAuth(guard, async (request, { organization }) => {
   const { searchParams } = new URL(request.url)
+  const requestedPage = Number(searchParams.get('page') || 1)
+  const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
+  const pageSize = 100
   const status = searchParams.get('status')
   const term = (searchParams.get('q') ?? '').replace(/[,()%*\\]/g, ' ').trim()
   const supabase = await createClient()
 
   let query = supabase
     .from('quotes')
-    .select(QUOTE_COLUMNS)
+    .select(QUOTE_COLUMNS, { count: 'exact' })
     .eq('organization_id', organization.id)
     .order('created_at', { ascending: false })
-    .limit(300)
+    .order('id', { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1)
   if (status && (QUOTE_STATUSES as readonly string[]).includes(status)) query = query.eq('status', status)
   if (term) {
     const number = Number(term.replace(/^p-?/i, ''))
@@ -31,13 +35,13 @@ export const GET = withTenantAuth(guard, async (request, { organization }) => {
       : query.or(`customer_name.ilike.%${term}%,customer_phone.ilike.%${term}%`)
   }
 
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) {
     if (MISSING_TABLE.test(error.message)) return NextResponse.json({ available: false, quotes: [] })
     logger.error('No se pudieron leer los presupuestos', { error: error.message })
     return NextResponse.json({ error: 'No se pudieron leer los presupuestos' }, { status: 500 })
   }
-  return NextResponse.json({ available: true, quotes: data ?? [] })
+  return NextResponse.json({ available: true, quotes: data ?? [], pagination: { page, pageSize, total: count ?? 0 } })
 })
 
 export const POST = withTenantAuth(guard, async (request, { organization, user }) => {

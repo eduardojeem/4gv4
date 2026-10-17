@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { BarChart } from 'recharts/es6/chart/BarChart'
 import { Bar } from 'recharts/es6/cartesian/Bar'
@@ -50,12 +51,12 @@ function filterByPeriod(repairs: Repair[], period: Period): Repair[] {
 function buildMonthlyData(repairs: Repair[]) {
   const buckets: Record<string, { name: string; reparaciones: number; ingresos: number }> = {}
   repairs.forEach(r => {
-    const d = new Date(r.completedAt || r.createdAt)
+    const d = new Date(r.createdAt)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     const label = d.toLocaleDateString('es', { month: 'short', year: '2-digit' })
     if (!buckets[key]) buckets[key] = { name: label, reparaciones: 0, ingresos: 0 }
     buckets[key].reparaciones += 1
-    buckets[key].ingresos += r.finalCost || r.estimatedCost || 0
+    buckets[key].ingresos += r.dbStatus === 'entregado' ? (r.finalCost ?? r.estimatedCost ?? 0) : 0
   })
   return Object.entries(buckets)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -98,7 +99,7 @@ function KpiCard({ title, value, subtitle, icon: Icon, tone = 'indigo' }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TechnicianStatsPage() {
-  const { repairs, isLoading } = useRepairs()
+  const { repairs, isLoading, error, refreshRepairs } = useRepairs()
   const { user } = useAuth()
   const [period, setPeriod] = useState<Period>('30d')
 
@@ -118,7 +119,7 @@ export default function TechnicianStatsPage() {
     const completed = periodRepairs.filter(r => r.dbStatus === 'listo' || r.dbStatus === 'entregado').length
     const totalRevenue = periodRepairs
       .filter(r => r.dbStatus === 'entregado')
-      .reduce((acc, r) => acc + (r.finalCost || r.estimatedCost || 0), 0)
+      .reduce((acc, r) => acc + (r.finalCost ?? r.estimatedCost ?? 0), 0)
 
     const completedWithDates = periodRepairs.filter(
       r => r.dbStatus === 'entregado' && r.completedAt && r.createdAt
@@ -143,7 +144,7 @@ export default function TechnicianStatsPage() {
   }, [periodRepairs])
 
   // Chart data
-  const monthlyData = useMemo(() => buildMonthlyData(myRepairs), [myRepairs])
+  const monthlyData = useMemo(() => buildMonthlyData(periodRepairs), [periodRepairs])
   // Ingresos: misma definición que el KPI (solo reparaciones entregadas) para
   // que el gráfico y la tarjeta cuadren.
   const revenueData = useMemo(
@@ -187,6 +188,8 @@ export default function TechnicianStatsPage() {
   }
 
   // Loading state
+  if (error) return <div role="alert" className="space-y-3 p-6 text-destructive"><p>No se pudieron cargar las estadísticas del técnico.</p><Button variant="outline" onClick={() => void refreshRepairs()}>Reintentar</Button></div>
+
   if (isLoading) {
     return (
       <div className="space-y-6 max-w-6xl mx-auto">

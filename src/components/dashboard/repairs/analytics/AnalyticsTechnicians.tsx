@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
@@ -9,8 +8,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 import { cn } from '@/lib/utils'
 
-export function AnalyticsTechnicians({ className }: { className?: string }) {
-  const [timeRange, setTimeRange] = useState('6months')
+export function AnalyticsTechnicians({ className, timeRange = '6months', onTimeRangeChange }: { className?: string; timeRange?: string; onTimeRangeChange?: (value: string) => void }) {
   const analytics = useRepairAnalytics(timeRange)
   const list = analytics.technicianAnalysis || []
 
@@ -36,7 +34,7 @@ export function AnalyticsTechnicians({ className }: { className?: string }) {
           </p>
         </div>
 
-        <Select value={timeRange} onValueChange={setTimeRange}>
+        <Select value={timeRange} onValueChange={onTimeRangeChange}>
           <SelectTrigger className="w-[160px] h-8 text-xs bg-card border-border/70 rounded-xl">
             <SelectValue />
           </SelectTrigger>

@@ -1,18 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowUpDown,
   CheckCircle2,
   Clock,
-  Copy,
-  ExternalLink,
   FileText,
-  Filter,
   Hammer,
-  HelpCircle,
   Laptop,
   Loader2,
   MessageCircle,
@@ -24,7 +21,6 @@ import {
   ShoppingCart,
   Sparkles,
   Store,
-  Tag,
   TrendingUp,
   UserCheck,
   UtensilsCrossed,
@@ -154,7 +150,11 @@ const FILTERS: Array<{
 type SortOption = 'recent' | 'amount_desc' | 'amount_asc' | 'expiry'
 
 export function QuotesList() {
-  const { businessVertical, organizationName } = useSubscriptionStatus()
+  const { scope, currentScope } = useTenantScope()
+  const abortRef = useRef<AbortController | null>(null)
+  const [page, setPage] = useState(1)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const { businessVertical } = useSubscriptionStatus()
   const [selectedVertical, setSelectedVertical] = useState<BusinessVertical>(businessVertical || 'general')
 
   // Mantener sincronizado si la organización cambia de rubro
@@ -177,20 +177,46 @@ export function QuotesList() {
   const [sortBy, setSortBy] = useState<SortOption>('recent')
 
   const load = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const requestScope = scope
     setLoading(true)
+    setLoadError(null)
     try {
-      const response = await fetch('/api/quotes', { cache: 'no-store' })
-      const body = await response.json().catch(() => ({}))
-      setAvailable(body.available !== false)
-      setQuotes(Array.isArray(body.quotes) ? body.quotes : [])
+      const all: QuoteSummary[] = []
+      for (let page = 1; ; page++) {
+        const response = await fetch(`/api/quotes?page=${page}`, { cache: 'no-store', signal: controller.signal })
+        const body = await response.json()
+        if (controller.signal.aborted || currentScope.current !== requestScope) return
+        if (!response.ok) throw new Error(body.error || 'No se pudieron cargar los presupuestos')
+        setAvailable(body.available !== false)
+        if (body.available === false) { setQuotes([]); return }
+        const batch: QuoteSummary[] = body.quotes ?? []
+        all.push(...batch)
+        const total = body.pagination?.total
+        if (typeof total !== 'number') throw new Error('Falta la cobertura de presupuestos. Reintentá.')
+        if (all.length >= total) break
+        if (!batch.length) throw new Error('La lista cambió durante la carga. Reintentá.')
+      }
+      setQuotes(all)
+    } catch (error) {
+      if (!controller.signal.aborted && currentScope.current === requestScope) {
+        setQuotes([])
+        setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar los presupuestos')
+      }
     } finally {
-      setLoading(false)
+      if (abortRef.current === controller && currentScope.current === requestScope) setLoading(false)
     }
-  }, [])
+  }, [scope, currentScope])
 
   useEffect(() => {
+    setQuotes([])
+    setPage(1)
     void load()
+    return () => abortRef.current?.abort()
   }, [load])
+  useEffect(() => setPage(1), [filter, search, sortBy])
 
   // Métricas y estadísticas comerciales calculadas
   const stats = useMemo(() => {
@@ -243,8 +269,25 @@ export function QuotesList() {
     })
   }, [quotes, filter, search, sortBy])
 
+  const pageCount = Math.max(1, Math.ceil(visible.length / 50))
+  const pageQuotes = visible.slice((page - 1) * 50, page * 50)
+
+  if (loadError) {
+    return <div className="space-y-3 p-6">
+      <h1 className="text-2xl font-bold">Presupuestos</h1>
+      <p role="alert" className="text-destructive">{loadError}</p>
+      <p>Los indicadores no están disponibles hasta completar la carga.</p>
+      <Button onClick={() => void load()} disabled={loading}>Reintentar</Button>
+    </div>
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button>
+        <span>Página {page} de {pageCount} · {visible.length} presupuestos</span>
+        <Button variant="outline" disabled={page >= pageCount || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button>
+      </div>
       {/* ── Encabezado Principal y Selección de Rubro ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -519,7 +562,7 @@ export function QuotesList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {visible.map((quote) => {
+                {pageQuotes.map((quote) => {
                   const expired =
                     (quote.status === 'draft' || quote.status === 'sent') &&
                     isQuoteExpired(quote.valid_until)
@@ -642,9 +685,9 @@ export function QuotesList() {
 
           {/* Vista Móvil: Tarjetas táctiles */}
           <div className="grid gap-2.5 md:hidden">
-            {visible.map((quote) => {
+            {pageQuotes.map((quote) => {
               const code = quoteCode(quote.number)
-              const expired =
+              const _expired =
                 (quote.status === 'draft' || quote.status === 'sent') &&
                 isQuoteExpired(quote.valid_until)
 

@@ -36,7 +36,13 @@ import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useBranch } from '@/contexts/branch-context'
+import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
+import { homeCalendar } from '@/lib/dashboard/home-calendar'
+import { utcToZoned, DEFAULT_TIMEZONE } from '@/lib/agenda/time'
 import { withBranchFilter } from '@/lib/branches/client'
+import { calculateExpectedCashBalance, isPhysicalCashSale, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
+import { normalizeCashMovementType } from '@/app/dashboard/pos/types'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatCurrency } from '@/lib/currency'
 import { COMPLETED_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
@@ -215,6 +221,17 @@ export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
   const { organization } = useActiveOrganization()
+  const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
+  const statsDataKey = `${scope}:${selectedBranchId ?? 'all'}`
+  const currentStatsKey = useRef(statsDataKey)
+  currentStatsKey.current = statsDataKey
+  const statsAbort = useRef<AbortController | null>(null)
+  const [calendarConfig, setCalendarConfig] = useState({ scope: '', timeZone: DEFAULT_TIMEZONE })
+  const timeZone = calendarConfig.scope === scope ? calendarConfig.timeZone : DEFAULT_TIMEZONE
+  const statsRequest = useRef(0)
+  const [statsScope, setStatsScope] = useState<string | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
   const [canRefresh, setCanRefresh] = useState(true)
   const refreshCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -292,32 +309,79 @@ export default function DashboardPage() {
 
   const expectedBalance = useMemo(() => {
     if (!currentSession) return 0
-    return currentSession.movements.reduce((sum, mov) => {
-      if (mov.type === 'opening' || mov.type === 'sale' || mov.type === 'cash_in') {
-        return sum + mov.amount
-      } else if (mov.type === 'cash_out') {
-        return sum - mov.amount
-      }
-      return sum
-    }, 0)
+    return calculateExpectedCashBalance(currentSession.movements)
   }, [currentSession])
 
   const fetchDashboardStats = useCallback(async () => {
-    if (!config.supabase.isConfigured || !organization?.id) return
+    if (!config.supabase.isConfigured || !organization?.id || organization.id !== scopeOrganizationId) return
+    statsAbort.current?.abort()
+    const controller = new AbortController()
+    statsAbort.current = controller
+    const request = ++statsRequest.current
+    const isCurrent = () => request === statsRequest.current && currentScope.current === scope && currentStatsKey.current === statsDataKey
     setLoadingStats(true)
+    setStatsError(null)
     try {
-      const now = new Date()
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+      const { data: settings, error: settingsError } = await supabase.from('organization_settings')
+        .select('timezone').eq('organization_id', organization.id).abortSignal(controller.signal).maybeSingle()
+      if (!isCurrent()) return
+      if (settingsError) throw settingsError
+      let queryTimeZone = settings?.timezone || DEFAULT_TIMEZONE
+      try { new Intl.DateTimeFormat('es-PY', { timeZone: queryTimeZone }).format() }
+      catch { queryTimeZone = DEFAULT_TIMEZONE }
+      const { startOfDay, endOfDay, startOfWeek, last7Days } = homeCalendar(queryTimeZone)
 
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date()
-        d.setDate(d.getDate() - (6 - i))
-        d.setHours(0, 0, 0, 0)
-        return d
-      })
-
+      const responses = await Promise.all([
+        completeDashboardQuery(withBranchFilter(
+          supabase.from('sales').select('id,total:total_amount,status,created_at', { count: 'exact' }).eq('organization_id', organization.id)
+            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
+          selectedBranchId,
+        ), controller.signal),
+        hasOrders ? withBranchFilter(
+          supabase
+            .from('customer_orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('organization_id', organization.id)
+            .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
+          selectedBranchId,
+        ) : Promise.resolve({ count: 0, data: [] }),
+        completeDashboardQuery(supabase.from('customers').select('id, created_at', { count: 'exact' }).eq('organization_id', organization.id).gte('created_at', startOfWeek.toISOString()), controller.signal),
+        completeDashboardQuery(supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id', { count: 'exact' }).eq('organization_id', organization.id).eq('is_active', true), controller.signal),
+        completeDashboardQuery(supabase.from('categories').select('id, name', { count: 'exact' }).eq('organization_id', organization.id).eq('is_active', true), controller.signal),
+        hasRepairs ? withBranchFilter(
+          // Fuente única de "en proceso": incluye pausado y excluye listo
+          // (listo = reparación terminada, esperando retiro).
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', [...ACTIVE_REPAIR_STATUSES]),
+          selectedBranchId,
+        ) : Promise.resolve({ count: 0, data: [] }),
+        completeDashboardQuery(withBranchFilter(
+          supabase.from('sales').select('id,total_amount,created_at,status', { count: 'exact' }).eq('organization_id', organization.id)
+            .gte('created_at', startOfWeek.toISOString()).lte('created_at', endOfDay.toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
+          selectedBranchId,
+        ), controller.signal),
+        // Reparaciones ingresadas hoy
+        hasRepairs ? completeDashboardQuery(withBranchFilter(
+          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount, status, created_at', { count: 'exact' }).eq('organization_id', organization.id)
+            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
+          selectedBranchId,
+        ), controller.signal) : Promise.resolve({ data: [] }),
+        // Reparaciones entregadas hoy
+        hasRepairs ? completeDashboardQuery(withBranchFilter(
+          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount, status, delivered_at', { count: 'exact' }).eq('organization_id', organization.id)
+            .eq('status', 'entregado')
+            .gte('delivered_at', startOfDay.toISOString()).lte('delivered_at', endOfDay.toISOString()),
+          selectedBranchId,
+        ), controller.signal) : Promise.resolve({ data: [] }),
+        // Reparaciones listas para retiro
+        hasRepairs ? completeDashboardQuery(withBranchFilter(
+          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount', { count: 'exact' }).eq('organization_id', organization.id)
+            .eq('status', 'listo'),
+          selectedBranchId,
+        ), controller.signal) : Promise.resolve({ data: [] }),
+      ])
+      if (!isCurrent()) return
+      const failed = responses.find(response => 'error' in response && response.error)
+      if (failed) throw new Error('No se pudieron cargar todos los indicadores.')
       const [
         { data: salesToday },
         { count: activeOrdersCount },
@@ -329,53 +393,8 @@ export default function DashboardPage() {
         { data: repairsTodayData },
         { data: repairsDeliveredData },
         { data: repairsReadyData },
-      ] = await Promise.all([
-        withBranchFilter(
-          supabase.from('sales').select('total:total_amount,status,created_at').eq('organization_id', organization.id)
-            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-          selectedBranchId,
-        ),
-        hasOrders ? withBranchFilter(
-          supabase
-            .from('customer_orders')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organization.id)
-            .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
-          selectedBranchId,
-        ) : Promise.resolve({ count: 0, data: [] }),
-        supabase.from('customers').select('created_at').eq('organization_id', organization.id).gte('created_at', startOfWeek.toISOString()),
-        supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('organization_id', organization.id).eq('is_active', true),
-        supabase.from('categories').select('id, name').eq('organization_id', organization.id).eq('is_active', true),
-        hasRepairs ? withBranchFilter(
-          // Fuente única de "en proceso": incluye pausado y excluye listo
-          // (listo = reparación terminada, esperando retiro).
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', [...ACTIVE_REPAIR_STATUSES]),
-          selectedBranchId,
-        ) : Promise.resolve({ count: 0, data: [] }),
-        withBranchFilter(
-          supabase.from('sales').select('total_amount,created_at,status').eq('organization_id', organization.id)
-            .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
-          selectedBranchId,
-        ),
-        // Reparaciones ingresadas hoy
-        hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at').eq('organization_id', organization.id)
-            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-          selectedBranchId,
-        ) : Promise.resolve({ data: [] }),
-        // Reparaciones entregadas hoy
-        hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at').eq('organization_id', organization.id)
-            .or(`delivered_at.gte.${startOfDay.toISOString()},status.eq.entregado`),
-          selectedBranchId,
-        ) : Promise.resolve({ data: [] }),
-        // Reparaciones listas para retiro
-        hasRepairs ? withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount').eq('organization_id', organization.id)
-            .eq('status', 'listo'),
-          selectedBranchId,
-        ) : Promise.resolve({ data: [] }),
-      ])
+      ] = responses
+      setStatsScope(statsDataKey)
 
       type RepairItem = { final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null; created_at?: string }
 
@@ -385,7 +404,7 @@ export default function DashboardPage() {
 
       const deliveredRaw = (repairsDeliveredData || []) as unknown as RepairItem[]
       const deliveredTodayList = deliveredRaw.filter(r => {
-        if (!r.delivered_at) return r.status === 'entregado'
+        if (!r.delivered_at) return false
         const d = new Date(r.delivered_at)
         return d >= startOfDay && d <= endOfDay
       })
@@ -454,24 +473,10 @@ export default function DashboardPage() {
       }).length
 
       type SalesWeekRow = { total_amount: number; created_at: string }
-      const trendData = last7Days.map(dayStart => {
-        const dayEnd = new Date(dayStart)
-        dayEnd.setDate(dayEnd.getDate() + 1)
-        return ((salesWeek || []) as unknown as SalesWeekRow[])
-          .filter(s => {
-            const t = new Date(s.created_at)
-            return t >= dayStart && t < dayEnd
-          })
-          .reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
-      })
-      const customerTrend = last7Days.map(dayStart => {
-        const dayEnd = new Date(dayStart)
-        dayEnd.setDate(dayEnd.getDate() + 1)
-        return customerRows.filter(c => {
-          const t = new Date(c.created_at)
-          return t >= dayStart && t < dayEnd
-        }).length
-      })
+      const trendData = last7Days.map(day => ((salesWeek || []) as unknown as SalesWeekRow[])
+        .filter(s => utcToZoned(s.created_at, queryTimeZone).date === day)
+        .reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0))
+      const customerTrend = last7Days.map(day => customerRows.filter(c => utcToZoned(c.created_at, queryTimeZone).date === day).length)
 
       const nextStats: KpiStat[] = [
         {
@@ -522,16 +527,20 @@ export default function DashboardPage() {
         }] : []),
       ]
       setStats(nextStats)
+      setLastUpdated(new Date())
+      setCalendarConfig({ scope, timeZone: queryTimeZone })
       // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
       setCanRefresh(false)
       if (refreshCooldownRef.current) clearTimeout(refreshCooldownRef.current)
       refreshCooldownRef.current = setTimeout(() => setCanRefresh(true), 30_000)
     } catch (error) {
+      if (!isCurrent()) return
       console.error('Error fetching dashboard stats:', error)
+      setStatsError('No se pudieron cargar los indicadores. Reintentá la consulta.')
     } finally {
-      setLoadingStats(false)
+      if (isCurrent()) setLoadingStats(false)
     }
-  }, [hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
+  }, [scope, currentScope, scopeOrganizationId, statsDataKey, hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured && organization?.id) {
@@ -539,6 +548,8 @@ export default function DashboardPage() {
     } else {
       setLoadingStats(false)
     }
+    const requests = statsRequest
+    return () => { requests.current++; statsAbort.current?.abort() }
   }, [fetchDashboardStats, organization?.id])
 
   const quickActions = [
@@ -554,14 +565,14 @@ export default function DashboardPage() {
   ]
 
   const greeting = (() => {
-    const h = new Date().getHours()
+    const h = Math.floor(utcToZoned(Date.now(), timeZone).minutes / 60)
     if (h < 12) return 'Buenos días'
     if (h < 19) return 'Buenas tardes'
     return 'Buenas noches'
   })()
 
   const today = new Date().toLocaleDateString('es-ES', {
-    weekday: 'long', day: 'numeric', month: 'long',
+    weekday: 'long', day: 'numeric', month: 'long', timeZone,
   })
 
   useEffect(() => () => {
@@ -584,7 +595,7 @@ export default function DashboardPage() {
             </h1>
             <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              En vivo
+              {lastUpdated && statsScope === statsDataKey ? `Actualizado ${lastUpdated.toLocaleTimeString('es-PY', { timeZone })}` : 'Pendiente de actualización'}
             </span>
           </div>
           <p className="text-xs capitalize text-slate-500 dark:text-slate-400 sm:text-sm">{today}</p>
@@ -673,15 +684,16 @@ export default function DashboardPage() {
       <BusinessStartGuide />
       <StoreSetupAlert />
 
+      {statsError && <div role="alert" className="space-y-2 rounded-xl border border-destructive p-4 text-sm text-destructive"><p>{statsError}</p><Button variant="outline" onClick={() => void fetchDashboardStats()}>Reintentar</Button></div>}
       {/* KPI grid */}
       <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
-        {stats.map((stat) => (
-          <KpiCard key={stat.title} stat={stat} loading={loadingStats} />
+        {!statsError && stats.map((stat) => (
+          <KpiCard key={stat.title} stat={stat} loading={loadingStats || statsScope !== statsDataKey} />
         ))}
       </section>
 
       {/* Resumen Financiero de Reparaciones del Día */}
-      {hasRepairs ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-3.5 shadow-sm sm:p-5 dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
+      {hasRepairs && !statsError && statsScope === statsDataKey ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-3.5 shadow-sm sm:p-5 dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/60 pb-3.5 dark:border-amber-900/40">
           <div className="flex items-center gap-3">
             <div className="hidden h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600 sm:flex">
@@ -885,7 +897,7 @@ export default function DashboardPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="amount">Monto Inicial (Gs)</Label>
+              <Label htmlFor="amount">Monto Inicial (moneda de la tienda)</Label>
               <Input
                 id="amount"
                 type="number"
@@ -943,38 +955,38 @@ export default function DashboardPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Apertura:</span>
                 <span className="font-semibold">
-                  {new Intl.NumberFormat('es-PY').format(currentSession.opening_balance)} Gs.
+                  {formatCurrency(currentSession.opening_balance)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ventas registradas:</span>
                 <span className="font-semibold text-emerald-600">
-                  +{new Intl.NumberFormat('es-PY').format(
-                    currentSession.movements.filter(m => m.type === 'sale').reduce((s, m) => s + m.amount, 0)
-                  )} Gs.
+                  +{formatCurrency(
+                    currentSession.movements.filter(m => isPhysicalCashSale(m)).reduce((s, m) => s + m.amount, 0)
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ingresos (Varios):</span>
                 <span className="font-semibold text-emerald-600">
-                  +{new Intl.NumberFormat('es-PY').format(
-                    currentSession.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0)
-                  )} Gs.
+                  +{formatCurrency(
+                    currentSession.movements.filter(m => normalizeCashMovementType(m.type) === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Egresos:</span>
                 <span className="font-semibold text-rose-600">
-                  -{new Intl.NumberFormat('es-PY').format(
-                    currentSession.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0)
-                  )} Gs.
+                  -{formatCurrency(
+                    currentSession.movements.filter(m => normalizeCashMovementType(m.type) === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )}
                 </span>
               </div>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between font-bold">
                 <span>Esperado en caja:</span>
                 <span className="text-blue-700 dark:text-blue-400">
-                  {new Intl.NumberFormat('es-PY').format(expectedBalance)} Gs.
+                  {formatCurrency(expectedBalance)}
                 </span>
               </div>
               {parsedClosingAmount !== null && (
@@ -986,7 +998,7 @@ export default function DashboardPage() {
                   <span>Diferencia:</span>
                   <span>
                     {parsedClosingAmount > expectedBalance ? '+' : ''}
-                    {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - expectedBalance)} Gs.
+                    {formatCurrency(parsedClosingAmount - expectedBalance)}
                   </span>
                 </div>
               )}
@@ -994,14 +1006,14 @@ export default function DashboardPage() {
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="closing-counted">Monto real contado en caja (Gs)</Label>
+            <Label htmlFor="closing-counted">Monto real contado en caja (moneda de la tienda)</Label>
             <Input
               id="closing-counted"
               type="number"
               inputMode="decimal"
               value={closingCountedAmount}
               onChange={(e) => setClosingCountedAmount(e.target.value)}
-              placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(expectedBalance)}`}
+              placeholder={`Ej: ${formatCurrency(expectedBalance)}`}
               autoFocus
             />
             <p className="text-xs text-muted-foreground">

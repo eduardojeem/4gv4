@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -669,6 +670,8 @@ function QuoteLineRow({
 // -----------------------------------------------------------------------------
 export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   const router = useRouter()
+  const { scope, currentScope, organizationId, userId } = useTenantScope()
+  const draftKey = organizationId && userId ? `${LOCAL_DRAFT_KEY}:${organizationId}:${userId}` : null
   const { businessVertical, organizationName } = useSubscriptionStatus()
   const verticalMeta = useMemo(() => getQuoteVerticalConfig(businessVertical), [businessVertical])
 
@@ -729,29 +732,48 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   // Carga inicial
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    const initialScope = scope
+    setQuote(null)
+    setSaving(false)
+    setBusy(false)
+    setCurrency('PYG')
+    setValidUntil(defaultValidUntil(verticalMeta.defaultValidityDays))
+    setStoreName(organizationName || '')
+    setCustomer({ id: null, name: '', phone: '', email: '', ruc: '' })
+    setLines([])
+    setNotes('')
+    setShareUrl(null)
+    setSale(null)
+    setDirty(false)
+    setRecoveredDraftAvailable(false)
+    setFrequent(null)
+    setPriceMode('retail')
+    setPreviewOpen(false)
     const run = async () => {
       setLoading(true)
       try {
         if (quoteId) {
-          const response = await fetch(`/api/quotes/${quoteId}`, { cache: 'no-store' })
+          const response = await fetch(`/api/quotes/${quoteId}`, { cache: 'no-store', signal: controller.signal })
           const body = await response.json().catch(() => ({}))
+          if (cancelled || currentScope.current !== initialScope) return
           if (!response.ok) {
             toast.error(body.error || 'No se encontró el presupuesto')
             router.replace('/dashboard/quotes')
             return
           }
-          if (cancelled) return
+          if (cancelled || currentScope.current !== initialScope) return
           applyLoaded(body.quote)
           setShareUrl(body.shareUrl)
           setSale(body.sale)
           if (body.storeName) setStoreName(body.storeName)
         } else {
-          const body = await fetch('/api/quotes/lookup?type=meta').then((res) => res.json()).catch(() => ({}))
-          if (cancelled) return
+          const body = await fetch('/api/quotes/lookup?type=meta', { signal: controller.signal }).then((res) => res.json()).catch(() => ({}))
+          if (cancelled || currentScope.current !== initialScope) return
           if (body.currency) setCurrency(body.currency)
           if (body.storeName) setStoreName(body.storeName)
           try {
-            const rawDraft = localStorage.getItem(LOCAL_DRAFT_KEY)
+            const rawDraft = draftKey ? localStorage.getItem(draftKey) : null
             if (rawDraft) {
               const parsed = JSON.parse(rawDraft)
               if (parsed && (parsed.customer?.name || parsed.lines?.length > 0)) setRecoveredDraftAvailable(true)
@@ -764,46 +786,49 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
         if (!cancelled) setLoading(false)
       }
     }
-    void run()
+    void run().catch(() => { if (!controller.signal.aborted) toast.error('No se pudo cargar el presupuesto') })
     return () => {
       cancelled = true
+      controller.abort()
     }
-  }, [quoteId, applyLoaded, router])
+  }, [quoteId, applyLoaded, router, scope, draftKey, currentScope, organizationName, verticalMeta.defaultValidityDays])
 
   useEffect(() => {
     if (!editable) return
     let cancelled = false
+    const initialScope = scope
     fetch('/api/quotes/lookup?type=frequent')
       .then((res) => (res.ok ? res.json() : { results: [] }))
       .then((body) => {
-        if (!cancelled) setFrequent(Array.isArray(body.results) ? body.results : [])
+        if (!cancelled && currentScope.current === initialScope) setFrequent(Array.isArray(body.results) ? body.results : [])
       })
       .catch(() => {
-        if (!cancelled) setFrequent([])
+        if (!cancelled && currentScope.current === initialScope) setFrequent([])
       })
     return () => {
       cancelled = true
     }
-  }, [editable])
+  }, [editable, scope, currentScope])
 
   const touch = () => setDirty(true)
 
   // Un presupuesto nuevo se guarda en este dispositivo mientras se arma.
   useEffect(() => {
-    if (!isNew || !dirty) return
+    if (!isNew || !dirty || !draftKey || loading) return
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ customer, priceMode, validUntil, notes, lines, savedAt: new Date().toISOString() }))
+        if (currentScope.current !== scope) return
+        localStorage.setItem(draftKey!, JSON.stringify({ customer, priceMode, validUntil, notes, lines, savedAt: new Date().toISOString() }))
       } catch {
         // Sin almacenamiento local el borrador solo vive en la pantalla.
       }
     }, 1000)
     return () => clearTimeout(timer)
-  }, [isNew, dirty, customer, priceMode, validUntil, notes, lines])
+  }, [isNew, dirty, customer, priceMode, validUntil, notes, lines, draftKey, scope, loading, currentScope])
 
   const restoreDraft = () => {
     try {
-      const raw = localStorage.getItem(LOCAL_DRAFT_KEY)
+      const raw = draftKey ? localStorage.getItem(draftKey) : null
       if (!raw) return
       const draft = JSON.parse(raw)
       if (draft.customer) setCustomer(draft.customer)
@@ -821,7 +846,7 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
 
   const discardDraft = () => {
     try {
-      localStorage.removeItem(LOCAL_DRAFT_KEY)
+      if (draftKey) localStorage.removeItem(draftKey)
     } catch {
       // Nada que borrar.
     }
@@ -898,11 +923,13 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   })
 
   const save = async (): Promise<string | null> => {
+    if (currentScope.current !== scope) return null
     if (blockingIssues.length > 0) {
       setShowIssues(true)
       toast.error(blockingIssues[0].message)
       return null
     }
+    const requestScope = scope
     setSaving(true)
     try {
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : '/api/quotes', {
@@ -911,6 +938,7 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
         body: JSON.stringify(payload()),
       })
       const body = await response.json().catch(() => ({}))
+      if (currentScope.current !== requestScope) return null
       if (!response.ok) {
         toast.error(body.error || 'No se pudo guardar el presupuesto')
         return null
@@ -919,7 +947,7 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
       setShowIssues(false)
       if (isNew) {
         try {
-          localStorage.removeItem(LOCAL_DRAFT_KEY)
+          if (draftKey) localStorage.removeItem(draftKey)
         } catch {
           // Nada que borrar.
         }
@@ -945,10 +973,12 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editable, saving, customer, lines, priceMode, validUntil, notes])
+  }, [editable, saving, customer, lines, priceMode, validUntil, notes, save])
 
   const changeStatus = async (action: string, success: string) => {
+    if (currentScope.current !== scope) return
     if (!quote) return
+    const requestScope = scope
     setBusy(true)
     try {
       const response = await fetch(`/api/quotes/${quote.id}`, {
@@ -957,6 +987,7 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
         body: JSON.stringify({ action }),
       })
       const body = await response.json().catch(() => ({}))
+      if (currentScope.current !== requestScope) return
       if (!response.ok) {
         toast.error(body.error || 'No se pudo actualizar el estado')
         return
@@ -1007,6 +1038,8 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   }
 
   const duplicate = async () => {
+    if (currentScope.current !== scope) return
+    const requestScope = scope
     setBusy(true)
     try {
       const response = await fetch('/api/quotes', {
@@ -1015,6 +1048,7 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
         body: JSON.stringify({ ...payload(), valid_until: defaultValidUntil(verticalMeta.defaultValidityDays) }),
       })
       const body = await response.json().catch(() => ({}))
+      if (currentScope.current !== requestScope) return
       if (!response.ok) {
         toast.error(body.error || 'No se pudo duplicar el presupuesto')
         return
@@ -1027,9 +1061,12 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   }
 
   const remove = async () => {
+    if (currentScope.current !== scope) return
     if (!quote || !window.confirm('¿Eliminar este borrador?')) return
+    const requestScope = scope
     const response = await fetch(`/api/quotes/${quote.id}`, { method: 'DELETE' })
     const body = await response.json().catch(() => ({}))
+      if (currentScope.current !== requestScope) return
     if (!response.ok) {
       toast.error(body.error || 'No se pudo eliminar el borrador')
       return

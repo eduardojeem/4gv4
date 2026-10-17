@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const control = vi.hoisted(() => ({
   organizacion: { id: 'org-1' } as { id: string } | null,
   organizacionCargando: false,
-  sucursal: { organization_id: 'org-1' } as { organization_id: string } | null,
+  sucursal: { organization_id: 'org-1' } as { organization_id: string; id?: string } | null,
   /** Consultas de ventas del periodo que esperan a que la prueba las resuelva. */
   ventasPendientes: [] as Array<{ desde: string; resolver: (v: unknown) => void }>,
   llamadas: [] as Array<{ tabla: string; filtros: unknown[][] }>,
@@ -14,7 +14,7 @@ const control = vi.hoisted(() => ({
 function consulta(tabla: string) {
   const filtros: unknown[][] = []
   const q: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'gte', 'lte', 'order', 'limit', 'in', 'not', 'or']) {
+  for (const m of ['select', 'eq', 'gte', 'lte', 'order', 'limit', 'in', 'not', 'or', 'range', 'abortSignal']) {
     q[m] = vi.fn((...args: unknown[]) => {
       filtros.push([m, ...args])
       return q
@@ -25,7 +25,10 @@ function consulta(tabla: string) {
     const esVentasDelPeriodo = tabla === 'sales' && !filtros.some((f) => f[0] === 'limit')
     if (esVentasDelPeriodo) {
       const desde = String(filtros.find((f) => f[0] === 'gte')?.[2])
-      return new Promise((resolver) => control.ventasPendientes.push({ desde, resolver })).then(ok, mal)
+      return new Promise((resolver) => control.ventasPendientes.push({ desde, resolver: (value: unknown) => {
+        const response = value as { data?: unknown[]; count?: number }
+        resolver({ ...response, count: response.count ?? response.data?.length ?? 0 })
+      } })).then(ok, mal)
     }
     if (tabla === 'sales') return Promise.resolve({ data: control.recientes, error: null }).then(ok, mal)
     return Promise.resolve({ data: [], error: null, count: 0 }).then(ok, mal)
@@ -38,6 +41,9 @@ vi.mock('@/contexts/branch-context', () => ({ useBranch: () => ({ selectedBranch
 vi.mock('@/contexts/ActiveOrganizationContext', () => ({
   useActiveOrganization: () => ({ organization: control.organizacion, isLoading: control.organizacionCargando }),
 }))
+
+const tenant = vi.hoisted(() => ({ scope: 'org-1', currentScope: { current: 'org-1' } }))
+vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => ({ ...tenant, organizationId: control.organizacion?.id }) }))
 
 import { usePosStats } from './usePosStats'
 
@@ -161,4 +167,32 @@ describe('sin organización', () => {
     const ventas = control.llamadas.find((l) => l.tabla === 'sales')!
     expect(ventas.filtros).toContainEqual(['eq', 'organization_id', 'org-1'])
   })
+})
+
+it('scopes all primary sales, credit and repair queries to the selected branch', async () => {
+ control.sucursal = { organization_id: 'org-1', id: 'branch-2' }
+ renderHook(() => usePosStats(UN_DIA))
+ await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
+ await act(async () => { control.ventasPendientes[0].resolver({ data: [], error: null }) })
+ for (const query of control.llamadas.filter(q => ['sales', 'customer_credits', 'repairs'].includes(q.tabla))) {
+  expect(query.filtros).toContainEqual(['eq', 'branch_id', 'branch-2'])
+ }
+})
+
+it('aggregates all 1250 sales and batches their item lookups', async () => {
+ const { result } = renderHook(() => usePosStats(UN_DIA))
+ for (let page = 0; page < 3; page++) {
+  await waitFor(() => expect(control.ventasPendientes).toHaveLength(page + 1))
+  const rows = Array.from({ length: page === 2 ? 250 : 500 }, (_, i) => venta(`sale-${page * 500 + i}`, 10))
+  await act(async () => { control.ventasPendientes[page].resolver({ data: rows, error: null, count: 1250 }) })
+ }
+ await waitFor(() => expect(result.current.loading).toBe(false))
+ expect(result.current.stats.totalSales).toBe(12500)
+ expect(result.current.stats.totalTransactions).toBe(1250)
+ const batches = control.llamadas.filter(q => q.tabla === 'sale_items')
+ expect(batches).toHaveLength(13)
+ for (const batch of batches) {
+  const ids = batch.filtros.find(f => f[0] === 'in' && f[1] === 'sale_id')?.[2] as string[]
+  expect(ids.length).toBeLessThanOrEqual(100)
+ }
 })

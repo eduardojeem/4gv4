@@ -1,5 +1,6 @@
 'use client'
 
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import {
@@ -1405,6 +1406,7 @@ function OrderDetailDialog({
 }
 
 export function OrdersDashboard() {
+  const { scope, currentScope } = useTenantScope()
   const abortRef = useRef<AbortController | null>(null)
   const statsLoadedRef = useRef(false)
 
@@ -1437,6 +1439,7 @@ export function OrdersDashboard() {
   const needsAction = (stats['PENDING'] ?? 0) + (stats['READY'] ?? 0)
 
   const loadOrders = useCallback(async (opts?: { forceStats?: boolean }) => {
+    const requestScope = scope
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -1459,6 +1462,7 @@ export function OrdersDashboard() {
       const response = await fetch(`/api/orders?${params}`, { signal: controller.signal, cache: 'no-store' })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudieron cargar los pedidos.')
+      if (controller.signal.aborted || abortRef.current !== controller || currentScope.current !== requestScope) return
       const data = payload.data as OrdersPayload
       setOrders(data.orders)
       setTotalPages(data.pagination.totalPages)
@@ -1466,14 +1470,32 @@ export function OrdersDashboard() {
       if (data.stats) { setStats(data.stats); statsLoadedRef.current = true }
       if (data.meta) { setTodayCount(data.meta.todayCount); setTodayRevenue(data.meta.todayRevenue) }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return
+      if (controller.signal.aborted || currentScope.current !== requestScope) return
       const message = error instanceof Error ? error.message : 'Intentá nuevamente.'
       setLoadError(message)
       toast.error('No se pudieron cargar los pedidos', { description: message })
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
-  }, [page, search, statusTab, paymentFilter, datePreset, sortField, sortDir])
+  }, [page, search, statusTab, paymentFilter, datePreset, sortField, sortDir, scope, currentScope])
+
+  useEffect(() => {
+    abortRef.current?.abort()
+    statsLoadedRef.current = false
+    setOrders([])
+    setStats({})
+    setTodayCount(0)
+    setTodayRevenue(0)
+    setTotal(0)
+    setTotalPages(1)
+    setPage(1)
+    setSelectedIds(new Set())
+    setDetailOrder(null)
+    setCollectionOrder(null)
+    setDeliveryOrder(null)
+    setCreateOpen(false)
+    return () => abortRef.current?.abort()
+  }, [scope])
 
   useEffect(() => {
     const t = window.setTimeout(() => void loadOrders(), 250)
@@ -1490,6 +1512,7 @@ export function OrdersDashboard() {
   async function updateStatus(order: CustomerOrder, nextStatus: OrderStatus, confirmed = false) {
     if (nextStatus === 'CANCELLED' && cancelConfirmId !== order.id) { setCancelConfirmId(order.id); return }
     if (nextStatus === 'DELIVERED' && !confirmed) { setDeliveryOrder(order); return }
+    const requestScope = scope
     setCancelConfirmId(null); setUpdatingId(order.id)
     try {
       const response = await fetch(`/api/orders/${order.id}/status`, {
@@ -1498,6 +1521,7 @@ export function OrdersDashboard() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo actualizar.')
+      if (currentScope.current !== requestScope) return
       const updated = payload.data as CustomerOrder
       setOrders((cur) => {
         const mapped = cur.map((r) => r.id === order.id ? updated : r)
@@ -1515,6 +1539,7 @@ export function OrdersDashboard() {
   }
 
   async function recordCollection(order: CustomerOrder, input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) {
+    const requestScope = scope
     setUpdatingId(order.id)
     try {
       const response = await fetch(`/api/orders/${order.id}/payment`, {
@@ -1531,6 +1556,7 @@ export function OrdersDashboard() {
       if (!response.ok || payload?.success === false) {
         throw new Error(payload?.error ?? 'No se pudo actualizar.')
       }
+      if (currentScope.current !== requestScope) return
       const updated = payload.data as CustomerOrder
       setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
       setDetailOrder((cur) => cur?.id === order.id ? updated : cur)
