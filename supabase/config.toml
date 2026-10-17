@@ -1,2 +1,9 @@
+project_id = "4gv4"
+
 [auth]
 pwned_passwords_protection_enabled = true
+
+# Local development only. Avoid the unused log collector and its Docker TCP
+# dependency; production observability is configured on the hosted project.
+[analytics]
+enabled = false

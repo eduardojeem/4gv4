@@ -54,7 +54,11 @@ describe('todas las pantallas de clientes usan la misma cuenta', () => {
   it('la analítica suma lo gastado real y descarta ventas anuladas por mes', () => {
     const metricas = leer('src/hooks/use-customer-metrics.ts')
     expect(metricas).not.toContain('total_spent_this_year ?? c.lifetime_value')
-    expect(metricas).toMatch(/if \(!isCountableSale\([\w.]+\.status\)\) continue/)
+    expect(metricas).toContain("rpc('dashboard_customer_monthly_summary'")
+    const sql = leer('supabase/migrations/20261017213719_dashboard_customer_monthly_summary.sql')
+    expect(sql).toContain("not in ('cancelled','cancelada','cancelado')")
+    expect(sql).toContain('security invoker')
+    expect(sql).toContain('sum(s.total_amount)')
   })
 
   it('el detalle toma el mismo cálculo que la lista y no la última edición como visita', () => {

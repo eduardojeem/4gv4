@@ -4355,6 +4355,10 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      dashboard_customer_monthly_summary: {
+        Args: { p_organization_id: string; p_start: string; p_end: string; p_time_zone: string }
+        Returns: { year: number; month_index: number; revenue: number; sale_count: number }[]
+      }
       record_customer_order_collection_atomic: {
         Args: {
           p_organization_id: string

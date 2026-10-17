@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { synchronizeDashboardSummaryScope } from '@/lib/dashboard/summary-cache'
 import { useAuth } from '@/contexts/auth-context'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
@@ -12,7 +13,7 @@ export function useTenantScope() {
   const organizationId = (switched?.userId === user?.id ? switched?.id : null) ?? active?.organization?.id ?? user?.organization?.id ?? null
   const scope = `${user?.id ?? ''}:${organizationId ?? ''}`
   const currentScope = useRef(scope)
-  useLayoutEffect(() => { currentScope.current = scope }, [scope])
+  useLayoutEffect(() => { currentScope.current = scope; synchronizeDashboardSummaryScope(scope) }, [scope])
   useEffect(() => {
     const onChange = (event: Event) => {
       const id = (event as CustomEvent<{ organizationId?: string }>).detail?.organizationId

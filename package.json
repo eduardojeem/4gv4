@@ -36,6 +36,8 @@
     "postbuild": "node scripts/post-build-checks.mjs",
     "grant:superadmin": "node scripts/grant-super-admin.js",
     "verify:supabase": "npx tsx scripts/verify-supabase.ts",
+    "supabase:local:start": "npx supabase start --exclude logflare,vector",
+    "supabase:local:stop": "npx supabase stop --project-id 4gv4",
     "audit:barcodes": "npx tsx scripts/audit-barcodes.ts",
     "audit:browser": "node scripts/audit-public-browser.mjs",
     "setup:repairs": "node scripts/setup-repairs.js",

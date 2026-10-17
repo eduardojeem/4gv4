@@ -7,6 +7,7 @@ import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/rol
 import { normalizeRole } from '../lib/auth/role-utils'
 import { toast } from 'sonner'
 import { logAuthEventClient } from '@/lib/auth-event-client'
+import { clearDashboardSummaryCache } from '@/lib/dashboard/summary-cache'
 import { shouldReuseAuthenticatedUser } from '@/lib/auth/auth-event-stability'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
@@ -436,6 +437,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para cerrar sesión
   const signOut = useCallback(async () => {
+    clearDashboardSummaryCache()
     try {
       setLoading(true)
 
@@ -649,6 +651,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, nextSession) => {
+        if (event === 'SIGNED_OUT' || event === 'USER_UPDATED' || event === 'SIGNED_IN') clearDashboardSummaryCache()
         if (!isMounted) return
 
         // Flujo de recuperación de contraseña (enlace implícito con #access_token).

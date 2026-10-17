@@ -1,708 +1,120 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { eachDayOfInterval, format } from 'date-fns'
+import { z } from 'zod'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { DateRange } from 'react-day-picker'
 import { createClient } from '@/lib/supabase/client'
-import { DateRange } from 'react-day-picker'
-import { calculateProfit, calculateSalesCost, type ProfitResult, type SaleItemRow } from '../lib/pos-profit'
-import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
-import { withBranchFilter } from '@/lib/branches/client'
-import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useBranch } from '@/contexts/branch-context'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
-import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { getCachedDashboardSummary } from '@/lib/dashboard/summary-cache'
+import { calculateProfit } from '../lib/pos-profit'
 import { buildDailySales, rangeBounds } from '../lib/pos-dashboard-range'
+import { EMPTY_POS_STATS, usePosDetails, type PosStats } from './usePosDetails'
+export type { PosStats, PosSaleItem, PosRecentSale, PosEnrichedSale, PosCreditRecord, PosDeliveredRepairRecord } from './usePosDetails'
 
-export type PosSaleItem = SaleItemRow & { sale_id: string }
+const amount = z.number().finite()
+const summarySchema = z.object({
+  totalSales: amount, netSales: amount, totalTransactions: amount, averageTicket: amount,
+  totalCost: amount, itemsWithoutCost: amount,
+  dailySales: z.array(z.object({ bucket_day: z.string(), sales: amount, transactions: amount })),
+  topProducts: z.array(z.object({ name:z.string(), sales:amount, revenue:amount })),
+  paymentMethods: z.array(z.object({ name:z.string(), value:amount })),
+  recentSales: z.array(z.object({id:z.string(),created_at:z.string(),total:amount.nullable(),payment_method:z.string().nullable(),customer:z.object({name:z.string().nullable()}),customer_name:z.string().nullable(),items_count:amount})),
+  creditStats:z.object({totalAmount:amount,count:amount,averageTicket:amount,pendingAmount:amount}),
+  repairCreditStats:z.object({totalAmount:amount,count:amount,pendingAmount:amount}),
+  repairStats:z.object({totalAmount:amount,deliveredAmount:amount,deliveredCount:amount,readyAmount:amount,readyCount:amount,activeCount:amount,deliveredPartsCost:amount,deliveredLaborCost:amount,netProfit:amount,refundsAmount:amount}),
+  refunds:z.object({totalAmount:amount,salesAmount:amount,repairsAmount:amount}),
+})
+type Summary = z.infer<typeof summarySchema>
 
-interface InstallmentRow {
-    amount?: number | string | null
-    amount_paid?: number | string | null
-}
+export function usePosStats(dateRange: DateRange | undefined) {
+  const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
+  const { selectedBranchId, selectedBranch } = useBranch()
+  const { organization, isLoading: organizationLoading } = useActiveOrganization()
+  const organizationId = organization?.id ?? null
+  const branchId = selectedBranchId ?? selectedBranch?.id ?? null
+  const bounds = rangeBounds(dateRange)
+  const from = bounds?.from
+  const to = bounds?.to
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const key = JSON.stringify(['pos', scope, organizationId, branchId, from, to, organization?.role, 'analytics.read', timezone])
+  const keyRef = useRef(key)
+  useLayoutEffect(() => { keyRef.current = key }, [key])
+  const supabase = useMemo(() => createClient(), [])
+  const [snapshot, setSnapshot] = useState<{key: string; stats: PosStats} | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [failure, setFailure] = useState<{key:string;error:Error} | null>(null)
+  const error = failure?.key === key ? failure.error : null
+  const setError = useCallback((error:Error|null) => setFailure(error ? {key,error}:null),[key])
+  const [detailSnapshot, setDetailSnapshot] = useState<{key: string; stats: PosStats} | null>(null)
+  const { refetch: fetchFullDetails } = usePosDetails(dateRange, false)
+  const [detailsLoadingKey, setDetailsLoadingKey] = useState<string | null>(null)
+  const detailsLoading = detailsLoadingKey === key
+  const [detailFailure, setDetailFailure] = useState<{key:string;error:Error} | null>(null)
+  const detailsError = detailFailure?.key === key ? detailFailure.error : null
+  const currentKey = snapshot?.key === key
+  const detailsLoaded = detailSnapshot?.key === key
+  const summary = currentKey ? snapshot.stats : EMPTY_POS_STATS
+  const stats = detailsLoaded ? { ...summary, allSales: detailSnapshot.stats.allSales, allCredits: detailSnapshot.stats.allCredits, allRepairCredits: detailSnapshot.stats.allRepairCredits, repairStats: { ...summary.repairStats, deliveredRepairs: detailSnapshot.stats.repairStats.deliveredRepairs } } : summary
 
-interface SalesDataRow {
-    id: string
-    code?: string | null
-    created_at: string
-    total?: number | null
-    payment_method?: string | null
-    customer?: { name?: string | null } | null
-    [key: string]: unknown
-}
-
-interface RecentDataRow {
-    id: string
-    created_at: string
-    total?: number | null
-    payment_method?: string | null
-    customer?: { name?: string | null } | null
-    sale_items?: Array<{ quantity?: number | string | null }> | null
-    [key: string]: unknown
-}
-
-/**
- * Solo ventas cobradas. La consulta no filtraba por estado: una venta anulada
- * (`PUT /api/sales` puede anularla) o pendiente seguia sumando en el total, las
- * transacciones, el ticket promedio, el grafico, los medios de pago y la
- * ganancia. Las filas sin estado se conservan: la columna tiene default
- * 'completed' y un nulo es una venta vieja, no una anulada.
- */
-const COUNTED_SALES_FILTER = `status.is.null,status.in.(${COMPLETED_SALE_STATUSES.join(',')})`
-
-export interface PosRecentSale {
-    id: string
-    created_at: string
-    total?: number | null
-    payment_method?: string | null
-    customer?: { name?: string | null } | null
-    customer_name: string | null
-    items?: unknown
-    items_count: number
-}
-
-export interface PosEnrichedSale {
-    id: string
-    code?: string | null
-    created_at: string
-    total?: number | null
-    payment_method?: string | null
-    customer?: { name?: string | null } | null
-    cost: number
-    refundAmount: number
-    itemsCount: number
-    profit: number
-    [key: string]: unknown
-}
-
-export interface PosCreditRecord {
-    id: string
-    created_at: string
-    customer?: { name?: string | null } | null
-    sale?: { code?: string; total_amount?: number; label?: string } | null
-    label?: string | null
-    status?: string
-    totalDebt: number
-    pendingDebt: number
-    origin_type?: string | null
-    [key: string]: unknown
-}
-
-export interface PosDeliveredRepairRecord {
-    id: string
-    ticket_number?: string | null
-    device_brand?: string | null
-    device_model?: string | null
-    delivered_at?: string | null
-    final_cost?: number | null
-    estimated_cost?: number | null
-    paid_amount?: number | null
-    parts_cost?: number | null
-    labor_cost?: number | null
-    payment_status?: string | null
-    [key: string]: unknown
-}
-
-export interface PosStats {
-    totalSales: number
-    totalTransactions: number
-    averageTicket: number
-    topProduct: { name: string; sales: number }
-    dailySales: Array<{ date: string; fullDate: string; sales: number; transactions: number }>
-    paymentMethods: Array<{ name: string; value: number; color: string }>
-    topProducts: Array<{ name: string; sales: number; revenue: number }>
-    recentSales: PosRecentSale[]
-    allSales: PosEnrichedSale[]
-    allCredits: PosCreditRecord[] // Sales credits
-    allRepairCredits: PosCreditRecord[] // Repair credits
-    creditStats: {
-        totalAmount: number
-        count: number
-        averageTicket: number
-        pendingAmount: number
-    }
-    repairCreditStats: {
-        totalAmount: number
-        count: number
-        pendingAmount: number
-    }
-    repairStats: {
-        totalAmount: number
-        deliveredAmount: number
-        deliveredCount: number
-        readyAmount: number
-        readyCount: number
-        activeCount: number
-        deliveredPartsCost: number
-        deliveredLaborCost: number
-        netProfit: number
-        refundsAmount: number
-        deliveredRepairs: PosDeliveredRepairRecord[]
-    }
-    refunds: {
-        totalAmount: number
-        salesAmount: number
-        repairsAmount: number
-    }
-    /** Facturacion sin IVA del periodo. */
-    netSales: number
-    /** Ganancia calculada sobre ambas bases: el interruptor no refetchea. */
-    profitStats: ProfitResult & {
-        /** Items cuyo producto no tiene costo cargado. */
-        itemsWithoutCost: number
-    }
-    /** Consultas que fallaron. La UI avisa en vez de mostrar ceros. */
-    warnings: string[]
-}
-
-interface UsePosStatsReturn {
-    stats: PosStats
-    loading: boolean
-    error: Error | null
-    refetch: () => Promise<void>
-}
-
-const EMPTY_FIGURES = { revenue: 0, salesProfit: 0, totalProfit: 0, profitMargin: 0 }
-
-export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn {
-    const [stats, setStats] = useState<PosStats>({
-        totalSales: 0,
-        totalTransactions: 0,
-        averageTicket: 0,
-        topProduct: { name: 'N/A', sales: 0 },
-        dailySales: [],
-        paymentMethods: [],
-        topProducts: [],
-        recentSales: [],
-        allSales: [],
-        allCredits: [],
-        allRepairCredits: [],
-        creditStats: {
-            totalAmount: 0,
-            count: 0,
-            averageTicket: 0,
-            pendingAmount: 0
-        },
-        repairCreditStats: {
-            totalAmount: 0,
-            count: 0,
-            pendingAmount: 0
-        },
-        repairStats: {
-            totalAmount: 0,
-            deliveredAmount: 0,
-            deliveredCount: 0,
-            readyAmount: 0,
-            readyCount: 0,
-            activeCount: 0,
-            deliveredPartsCost: 0,
-            deliveredLaborCost: 0,
-            netProfit: 0,
-            refundsAmount: 0,
-            deliveredRepairs: []
-        },
-        refunds: {
-            totalAmount: 0,
-            salesAmount: 0,
-            repairsAmount: 0
-        },
-        netSales: 0,
-        profitStats: {
-            totalCost: 0,
-            repairProfit: 0,
-            taxTotal: 0,
-            withTax: EMPTY_FIGURES,
-            withoutTax: EMPTY_FIGURES,
-            costUnavailable: false,
-            itemsWithoutCost: 0
-        },
-        warnings: []
-    })
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<Error | null>(null)
-    const { selectedBranch, selectedBranchId } = useBranch()
-    const branchId = selectedBranchId ?? selectedBranch?.id ?? null
-    // La organizacion salia solo de la sucursal seleccionada. Sin sucursal
-    // —falla la carga de sucursales o la organizacion no tiene ninguna activa—
-    // la consulta nunca corria y `loading` quedaba en true: «Cargando
-    // analíticas del POS…» para siempre.
-    const { organization: activeOrganization, isLoading: organizationLoading } = useActiveOrganization()
-    const organizationId = activeOrganization?.id ?? selectedBranch?.organization_id ?? null
-    // Cada consulta lleva un numero. Cambiar de «30 días» a «Hoy» dispara dos
-    // consultas a la vez; si la de 30 dias terminaba ultima, pisaba a la de hoy
-    // y el dashboard mostraba 30 dias con la etiqueta «Hoy».
-    const requestRef = useRef(0)
-    const abortRef = useRef<AbortController | null>(null)
-    const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
-
-    const supabase = useMemo(() => createClient(), [])
-
-    const fetchStats = useCallback(async () => {
-        abortRef.current?.abort()
-        const controller = new AbortController()
-        abortRef.current = controller
-        const requestId = ++requestRef.current
-        const esVigente = () => requestId === requestRef.current && currentScope.current === scope
-        const bounds = rangeBounds(dateRange)
-
-        if (!bounds || !dateRange?.from) {
-            setLoading(false)
-            return
-        }
-        if (!organizationId) {
-            if (!organizationLoading) {
-                setLoading(false)
-                setError(new Error('No hay una organización activa para mostrar estadísticas.'))
-            }
-            return
-        }
-
-        if (organizationLoading || (scopeOrganizationId && organizationId !== scopeOrganizationId)) {
-            setLoading(true)
-            return
-        }
-        setLoading(true)
-        setError(null)
-
-        try {
-            const { from, to } = bounds
-
-            // 1. Fetch Sales Summary
-            const salesPromise = supabase
-                .from('sales')
-                .select(`
-                    id,
-                    created_at,
-                    code,
-                    total:total_amount,
-                    net:subtotal_amount,
-                    payment_method,
-                    customer:customers!customer_id(name)
-                `, { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .or(COUNTED_SALES_FILTER)
-                .gte('created_at', from)
-                .lte('created_at', to)
-                .order('created_at', { ascending: false })
-
-            // 2. Fetch Credits
-            const creditsPromise = supabase
-                .from('customer_credits')
-                .select(`
-                    id,
-                    principal,
-                    created_at,
-                    status,
-                    customer:customers!customer_id(name),
-                    sale_id,
-                    origin_type,
-                    label,
-                    installments:credit_installments(amount, amount_paid)
-                `, { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .gte('created_at', from)
-                .lte('created_at', to)
-
-            // 3. Fetch Recent Sales
-            const recentPromise = supabase
-                .from('sales')
-                .select(`
-                    id,
-                    created_at,
-                    total:total_amount,
-                    payment_method,
-                    customer:customers!customer_id(name),
-                    sale_items(
-                        quantity,
-                        subtotal,
-                        product:products(name)
-                    )
-                `)
-                .eq('organization_id', organizationId)
-                .or(COUNTED_SALES_FILTER)
-                .gte('created_at', from)
-                .lte('created_at', to)
-                .order('created_at', { ascending: false })
-                .limit(10)
-
-            // 4. Fetch Repairs created in date range
-            const repairsCreatedPromise = supabase
-                .from('repairs')
-                .select(`
-                    id,
-                    created_at,
-                    delivered_at,
-                    status,
-                    final_cost,
-                    estimated_cost,
-                    paid_amount
-                `, { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .gte('created_at', from)
-                .lte('created_at', to)
-
-            // 5. Fetch Repairs delivered in date range
-            const repairsDeliveredPromise = supabase
-                .from('repairs')
-                .select(`
-                    id,
-                    ticket_number,
-                    device_brand,
-                    device_model,
-                    created_at,
-                    delivered_at,
-                    status,
-                    final_cost,
-                    estimated_cost,
-                    paid_amount,
-                    parts_cost,
-                    labor_cost,
-                    payment_status
-                `, { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .eq('status', 'entregado')
-                .gte('delivered_at', from)
-                .lte('delivered_at', to)
-
-            // 6. Fetch Ready Repairs
-            const repairsReadyPromise = supabase
-                .from('repairs')
-                .select(`
-                    id,
-                    final_cost,
-                    estimated_cost,
-                    paid_amount
-                `, { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .eq('status', 'listo')
-
-            // 7. Fetch Active Repairs Count
-            const repairsActivePromise = supabase
-                .from('repairs')
-                .select('id', { count: 'exact', head: true })
-                .eq('organization_id', organizationId)
-                .in('status', ['recibido', 'diagnostico', 'reparacion', 'pausado'])
-
-            // 8. Fetch Refunds
-            const afterSalesPromise = supabase
-                .from('after_sales_cases')
-                .select('id, source_type, refund_amount, status, request_type, sale_id, sale:sales!sale_id(branch_id), repair:repairs!repair_id(branch_id)', { count: 'exact' })
-                .eq('organization_id', organizationId)
-                .not('refund_amount', 'is', null)
-                .gte('resolved_at', from)
-                .lte('resolved_at', to)
-
-            // Apply the same header branch to every directly attributable primary query.
-            for (const query of [salesPromise, creditsPromise, recentPromise, repairsCreatedPromise,
-                repairsDeliveredPromise, repairsReadyPromise, repairsActivePromise]) {
-                withBranchFilter(query, branchId)
-            }
-
-            // Execute parallel primary queries
-            const [
-                { data: salesData, error: salesError },
-                { data: creditData, error: creditError },
-                { data: recentData, error: recentError },
-                { data: repairsCreatedData, error: repairsCreatedError },
-                { data: repairsDeliveredData, error: repairsDeliveredError },
-                { data: repairsReadyData, error: repairsReadyError },
-                { count: repairsActiveCount, error: repairsActiveError },
-                { data: afterSalesData, error: afterSalesError }
-            ] = await Promise.all([
-                completeDashboardQuery(salesPromise, controller.signal),
-                completeDashboardQuery(creditsPromise, controller.signal),
-                recentPromise,
-                completeDashboardQuery(repairsCreatedPromise, controller.signal),
-                completeDashboardQuery(repairsDeliveredPromise, controller.signal),
-                completeDashboardQuery(repairsReadyPromise, controller.signal),
-                repairsActivePromise,
-                completeDashboardQuery(afterSalesPromise, controller.signal)
-            ])
-
-            if (!esVigente()) return
-            if (salesError) throw salesError
-
-            // Los errores parciales ya no se descartan en silencio: se juntan
-            // para que la UI muestre que ese bloque no tiene datos reales, en
-            // lugar de dibujar un cero indistinguible de un dato verdadero.
-            const warnings: string[] = []
-            if (repairsReadyError) warnings.push('No se pudieron cargar las reparaciones listas.')
-            if (repairsActiveError) warnings.push('No se pudieron cargar las reparaciones activas.')
-            if (afterSalesError) warnings.push('No se pudieron cargar los reembolsos; la ganancia puede estar incompleta.')
-            if (recentError) warnings.push('No se pudieron cargar las transacciones recientes.')
-            if (creditError) warnings.push('No se pudieron cargar los créditos.')
-            if (repairsCreatedError) warnings.push('No se pudieron cargar las reparaciones del período.')
-            if (repairsDeliveredError) warnings.push('No se pudieron cargar las reparaciones entregadas.')
-
-            // --- Secondary Query: Fetch items for the retrieved sale IDs ---
-            const saleIds = (salesData || []).map(s => s.id)
-            let itemsData: PosSaleItem[] = []
-            let costUnavailable = false
-
-            for (let offset = 0; offset < saleIds.length; offset += 100) {
-                const { data: items, error: itemsError } = await completeDashboardQuery(supabase
-                    .from('sale_items')
-                    .select(`
-                        id,
-                        quantity,
-                        subtotal,
-                        sale_id,
-                        product:products(name, purchase_price)
-                    `, { count: 'exact' })
-                    .in('sale_id', saleIds.slice(offset, offset + 100)), controller.signal)
-
-                if (itemsError) {
-                    // Sin items no hay costo. Antes esto dejaba totalCost en 0
-                    // y la ganancia salia igual a la facturacion.
-                    costUnavailable = true
-                    itemsData = []
-                    warnings.push('No se pudo calcular el costo de mercadería: la ganancia y el margen no están disponibles.')
-                    break
-                } else {
-                    itemsData.push(...((items || []) as PosSaleItem[]))
-                }
-            }
-
-            // --- Processing ---
-
-            const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
-            // Base sin IVA. Si una venta no tiene subtotal se usa su total, para
-            // no restar un IVA que no conocemos.
-            const netSales = salesData?.reduce(
-                (acc, sale) => acc + ((sale as { net?: number | null }).net ?? sale.total ?? 0),
-                0
-            ) || 0
-            const totalTransactions = salesData?.length || 0
-            const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
-
-            // Process Credits Stats
-            // Para créditos con cuotas (installments), la deuda total es la suma de las cuotas (que incluye interés)
-            // y la deuda pendiente es la suma de las cuotas menos lo que ya se pagó.
-            const credits = (creditData || []).map(c => {
-                const hasInstallments = c.installments && c.installments.length > 0
-                let totalDebt = c.principal || 0
-                let pendingDebt = c.principal || 0
-
-                if (hasInstallments) {
-                    const instList = c.installments as InstallmentRow[]
-                    totalDebt = instList.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0)
-                    const totalPaid = instList.reduce((sum, inst) => sum + (Number(inst.amount_paid) || 0), 0)
-                    pendingDebt = totalDebt - totalPaid
-                } else if (c.status === 'paid' || c.status === 'cancelled') {
-                    pendingDebt = 0
-                }
-
-                // Intentamos encontrar la venta asociada en salesData (que comparte el mismo rango de fechas)
-                let sale = null
-                if (c.sale_id && salesData) {
-                    const foundSale = salesData.find(s => s.id === c.sale_id)
-                    if (foundSale) {
-                        // El select aliasa total_amount como `total`: no hay campo total_amount.
-                        sale = { code: foundSale.code, total_amount: foundSale.total || 0 }
-                    }
-                }
-
-                return { ...c, totalDebt, pendingDebt, sale } as PosCreditRecord
-            })
-
-            const saleCredits = credits.filter(c => c.origin_type === 'sale' || !c.origin_type)
-            const repairCredits = credits.filter(c => c.origin_type === 'repair')
-
-            const creditTotalAmount = saleCredits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
-            const creditCount = saleCredits.length
-            const creditAvgTicket = creditCount > 0 ? creditTotalAmount / creditCount : 0
-            const creditPendingAmount = saleCredits
-                .filter(c => c.status === 'active' || c.status === 'defaulted')
-                .reduce((sum, c) => sum + (c.pendingDebt || 0), 0)
-
-            const repairCreditTotalAmount = repairCredits.reduce((sum, c) => sum + (c.totalDebt || 0), 0)
-            const repairCreditCount = repairCredits.length
-            const repairCreditPendingAmount = repairCredits
-                .filter(c => c.status === 'active' || c.status === 'defaulted')
-                .reduce((sum, c) => sum + (c.pendingDebt || 0), 0)
-
-            // Process Repairs Stats
-            type RepairRow = { id: string; ticket_number?: string | null; device_brand?: string | null; device_model?: string | null; final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; parts_cost?: number | null; labor_cost?: number | null; payment_status?: string | null; status?: string; delivered_at?: string | null; created_at?: string | null }
-            const repairsCreated = (repairsCreatedData || []) as unknown as RepairRow[]
-            const repairTotalAmount = repairsCreated.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
-
-            const repairsDelivered = (repairsDeliveredData || []) as unknown as RepairRow[]
-            const repairDeliveredAmount = repairsDelivered.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
-            const repairDeliveredCount = repairsDelivered.length
-            
-            const repairDeliveredPartsCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.parts_cost) || 0), 0)
-            const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
-            
-            // Procesar reembolsos resueltos
-            const afterSales = (afterSalesData || []).filter(item => {
-                if (!branchId || branchId === 'all') return true
-                const sale = item.sale as unknown as { branch_id?: string } | null
-                const repair = item.repair as unknown as { branch_id?: string } | null
-                return sale?.branch_id === branchId || repair?.branch_id === branchId
-            })
-            const repairRefundsAmount = afterSales
-                .filter(c => c.source_type === 'repair' && (c.status === 'resolved' || c.status === 'approved'))
-                .reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
-            const saleRefundsAmount = afterSales
-                .filter(c => (c.source_type === 'sale' || c.source_type === 'product' || c.source_type === 'sale_item') && (c.status === 'resolved' || c.status === 'approved'))
-                .reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
-            const totalRefundsAmount = repairRefundsAmount + saleRefundsAmount
-
-            // Ganancia neta de taller descuenta costo de repuestos y devoluciones
-            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost - repairRefundsAmount
-
-            const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
-            const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
-            const repairReadyCount = repairsReady.length
-            const repairActiveCount = repairsActiveCount || 0
-
-            // Costo y ganancia: en pos-profit.ts, con tests.
-            const costBreakdown = calculateSalesCost(itemsData)
-            const profit = calculateProfit({
-                totalSales: totalSales - saleRefundsAmount,
-                netSales: netSales - saleRefundsAmount,
-                totalCost: costBreakdown.totalCost,
-                repairDeliveredAmount: repairNetProfit,
-                costUnavailable
-            })
-
-            if (!costUnavailable && costBreakdown.itemsWithoutCost > 0) {
-                warnings.push(
-                    `${costBreakdown.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen mostrado es optimista.`
-                )
-            }
-
-            const topProducts = costBreakdown.products.slice(0, 5)
-            const topProduct = topProducts[0] || { name: 'N/A', sales: 0 }
-
-            // Con el año en la clave: agrupaba por «dd/MM» y mezclaba el mismo dia
-            // de dos años distintos.
-            const dailySales = buildDailySales(
-                dateRange,
-                (salesData || []) as Array<{ created_at: string; total?: number | null }>
-            )
-
-            // Process Payment Methods
-            const methodsMap = new Map<string, number>()
-            salesData?.forEach((sale: { payment_method?: string | null; total?: number | null }) => {
-                let method = sale.payment_method || 'Otros'
-                if (method === 'cash' || method === 'efectivo') method = 'Efectivo'
-                else if (method === 'card' || method === 'tarjeta') method = 'Tarjeta'
-                else if (method === 'credit') method = 'Credito'
-                else if (method === 'transfer' || method === 'transferencia') method = 'Transferencia'
-                else method = method.charAt(0).toUpperCase() + method.slice(1)
-
-                methodsMap.set(method, (methodsMap.get(method) || 0) + (sale.total || 0))
-            })
-
-            const colors: Record<string, string> = {
-                'Efectivo': '#10b981',
-                'Tarjeta': '#3b82f6',
-                'Transferencia': '#f59e0b',
-                'Credito': '#8b5cf6',
-                'Otros': '#6b7280'
-            }
-
-            const paymentMethods = Array.from(methodsMap.entries()).map(([name, value]) => ({
-                name,
-                value,
-                color: colors[name] || '#6b7280'
-            }))
-
-            // Build allSales enriched with items cost
-            const validSalesData = (salesData || []) as SalesDataRow[]
-            const allSales: PosEnrichedSale[] = validSalesData.map(sale => {
-                const saleItems = itemsData.filter(i => i.sale_id === sale.id)
-                const saleCost = calculateSalesCost(saleItems).totalCost
-                const refundAmount = saleRefundsAmount > 0 
-                    ? afterSales.filter(c => c.source_type === 'sale' && c.sale_id === sale.id && (c.status === 'resolved' || c.status === 'approved')).reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
-                    : 0
-                return {
-                    ...sale,
-                    cost: saleCost,
-                    refundAmount,
-                    itemsCount: saleItems.reduce((n, i) => n + (Number(i.quantity) || 0), 0),
-                    profit: (sale.total || 0) - saleCost - refundAmount
-                }
-            })
-
-            // Fix recentSales missing fields
-            // La lista de recientes lee `customer_name` e `items_count`. No se
-            // armaban: cada venta figuraba como «Consumidor Final» con
-            // «undefined artículos».
-            const recentSales: PosRecentSale[] = ((recentData || []) as RecentDataRow[]).map(sale => ({
-                id: sale.id,
-                created_at: sale.created_at,
-                total: sale.total,
-                payment_method: sale.payment_method,
-                customer: sale.customer,
-                customer_name: sale.customer?.name ?? null,
-                items: sale.sale_items,
-                items_count: (sale.sale_items || []).reduce((n, i) => n + (Number(i.quantity) || 0), 0)
-            }))
-
-            // Llego tarde: el usuario ya eligio otro rango.
-            if (!esVigente()) return
-
-            setStats({
-                totalSales,
-                totalTransactions: validSalesData.length,
-                averageTicket,
-                topProduct,
-                dailySales,
-                paymentMethods,
-                topProducts,
-                recentSales,
-                allSales,
-                allCredits: saleCredits,
-                allRepairCredits: repairCredits,
-                creditStats: {
-                    totalAmount: creditTotalAmount,
-                    count: creditCount,
-                    averageTicket: creditAvgTicket,
-                    pendingAmount: creditPendingAmount
-                },
-                repairCreditStats: {
-                    totalAmount: repairCreditTotalAmount,
-                    count: repairCreditCount,
-                    pendingAmount: repairCreditPendingAmount
-                },
-                repairStats: {
-                    totalAmount: repairTotalAmount,
-                    deliveredAmount: repairDeliveredAmount,
-                    deliveredCount: repairDeliveredCount,
-                    readyAmount: repairReadyAmount,
-                    readyCount: repairReadyCount,
-                    activeCount: repairActiveCount,
-                    deliveredPartsCost: repairDeliveredPartsCost,
-                    deliveredLaborCost: repairDeliveredLaborCost,
-                    netProfit: repairNetProfit,
-                    refundsAmount: repairRefundsAmount,
-                    deliveredRepairs: (repairsDelivered || []) as PosDeliveredRepairRecord[]
-                },
-                refunds: {
-                    totalAmount: totalRefundsAmount,
-                    salesAmount: saleRefundsAmount,
-                    repairsAmount: repairRefundsAmount
-                },
-                netSales,
-                profitStats: {
-                    ...profit,
-                    itemsWithoutCost: costBreakdown.itemsWithoutCost
-                },
-                warnings
-            })
-
-        } catch (err) {
-            if (!esVigente()) return
-            console.error('Error fetching POS stats:', err)
-            setError(err instanceof Error ? err : new Error('Unknown error'))
-        } finally {
-            if (esVigente()) setLoading(false)
-        }
-    }, [dateRange, supabase, organizationId, organizationLoading, branchId, scope, currentScope, scopeOrganizationId])
-
-    useEffect(() => {
-        fetchStats()
-        const requests = requestRef
-        return () => { requests.current++; abortRef.current?.abort() }
-    }, [fetchStats])
-
-    return { stats, loading, error, refetch: fetchStats }
+  const fetchSummary = useCallback(async (force = false, signal?: AbortSignal) => {
+    if (organizationLoading || (scopeOrganizationId && organizationId !== scopeOrganizationId)) return
+    if (!organizationId || !from || !to) { setLoading(false); setError(new Error(!organizationId ? 'No hay una organización activa para mostrar estadísticas.' : 'Selecciona un período válido.')); return }
+    setLoading(true); setError(null)
+    try {
+      const raw = await getCachedDashboardSummary<Summary>(key, async () => {
+        let query = supabase.rpc('dashboard_pos_summary' as never, { p_organization_id: organizationId, p_branch_id: branchId === 'all' ? null : branchId, p_from: from, p_to: to, p_timezone: timezone } as never)
+        if (signal) query = query.abortSignal(signal)
+        const { data, error } = await query
+        if (error) throw new Error(error.message || 'No se pudo cargar el resumen del POS')
+        if (!data || typeof data !== 'object') throw new Error('Resumen del POS no disponible; aplica la migración dashboard_pos_summary.')
+        const parsed = summarySchema.safeParse(data)
+        if (!parsed.success) throw new Error('El resumen del POS tiene un formato inválido. Reintentá o revisá la migración.')
+        const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
+        const dailyBuckets = new Map(parsed.data.dailySales.map(day=>[day.bucket_day,day]))
+        if (parsed.data.dailySales.length !== expectedDays.length || dailyBuckets.size !== expectedDays.length || expectedDays.some(day=>!dailyBuckets.has(day))) throw new Error('El resumen diario está incompleto. Reintentá la consulta.')
+        return parsed.data
+      }, { force, signal })
+      if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return
+      const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
+      const dailyBuckets = new Map(raw.dailySales.map(day=>[day.bucket_day,day]))
+      const profit = calculateProfit({ totalSales: raw.totalSales - raw.refunds.salesAmount, netSales: raw.netSales - raw.refunds.salesAmount, totalCost: raw.totalCost, repairDeliveredAmount: raw.repairStats.netProfit })
+      const colors: Record<string,string> = { Efectivo:'#10b981', Tarjeta:'#3b82f6', Transferencia:'#f59e0b', Credito:'#8b5cf6', Otros:'#6b7280' }
+      const next: PosStats = { ...EMPTY_POS_STATS, ...raw, allSales: [], allCredits: [], allRepairCredits: [],
+        repairStats: { ...raw.repairStats, deliveredRepairs: [] },
+        recentSales: raw.recentSales.map(sale=>({...sale,total:sale.total??null,payment_method:sale.payment_method??null,customer_name:sale.customer_name??null,customer:{name:sale.customer?.name??null}})),
+        topProduct: raw.topProducts[0] ?? {name:'N/A',sales:0},
+        dailySales: buildDailySales({from: new Date(from), to: new Date(to)}, []).map((day,i) => ({ ...day, sales: dailyBuckets.get(expectedDays[i])!.sales, transactions: dailyBuckets.get(expectedDays[i])!.transactions })),
+        paymentMethods: raw.paymentMethods.map(method => ({ ...method, color: colors[method.name] ?? '#6b7280' })),
+        profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen mostrado es optimista.`] : [] }
+      setSnapshot({key,stats:next})
+    } catch (cause) {
+      if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setError(cause instanceof Error ? cause : new Error('No se pudo cargar el resumen'))
+    } finally { if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setLoading(false) }
+  }, [organizationLoading, organizationId, scopeOrganizationId, from, to, key, branchId, scope, currentScope, supabase, setError, timezone])
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetchSummary(false, controller.signal)
+    return () => controller.abort()
+  }, [fetchSummary])
+  const loadDetails = useCallback(async () => {
+    if (snapshot?.key !== key) throw new Error('Esperá a que se complete el resumen del período antes de solicitar el detalle.')
+    if (detailSnapshot?.key === key) return detailSnapshot.stats
+    const requestKey = key
+    setDetailsLoadingKey(key); setDetailFailure(null)
+    try {
+      const loaded = await fetchFullDetails()
+      const incomplete = loaded?.warnings.filter(message => !message.includes('precio de compra cargado'))
+      if (!loaded || incomplete?.length) throw new Error(incomplete?.join(' ') || 'No se pudo cargar el detalle completo')
+      if (currentScope.current !== scope || keyRef.current !== requestKey) throw new Error('El ámbito cambió. Vuelve a solicitar el detalle.')
+      setDetailSnapshot({key:requestKey,stats:loaded})
+      return loaded
+    } catch (cause) {
+      const failure = cause instanceof Error ? cause : new Error('No se pudo cargar el detalle')
+      if (keyRef.current === requestKey) setDetailFailure({key:requestKey,error:failure})
+      throw failure
+    } finally { if (keyRef.current === requestKey) setDetailsLoadingKey(null) }
+  }, [fetchFullDetails, key, currentScope, scope, detailSnapshot, snapshot])
+  const refetch = useCallback(async () => { setDetailSnapshot(null); await fetchSummary(true) }, [fetchSummary])
+  return { stats, loading: organizationLoading || loading || (!currentKey && !error), error, refetch, detailsLoaded, detailsLoading, detailsError, loadDetails }
 }

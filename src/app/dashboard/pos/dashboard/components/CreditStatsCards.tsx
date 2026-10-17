@@ -1,13 +1,14 @@
+import { PosDetailLoader, type PosDetailProps } from './PosDetailLoader'
 import { Card, CardContent } from "@/components/ui/card"
 import { CreditCard, Wallet, AlertCircle, Receipt, User, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { PosStats } from "../hooks/usePosStats"
 
-interface CreditStatsCardsProps {
+interface CreditStatsCardsProps extends PosDetailProps {
     stats: PosStats
 }
 
-export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
+export function CreditStatsCards({ stats, detailsLoaded = true, ...detailProps }: CreditStatsCardsProps) {
     const { creditStats } = stats
 
     if (!creditStats) {
@@ -75,7 +76,7 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                 </Card>
             </div>
 
-            <Card className="border border-border/60 shadow-sm overflow-hidden bg-card mt-6">
+            {!detailsLoaded ? <PosDetailLoader {...detailProps} /> : <Card className="border border-border/60 shadow-sm overflow-hidden bg-card mt-6">
                 <div className="w-full overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="text-xs text-slate-500 bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
@@ -165,7 +166,7 @@ export function CreditStatsCards({ stats }: CreditStatsCardsProps) {
                         </tbody>
                     </table>
                 </div>
-            </Card>
+            </Card>}
         </div>
     )
 }
