@@ -12,6 +12,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 /** Lo que puede salir mal al anular, dicho en castellano. */
 const VOID_ERRORS: Array<[string, string, number]> = [
+  ['SALE_HAS_COMPLETED_AFTER_SALES', 'La venta ya tiene devoluciones completadas en Posventa. Revisá esos reintegros antes de anularla para no duplicar dinero ni stock.', 409],
   ['SALE_NOT_IN_ORGANIZATION', 'No encontramos esa venta en tu negocio.', 404],
   ['SALE_CREDIT_ALREADY_PAID', 'El crédito de esta venta ya tiene cuotas cobradas. Resolvé primero la devolución del dinero con el cliente.', 409],
   ['VOID_REQUIRES_OPEN_REGISTER', 'Abrí la caja antes de anular: hay efectivo que devolver y tiene que quedar registrado.', 409],

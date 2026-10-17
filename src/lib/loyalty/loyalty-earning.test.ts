@@ -157,7 +157,9 @@ describe('ventas a crédito: suman al cobrar cada cuota', () => {
 describe('devoluciones', () => {
   it('postventa descuenta los puntos de la compra al reintegrar, una vez por caso', () => {
     const ruta = leer('src/app/api/after-sales/[id]/route.ts')
-    expect(ruta).toContain("supabase.rpc('reverse_loyalty_points_for_refund', {")
-    expect(ruta).toContain('p_idempotency_key: `refund:${id}`,')
+    expect(ruta).toContain('mutateAfterSalesCase(user.id, organization.id, parsed.data, id.data)')
+    const sql = leer('supabase/migrations/20261016214756_dashboard_financial_atomic_hardening.sql')
+    expect(sql).toContain("public.reverse_loyalty_points_for_refund(p_organization_id,c.customer_id,c.sale_id,refund,'refund:'||c.id)")
+    expect(sql).toContain('insert into public.after_sales_resolution_requests')
   })
 })

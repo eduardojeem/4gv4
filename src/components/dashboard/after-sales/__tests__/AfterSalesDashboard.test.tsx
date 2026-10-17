@@ -117,6 +117,19 @@ describe('AfterSalesDashboard validations upon completion', () => {
         expect(confirmBtn).not.toBeDisabled()
     })
 
+    it('sends explicit zero when no refund is selected, overriding a stored amount', async () => {
+        global.fetch = createFetchMock([{ ...mockCase, refund_amount: 50000 }])
+        render(<AfterSalesDashboard />)
+        await screen.findByText('CASO-0001')
+        fireEvent.click(screen.getByRole('button', { name: /marcar completado/i }))
+        fireEvent.click(screen.getByRole('button', { name: /confirmar/i }))
+        await waitFor(() => {
+            const patch = vi.mocked(global.fetch).mock.calls.find(([, options]) => options?.method === 'PATCH')
+            expect(patch).toBeDefined()
+            expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({ status: 'completed', refund_amount: 0, refund_method: null })
+        })
+    })
+
     it('blocks confirmation when refund amount exceeds original sale total', async () => {
         render(<AfterSalesDashboard />)
 

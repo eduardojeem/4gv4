@@ -418,21 +418,19 @@ export function AfterSalesDashboard() {
     const isWarrantyApproval =
         confirming?.status === 'approved' && confirming.item.request_type === 'repair_warranty'
 
-    // Lo que valen las unidades reclamadas, no el total de toda la venta: en una
-    // venta de cinco productos, devolver uno dejaba reintegrar los cinco.
-    const claimedValue = confirming?.item.sale_item && confirming.item.sale_item.quantity > 0
-        ? (confirming.item.sale_item.subtotal / confirming.item.sale_item.quantity) * (confirming.item.quantity || 1)
-        : null
-    const originalTotal = confirming?.item.source_type === 'sale'
-        ? claimedValue ?? (Number(confirming.item.sales?.total_amount) || null)
-        : Number(confirming?.item.repairs?.final_cost) || null
+    // This is only the invoice ceiling. Resolution checks the line allocation
+    // including invoice discounts/taxes and previous returns atomically.
+    const sourceTotal = confirming?.item.source_type === 'sale'
+        ? confirming.item.sales?.total_amount
+        : confirming?.item.repairs?.final_cost
+    const originalTotal = sourceTotal == null || !Number.isFinite(Number(sourceTotal)) ? null : Number(sourceTotal)
 
     const openCaseAction = (item: AfterSalesCase, action: { status: CaseStatus; label: string }) => {
         setRestockAction(defaultRestockFor(item.request_type))
         setConfirming({ item, status: action.status, label: action.label })
     }
 
-    const refundExceedsOriginal = Boolean(originalTotal !== null && originalTotal > 0 && parsedRefund > originalTotal)
+    const refundExceedsOriginal = Boolean(originalTotal !== null && parsedRefund > originalTotal)
 
     const hasPendingRework = Boolean(
         confirming?.status === 'completed'
@@ -1701,9 +1699,9 @@ export function AfterSalesDashboard() {
                                     <label htmlFor="refund-amount" className="text-sm font-medium">
                                         Monto a reintegrar
                                     </label>
-                                    {originalTotal !== null && originalTotal > 0 && (
+                                    {originalTotal !== null && (
                                         <span className="text-xs text-muted-foreground">
-                                            {claimedValue !== null ? 'Valor reclamado' : 'Total origen'}: <span className="font-semibold text-foreground">{formatMoney(originalTotal)}</span>
+                                            Total origen: <span className="font-semibold text-foreground">{formatMoney(originalTotal)}</span>
                                         </span>
                                     )}
                                 </div>
@@ -1718,11 +1716,11 @@ export function AfterSalesDashboard() {
                                 {refundExceedsOriginal ? (
                                     <p className="text-xs font-medium text-destructive flex items-center gap-1">
                                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                        El monto a reintegrar ({formatMoney(parsedRefund)}) supera {claimedValue !== null ? 'lo que valen las unidades reclamadas' : 'el total original de la operación'} ({formatMoney(originalTotal!)}).
+                                        El monto a reintegrar ({formatMoney(parsedRefund)}) supera el total original de la operación ({formatMoney(originalTotal!)}).
                                     </p>
                                 ) : (
                                     <p className="text-xs text-muted-foreground">
-                                        Dejalo vacío o en 0 si no corresponde devolver dinero al cliente.
+                                        Dejalo vacío o en 0 si no corresponde devolver dinero. El importe también se valida según las unidades, descuentos y reintegros anteriores.
                                     </p>
                                 )}
                             </div>
@@ -1861,9 +1859,8 @@ export function AfterSalesDashboard() {
                                     confirming.status === 'completed'
                                         ? {
                                             restock_action: restockAction,
-                                            ...(parsedRefund > 0
-                                                ? { refund_amount: parsedRefund, refund_method: refundMethod }
-                                                : {}),
+                                            refund_amount: parsedRefund,
+                                            refund_method: parsedRefund > 0 ? refundMethod : null,
                                             ...(resolutionNotes.trim() ? { notes: resolutionNotes.trim() } : {}),
                                         }
                                         : confirming.status === 'rejected'
