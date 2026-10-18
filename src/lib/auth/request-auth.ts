@@ -47,21 +47,7 @@ async function loadRoleRow(
     return roleWithStatus as RoleRow | null
   }
 
-  if (roleWithStatusError.message?.includes('is_active')) {
-    const { data: roleOnly, error: roleOnlyError } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (!roleOnlyError) {
-      // Column doesn't exist yet (old schema) — assume active for backward compat.
-      // Once the is_active column migration is applied, this fallback won't be reached.
-      return roleOnly ? { role: roleOnly.role, is_active: true } : null
-    }
-  }
-
-  return null
+  throw new Error('No se pudo verificar el estado del rol del usuario')
 }
 
 async function loadProfileRow(
@@ -78,19 +64,7 @@ async function loadProfileRow(
     return profileWithStatus as ProfileRow | null
   }
 
-  if (profileWithStatusError.message?.includes('status')) {
-    const { data: profileRoleOnly, error: profileRoleOnlyError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (!profileRoleOnlyError) {
-      return profileRoleOnly ? { role: profileRoleOnly.role } : null
-    }
-  }
-
-  return null
+  throw new Error('No se pudo verificar el estado del perfil del usuario')
 }
 
 export async function resolveRequestAuthUser(): Promise<RequestAuthResolution> {
