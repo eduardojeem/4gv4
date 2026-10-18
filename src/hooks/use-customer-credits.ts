@@ -14,6 +14,8 @@ export interface CreditInfo {
   term_months: number
   start_date: string
   status: 'active' | 'completed' | 'defaulted' | 'cancelled'
+  /** Código legible del crédito (CR-...). */
+  credit_code?: string | null
   created_at: string
   updated_at: string
 }

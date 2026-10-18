@@ -1,9 +1,10 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useMemo, useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import {
-  MessageCircle,
   ShoppingCart,
   HelpCircle,
   CreditCard,
@@ -175,7 +176,7 @@ export function WhatsAppProductDialog({
         <DialogHeader className="border-b border-border/60 bg-gradient-to-r from-emerald-600/10 via-teal-500/10 to-background px-5 py-4 sm:px-6">
           <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 shadow-xs">
-              <MessageCircle className="h-4 w-4" />
+              <WhatsAppIcon className="h-4 w-4" />
             </span>
             <div>
               <DialogTitle className="text-base sm:text-lg font-bold">
@@ -352,7 +353,7 @@ export function WhatsAppProductDialog({
             onClick={handleOpenWhatsApp}
             className="flex-1 gap-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-bold shadow-md shadow-emerald-600/20 h-11 text-xs sm:text-sm"
           >
-            <MessageCircle className="h-4 w-4" />
+            <WhatsAppIcon className="h-4 w-4" />
             <span>Abrir en WhatsApp</span>
             <ExternalLink className="h-3.5 w-3.5 opacity-80" />
           </Button>

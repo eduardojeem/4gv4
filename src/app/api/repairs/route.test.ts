@@ -36,6 +36,12 @@ describe('GET /api/repairs', () => {
     expect(routeSource).toContain(".not('status', 'in',")
   })
 
+  it('filters active repairs only with values that exist in the repair_status enum', () => {
+    // «delivered»/«cancelled» no son valores del enum: Postgres rechazaba la consulta entera.
+    expect(routeSource).toContain(`.not('status', 'in', '("entregado","cancelado")')`)
+    expect(routeSource).not.toMatch(/'in', '\([^)]*"(delivered|cancelled)"/)
+  })
+
   it('accepts new repair image paths only from the active organization and uploader', () => {
     expect(routeSource).toContain('isOwnedRepairImagePath(path, ctx.organizationId, ctx.userId)')
     expect(routeSource).toContain("code: 'INVALID_REPAIR_IMAGE'")

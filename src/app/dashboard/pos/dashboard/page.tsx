@@ -37,7 +37,8 @@ export default function POSDashboard() {
   })
   const [activeViewTab, setActiveViewTab] = useState<PosDashboardViewTab>('all')
 
-  const { stats, loading, error, refetch } = usePosStats(dateRange)
+  const { stats, loading, error, refetch, detailsLoaded, detailsLoading, detailsError, loadDetails } = usePosStats(dateRange)
+  const detailProps = { detailsLoaded, detailsLoading, detailsError, onLoadDetails: () => { void loadDetails().catch(() => undefined) } }
 
   // Pestañas segun los modulos de la organizacion. Se leen del contexto que el
   // layout arma en el servidor: no hay estado de carga ni parpadeo.
@@ -50,17 +51,18 @@ export default function POSDashboard() {
   const creditPortfolio = useCreditPortfolio(dateRange, hasCredits && viewTab === 'credits')
   const [refreshing, setRefreshing] = useState(false)
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
+      const full = await loadDetails()
       // Exportaba `recentSales`: las 10 ventas mas recientes, no el periodo, y
       // con Cliente e Items en «undefined». Ahora son todas las del periodo,
       // con las columnas de la tabla detallada.
-      if (!stats.allSales.length) {
+      if (!full.allSales.length) {
         toast.error('No hay ventas en el período para exportar')
         return
       }
 
-      const csvContent = buildSalesCsv(stats.allSales)
+      const csvContent = buildSalesCsv(full.allSales)
 
       const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
@@ -71,7 +73,7 @@ export default function POSDashboard() {
       link.click()
       document.body.removeChild(link)
 
-      toast.success(`Exportadas ${stats.allSales.length} ventas del período`)
+      toast.success(`Exportadas ${full.allSales.length} ventas del período`)
     } catch (e) {
       toast.error('Error al exportar datos')
       console.error(e)
@@ -153,6 +155,7 @@ export default function POSDashboard() {
           dateRange={dateRange}
           setDateRange={setDateRange}
           onExport={handleExport}
+          exportDisabled={detailsLoading}
           activeViewTab={viewTab}
           setActiveViewTab={setActiveViewTab}
           availableTabs={availableTabs}
@@ -161,6 +164,7 @@ export default function POSDashboard() {
 
 
 
+      <p className="text-xs text-muted-foreground">Consultá períodos de hasta 20 años. Los detalles y exportaciones se cargan al solicitarlos.</p>
       {/* Refresh footer */}
       <div className="flex justify-end -mt-2">
         <Button
@@ -182,7 +186,7 @@ export default function POSDashboard() {
 
       {/* 2. Taller: solo si la organizacion tiene el modulo de reparaciones. */}
       {hasRepairs && showsSection('repairs', viewTab) && (
-        <RepairPosStatsCards stats={stats} />
+        <RepairPosStatsCards stats={stats} {...detailProps} />
       )}
 
       {/* 3. Tarjetas de Ganancias & Rentabilidad (visible en 'all' o 'profit') */}
@@ -200,7 +204,7 @@ export default function POSDashboard() {
         />
       )}
       {hasCredits && showsSection('credits', viewTab) && (
-        <CreditStatsCards stats={stats} />
+        <CreditStatsCards stats={stats} {...detailProps} />
       )}
 
       {/* 5. Gráficos y Tablas */}
@@ -216,7 +220,7 @@ export default function POSDashboard() {
             <TopProductsCard products={stats.topProducts} />
           </div>
 
-          <DetailedSalesTable stats={stats} />
+          <DetailedSalesTable stats={stats} {...detailProps} />
         </>
       )}
     </div>

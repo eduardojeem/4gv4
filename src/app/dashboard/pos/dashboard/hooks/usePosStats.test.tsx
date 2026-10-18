@@ -1,198 +1,69 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const control = vi.hoisted(() => ({
-  organizacion: { id: 'org-1' } as { id: string } | null,
-  organizacionCargando: false,
-  sucursal: { organization_id: 'org-1' } as { organization_id: string; id?: string } | null,
-  /** Consultas de ventas del periodo que esperan a que la prueba las resuelva. */
-  ventasPendientes: [] as Array<{ desde: string; resolver: (v: unknown) => void }>,
-  llamadas: [] as Array<{ tabla: string; filtros: unknown[][] }>,
-  recientes: [] as unknown[],
-}))
-
-function consulta(tabla: string) {
-  const filtros: unknown[][] = []
-  const q: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'gte', 'lte', 'order', 'limit', 'in', 'not', 'or', 'range', 'abortSignal']) {
-    q[m] = vi.fn((...args: unknown[]) => {
-      filtros.push([m, ...args])
-      return q
-    })
-  }
-  q.then = (ok: (v: unknown) => unknown, mal: (e: unknown) => unknown) => {
-    control.llamadas.push({ tabla, filtros })
-    const esVentasDelPeriodo = tabla === 'sales' && !filtros.some((f) => f[0] === 'limit')
-    if (esVentasDelPeriodo) {
-      const desde = String(filtros.find((f) => f[0] === 'gte')?.[2])
-      return new Promise((resolver) => control.ventasPendientes.push({ desde, resolver: (value: unknown) => {
-        const response = value as { data?: unknown[]; count?: number }
-        resolver({ ...response, count: response.count ?? response.data?.length ?? 0 })
-      } })).then(ok, mal)
-    }
-    if (tabla === 'sales') return Promise.resolve({ data: control.recientes, error: null }).then(ok, mal)
-    return Promise.resolve({ data: [], error: null, count: 0 }).then(ok, mal)
-  }
-  return q
-}
-
-vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: (t: string) => consulta(t) }) }))
-vi.mock('@/contexts/branch-context', () => ({ useBranch: () => ({ selectedBranch: control.sucursal }) }))
-vi.mock('@/contexts/ActiveOrganizationContext', () => ({
-  useActiveOrganization: () => ({ organization: control.organizacion, isLoading: control.organizacionCargando }),
-}))
-
-const tenant = vi.hoisted(() => ({ scope: 'org-1', currentScope: { current: 'org-1' } }))
-vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => ({ ...tenant, organizationId: control.organizacion?.id }) }))
-
+const state = vi.hoisted(() => ({ rpc: vi.fn(), full: vi.fn(), from: vi.fn(), org: {id:'org',role:'owner'}, scope: {current:'user:org'} }))
+vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({rpc: state.rpc,from:state.from}) }))
+vi.mock('@/contexts/branch-context', () => ({useBranch:()=>({selectedBranchId:'branch'})}))
+vi.mock('@/contexts/ActiveOrganizationContext',()=>({useActiveOrganization:()=>({organization:state.org,isLoading:false})}))
+vi.mock('@/hooks/use-tenant-scope',()=>({useTenantScope:()=>({scope:'user:org',currentScope:state.scope,organizationId:'org'})}))
+vi.mock('@/lib/dashboard/summary-cache',()=>({getCachedDashboardSummary:(_key:string,load:()=>Promise<unknown>)=>load()}))
+vi.mock('./usePosDetails',async(importOriginal)=>{const actual=await importOriginal<typeof import('./usePosDetails')>();return {...actual,usePosDetails:()=>({refetch:state.full})}})
 import { usePosStats } from './usePosStats'
-
-const venta = (id: string, total: number) => ({
-  id,
-  code: id,
-  created_at: new Date(2026, 8, 10, 12).toISOString(),
-  total,
-  net: total,
-  payment_method: 'efectivo',
-  customer: null,
+import { EMPTY_POS_STATS } from './usePosDetails'
+const range = {from:new Date(2026,9,17),to:new Date(2026,9,17)}
+const summary = {...EMPTY_POS_STATS,totalSales:110,totalTransactions:1,netSales:100,totalCost:60,itemsWithoutCost:1,dailySales:[{bucket_day:'2026-10-17',sales:110,transactions:1}],refunds:{totalAmount:10,salesAmount:10,repairsAmount:0}}
+beforeEach(()=>{vi.clearAllMocks();state.scope.current='user:org';state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:summary,error:null}),{abortSignal(){return this}}));state.full.mockResolvedValue({...EMPTY_POS_STATS,allSales:[{id:'sale',created_at:new Date().toISOString(),cost:60,refundAmount:10,itemsCount:2,profit:40}],warnings:[]})})
+describe('POS summary and explicit detail boundary',()=>{
+ it('loads one aggregate RPC without raw sales, items, credits or repairs for KPI rendering',async()=>{
+  const {result}=renderHook(()=>usePosStats(range))
+  await waitFor(()=>expect(result.current.loading).toBe(false))
+  expect(state.rpc).toHaveBeenCalledTimes(1);expect(state.from).not.toHaveBeenCalled();expect(state.full).not.toHaveBeenCalled()
+  expect(state.rpc.mock.calls[0][1]).toMatchObject({p_organization_id:'org',p_branch_id:'branch'})
+  expect(result.current.detailsLoaded).toBe(false)
+  expect(result.current.stats.profitStats.withTax.salesProfit).toBe(40)
+  expect(result.current.stats.profitStats.withoutTax.salesProfit).toBe(30)
+  expect(result.current.stats.profitStats.itemsWithoutCost).toBe(1)
+ })
+ it('loads full detail only on demand and returns the real rows for export',async()=>{
+  const {result}=renderHook(()=>usePosStats(range));await waitFor(()=>expect(result.current.loading).toBe(false))
+  let loaded:unknown
+  await act(async()=>{loaded=await result.current.loadDetails()})
+  expect(state.full).toHaveBeenCalledTimes(1);expect(loaded).toHaveProperty('allSales.0.id','sale')
+  expect(result.current.detailsLoaded).toBe(true);expect(result.current.stats.allSales[0].id).toBe('sale')
+ })
+ it('surfaces failed detail and never claims an empty completed export',async()=>{
+  state.full.mockResolvedValue(undefined)
+  const {result}=renderHook(()=>usePosStats(range));await waitFor(()=>expect(result.current.loading).toBe(false))
+  await act(async()=>{await expect(result.current.loadDetails()).rejects.toThrow('detalle completo')})
+  expect(result.current.detailsError).toBeTruthy();expect(result.current.detailsLoaded).toBe(false)
+ })
 })
 
-/** Estable entre renders, como el rango que la página guarda en useState. */
-const UN_DIA = { from: new Date(2026, 8, 10) }
 
-beforeEach(() => {
-  control.organizacion = { id: 'org-1' }
-  control.organizacionCargando = false
-  control.sucursal = { organization_id: 'org-1' }
-  control.ventasPendientes = []
-  control.llamadas = []
-  control.recientes = []
+it('hides in-flight detail loading and errors when the period key changes',async()=>{
+ let resolveDetails!:(value:unknown)=>void
+ state.full.mockReturnValue(new Promise(resolve=>{resolveDetails=resolve}))
+ const {result,rerender}=renderHook(({period})=>usePosStats(period),{initialProps:{period:range}})
+ await waitFor(()=>expect(result.current.loading).toBe(false))
+ let pending:Promise<unknown>
+ act(()=>{pending=result.current.loadDetails().catch(()=>undefined)})
+ expect(result.current.detailsLoading).toBe(true)
+ const next={from:new Date(2026,9,16),to:new Date(2026,9,16)}
+ rerender({period:next})
+ await waitFor(()=>expect(result.current.loading).toBe(false))
+ expect(result.current.detailsLoading).toBe(false);expect(result.current.detailsError).toBeNull()
+ await act(async()=>{resolveDetails(undefined);await pending})
+ expect(result.current.detailsError).toBeNull();expect(result.current.detailsLoaded).toBe(false)
+})
+it('rejects malformed summary payloads rather than drawing fabricated zero figures',async()=>{
+ state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:{totalSales:999},error:null}),{abortSignal(){return this}}))
+ const {result}=renderHook(()=>usePosStats(range))
+ await waitFor(()=>expect(result.current.error?.message).toContain('formato inválido'))
+ expect(result.current.loading).toBe(false)
 })
 
-/**
- * Cambiar de «30 días» a «Hoy» dispara dos consultas a la vez. Si la de 30
- * días terminaba última, pisaba a la de hoy: el dashboard mostraba 30 días con
- * la etiqueta «Hoy».
- */
-describe('cambiar el rango rápido dos veces seguidas', () => {
-  it('la respuesta del rango viejo no pisa a la del nuevo', async () => {
-    const treintaDias = { from: new Date(2026, 7, 12), to: new Date(2026, 8, 10) }
-    const hoy = { from: new Date(2026, 8, 10), to: new Date(2026, 8, 10) }
-
-    const { result, rerender } = renderHook(({ rango }) => usePosStats(rango), {
-      initialProps: { rango: treintaDias },
-    })
-    await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
-
-    rerender({ rango: hoy })
-    await waitFor(() => expect(control.ventasPendientes).toHaveLength(2))
-
-    const [viejo, nuevo] = control.ventasPendientes
-    // Termina primero la de hoy, después la de 30 días.
-    await act(async () => {
-      nuevo.resolver({ data: [venta('hoy-1', 50_000)], error: null })
-    })
-    await waitFor(() => expect(result.current.stats.totalTransactions).toBe(1))
-
-    await act(async () => {
-      viejo.resolver({ data: [venta('mes-1', 10), venta('mes-2', 20), venta('mes-3', 30)], error: null })
-    })
-
-    // La de 30 días llegó tarde y se descarta.
-    expect(result.current.stats.totalTransactions).toBe(1)
-    expect(result.current.stats.totalSales).toBe(50_000)
-    expect(result.current.loading).toBe(false)
-  })
-})
-
-describe('las ventas que cuentan', () => {
-  it('no suma las anuladas ni las pendientes', async () => {
-    renderHook(() => usePosStats(UN_DIA))
-    await waitFor(() => expect(control.llamadas.some((l) => l.tabla === 'sales')).toBe(true))
-
-    const consultasDeVentas = control.llamadas.filter((l) => l.tabla === 'sales')
-    for (const c of consultasDeVentas) {
-      expect(c.filtros).toContainEqual(['or', 'status.is.null,status.in.(completed,completada)'])
-    }
-  })
-})
-
-describe('las transacciones recientes', () => {
-  it('traen el nombre del cliente y la cantidad de artículos', async () => {
-    // La lista leía campos que no existían: todas las ventas figuraban como
-    // «Consumidor Final» con «undefined artículos».
-    control.recientes = [
-      {
-        id: 'r-1',
-        created_at: new Date(2026, 8, 10, 11).toISOString(),
-        total: 30_000,
-        payment_method: 'tarjeta',
-        customer: { name: 'Ana Villalba' },
-        sale_items: [{ quantity: 2 }, { quantity: 1 }],
-      },
-    ]
-    const { result } = renderHook(() => usePosStats(UN_DIA))
-    await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
-    await act(async () => {
-      control.ventasPendientes[0].resolver({ data: [], error: null })
-    })
-
-    await waitFor(() => expect(result.current.stats.recentSales).toHaveLength(1))
-    expect(result.current.stats.recentSales[0]).toMatchObject({ customer_name: 'Ana Villalba', items_count: 3 })
-  })
-})
-
-describe('sin organización', () => {
-  it('termina de cargar y lo dice, en vez de quedarse cargando para siempre', async () => {
-    control.organizacion = null
-    control.sucursal = null
-    const { result } = renderHook(() => usePosStats(UN_DIA))
-    await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(result.current.error?.message).toMatch(/No hay una organización activa/)
-  })
-
-  it('mientras la organización todavía carga, espera sin mostrar error', async () => {
-    control.organizacion = null
-    control.sucursal = null
-    control.organizacionCargando = true
-    const { result } = renderHook(() => usePosStats(UN_DIA))
-    await new Promise((r) => setTimeout(r, 20))
-    expect(result.current.error).toBeNull()
-  })
-
-  it('usa la organización activa aunque no haya sucursal seleccionada', async () => {
-    control.sucursal = null
-    renderHook(() => usePosStats(UN_DIA))
-    await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
-    const ventas = control.llamadas.find((l) => l.tabla === 'sales')!
-    expect(ventas.filtros).toContainEqual(['eq', 'organization_id', 'org-1'])
-  })
-})
-
-it('scopes all primary sales, credit and repair queries to the selected branch', async () => {
- control.sucursal = { organization_id: 'org-1', id: 'branch-2' }
- renderHook(() => usePosStats(UN_DIA))
- await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
- await act(async () => { control.ventasPendientes[0].resolver({ data: [], error: null }) })
- for (const query of control.llamadas.filter(q => ['sales', 'customer_credits', 'repairs'].includes(q.tabla))) {
-  expect(query.filtros).toContainEqual(['eq', 'branch_id', 'branch-2'])
- }
-})
-
-it('aggregates all 1250 sales and batches their item lookups', async () => {
- const { result } = renderHook(() => usePosStats(UN_DIA))
- for (let page = 0; page < 3; page++) {
-  await waitFor(() => expect(control.ventasPendientes).toHaveLength(page + 1))
-  const rows = Array.from({ length: page === 2 ? 250 : 500 }, (_, i) => venta(`sale-${page * 500 + i}`, 10))
-  await act(async () => { control.ventasPendientes[page].resolver({ data: rows, error: null, count: 1250 }) })
- }
- await waitFor(() => expect(result.current.loading).toBe(false))
- expect(result.current.stats.totalSales).toBe(12500)
- expect(result.current.stats.totalTransactions).toBe(1250)
- const batches = control.llamadas.filter(q => q.tabla === 'sale_items')
- expect(batches).toHaveLength(13)
- for (const batch of batches) {
-  const ids = batch.filtros.find(f => f[0] === 'in' && f[1] === 'sale_id')?.[2] as string[]
-  expect(ids.length).toBeLessThanOrEqual(100)
- }
+it('rejects an empty daily series for a nonempty requested period instead of filling fake zeros',async()=>{
+ state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:{...summary,dailySales:[]},error:null}),{abortSignal(){return this}}))
+ const {result}=renderHook(()=>usePosStats(range))
+ await waitFor(()=>expect(result.current.error?.message).toContain('diario está incompleto'))
+ expect(result.current.loading).toBe(false)
 })

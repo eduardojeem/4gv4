@@ -1,9 +1,11 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowLeft, ArrowRight, CalendarCheck2, CalendarOff, ChevronRight, Clock, MapPin, Menu, MessageCircle, Moon, Phone, Store, Sun, User, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarCheck2, CalendarOff, ChevronRight, Clock, MapPin, Menu, Moon, Phone, Store, Sun, User, X } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
@@ -326,7 +328,7 @@ export function ServicesSiteHeader({
               rel="noopener noreferrer"
               className="ml-1 hidden h-10 items-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/30 transition hover:shadow-md hover:brightness-110 sm:inline-flex"
             >
-              <MessageCircle aria-hidden="true" className="h-4 w-4" />
+              <WhatsAppIcon aria-hidden="true" className="h-4 w-4" />
               Pedir turno
             </a>
           ) : null}
@@ -430,7 +432,7 @@ export function ServicesSiteHeader({
                     bookingHref ? 'border border-current/20' : 'bg-primary text-primary-foreground shadow-sm',
                   )}
                 >
-                  <MessageCircle aria-hidden="true" className="h-4 w-4" />
+                  <WhatsAppIcon aria-hidden="true" className="h-4 w-4" />
                   {bookingHref ? 'Escribir por WhatsApp' : 'Pedir turno por WhatsApp'}
                 </a>
               )}

@@ -1,6 +1,17 @@
 'use client'
 
-import { CREDIT_PAPER_FORMATS, CREDIT_PAPER_LABELS, type CreditPaperFormat } from '@/lib/credits/paper'
+import { useState } from 'react'
+import {
+  CREDIT_PAPER_FORMATS,
+  CREDIT_PAPER_LABELS,
+  CREDIT_PRINTABLE_FIT_LABELS,
+  CREDIT_PRINTABLE_FITS,
+  isCreditPrintableFit,
+  readCreditPrintableFit,
+  writeCreditPrintableFit,
+  type CreditPaperFormat,
+  type CreditPrintableFit,
+} from '@/lib/credits/paper'
 import { cn } from '@/lib/utils'
 
 /**
@@ -11,6 +22,10 @@ import { cn } from '@/lib/utils'
  * cortado por los costados y uno con laser A4 recibia una tira angosta en una
  * esquina de la hoja. Se repite el mismo control para que el comerciante no
  * tenga que aprender dos formas distintas de hacer lo mismo.
+ *
+ * En rollo suma «Ajuste»: cada térmica imprime un ancho distinto, y si el texto
+ * sale cortado a los costados se angosta el contenido. Se recuerda en este
+ * equipo, como el papel, y lo leen los generadores al imprimir.
  */
 export function CreditPaperPicker({
   value,
@@ -23,9 +38,17 @@ export function CreditPaperPicker({
   className?: string
   label?: string
 }) {
+  const [fit, setFit] = useState<CreditPrintableFit>(() => readCreditPrintableFit())
+
+  const changeFit = (next: string) => {
+    if (!isCreditPrintableFit(next)) return
+    setFit(next)
+    writeCreditPrintableFit(next)
+  }
+
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <span className="text-[11px] font-medium text-muted-foreground shrink-0">{label}</span>
+    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+      <span className="text-xs font-medium text-muted-foreground shrink-0">{label}</span>
       <div
         role="radiogroup"
         aria-label="Formato de papel"
@@ -42,7 +65,7 @@ export function CreditPaperPicker({
               onClick={() => onChange(format)}
               title={CREDIT_PAPER_LABELS[format]}
               className={cn(
-                'rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+                'rounded-md px-2 py-1 text-xs font-semibold transition-colors',
                 'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 activo
                   ? 'bg-background text-foreground shadow-xs'
@@ -54,6 +77,21 @@ export function CreditPaperPicker({
           )
         })}
       </div>
+      {value !== 'A4' && (
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Si el ticket sale cortado a los costados, elegí uno más angosto">
+          Ajuste
+          <select
+            value={fit}
+            onChange={(event) => changeFit(event.target.value)}
+            className="h-7 rounded-md border bg-background px-1.5 text-xs font-medium text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Ajuste del ancho a la impresora"
+          >
+            {CREDIT_PRINTABLE_FITS.map((option) => (
+              <option key={option} value={option}>{CREDIT_PRINTABLE_FIT_LABELS[option]}</option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   )
 }

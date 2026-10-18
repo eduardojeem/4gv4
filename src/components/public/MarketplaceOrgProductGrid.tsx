@@ -10,7 +10,6 @@ import {
   Package,
   Store,
   MapPin,
-  MessageCircle,
   Play,
   Pause,
 } from 'lucide-react'
@@ -22,7 +21,7 @@ import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { FavoriteButton } from './Favorites'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { getSocialLinks } from '@/lib/public/social-links'
-import { SOCIAL_ICONS } from '@/components/public/SocialIcons'
+import { WhatsAppIcon, SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import { cn } from '@/lib/utils'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
@@ -231,7 +230,7 @@ function OrgProductCard({
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex h-7.5 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#075E54] transition-colors hover:bg-[#075E54] hover:text-white dark:text-[#4ADE80]"
               >
-                <MessageCircle className="h-3 w-3" />
+                <WhatsAppIcon className="h-3 w-3" />
                 <span>Preguntar</span>
               </a>
             ) : (
@@ -397,7 +396,7 @@ function OrgProductSection({
                       aria-label={`WhatsApp de ${org.name}`}
                       className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
                     >
-                      <MessageCircle className="h-3 w-3" />
+                      <WhatsAppIcon className="h-3 w-3" />
                       <span>WhatsApp</span>
                     </a>
                   </>

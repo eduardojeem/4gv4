@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 /**
  * «¿Por qué no veo el precio?»
  *
@@ -16,7 +18,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { MessageCircle, Lock, LogIn, UserPlus } from 'lucide-react'
+import { Lock, LogIn, UserPlus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -134,7 +136,7 @@ export function PriceAccessDialog({
                   : 'border border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30'
               )}
             >
-              <MessageCircle className="h-4 w-4" />
+              <WhatsAppIcon className="h-4 w-4" />
               Preguntar el precio por WhatsApp
             </a>
           )}

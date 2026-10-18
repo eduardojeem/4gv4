@@ -515,7 +515,10 @@ export async function GET(request: NextRequest) {
       }
 
       if (chargeable) {
-        query = query.not('status', 'in', '("delivered","cancelled","entregado","cancelado")')
+        // Solo valores del enum repair_status: «delivered»/«cancelled» no existen
+        // y Postgres rechazaba la consulta entera (500 en el buscador del POS,
+        // la página de prioridades y la app).
+        query = query.not('status', 'in', '("entregado","cancelado")')
       }
 
       if (escapedSearch) {

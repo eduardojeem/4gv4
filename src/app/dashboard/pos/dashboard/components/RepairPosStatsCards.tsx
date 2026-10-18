@@ -1,3 +1,4 @@
+import { PosDetailLoader, type PosDetailProps } from './PosDetailLoader'
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,11 +12,11 @@ import { formatCurrency } from '@/lib/currency'
 import type { PosStats, PosDeliveredRepairRecord, PosCreditRecord } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
 
-interface RepairPosStatsCardsProps {
+interface RepairPosStatsCardsProps extends PosDetailProps {
     stats: PosStats
 }
 
-export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
+export function RepairPosStatsCards({ stats, detailsLoaded = true, ...detailProps }: RepairPosStatsCardsProps) {
     const { repairStats } = stats
     const [selectedRepair, setSelectedRepair] = useState<PosDeliveredRepairRecord | null>(null)
 
@@ -129,7 +130,8 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                 </Card>
             </div>
 
-            {repairStats.deliveredRepairs && repairStats.deliveredRepairs.length > 0 && (
+            {!detailsLoaded && <PosDetailLoader {...detailProps} />}
+            {detailsLoaded && repairStats.deliveredRepairs && repairStats.deliveredRepairs.length > 0 && (
                 <Card className="mt-6 border-slate-200 dark:border-slate-800">
                     <CardHeader className="py-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/50">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -215,7 +217,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
             )}
 
             {/* Nueva tabla de Créditos por Reparaciones */}
-            <Card className="mt-6 border-slate-200 dark:border-slate-800">
+            {detailsLoaded && <Card className="mt-6 border-slate-200 dark:border-slate-800">
                 <CardHeader className="py-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/80 dark:bg-slate-900/50 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <Banknote className="h-4 w-4 text-rose-500" />
@@ -321,7 +323,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                         </div>
                     </ScrollArea>
                 </CardContent>
-            </Card>
+            </Card>}
 
             {/* Modal de Detalle */}
             <Dialog open={!!selectedRepair} onOpenChange={(open) => !open && setSelectedRepair(null)}>

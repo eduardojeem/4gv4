@@ -1,3 +1,4 @@
+import { PosDetailLoader, type PosDetailProps } from './PosDetailLoader'
 import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,13 +12,15 @@ import { es } from 'date-fns/locale'
 import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
 
-interface DetailedSalesTableProps {
+interface DetailedSalesTableProps extends PosDetailProps {
     stats: PosStats
 }
 
-export function DetailedSalesTable({ stats }: DetailedSalesTableProps) {
+export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps }: DetailedSalesTableProps) {
     const allSales = stats.allSales || []
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
+
+    if (!detailsLoaded) return <PosDetailLoader {...detailProps} />
 
     return (
         <div className="space-y-4 mt-6">

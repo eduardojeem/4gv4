@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -12,7 +14,6 @@ import {
   ExternalLink,
   Mail,
   MapPin,
-  MessageCircle,
   Navigation,
   Phone,
   Share2,
@@ -116,7 +117,7 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
 
           <div className="mx-auto max-w-3xl text-center space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-xs">
-              <MessageCircle className="h-3.5 w-3.5" />
+              <WhatsAppIcon className="h-3.5 w-3.5" />
               <span>Atención Directa & Ventas</span>
             </div>
 
@@ -140,7 +141,7 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
                   target={phoneClean ? '_blank' : undefined}
                   rel={phoneClean ? 'noopener noreferrer' : undefined}
                 >
-                  <MessageCircle className="h-5 w-5" />
+                  <WhatsAppIcon className="h-5 w-5" />
                   <span>{phoneClean ? 'Escribir por WhatsApp' : 'Contactar por Email'}</span>
                 </a>
               </Button>

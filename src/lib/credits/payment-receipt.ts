@@ -1,8 +1,9 @@
 import { createReceiptDocument } from './receipt-document'
+import { registerThermalPrintDocument } from './thermal-print'
 import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
-import { CREDIT_PAPER_WIDTH_MM, toPdfText, type CreditPaperFormat } from './paper'
+import { CREDIT_PAPER_WIDTH_MM, creditPrintableWidthMm, toPdfText, type CreditPaperFormat, type CreditPrintableFit } from './paper'
 
 export type CreditPaymentReceiptMethod = 'cash' | 'card' | 'transfer' | string | null | undefined
 
@@ -481,7 +482,8 @@ export type CreditPaymentReceiptRenderTarget = {
  */
 export function getCreditPaymentReceiptTarget(
   format: CreditPaperFormat,
-  printerWidthMm?: number
+  printerWidthMm?: number,
+  fit?: CreditPrintableFit
 ): CreditPaymentReceiptRenderTarget {
   if (format === 'A4') {
     const pageWidthMm = 210
@@ -508,13 +510,18 @@ export function getCreditPaymentReceiptTarget(
 
   const pageWidthMm = Math.max(48, Math.min(90, printerWidthMm ?? CREDIT_PAPER_WIDTH_MM[format]))
   const layout = getCreditPaymentReceiptLayout(pageWidthMm)
+  // El contenido va centrado dentro del ancho que la impresora realmente
+  // imprime. Antes ocupaba todo el papel menos 4 mm por lado y en varias
+  // térmicas se cortaba a los costados.
+  const contentWidthMm = creditPrintableWidthMm(format === '58mm' ? '58mm' : '80mm', fit, pageWidthMm)
+  const labelColumnWidth = Math.max(16, Math.min(30, contentWidthMm * 0.4))
   return {
     pageWidthMm,
     pageHeightMm: 0, // en rollo la calcula el generador segun el contenido
-    contentLeftMm: layout.margin,
-    contentWidthMm: layout.usableWidth,
-    labelColumnWidth: layout.labelColumnWidth,
-    valueColumnWidth: layout.valueColumnWidth,
+    contentLeftMm: (pageWidthMm - contentWidthMm) / 2,
+    contentWidthMm,
+    labelColumnWidth,
+    valueColumnWidth: Math.max(1, contentWidthMm - labelColumnWidth),
     titleFontSize: layout.titleFontSize,
     receiptFontSize: layout.receiptFontSize,
     metaFontSize: layout.metaFontSize,
@@ -716,5 +723,21 @@ export async function createCreditPaymentReceiptPdf(
     return pieFinal + footerLines * (t.footerFontSize + 0.5) * 0.42 + t.footerBottom
   })
 
+  if (!t.isSheet) {
+    const compacto = usesShortLabels(t.pageWidthMm)
+    registerThermalPrintDocument(doc, {
+      title: 'COMPROBANTE DE PAGO',
+      issuer: [input.businessName || 'Comprobante de pago', input.businessRuc ? `RUC ${input.businessRuc}` : '', input.businessPhone || '', input.businessAddress || ''],
+      metadata: [`N° ${receiptNumber}`, paidAt.toLocaleString(input.locale || getDisplayLocale(), { timeZone: input.timeZone })],
+      sections: [
+        { title: 'DATOS DEL CLIENTE', rows: buildCreditInfoRows(input, { compacto }) },
+        { title: 'DETALLE DEL PAGO', rows: buildPaymentDetailRows(input, { compacto }) },
+        { title: 'PLAN DE CUOTAS', rows: buildInstallmentPlanRows(input, { compacto }) },
+        { title: 'ESTADO DE CUENTA', rows: buildAccountStatusRows(input, { compacto }) },
+      ],
+      contentWidthMm: t.contentWidthMm, fontSizePt: t.tableBodyFontSize + 0.3,
+      footer: 'Gracias por su pago. Conserve este comprobante.', signature: true,
+    })
+  }
   return { doc, receiptNumber }
 }

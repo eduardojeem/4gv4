@@ -1,8 +1,9 @@
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
 import type { CSSProperties } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { CalendarCheck2, Clock, MapPin, MessageCircle, Navigation } from 'lucide-react'
+import { CalendarCheck2, Clock, MapPin, Navigation } from 'lucide-react'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { formatCurrency } from '@/lib/currency'
 import { APPOINTMENT_STATUS_LABELS, type AppointmentStatus } from '@/lib/agenda/agenda-api'
@@ -205,7 +206,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
         <div className="grid gap-2">
           {wa && (
             <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white">
-              <MessageCircle aria-hidden="true" className="h-4 w-4" />
+              <WhatsAppIcon aria-hidden="true" className="h-4 w-4" />
               Escribir a la tienda
             </a>
           )}

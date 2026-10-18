@@ -36,16 +36,12 @@ import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useBranch } from '@/contexts/branch-context'
-import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
-import { homeCalendar } from '@/lib/dashboard/home-calendar'
+import { fetchDashboardHomeSummary, type HomeSummaryRpcClient } from '@/lib/dashboard/home-summary'
 import { utcToZoned, DEFAULT_TIMEZONE } from '@/lib/agenda/time'
-import { withBranchFilter } from '@/lib/branches/client'
 import { calculateExpectedCashBalance, isPhysicalCashSale, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
 import { normalizeCashMovementType } from '@/app/dashboard/pos/types'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatCurrency } from '@/lib/currency'
-import { COMPLETED_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
-import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -222,7 +218,8 @@ export default function DashboardPage() {
   const { selectedBranchId } = useBranch()
   const { organization } = useActiveOrganization()
   const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
-  const statsDataKey = `${scope}:${selectedBranchId ?? 'all'}`
+  const moduleFingerprint = [...effectiveModules].sort().join(',')
+  const statsDataKey = `${scope}:${selectedBranchId ?? 'all'}:${organization?.role ?? ''}:${moduleFingerprint}`
   const currentStatsKey = useRef(statsDataKey)
   currentStatsKey.current = statsDataKey
   const statsAbort = useRef<AbortController | null>(null)
@@ -312,8 +309,8 @@ export default function DashboardPage() {
     return calculateExpectedCashBalance(currentSession.movements)
   }, [currentSession])
 
-  const fetchDashboardStats = useCallback(async () => {
-    if (!config.supabase.isConfigured || !organization?.id || organization.id !== scopeOrganizationId) return
+  const fetchDashboardStats = useCallback(async (force = false) => {
+    if (!config.supabase.isConfigured || !user?.id || !organization?.id || organization.id !== scopeOrganizationId) return
     statsAbort.current?.abort()
     const controller = new AbortController()
     statsAbort.current = controller
@@ -322,161 +319,25 @@ export default function DashboardPage() {
     setLoadingStats(true)
     setStatsError(null)
     try {
-      const { data: settings, error: settingsError } = await supabase.from('organization_settings')
-        .select('timezone').eq('organization_id', organization.id).abortSignal(controller.signal).maybeSingle()
+      const summary = await fetchDashboardHomeSummary(supabase as unknown as HomeSummaryRpcClient, {
+        userId: user?.id ?? '', organizationId: organization.id, branchId: selectedBranchId,
+        role: organization.role, modules: moduleFingerprint.split(',').filter(Boolean),
+      }, { signal: controller.signal, force })
       if (!isCurrent()) return
-      if (settingsError) throw settingsError
-      let queryTimeZone = settings?.timezone || DEFAULT_TIMEZONE
-      try { new Intl.DateTimeFormat('es-PY', { timeZone: queryTimeZone }).format() }
-      catch { queryTimeZone = DEFAULT_TIMEZONE }
-      const { startOfDay, endOfDay, startOfWeek, last7Days } = homeCalendar(queryTimeZone)
-
-      const responses = await Promise.all([
-        completeDashboardQuery(withBranchFilter(
-          supabase.from('sales').select('id,total:total_amount,status,created_at', { count: 'exact' }).eq('organization_id', organization.id)
-            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-          selectedBranchId,
-        ), controller.signal),
-        hasOrders ? withBranchFilter(
-          supabase
-            .from('customer_orders')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organization.id)
-            .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
-          selectedBranchId,
-        ) : Promise.resolve({ count: 0, data: [] }),
-        completeDashboardQuery(supabase.from('customers').select('id, created_at', { count: 'exact' }).eq('organization_id', organization.id).gte('created_at', startOfWeek.toISOString()), controller.signal),
-        completeDashboardQuery(supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id', { count: 'exact' }).eq('organization_id', organization.id).eq('is_active', true), controller.signal),
-        completeDashboardQuery(supabase.from('categories').select('id, name', { count: 'exact' }).eq('organization_id', organization.id).eq('is_active', true), controller.signal),
-        hasRepairs ? withBranchFilter(
-          // Fuente única de "en proceso": incluye pausado y excluye listo
-          // (listo = reparación terminada, esperando retiro).
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', [...ACTIVE_REPAIR_STATUSES]),
-          selectedBranchId,
-        ) : Promise.resolve({ count: 0, data: [] }),
-        completeDashboardQuery(withBranchFilter(
-          supabase.from('sales').select('id,total_amount,created_at,status', { count: 'exact' }).eq('organization_id', organization.id)
-            .gte('created_at', startOfWeek.toISOString()).lte('created_at', endOfDay.toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
-          selectedBranchId,
-        ), controller.signal),
-        // Reparaciones ingresadas hoy
-        hasRepairs ? completeDashboardQuery(withBranchFilter(
-          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount, status, created_at', { count: 'exact' }).eq('organization_id', organization.id)
-            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-          selectedBranchId,
-        ), controller.signal) : Promise.resolve({ data: [] }),
-        // Reparaciones entregadas hoy
-        hasRepairs ? completeDashboardQuery(withBranchFilter(
-          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount, status, delivered_at', { count: 'exact' }).eq('organization_id', organization.id)
-            .eq('status', 'entregado')
-            .gte('delivered_at', startOfDay.toISOString()).lte('delivered_at', endOfDay.toISOString()),
-          selectedBranchId,
-        ), controller.signal) : Promise.resolve({ data: [] }),
-        // Reparaciones listas para retiro
-        hasRepairs ? completeDashboardQuery(withBranchFilter(
-          supabase.from('repairs').select('id, final_cost, estimated_cost, paid_amount', { count: 'exact' }).eq('organization_id', organization.id)
-            .eq('status', 'listo'),
-          selectedBranchId,
-        ), controller.signal) : Promise.resolve({ data: [] }),
-      ])
-      if (!isCurrent()) return
-      const failed = responses.find(response => 'error' in response && response.error)
-      if (failed) throw new Error('No se pudieron cargar todos los indicadores.')
-      const [
-        { data: salesToday },
-        { count: activeOrdersCount },
-        { data: customersWeek },
-        { data: productsData },
-        { data: categoriesData },
-        { count: repairsActiveCount },
-        { data: salesWeek },
-        { data: repairsTodayData },
-        { data: repairsDeliveredData },
-        { data: repairsReadyData },
-      ] = responses
       setStatsScope(statsDataKey)
-
-      type RepairItem = { final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null; created_at?: string }
-
-      const todayList = (repairsTodayData || []) as unknown as RepairItem[]
-      const todayCount = todayList.length
-      const todayAmount = todayList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
-
-      const deliveredRaw = (repairsDeliveredData || []) as unknown as RepairItem[]
-      const deliveredTodayList = deliveredRaw.filter(r => {
-        if (!r.delivered_at) return false
-        const d = new Date(r.delivered_at)
-        return d >= startOfDay && d <= endOfDay
-      })
-      const deliveredCount = deliveredTodayList.length
-      const deliveredAmount = deliveredTodayList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
-
-      const readyList = (repairsReadyData || []) as unknown as RepairItem[]
-      const readyCount = readyList.length
-      const readyAmount = readyList.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
-
-      setRepairStats({
-        todayCount,
-        todayAmount,
-        deliveredCount,
-        deliveredAmount,
-        readyCount,
-        readyAmount,
-      })
-
-      type SaleRow = { total: number; status: string; created_at: string }
-      const salesRows = (salesToday || []) as unknown as SaleRow[]
-      const totalRevenueToday = salesRows
-        .filter(s => isCompletedSaleStatus(s.status))
-        .reduce((sum, s) => sum + (Number(s.total) || 0), 0)
-      const completedToday = salesRows.filter(s => isCompletedSaleStatus(s.status)).length
-
-      const activeOrders = activeOrdersCount || 0
-      const customerRows = (customersWeek || []) as unknown as Array<{ created_at: string }>
-      const newCustomers = customerRows.length
-
-      // Diferenciación de Productos físicos vs Servicios
-      type ProductRow = { id: string; stock_quantity?: number | null; min_stock?: number | null; unit_measure?: string | null; category_id?: string | null }
-      type CategoryRow = { id: string; name: string }
-
-      const productRows = (productsData || []) as unknown as ProductRow[]
-      const categoryList = (categoriesData || []) as unknown as CategoryRow[]
-
-      const serviceCategoryIds = new Set(
-        categoryList
-          .filter(c => (c.name || '').toLowerCase().includes('servicio'))
-          .map(c => c.id)
-      )
-
-      const servicesList = hasServices ? productRows.filter(p => {
-        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
-        return isServiceUnit || isServiceCat
-      }) : []
-      const servicesCount = servicesList.length
-
-      const physicalProducts = productRows.filter(p => {
-        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
-        return !isServiceUnit && !isServiceCat
-      })
-      const physicalProductsCount = physicalProducts.length
-      const totalCatalogCount = hasServices ? productRows.length : physicalProductsCount
-
-      const repairsActive = repairsActiveCount || 0
-
-      // Stock bajo aplica exclusivamente a productos físicos con control de inventario
-      const lowStockCount = physicalProducts.filter(p => {
-        const sq = Number(p.stock_quantity ?? 0)
-        const ms = Number(p.min_stock ?? 5)
-        return sq <= ms
-      }).length
-
-      type SalesWeekRow = { total_amount: number; created_at: string }
-      const trendData = last7Days.map(day => ((salesWeek || []) as unknown as SalesWeekRow[])
-        .filter(s => utcToZoned(s.created_at, queryTimeZone).date === day)
-        .reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0))
-      const customerTrend = last7Days.map(day => customerRows.filter(c => utcToZoned(c.created_at, queryTimeZone).date === day).length)
+      const queryTimeZone = summary.timeZone
+      const totalRevenueToday = summary.sales.todayAmount
+      const completedToday = summary.sales.todayCount
+      const activeOrders = summary.orders.activeCount
+      const newCustomers = summary.customers.newCount
+      const physicalProductsCount = summary.catalog.physicalCount
+      const servicesCount = hasServices ? summary.catalog.servicesCount : 0
+      const totalCatalogCount = physicalProductsCount + servicesCount
+      const lowStockCount = summary.catalog.lowStockCount
+      const repairsActive = summary.repairs.activeCount
+      const trendData = summary.sales.daily
+      const customerTrend = summary.customers.daily
+      setRepairStats(summary.repairs)
 
       const nextStats: KpiStat[] = [
         {
@@ -527,7 +388,7 @@ export default function DashboardPage() {
         }] : []),
       ]
       setStats(nextStats)
-      setLastUpdated(new Date())
+      setLastUpdated(new Date(summary.generatedAt))
       setCalendarConfig({ scope, timeZone: queryTimeZone })
       // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
       setCanRefresh(false)
@@ -536,11 +397,11 @@ export default function DashboardPage() {
     } catch (error) {
       if (!isCurrent()) return
       console.error('Error fetching dashboard stats:', error)
-      setStatsError('No se pudieron cargar los indicadores. Reintentá la consulta.')
+      setStatsError(error instanceof Error ? error.message : 'No se pudieron cargar los indicadores. Reintentá la consulta.')
     } finally {
       if (isCurrent()) setLoadingStats(false)
     }
-  }, [scope, currentScope, scopeOrganizationId, statsDataKey, hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
+  }, [scope, currentScope, scopeOrganizationId, statsDataKey, moduleFingerprint, user?.id, organization?.role, hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured && organization?.id) {
@@ -643,7 +504,7 @@ export default function DashboardPage() {
             onClick={() => {
               if (!canRefresh) return
               startTransition(() => {
-                fetchDashboardStats()
+                fetchDashboardStats(true)
                 if (activeRegisterId) {
                   checkOpenSession(activeRegisterId).catch(() => {})
                 }
@@ -684,7 +545,7 @@ export default function DashboardPage() {
       <BusinessStartGuide />
       <StoreSetupAlert />
 
-      {statsError && <div role="alert" className="space-y-2 rounded-xl border border-destructive p-4 text-sm text-destructive"><p>{statsError}</p><Button variant="outline" onClick={() => void fetchDashboardStats()}>Reintentar</Button></div>}
+      {statsError && <div role="alert" className="space-y-2 rounded-xl border border-destructive p-4 text-sm text-destructive"><p>{statsError}</p><Button variant="outline" onClick={() => void fetchDashboardStats(true)}>Reintentar</Button></div>}
       {/* KPI grid */}
       <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
         {!statsError && stats.map((stat) => (

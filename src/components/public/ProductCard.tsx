@@ -1,10 +1,12 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useMemo, useState } from 'react'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import { AppImage as Image } from '@/components/ui/app-image'
-import { ArrowRight, Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Minus, Package, Plus, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, Minus, Package, Plus, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
@@ -537,7 +539,7 @@ export function ProductCard(props: ProductCardProps) {
                 className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20"
                 aria-label={`Preguntar el precio de ${product.name} por WhatsApp`}
               >
-                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                <WhatsAppIcon className="h-3.5 w-3.5 shrink-0" />
                 <span>Preguntar</span>
               </a>
             )}
@@ -573,7 +575,7 @@ export function ProductCard(props: ProductCardProps) {
                 aria-label={`Consultar por ${product.name} en WhatsApp`}
                 title={`Consultar por ${product.name} en WhatsApp`}
               >
-                <MessageCircle className="h-4 w-4" />
+                <WhatsAppIcon className="h-4 w-4" />
               </a>
             )}
           </div>
@@ -904,7 +906,7 @@ export function ProductCard(props: ProductCardProps) {
                     onClick={() => setQuickViewOpen(false)}
                     className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98]"
                   >
-                    <MessageCircle className="h-4 w-4" />
+                    <WhatsAppIcon className="h-4 w-4" />
                     Preguntar el precio
                   </a>
                 )
@@ -931,7 +933,7 @@ export function ProductCard(props: ProductCardProps) {
                   onClick={() => setQuickViewOpen(false)}
                   className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98]"
                 >
-                  <MessageCircle className="h-4 w-4" />
+                  <WhatsAppIcon className="h-4 w-4" />
                   {selectedVariantInStock ? 'Pedir por WhatsApp' : 'Consultar por WhatsApp'}
                 </a>
               ) : null}

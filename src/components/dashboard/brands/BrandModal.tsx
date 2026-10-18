@@ -36,6 +36,14 @@ type CatalogBrand = {
   name: string
   logo_url?: string | null
   website?: string | null
+  aliases?: string[] | null
+  /** Ya está vinculada en la tienda: elegirla de nuevo fallaba por nombre repetido. */
+  already_added?: boolean
+}
+
+/** Sin tildes ni signos, para comparar el nombre escrito con el del catálogo. */
+function comparable(value: string | null | undefined) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
 export type BrandModalBrand = Brand | (Partial<Brand> & { isActive?: boolean })
@@ -50,6 +58,11 @@ interface BrandModalProps {
    * era el paso que sobraba.
    */
   initialName?: string
+  /**
+   * Con qué arranca el alta: buscando la oficial (lo habitual) o directamente
+   * como propia, cuando se eligió «Crear marca propia».
+   */
+  initialMode?: 'official' | 'own'
   onSave: (brandData: BrandInsert) => Promise<{ success: boolean; error?: string }>
 }
 
@@ -80,6 +93,7 @@ export function BrandModal({
   onClose,
   brand,
   initialName,
+  initialMode = 'official',
   onSave
 }: BrandModalProps) {
   const [formData, setFormData] = useState<BrandInsert>({
@@ -102,6 +116,8 @@ export function BrandModal({
   const [catalogResults, setCatalogResults] = useState<CatalogBrand[]>([])
   const [loadingCatalog, setLoadingCatalog] = useState(false)
   const [ownBrand, setOwnBrand] = useState(false)
+  // Al escribir una propia, la oficial con ese mismo nombre si existe.
+  const [officialMatch, setOfficialMatch] = useState<CatalogBrand | null>(null)
 
   useEffect(() => {
     if (!isOpen || ownBrand || official) return
@@ -127,7 +143,8 @@ export function BrandModal({
       ? { id: brand.global_brand_id, name: brand.name, logo_url: brand.logo_url }
       : null
     setOfficial(linked)
-    setOwnBrand(Boolean(brand) && !linked)
+    setOwnBrand(brand ? !linked : initialMode === 'own')
+    setOfficialMatch(null)
     // Con un nombre ya escrito, la búsqueda del catálogo arranca hecha: si esa
     // marca es oficial, aparece sola; si no, el nombre ya está cargado para
     // crearla como propia.
@@ -154,7 +171,34 @@ export function BrandModal({
       })
     }
     setErrors({})
-  }, [brand, isOpen, initialName])
+  }, [brand, isOpen, initialName, initialMode])
+
+  // Crear como propia una marca que existe en el catálogo la deja sin logo y
+  // fuera del grupo del marketplace: se avisa mientras se escribe.
+  useEffect(() => {
+    const name = (formData.name ?? '').trim()
+    if (!isOpen || !ownBrand || official || name.length < 2) {
+      setOfficialMatch(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/brands/catalog?limit=5&search=${encodeURIComponent(name)}`)
+        const payload = await response.json().catch(() => null)
+        if (cancelled) return
+        const target = comparable(name)
+        const match = ((payload?.success ? payload.data : []) as CatalogBrand[]).find((item) =>
+          comparable(item.name) === target || (item.aliases ?? []).some((alias) => comparable(alias) === target)
+        )
+        // Si esta misma marca ya es la vinculada, no hay nada que avisar.
+        setOfficialMatch(match && match.id !== brand?.global_brand_id ? match : null)
+      } catch {
+        if (!cancelled) setOfficialMatch(null)
+      }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [isOpen, ownBrand, official, formData.name, brand?.global_brand_id])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -190,7 +234,7 @@ export function BrandModal({
     e.preventDefault()
     
     if (!validateForm()) {
-      toast.error('Por favor corrige los errores en el formulario')
+      toast.error('Revisá los campos marcados')
       return
     }
 
@@ -215,8 +259,8 @@ export function BrandModal({
       if (result.success) {
         toast.success(
           brand 
-            ? 'Marca actualizada exitosamente' 
-            : 'Marca creada exitosamente'
+            ? 'Marca actualizada'
+            : 'Marca creada'
         )
         onClose()
       } else {
@@ -236,25 +280,30 @@ export function BrandModal({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Building2 className="w-5 h-5 text-blue-600" />
-            {brand ? 'Editar Marca' : 'Agregar Nueva Marca'}
+            {official || (!ownBrand && !brand)
+              ? <BadgeCheck className="w-5 h-5 text-primary" />
+              : <Building2 className="w-5 h-5 text-primary" />}
+            {brand ? 'Editar marca' : ownBrand ? 'Nueva marca propia' : 'Nueva marca oficial'}
           </DialogTitle>
           <DialogDescription>
-            {brand 
-              ? 'Modifica la información de la marca'
-              : 'Registra una nueva marca para tus productos'
-            }
+            {brand
+              ? official
+                ? 'Marca oficial del catálogo: el nombre y el logo los mantiene la plataforma.'
+                : 'Marca propia de tu tienda: se muestra con su inicial.'
+              : ownBrand
+                ? 'Para marcas que no están en el catálogo, por ejemplo una línea de tu negocio.'
+                : 'Buscala en el catálogo: llega con su logo y se agrupa en el marketplace.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={cn('grid w-full', official ? 'grid-cols-1' : 'grid-cols-2')}>
               <TabsTrigger value="basic" className="flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
                 Básico
               </TabsTrigger>
-              <TabsTrigger value="details" className="flex items-center gap-2">
+              <TabsTrigger value="details" className={cn('flex items-center gap-2', official && 'hidden')}>
                 <Globe className="w-4 h-4" />
                 Detalles
               </TabsTrigger>
@@ -265,7 +314,7 @@ export function BrandModal({
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
-                    Información Básica
+                    Datos de la marca
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -306,9 +355,27 @@ export function BrandModal({
                         placeholder="Ej: Panadería del barrio"
                         className={cn(errors.name && 'border-red-500')}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Se muestra con su inicial. Los logos los carga la plataforma para las marcas del catálogo.
-                      </p>
+                      {officialMatch ? (
+                        <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between" role="status">
+                          <span>
+                            «{officialMatch.name}» es una marca oficial del catálogo. Como propia no tendría logo ni se agruparía en el marketplace.
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0"
+                            disabled={officialMatch.already_added}
+                            onClick={() => { setOfficial(officialMatch); setOwnBrand(false); handleInputChange('name', officialMatch.name); setOfficialMatch(null) }}
+                          >
+                            {officialMatch.already_added ? 'Ya la tenés como oficial' : 'Usar la oficial'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Se muestra con su inicial. Los logos los carga la plataforma para las marcas del catálogo.
+                        </p>
+                      )}
                       {errors.name && (
                         <p className="text-sm text-red-500 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" />
@@ -344,8 +411,9 @@ export function BrandModal({
                             <button
                               key={item.id}
                               type="button"
+                              disabled={item.already_added && item.id !== brand?.global_brand_id}
                               onClick={() => { setOfficial(item); handleInputChange('name', item.name) }}
-                              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
+                              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
                             >
                               {item.logo_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -355,7 +423,10 @@ export function BrandModal({
                                   {item.name.charAt(0).toUpperCase()}
                                 </span>
                               )}
-                              <span className="text-sm font-medium text-foreground">{item.name}</span>
+                              <span className="flex-1 text-sm font-medium text-foreground">{item.name}</span>
+                              {item.already_added && item.id !== brand?.global_brand_id && (
+                                <span className="text-xs text-muted-foreground">Ya en tu tienda</span>
+                              )}
                             </button>
                           ))
                         )}
@@ -388,8 +459,8 @@ export function BrandModal({
                       id="description"
                       value={formData.description || ''}
                       onChange={(e) => handleInputChange('description', e.target.value)}
-                      placeholder="Describe la marca..."
-                      rows={4}
+                      placeholder="Describí la marca…"
+rows={4}
                     />
                   </div>
                 </CardContent>
@@ -401,13 +472,13 @@ export function BrandModal({
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Globe className="w-4 h-4" />
-                    Información Adicional
+                    Más datos
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="website" className="text-sm font-medium">
-                      Sitio Web
+                      Sitio web
                     </Label>
                     <Input
                       id="website"
@@ -427,7 +498,7 @@ export function BrandModal({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
-                        País de Origen
+                        País de origen
                       </Label>
                       <Select 
                         value={formData.country || ''} 
@@ -448,7 +519,7 @@ export function BrandModal({
 
                     <div className="space-y-2">
                       <Label htmlFor="founded_year" className="text-sm font-medium">
-                        Año de Fundación
+                        Año de fundación
                       </Label>
                       <Input
                         id="founded_year"
@@ -486,17 +557,16 @@ export function BrandModal({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700"
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Guardando...
+                  Guardando…
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />
-                  {brand ? 'Actualizar Marca' : 'Crear Marca'}
+                  {brand ? 'Guardar cambios' : official ? 'Agregar marca oficial' : ownBrand ? 'Crear marca propia' : 'Agregar marca'}
                 </>
               )}
             </Button>

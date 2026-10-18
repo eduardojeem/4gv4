@@ -6,7 +6,7 @@ import {
   Plus, Download, LayoutGrid, List, Trash2,
   CheckCircle, XCircle, RefreshCw, FolderTree,
   MoreHorizontal, AlertTriangle, FolderOpen, Layers,
-  Tag, Search, SlidersHorizontal, X
+  Tag, Search, SlidersHorizontal, X, Sparkles, Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,8 @@ import { CategoryGrid } from '@/components/categories/CategoryCard'
 import { CategoryListView } from '@/components/categories/CategoryListView'
 import { CategoryTreeViewImproved } from '@/components/categories/CategoryTreeViewImproved'
 import { CategoryModal } from '@/components/categories/CategoryModal'
+import { GlobalCategoryImportDialog } from '@/components/categories/GlobalCategoryImportDialog'
+import type { GlobalCategory } from '@/lib/categories/global-catalog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,7 +52,21 @@ import {
 } from '@/components/ui/alert-dialog'
 
 // Quick filter types
-type QuickFilter = 'all' | 'active' | 'inactive' | 'root' | 'sub'
+type QuickFilter = 'all' | 'active' | 'inactive' | 'root' | 'sub' | 'unlinked'
+
+/** Las categorías que coinciden y sus padres: en el árbol, una subcategoría sin su padre queda suelta. */
+function withParents(matches: Category[], all: Category[]): Category[] {
+  const byId = new Map(all.map((category) => [category.id, category]))
+  const keep = new Set<string>()
+  for (const category of matches) {
+    let current: Category | undefined = category
+    while (current && !keep.has(current.id)) {
+      keep.add(current.id)
+      current = current.parent_id ? byId.get(current.parent_id) : undefined
+    }
+  }
+  return all.filter((category) => keep.has(category.id))
+}
 
 export default function CategoriesPage() {
   const {
@@ -84,6 +100,51 @@ export default function CategoriesPage() {
     isOpen: boolean; id: string | null; isBulk: boolean
   }>({ isOpen: false, id: null, isBulk: false })
 
+  // Catálogo global del rubro: para agregar categorías y para elegir el vínculo.
+  const [globalCatalog, setGlobalCatalog] = useState<GlobalCategory[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [starterNames, setStarterNames] = useState<string[]>([])
+  const [seedingStarter, setSeedingStarter] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const [catalogResponse, starterResponse] = await Promise.all([
+          fetch('/api/categories/global', { cache: 'no-store' }),
+          fetch('/api/categories/starter', { cache: 'no-store' }),
+        ])
+        const catalogPayload = await catalogResponse.json().catch(() => null)
+        const starterPayload = await starterResponse.json().catch(() => null)
+        if (!active) return
+        if (catalogPayload?.success) setGlobalCatalog(catalogPayload.data ?? [])
+        if (Array.isArray(starterPayload?.names)) setStarterNames(starterPayload.names)
+      } catch {
+        /* sin catálogo se puede seguir creando a mano */
+      } finally {
+        if (active) setCatalogLoading(false)
+      }
+    }
+    void load()
+    return () => { active = false }
+  }, [])
+
+  const handleSeedStarter = async () => {
+    setSeedingStarter(true)
+    try {
+      const response = await fetch('/api/categories/starter', { method: 'POST' })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(payload?.error || 'No se pudieron crear las categorías.')
+      toast.success(payload?.created ? `Se crearon ${payload.created} categorías` : 'Ya tenías categorías: no se agregó nada')
+      await fetchCategories()
+    } catch (error) {
+      toast.error('No se pudieron crear las categorías', { description: error instanceof Error ? error.message : undefined })
+    } finally {
+      setSeedingStarter(false)
+    }
+  }
+
   // Sync search with filter (debounced)
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -96,6 +157,7 @@ export default function CategoriesPage() {
   const stats = useMemo(() => computeCategoryStats(categories), [categories])
   const rootCount = useMemo(() => categories.filter(c => !c.parent_id).length, [categories])
   const subCount = useMemo(() => categories.filter(c => !!c.parent_id).length, [categories])
+  const unlinkedCount = useMemo(() => categories.filter(c => !c.global_category_id).length, [categories])
   const withProducts = useMemo(
     () =>
       categories.filter((c) => ((c.products_count ?? c.stats?.product_count ?? 0) > 0)).length,
@@ -115,11 +177,29 @@ export default function CategoriesPage() {
         (quickFilter === 'active' && c.is_active) ||
         (quickFilter === 'inactive' && !c.is_active) ||
         (quickFilter === 'root' && !c.parent_id) ||
-        (quickFilter === 'sub' && !!c.parent_id)
+        (quickFilter === 'sub' && !!c.parent_id) ||
+        (quickFilter === 'unlinked' && !c.global_category_id)
 
       return matchesSearch && matchesQuick
     })
   }, [categories, filters.search, quickFilter])
+
+  // En el árbol se muestran también los padres de lo que coincide.
+  const treeCategories = useMemo(
+    () => (filteredCategories.length === categories.length ? categories : withParents(filteredCategories, categories)),
+    [filteredCategories, categories]
+  )
+
+  /** Por qué no se puede eliminar una categoría, si no se puede. */
+  const deleteBlocker = useCallback((id: string) => {
+    const category = categories.find((item) => item.id === id)
+    if (!category) return null
+    const children = categories.filter((item) => item.parent_id === id).length
+    const products = category.products_count ?? category.stats?.product_count ?? 0
+    if (children > 0) return `tiene ${children} subcategoría${children === 1 ? '' : 's'}`
+    if (products > 0) return `tiene ${products} producto${products === 1 ? '' : 's'}`
+    return null
+  }, [categories])
 
   // Handlers
   const handleEdit = (category: Category) => {
@@ -145,7 +225,8 @@ export default function CategoriesPage() {
 
     if (deleteDialog.isBulk) {
       let successCount = 0, failCount = 0
-      for (const id of selectedIds) {
+      // Las que tienen subcategorías o productos no se intentan: el servidor las rechaza.
+      for (const id of selectedIds.filter((selectedId) => !deleteBlocker(selectedId))) {
         const res = await deleteCategory(id)
         if (res.success) {
           successCount += 1
@@ -156,6 +237,7 @@ export default function CategoriesPage() {
       if (successCount > 0) { toast.success(`${successCount} categorías eliminadas`); setSelectedIds([]) }
       if (failCount > 0) toast.error(`No se pudieron eliminar ${failCount} categorías`)
     } else if (deleteDialog.id) {
+      if (deleteBlocker(deleteDialog.id)) return
       const res = await deleteCategory(deleteDialog.id)
       if (res.success) {
         toast.success('Categoría eliminada')
@@ -220,8 +302,9 @@ export default function CategoriesPage() {
     { id: 'all', label: 'Todas', count: categories.length },
     { id: 'active', label: 'Activas', count: stats.active_categories },
     { id: 'inactive', label: 'Inactivas', count: categories.length - stats.active_categories },
-    { id: 'root', label: 'Raíz', count: rootCount },
-    { id: 'sub', label: 'Sub', count: subCount },
+    { id: 'root', label: 'Principales', count: rootCount },
+    { id: 'sub', label: 'Subcategorías', count: subCount },
+    { id: 'unlinked', label: 'Sin vincular al marketplace', count: unlinkedCount },
   ]
 
   return (
@@ -230,13 +313,10 @@ export default function CategoriesPage() {
 
         {/* ─── HEADER EJECUTIVO ─── */}
         <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card to-muted/30 p-6 sm:p-8 shadow-xs">
-          {/* Ambient lighting glow */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl dark:bg-indigo-500/15" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl dark:bg-purple-500/15" />
 
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="flex items-start sm:items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
                 <FolderOpen className="h-6 w-6" />
               </div>
               <div>
@@ -245,7 +325,7 @@ export default function CategoriesPage() {
                     Categorías
                   </h1>
                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold">
-                    Catálogo de Productos
+                    Catálogo de productos
                   </Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -272,12 +352,24 @@ export default function CategoriesPage() {
 
               {canCreate && (
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsImportOpen(true)}
+                  className="h-9 gap-1.5 rounded-xl text-xs font-semibold"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Agregar desde el catálogo
+                </Button>
+              )}
+
+              {canCreate && (
+                <Button
                   onClick={openCreateModal}
                   size="sm"
                   className="h-9 gap-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm shadow-primary/20"
                 >
                   <Plus className="h-4 w-4" />
-                  Nueva Categoría
+                  Nueva categoría
                 </Button>
               )}
             </div>
@@ -290,11 +382,11 @@ export default function CategoriesPage() {
           <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Categorías</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total de categorías</p>
                 <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 tabular-nums">
                   {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : stats.total_categories}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">En catálogo de tienda</p>
+                <p className="text-xs text-muted-foreground mt-0.5">En catálogo de tienda</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
                 <Tag className="h-5 w-5" />
@@ -310,7 +402,7 @@ export default function CategoriesPage() {
                 <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
                   {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : stats.active_categories}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Visibles en catálogo</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Visibles en catálogo</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
                 <CheckCircle className="h-5 w-5" />
@@ -322,11 +414,11 @@ export default function CategoriesPage() {
           <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Subcategorías</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Vinculadas</p>
                 <div className="text-2xl sm:text-3xl font-extrabold text-purple-600 dark:text-purple-400 mt-1 tabular-nums">
-                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : subCount}
+                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : categories.length - unlinkedCount}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Estructura multinivel</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Agrupadas en el marketplace</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
                 <Layers className="h-5 w-5" />
@@ -338,11 +430,11 @@ export default function CategoriesPage() {
           <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Con Productos</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Con productos</p>
                 <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
                   {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : withProducts}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Con stock / catálogo</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Tienen al menos un producto</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
                 <FolderOpen className="h-5 w-5" />
@@ -442,7 +534,7 @@ export default function CategoriesPage() {
               >
                 {f.label}
                 <span className={cn(
-                  "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums",
+                  "rounded-full px-1.5 py-0 text-xs font-bold tabular-nums",
                   quickFilter === f.id ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
                 )}>
                   {f.count}
@@ -459,7 +551,7 @@ export default function CategoriesPage() {
         <Tabs value={viewMode} onValueChange={(v) => { if (v === 'grid' || v === 'list' || v === 'tree') setViewMode(v) }} className="space-y-4">
           <TabsList className="h-10 bg-muted/60 p-1 rounded-xl border border-border/60">
             <TabsTrigger value="grid" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
-              <LayoutGrid className="h-3.5 w-3.5" /> Grid
+              <LayoutGrid className="h-3.5 w-3.5" /> Tarjetas
             </TabsTrigger>
             <TabsTrigger value="list" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
               <List className="h-3.5 w-3.5" /> Lista
@@ -498,6 +590,42 @@ export default function CategoriesPage() {
                     </div>
                   </div>
                 ))}
+              </motion.div>
+            ) : categories.length === 0 && !loading ? (
+              <motion.div
+                key="onboarding"
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-14 px-6 text-center"
+              >
+                <div className="rounded-2xl bg-muted/50 p-5 mb-4">
+                  <FolderOpen className="h-10 w-10 text-muted-foreground mx-auto" />
+                </div>
+                <h3 className="font-semibold text-lg mb-1">Todavía no tenés categorías</h3>
+                <p className="max-w-md text-sm text-muted-foreground mb-5">
+                  Ordenan tus productos en el punto de venta y en la tienda online. Podés arrancar con las de tu rubro y ajustarlas después.
+                </p>
+                {canCreate && (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {starterNames.length > 0 && (
+                      <Button size="sm" onClick={() => void handleSeedStarter()} disabled={seedingStarter}>
+                        {seedingStarter ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                        Agregar las de mi rubro
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => setIsImportOpen(true)}>
+                      Elegir del catálogo
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={openCreateModal}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Crear una
+                    </Button>
+                  </div>
+                )}
+                {canCreate && starterNames.length > 0 && (
+                  <p className="mt-3 text-xs text-muted-foreground">De tu rubro: {starterNames.join(', ')}</p>
+                )}
               </motion.div>
             ) : filteredCategories.length === 0 ? (
               <motion.div
@@ -552,7 +680,7 @@ export default function CategoriesPage() {
                     } : undefined}
                     selectedIds={canBulkSelect ? selectedIds : []}
                     onSelectionChange={canBulkSelect ? setSelectedIds : undefined}
-                    getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Desconocida'}
+                    getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Sin categoría padre'}
                   />
                 </TabsContent>
 
@@ -564,7 +692,7 @@ export default function CategoriesPage() {
                     onToggleActive={canUpdate ? handleToggleActive : undefined}
                     selectedIds={canBulkSelect ? selectedIds : []}
                     onSelectionChange={canBulkSelect ? setSelectedIds : undefined}
-                    getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Desconocida'}
+                    getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Sin categoría padre'}
                     onAddChild={canCreate ? (parentId) => {
                       setEditingCategory(undefined)
                       setInitialParentId(parentId)
@@ -575,7 +703,7 @@ export default function CategoriesPage() {
 
                 <TabsContent value="tree" className="mt-0">
                   <CategoryTreeViewImproved
-                    categories={filteredCategories}
+                    categories={treeCategories}
                     onEdit={canUpdate ? handleEdit : undefined}
                     onDelete={canDelete ? handleDeleteClick : undefined}
                     onToggleActive={canUpdate ? handleToggleActive : undefined}
@@ -601,6 +729,21 @@ export default function CategoriesPage() {
           category={editingCategory}
           categories={categories}
           initialParentId={initialParentId}
+          globalCatalog={globalCatalog}
+        />
+
+        <GlobalCategoryImportDialog
+          open={isImportOpen}
+          onOpenChange={setIsImportOpen}
+          catalog={globalCatalog}
+          catalogLoading={catalogLoading}
+          localCategories={categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            parent_id: category.parent_id ?? null,
+            global_category_id: category.global_category_id ?? null,
+          }))}
+          onImported={() => void fetchCategories()}
         />
 
         <AlertDialog
@@ -609,22 +752,40 @@ export default function CategoriesPage() {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Eliminar categoría?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {!deleteDialog.isBulk && deleteDialog.id && deleteBlocker(deleteDialog.id)
+                  ? 'No se puede eliminar'
+                  : deleteDialog.isBulk ? '¿Eliminar categorías?' : '¿Eliminar categoría?'}
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 {deleteDialog.isBulk
-                  ? `Se eliminarán ${selectedIds.length} categorías. Esta acción no se puede deshacer.`
-                  : 'Esta categoría se eliminará permanentemente.'
+                  ? (() => {
+                      const blocked = selectedIds.filter((id) => deleteBlocker(id)).length
+                      const deletable = selectedIds.length - blocked
+                      return blocked > 0
+                        ? `Se eliminarán ${deletable} de ${selectedIds.length}. ${blocked} no se pueden eliminar porque tienen subcategorías o productos: movelos antes. Esta acción no se puede deshacer.`
+                        : `Se eliminarán ${selectedIds.length} categorías. Esta acción no se puede deshacer.`
+                    })()
+                  : deleteDialog.id && deleteBlocker(deleteDialog.id)
+                    ? `Esta categoría ${deleteBlocker(deleteDialog.id)}. Movelos a otra categoría antes de eliminarla.`
+                    : 'Esta categoría se eliminará permanentemente.'
                 }
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>
+                {!deleteDialog.isBulk && deleteDialog.id && deleteBlocker(deleteDialog.id) ? 'Entendido' : 'Cancelar'}
+              </AlertDialogCancel>
+              {!(deleteDialog.isBulk
+                ? selectedIds.every((id) => deleteBlocker(id))
+                : deleteDialog.id && deleteBlocker(deleteDialog.id)) && (
               <AlertDialogAction
                 onClick={handleConfirmDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 Eliminar
               </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

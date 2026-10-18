@@ -75,7 +75,7 @@ export function StoreSocialLinks({
                 variant === 'card'
                   ? 'group flex items-center gap-3 rounded-2xl border border-border/60 bg-background/80 p-3 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md'
                   : cn(
-                      'flex h-10 w-10 items-center justify-center rounded-full border border-border/70 text-muted-foreground hover:-translate-y-0.5',
+                      'flex h-11 w-11 items-center justify-center rounded-full border border-border/70 text-muted-foreground hover:-translate-y-0.5',
                       BRAND_FILL[social.platform]
                     )
               )}
@@ -100,7 +100,7 @@ export function StoreSocialLinks({
                   </span>
                 </>
               ) : (
-                <Icon className="h-4 w-4" />
+                <Icon className="h-5 w-5" />
               )}
             </a>
           </li>

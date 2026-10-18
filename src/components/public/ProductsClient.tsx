@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
@@ -22,7 +24,6 @@ import {
   Sparkles,
   Store,
   Tag,
-  MessageCircle,
   X
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -1002,7 +1003,7 @@ export function ProductsClient({
                         onClick={(e) => e.stopPropagation()}
                         className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#25D366]/10 px-2 text-xs font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:rounded-xl dark:text-[#4ADE80]"
                       >
-                        <MessageCircle className="h-3.5 w-3.5" />
+                        <WhatsAppIcon className="h-3.5 w-3.5" />
                         <span>Preguntar precio</span>
                       </a>
                     ) : (

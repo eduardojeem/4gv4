@@ -8,7 +8,8 @@ describe('home dashboard cash and unavailable data contract', () => {
   expect(source).not.toContain(' Gs.')
  })
  it('rejects database failures and shows an explicit retry instead of KPI zeroes', () => {
-  expect(source).toContain("'error' in response && response.error")
+  expect(source).toContain('fetchDashboardHomeSummary')
+  expect(source).not.toContain(".from('sales')")
   expect(source).toContain('role="alert"')
   expect(source).toContain('Reintentar')
   expect(source).not.toContain('En vivo')

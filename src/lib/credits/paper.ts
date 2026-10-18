@@ -79,6 +79,73 @@ export function writeCreditPaperFormat(format: CreditPaperFormat): void {
 }
 
 /**
+ * Ancho que la impresora realmente imprime, en milímetros.
+ *
+ * El papel de 80 mm se imprime en unos 72 mm y el de 58 mm en unos 48, pero
+ * varias impresoras imprimen menos (64 mm o 44 mm) o corren el margen. Antes el
+ * contenido ocupaba 72 mm en 80 y 52 mm en 58: llegaba al borde exacto, o lo
+ * pasaba, y en esas impresoras el texto se cortaba a los costados. Ahora el
+ * contenido va centrado dentro de un ancho seguro, y si igual se corta se puede
+ * angostar desde el selector de papel.
+ */
+export type CreditPrintableFit = 'standard' | 'narrow' | 'narrowest'
+
+export const CREDIT_PRINTABLE_FITS: CreditPrintableFit[] = ['standard', 'narrow', 'narrowest']
+
+export const CREDIT_PRINTABLE_FIT_LABELS: Record<CreditPrintableFit, string> = {
+  standard: 'Normal',
+  narrow: 'Más angosto',
+  narrowest: 'Muy angosto',
+}
+
+export const CREDIT_PRINTABLE_WIDTH_MM: Record<'58mm' | '80mm', Record<CreditPrintableFit, number>> = {
+  '80mm': { standard: 70, narrow: 66, narrowest: 62 },
+  '58mm': { standard: 46, narrow: 43, narrowest: 40 },
+}
+
+const FIT_STORAGE_KEY = 'creditReceiptFit'
+
+export function isCreditPrintableFit(value: unknown): value is CreditPrintableFit {
+  return value === 'standard' || value === 'narrow' || value === 'narrowest'
+}
+
+/** Como el papel, es del puesto de trabajo: cada impresora corta distinto. */
+export function readCreditPrintableFit(): CreditPrintableFit {
+  if (typeof window === 'undefined') return 'standard'
+  try {
+    const saved = window.localStorage.getItem(FIT_STORAGE_KEY)
+    return isCreditPrintableFit(saved) ? saved : 'standard'
+  } catch {
+    return 'standard'
+  }
+}
+
+export function writeCreditPrintableFit(fit: CreditPrintableFit): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(FIT_STORAGE_KEY, fit)
+  } catch {
+    // Se pierde la preferencia, pero la impresión en curso igual sale.
+  }
+}
+
+/**
+ * El ancho del contenido para un rollo. Con un ancho de papel fuera de lo
+ * común (por ejemplo 76 mm) se escala desde el de 80.
+ */
+export function creditPrintableWidthMm(
+  format: '58mm' | '80mm',
+  fit: CreditPrintableFit = readCreditPrintableFit(),
+  paperWidthMm: number = CREDIT_PAPER_WIDTH_MM[format],
+): number {
+  const base = CREDIT_PRINTABLE_WIDTH_MM[format][fit]
+  const nominal = CREDIT_PAPER_WIDTH_MM[format]
+  const scaled = paperWidthMm === nominal ? base : base * (paperWidthMm / nominal)
+  // Nunca más ancho que el papel menos 3 mm por lado.
+  return Math.max(30, Math.min(scaled, paperWidthMm - 6))
+}
+
+/**
  * Escala tipografica y de espaciado por formato. Un cuerpo de 7pt que se lee
  * bien en un rollo de 80mm queda diminuto en una hoja A4, y en 58mm hay que
  * ceder tamaño para que las columnas entren.
@@ -120,12 +187,14 @@ export function getCreditPaperMetrics(format: CreditPaperFormat): CreditPaperMet
 
   const angosto = format === '58mm'
   const pageWidthMm = CREDIT_PAPER_WIDTH_MM[format]
-  const marginMm = angosto ? 3 : 4
+  // Contenido centrado dentro del ancho que imprime la impresora.
+  const contentWidthMm = creditPrintableWidthMm(format)
+  const marginMm = (pageWidthMm - contentWidthMm) / 2
 
   return {
     format,
     pageWidthMm,
-    contentWidthMm: pageWidthMm - marginMm * 2,
+    contentWidthMm,
     marginMm,
     titleSize: angosto ? 8.5 : 10,
     headingSize: angosto ? 7.5 : 8.5,

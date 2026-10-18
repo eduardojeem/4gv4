@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { createElement, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -342,7 +344,7 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean, vari
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-md shadow-emerald-700/20 gap-2"
                 >
                   <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
-                    <MessageCircle className="h-4 w-4" />
+                    <WhatsAppIcon className="h-4 w-4" />
                     <span>Consultar por WhatsApp</span>
                   </a>
                 </Button>

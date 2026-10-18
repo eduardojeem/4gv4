@@ -14,6 +14,7 @@ import { Loader2, FolderOpen, FolderTree, ChevronRight, Sparkles, X } from 'luci
 import { cn } from '@/lib/utils'
 import { useGlobalCategorySuggest } from '@/hooks/useGlobalCategorySuggest'
 import type { GlobalCategorySuggestion } from '@/hooks/useGlobalCategorySuggest'
+import type { GlobalCategory } from '@/lib/categories/global-catalog'
 
 interface CategoryModalProps {
     isOpen: boolean
@@ -23,7 +24,11 @@ interface CategoryModalProps {
     categories: Category[]
     loading?: boolean
     initialParentId?: string | null
+    /** Catálogo global del rubro, para elegir o mostrar el vínculo. */
+    globalCatalog?: GlobalCategory[]
 }
+
+const NO_GLOBAL = 'none'
 
 function stringToColorClass(str: string): string {
     const colors = ['text-violet-600', 'text-blue-600', 'text-emerald-600', 'text-amber-600', 'text-rose-600', 'text-cyan-600', 'text-orange-600', 'text-pink-600', 'text-indigo-600', 'text-teal-600']
@@ -38,7 +43,8 @@ export function CategoryModal({
     onSubmit,
     category,
     categories,
-    initialParentId
+    initialParentId,
+    globalCatalog = [],
 }: CategoryModalProps) {
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
@@ -49,11 +55,19 @@ export function CategoryModal({
     // Mapeo a categoría global (opcional, mejora el marketplace)
     const [globalCategoryId, setGlobalCategoryId] = useState<string | null>(null)
     const [globalCategoryName, setGlobalCategoryName] = useState<string>('')
-    const isNewCategory = !category
 
-    // Sugerencias de categoría global (solo al crear)
+    // Sugerencias mientras no esté vinculada: al crear y también al editar.
     const { suggestions, isLoading: suggestLoading, dismiss: dismissSuggestions } =
-      useGlobalCategorySuggest(name, isNewCategory && isOpen)
+      useGlobalCategorySuggest(name, isOpen && !globalCategoryId)
+
+    // «Padre / Hijo», para elegir del catálogo sin confundir dos «Accesorios».
+    const globalOptions = useMemo(() => {
+        const byId = new Map(globalCatalog.map((item) => [item.id, item]))
+        return globalCatalog.map((item) => {
+            const parent = item.parent_id ? byId.get(item.parent_id) : undefined
+            return { id: item.id, label: parent ? `${parent.name} / ${item.name}` : item.name }
+        })
+    }, [globalCatalog])
 
     useEffect(() => {
         if (isOpen) {
@@ -70,10 +84,13 @@ export function CategoryModal({
             }
             setErrors({})
             setSubmitting(false)
-            setGlobalCategoryId(null)
-            setGlobalCategoryName('')
+            // Al editar se parte del vínculo que ya tiene. Antes se reiniciaba y se
+            // guardaba vacío: cualquier edición desvinculaba la categoría del marketplace.
+            const linkedId = category?.global_category_id ?? null
+            setGlobalCategoryId(linkedId)
+            setGlobalCategoryName(linkedId ? globalCatalog.find((item) => item.id === linkedId)?.name ?? 'Categoría del marketplace' : '')
         }
-    }, [isOpen, category, initialParentId])
+    }, [isOpen, category, initialParentId, globalCatalog])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -144,7 +161,7 @@ export function CategoryModal({
                         </div>
                         <div>
                             <DialogTitle className="text-lg">
-                                {category ? 'Editar Categoría' : 'Nueva Categoría'}
+                                {category ? 'Editar categoría' : 'Nueva categoría'}
                             </DialogTitle>
                             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                                 {category ? `Editando: ${category.name}` : 'Completá los datos para crear la categoría'}
@@ -173,7 +190,7 @@ export function CategoryModal({
                         {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
 
                         {/* Panel de sugerencias de categoría global */}
-                        {isNewCategory && !globalCategoryId && suggestions.length > 0 && (
+                        {!globalCategoryId && suggestions.length > 0 && (
                             <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-800 dark:bg-blue-950/30">
                                 <div className="mb-2 flex items-center justify-between">
                                     <p className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300">
@@ -183,7 +200,8 @@ export function CategoryModal({
                                     <button
                                         type="button"
                                         onClick={dismissSuggestions}
-                                        className="text-blue-400 hover:text-blue-600"
+                                        className="text-blue-500 hover:text-blue-700"
+                                        aria-label="Ocultar sugerencias"
                                     >
                                         <X className="h-3.5 w-3.5" />
                                     </button>
@@ -210,14 +228,14 @@ export function CategoryModal({
                                         </button>
                                     ))}
                                 </div>
-                                <p className="mt-1.5 text-[10px] text-blue-500/70 dark:text-blue-400/60">
+                                <p className="mt-1.5 text-xs text-blue-700/80 dark:text-blue-300/80">
                                     Asociar tu categoría al marketplace mejora la visibilidad de tus productos.
                                 </p>
                             </div>
                         )}
 
                         {/* Categoría global seleccionada */}
-                        {isNewCategory && globalCategoryId && (
+                        {globalCategoryId && (
                             <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/30">
                                 <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                                     <Sparkles className="h-3.5 w-3.5" />
@@ -227,20 +245,55 @@ export function CategoryModal({
                                 <button
                                     type="button"
                                     onClick={handleClearGlobal}
-                                    className="text-emerald-400 hover:text-emerald-600"
+                                    className="text-emerald-500 hover:text-emerald-700"
+                                    aria-label="Quitar el vínculo con el marketplace"
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
                             </div>
                         )}
 
-                        {isNewCategory && suggestLoading && (
-                            <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {!globalCategoryId && suggestLoading && (
+                            <p className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Loader2 className="h-3 w-3 animate-spin" />
                                 Buscando similitudes en el marketplace…
                             </p>
                         )}
                     </div>
+
+                    {/* Elegir a mano del catálogo, al crear o al editar */}
+                    {globalOptions.length > 0 && (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="cat-global">Categoría del marketplace</Label>
+                            <Select
+                                value={globalCategoryId ?? NO_GLOBAL}
+                                onValueChange={(value) => {
+                                    if (value === NO_GLOBAL) {
+                                        handleClearGlobal()
+                                        return
+                                    }
+                                    setGlobalCategoryId(value)
+                                    setGlobalCategoryName(globalCatalog.find((item) => item.id === value)?.name ?? '')
+                                    dismissSuggestions()
+                                }}
+                            >
+                                <SelectTrigger id="cat-global">
+                                    <SelectValue placeholder="Sin vincular" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                    <SelectItem value={NO_GLOBAL}>
+                                        <span className="text-muted-foreground">Sin vincular</span>
+                                    </SelectItem>
+                                    {globalOptions.map((option) => (
+                                        <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Agrupa tus productos con los de otras tiendas en el marketplace. No cambia el nombre de tu categoría.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Description */}
                     <div className="space-y-1.5">
@@ -252,7 +305,7 @@ export function CategoryModal({
                                 setDescription(e.target.value)
                                 if (errors.description) setErrors({ ...errors, description: '' })
                             }}
-                            placeholder="Describe brevemente esta categoría..."
+                            placeholder="Describí brevemente esta categoría…"
                             className={cn("resize-none", errors.description ? 'border-red-500' : '')}
                             rows={2}
                         />
@@ -264,15 +317,15 @@ export function CategoryModal({
                         <div className="space-y-1.5">
                             <Label className="flex items-center gap-1.5">
                                 <FolderTree className="h-3.5 w-3.5 text-muted-foreground" />
-                                Categoría Padre
+                                Categoría padre
                             </Label>
                             <Select value={parentId} onValueChange={setParentId}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Ninguna (Raíz)" />
+                                    <SelectValue placeholder="Ninguna (principal)" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">
-                                        <span className="text-muted-foreground">Ninguna (Raíz)</span>
+                                        <span className="text-muted-foreground">Ninguna (principal)</span>
                                     </SelectItem>
                                     {availableParents.map((c) => (
                                         <SelectItem key={c.id} value={c.id}>
@@ -315,7 +368,7 @@ export function CategoryModal({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {category ? 'Guardar Cambios' : 'Crear Categoría'}
+                            {category ? 'Guardar cambios' : 'Crear categoría'}
                         </Button>
                     </DialogFooter>
                 </form>

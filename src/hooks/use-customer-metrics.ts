@@ -1,14 +1,36 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { completeDashboardQuery } from '@/lib/dashboard/complete-query'
+import { getCachedDashboardSummary } from '@/lib/dashboard/summary-cache'
+import { useAuth } from '@/contexts/auth-context'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
 import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
 import { fetchCustomerSpend } from '@/lib/customers/customer-spend-client'
-import { isCountableSale } from '@/lib/customers/customer-spend'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+
+type MonthlySummaryRow = { year: number; month_index: number; revenue: number; sale_count: number }
+
+/** Validate before caching: malformed aggregates are unavailable, never zero. */
+function parseMonthlySummary(value: unknown): MonthlySummaryRow[] {
+  if (!Array.isArray(value)) throw new Error('Formato de resumen mensual inválido.')
+  const seen = new Set<string>()
+  return value.map(item => {
+    if (!item || typeof item !== 'object') throw new Error('Fila mensual inválida.')
+    const row = item as Record<string, unknown>
+    if (typeof row.year !== 'number' || !Number.isInteger(row.year) || row.year < 1 || row.year > 9999
+      || typeof row.month_index !== 'number' || !Number.isInteger(row.month_index) || row.month_index < 0 || row.month_index > 11
+      || typeof row.revenue !== 'number' || !Number.isFinite(row.revenue)
+      || typeof row.sale_count !== 'number' || !Number.isSafeInteger(row.sale_count) || row.sale_count < 0) {
+      throw new Error('Campos del resumen mensual inválidos.')
+    }
+    const key = `${row.year}-${row.month_index}`
+    if (seen.has(key)) throw new Error('Mes duplicado en el resumen mensual.')
+    seen.add(key)
+    return { year: row.year, month_index: row.month_index, revenue: row.revenue, sale_count: row.sale_count }
+  })
+}
 
 /** Se deriva del tipo de la agregacion para que no puedan divergir. */
 export type CustomerMetrics = CustomerSpendMetrics
@@ -52,7 +74,9 @@ const EMPTY_METRICS: Record<string, CustomerMetrics> = {}
 
 // Métricas agregadas para AnalyticsDashboard (compatibles)
 export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
+  const { user } = useAuth()
   const activeOrganization = useOptionalActiveOrganization()
+  const authorizationKey = JSON.stringify([user?.role, [...(user?.permissions ?? [])].sort(), activeOrganization?.organization?.role, user?.organization?.role])
   const organizationId = activeOrganization?.organization?.id ?? null
   const { scope, currentScope, organizationId: scopeOrganizationId } = useTenantScope()
   const timeRange = options?.timeRange || '6months'
@@ -83,7 +107,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   // Ingresos reales por mes desde la tabla `sales` (clave "YYYY-M").
   // Una consulta fallida deja la serie no disponible; nunca reparte totales históricos.
   const months = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
-  const monthlyKey = `${scope}:${organizationId ?? ''}:${months}`
+  const monthlyKey = `${scope}:${organizationId ?? ''}:${months}:${authorizationKey}`
   const [loadedMonthlyKey, setLoadedMonthlyKey] = useState<string | null>(null)
   const [realMonthly, setRealMonthly] = useState<Map<string, { revenue: number; count: number }> | null>(null)
 
@@ -110,35 +134,22 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         start.setMonth(start.getMonth() - (months - 1))
         start.setHours(0, 0, 0, 0)
 
-        const supabase = createClient()
-        const { data, error } = await completeDashboardQuery(supabase
-          .from('sales')
-          .select('id, total_amount, created_at, status', { count: 'exact' })
-          .eq('organization_id', organizationId)
-          .gte('created_at', start.toISOString())
-          .lte('created_at', end.toISOString()), controller.signal)
-
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const cacheKey = JSON.stringify(['customer-monthly',scope,organizationId,'assigned-active-and-legacy-branchless',months,start.toISOString(),end.toISOString().slice(0,10),timeZone,authorizationKey])
+        const rows = await getCachedDashboardSummary<MonthlySummaryRow[]>(cacheKey, async () => {
+          const { data, error } = await createClient().rpc('dashboard_customer_monthly_summary', {
+            p_organization_id: organizationId,
+            p_start: start.toISOString(),
+            p_end: end.toISOString(),
+            p_time_zone: timeZone,
+          }).abortSignal(controller.signal)
+          if (error || !data) throw new Error('No se pudieron cargar las ventas mensuales.')
+          return parseMonthlySummary(data)
+        }, { signal: controller.signal })
         if (!isCurrent()) return
-        if (error || !data) {
-          setRealMonthly(null)
-          setMonthlyError('No se pudieron cargar las ventas mensuales.')
-          setMonthlyLoading(false)
-          return
-        }
-
         const map = new Map<string, { revenue: number; count: number }>()
-        for (const row of data) {
-          const rowObj = row as { created_at?: string | null; status?: string | null; total_amount?: number | string | null }
-          const created = rowObj.created_at
-          if (!created) continue
-          // Una venta anulada no es ingreso del mes.
-          if (!isCountableSale(rowObj.status)) continue
-          const d = new Date(created)
-          const key = `${d.getFullYear()}-${d.getMonth()}`
-          const cur = map.get(key) || { revenue: 0, count: 0 }
-          cur.revenue += Number(rowObj.total_amount) || 0
-          cur.count += 1
-          map.set(key, cur)
+        for (const row of rows) {
+          map.set(`${row.year}-${row.month_index}`, { revenue: Number(row.revenue), count: Number(row.sale_count) })
         }
         setLoadedMonthlyKey(monthlyKey)
         setRealMonthly(map)
@@ -151,7 +162,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     return () => {
       controller.abort()
     }
-  }, [months, organizationId, monthlyKey, scope, currentScope, scopeOrganizationId])
+  }, [months, organizationId, monthlyKey, scope, currentScope, scopeOrganizationId, authorizationKey])
 
   const monthlyData = useMemo(() => {
     if (!realMonthly || loadedMonthlyKey !== monthlyKey) return []

@@ -168,19 +168,23 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const categoryIds = activeFiltered.map((category) => category.id)
     const productCounts = new Map<string, number>()
 
-    if (categoryIds.length > 0) {
-      const { data: productRows, error: productsError } = await supabase
-        .from('products')
-        .select('category_id')
-        .eq('organization_id', organization.id)
-        .in('category_id', categoryIds)
-
-      if (productsError) throw productsError
-
-      for (const product of productRows ?? []) {
-        if (!product.category_id) continue
-        productCounts.set(product.category_id, (productCounts.get(product.category_id) ?? 0) + 1)
-      }
+    // Un conteo por categoría, en tandas. Antes se traían las filas de todos los
+    // productos y la base devuelve como mucho 1000: con más productos los
+    // conteos (y la tarjeta «Con productos») quedaban cortos.
+    const BATCH = 20
+    for (let start = 0; start < categoryIds.length; start += BATCH) {
+      const batch = categoryIds.slice(start, start + BATCH)
+      const counts = await Promise.all(batch.map((categoryId) =>
+        supabase
+          .from('products')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', organization.id)
+          .eq('category_id', categoryId)
+      ))
+      counts.forEach(({ count, error: countError }, index) => {
+        if (countError) throw countError
+        productCounts.set(batch[index], count ?? 0)
+      })
     }
 
     return NextResponse.json({

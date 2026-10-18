@@ -1,6 +1,7 @@
 import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId } from '@/lib/utils'
+import { registerThermalPrintDocument, type ThermalPrintSection } from './thermal-print'
 import {
   getCreditPaperMetrics,
   type CreditPaperFormat,
@@ -397,6 +398,34 @@ export async function createCreditHistoryTicket(
   })
   dibujar(doc as unknown as Doc, autoTable as never, input, m, ahora)
 
+  const sections: ThermalPrintSection[] = [
+    { title: 'CLIENTE', rows: [['Cliente', input.customerName], ['Código', input.customerCode || ''], ['Teléfono', input.customerPhone || '']].filter(([, value]) => value) },
+    { title: 'RESUMEN', rows: [
+      ['TOTAL FINANCIADO', formatCurrency(totalFinanciado(input.credits))],
+      ['TOTAL PAGADO', formatCurrency(input.totalPaid)],
+      ['SALDO PENDIENTE', formatCurrency(input.totalDebt)],
+      ['Créditos vigentes', String(vigentes(input.credits))],
+    ] },
+  ]
+  const next = findNextDueInstallment(input.credits)
+  if (next) sections[1].rows.push(['Próximo vencimiento', `${formatDateOnlyDisplay(next.dueDate)} ${formatCurrency(next.amount)}`])
+  for (const credit of input.credits) {
+    const code = credit.creditCode || formatCreditId(credit.id)
+    sections.push({ title: code, rows: [
+      ['Estado', statusLabel(credit.status)], ['Total', formatCurrency(financiadoDe(credit))],
+      ['Cuotas', String(credit.termMonths)], ['Saldo', formatCurrency(credit.remainingBalance ?? 0)],
+    ] })
+    if (credit.installments?.length) sections.push({
+      title: `Cuotas ${code}`, columns: ['N°', 'Vence', 'Monto', 'Pagado', 'Estado'],
+      rows: credit.installments.map(inst => [String(inst.number), formatDateOnlyDisplay(inst.dueDate), formatCurrency(inst.amount), formatCurrency(inst.amountPaid), statusLabel(inst.status)]),
+    })
+  }
+  registerThermalPrintDocument(doc, {
+    title: 'ESTADO DE CUENTA', issuer: [input.companyName, input.companyRuc ? `RUC ${input.companyRuc}` : '', input.companyPhone || '', input.companyAddress || ''],
+    metadata: [ahora.toLocaleString(getDisplayLocale())], sections,
+    contentWidthMm: m.contentWidthMm, fontSizePt: m.bodySize,
+    footer: 'Documento informativo. Consérvelo como referencia de su estado de cuenta.',
+  })
   return doc
 }
 

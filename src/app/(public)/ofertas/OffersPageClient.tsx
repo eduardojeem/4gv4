@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { AppImage as Image } from '@/components/ui/app-image'
@@ -12,7 +14,6 @@ import {
   ChevronRight,
   Eye,
   Flame,
-  MessageCircle,
   Package,
   Search,
   ShoppingCart,
@@ -464,7 +465,7 @@ function OfferCard({
                   suppressHydrationWarning
                   aria-label={`Consultar por ${offer.name} en WhatsApp`}
                 >
-                  <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <WhatsAppIcon aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   Consultar
                 </a>
               </Button>
@@ -953,7 +954,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <WhatsAppIcon aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     Consultar por WhatsApp
                   </a>
                 </Button>

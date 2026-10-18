@@ -1,8 +1,10 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Wrench, CheckCircle, Tag, Clock, ExternalLink, MessageCircle, ArrowRight, Sparkles } from 'lucide-react'
+import { Wrench, CheckCircle, Tag, Clock, ExternalLink, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { iconMap } from '@/lib/constants/brand-theme'
 import type { Service } from '@/types/website-settings'
@@ -233,7 +235,7 @@ export function ServicesGrid({ services }: ServicesGridProps) {
                         </>
                       ) : (
                         <>
-                          <MessageCircle className="h-4 w-4 text-emerald-600 group-hover:text-primary-foreground transition-colors" />
+                          <WhatsAppIcon className="h-4 w-4 text-emerald-600 group-hover:text-primary-foreground transition-colors" />
                           <span>Consultar por WhatsApp</span>
                         </>
                       )}

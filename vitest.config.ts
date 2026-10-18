@@ -5,6 +5,14 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  // Opciones de compilación fijas, iguales a las de tsconfig.json (las únicas
+  // que usa esbuild). Sin esto Vite busca el tsconfig de cada archivo, y los
+  // tests que importan código de mobile/ caen en mobile/tsconfig.json, que
+  // extiende expo/tsconfig.base: en CI no se instalan las dependencias de la
+  // app y el tsconfig no se puede resolver.
+  esbuild: {
+    tsconfigRaw: JSON.stringify({ compilerOptions: { target: 'ES2020', jsx: 'react-jsx' } }),
+  },
   test: {
     globals: true,
     environment: 'jsdom',

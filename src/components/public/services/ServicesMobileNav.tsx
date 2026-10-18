@@ -1,8 +1,10 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarCheck2, Home, MapPin, MessageCircle, Scissors } from 'lucide-react'
+import { CalendarCheck2, Home, MapPin, Scissors } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
@@ -82,7 +84,7 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
       )}
       {whatsappHref ? (
         <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className={TAB}>
-          <MessageCircle aria-hidden="true" className="h-5 w-5 text-[#25D366]" />
+          <WhatsAppIcon aria-hidden="true" className="h-5 w-5 text-[#25D366]" />
           WhatsApp
         </a>
       ) : (

@@ -1,3 +1,4 @@
+import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
 import { NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -136,6 +137,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const stockMaxParam = searchParams.get('stock_max')
     const stockMin = stockMinParam === null ? null : Number(stockMinParam)
     const stockMax = stockMaxParam === null ? null : Number(stockMaxParam)
+    const offersOnly = searchParams.get('offers') === 'true'
     const hasImage = searchParams.get('has_image') === 'true'
     const createdFrom = searchParams.get('created_from')
     const createdTo = searchParams.get('created_to')
@@ -250,6 +252,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       queryBuilder = queryBuilder.eq('featured', featured === 'true')
     }
 
+    if (offersOnly) queryBuilder = queryBuilder.eq('has_offer', true).gt('offer_price', 0)
     if (hasImage) queryBuilder = queryBuilder.not('image_url', 'is', null)
     if (createdFrom) queryBuilder = queryBuilder.gte('created_at', createdFrom)
     if (createdTo) queryBuilder = queryBuilder.lt('created_at', createdTo)
@@ -267,7 +270,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const from = (page - 1) * perPage
     const to = from + perPage - 1
     const needsInMemoryPagination =
-      stockStatus !== 'all' ||
+      offersOnly || stockStatus !== 'all' ||
       stockMin !== null ||
       stockMax !== null ||
       catalogKind !== null
@@ -384,13 +387,13 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       if (stockMax !== null && Number.isFinite(stockMax) && stock > stockMax) return false
       return true
     })
-    const catalogFilteredProducts = filterProductsByCatalogKind(stockFilteredProducts, catalogKind)
+    const catalogFilteredProducts = filterProductsByCatalogKind(stockFilteredProducts, catalogKind).filter(product => !offersOnly || hasActiveCatalogOffer(product))
     const filteredProducts = needsInMemoryPagination
       ? catalogFilteredProducts.slice(from, to + 1)
       : catalogFilteredProducts
     const filteredTotal = needsInMemoryPagination ? catalogFilteredProducts.length : (count || 0)
     // Se alcanzo el tope del barrido: lo listado y el total son parciales.
-    const truncated = needsInMemoryPagination && baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP
+    const truncated = needsInMemoryPagination && (baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP || (count ?? 0) > baseProducts.length)
 
     // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
     // tenga el permiso específico products.read_cost.

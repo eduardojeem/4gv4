@@ -37,13 +37,14 @@ interface PosDashboardHeaderProps {
   dateRange: DateRange | undefined
   setDateRange: (range: DateRange | undefined) => void
   onExport: () => void
+  exportDisabled?: boolean
   activeViewTab: PosDashboardViewTab
   setActiveViewTab: (tab: PosDashboardViewTab) => void
   /** Solo las pestañas cuyos modulos tiene la organizacion. */
   availableTabs: readonly PosDashboardTabDefinition[]
 }
 
-export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeViewTab, setActiveViewTab, availableTabs }: PosDashboardHeaderProps) {
+export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeViewTab, setActiveViewTab, availableTabs, exportDisabled }: PosDashboardHeaderProps) {
   // El encabezado decia «POS & Taller» y hablaba de reparaciones tambien en
   // organizaciones sin taller.
   const tieneTaller = availableTabs.some((tab) => tab.value === 'repairs')
@@ -161,7 +162,7 @@ export function PosDashboardHeader({ dateRange, setDateRange, onExport, activeVi
           className="h-9 font-semibold text-xs border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 transition-all shadow-2xs"
         />
 
-        <Button variant="outline" size="sm" className="h-9 gap-2 text-xs" onClick={onExport}>
+        <Button variant="outline" size="sm" className="h-9 gap-2 text-xs" onClick={onExport} disabled={exportDisabled}>
           <Download className="h-3.5 w-3.5" />
           Exportar CSV
         </Button>

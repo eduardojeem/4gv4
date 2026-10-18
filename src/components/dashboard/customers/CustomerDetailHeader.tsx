@@ -27,8 +27,10 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 
 import { Customer } from "@/hooks/use-customer-state"
-import { formatCurrency } from "@/lib/currency"
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from "@/lib/currency"
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { toPdfText } from '@/lib/credits/paper'
 
 interface CustomerDetailHeaderProps {
   customer: Customer
@@ -58,6 +60,9 @@ export function CustomerDetailHeader({
   // «Nueva Reparación» solo con el modulo de taller.
   const { effectiveModules } = useSubscriptionStatus()
   const tieneTaller = effectiveModules.includes('repairs')
+  // El nombre del comercio sale de la configuración: antes decía «4G» fijo.
+  const { settings } = useSharedSettings()
+  const companyName = settings.companyName?.trim() || ''
 
 
   // Atajo de teclado ESC para volver rápidamente a la lista de clientes
@@ -143,22 +148,24 @@ export function CustomerDetailHeader({
   const handleWhatsApp = () => {
     if (!customer.phone) return
     const phone = customer.phone.replace(/\D/g, '')
-    const msg = `Hola ${customer.name}, te contactamos de 4G.`
+    const msg = companyName ? `Hola ${customer.name}, te contactamos de ${companyName}.` : `Hola ${customer.name}.`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
   const exportToPDF = () => {
+    // Sin espacios duros de Intl: jsPDF los imprime como «?».
+    const formatCurrency = (value: number) => toPdfText(formatCurrencyBase(value))
     const doc = new jsPDF()
     const pageW = doc.internal.pageSize.getWidth()
 
-    doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(37, 99, 235)
-    doc.text('4G - PUNTO DE VENTA', pageW / 2, 22, { align: 'center' })
+    doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(0)
+    doc.text(companyName || 'Reporte de cliente', pageW / 2, 22, { align: 'center' })
 
     doc.setFontSize(14); doc.setTextColor(0)
     doc.text('Reporte de Cliente', pageW / 2, 32, { align: 'center' })
 
     doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(100)
-    doc.text(`Generado el ${new Date().toLocaleString('es-PY')}`, pageW / 2, 40, { align: 'center' })
+    doc.text(toPdfText(`Generado el ${new Date().toLocaleString(getDisplayLocale())}`), pageW / 2, 40, { align: 'center' })
 
     doc.setTextColor(0)
 
@@ -179,7 +186,7 @@ export function CustomerDetailHeader({
         ['Deuda Pendiente', formatCurrency(stats?.pendingDebt ?? customer.pending_amount ?? 0)],
       ],
       theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      headStyles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: 'bold' },
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
       margin: { left: 14, right: 14 }
     })

@@ -1,8 +1,10 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { MessageCircle, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -130,7 +132,8 @@ export function WhatsAppFloatButton({
             onBlur={()   => !hovered && setShowTooltip(false)}
             className={cn(
               'flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all',
-              'bg-[#25D366] text-white hover:bg-[#20BA5A]',
+              'border border-white/20 bg-[#128C7E] text-white hover:bg-[#075E54]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128C7E] focus-visible:ring-offset-2',
               'lg:h-16 lg:w-16',
               'relative overflow-hidden'
             )}
@@ -142,7 +145,7 @@ export function WhatsAppFloatButton({
             )}
             
             {/* Icon */}
-            <MessageCircle className="h-7 w-7 lg:h-8 lg:w-8 relative z-10" />
+            <WhatsAppIcon className="h-7 w-7 lg:h-8 lg:w-8 relative z-10" />
           </motion.button>
         </motion.div>
       )}

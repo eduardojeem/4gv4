@@ -1,12 +1,13 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   ArrowRight,
-  Briefcase, MessageCircle,
-  Package,
+  Briefcase, Package,
   Search, ShoppingBag,
   Sparkles, Truck,
   Wrench, Clock
@@ -233,7 +234,7 @@ function ClassicHeroSection({
               <Button asChild size="lg" className="rounded-xl font-bold shadow-sm gap-2">
                 {primaryAction.kind === 'contact' ? (
                   <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
-                    <MessageCircle className="h-4 w-4" />
+                    <WhatsAppIcon className="h-4 w-4" />
                     {heroContent.ctaPrimaryText || 'Solicitar información'}
                   </a>
                 ) : (
@@ -255,7 +256,7 @@ function ClassicHeroSection({
                   target={phoneClean ? '_blank' : undefined}
                   rel={phoneClean ? 'noopener noreferrer' : undefined}
                 >
-                  <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <WhatsAppIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   {heroContent.ctaSecondaryText || 'Contactar por WhatsApp'}
                 </a>
               </Button>}

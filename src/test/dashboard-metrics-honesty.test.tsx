@@ -4,6 +4,7 @@ import type { Customer } from '@/hooks/use-customer-state'
 type RepairFixture = { id: string; createdAt: string; dbStatus: string; finalCost?: number; estimatedCost?: number; completedAt?: string; technician?: { name: string } }
 const state = vi.hoisted(() => ({ repairs: [] as RepairFixture[], response: { data: null, error: { message: 'offline' } } }))
 const tenant = vi.hoisted(() => ({ scope: 'org', currentScope: { current: 'org' }, organizationId: 'org' }))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: { id: 'user', role: 'admin' } }) }))
 vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => tenant }))
 vi.mock('@/contexts/RepairsContext', () => ({ useRepairs: () => ({ repairs: state.repairs }) }))
 vi.mock('@/contexts/ActiveOrganizationContext', () => ({ useOptionalActiveOrganization: () => ({ organization: { id: 'org' } }) }))

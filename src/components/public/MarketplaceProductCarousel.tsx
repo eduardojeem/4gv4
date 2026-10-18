@@ -1,9 +1,11 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight, MessageCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
@@ -381,7 +383,7 @@ export function MarketplaceProductCarousel({
                           onClick={(e) => e.stopPropagation()}
                           className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#075E54] transition-colors hover:bg-[#075E54] hover:text-white sm:h-8 sm:rounded-xl sm:text-xs dark:text-[#4ADE80]"
                         >
-                          <MessageCircle className="h-3.5 w-3.5" />
+                          <WhatsAppIcon className="h-3.5 w-3.5" />
                           <span>Preguntar</span>
                         </a>
                       ) : (
