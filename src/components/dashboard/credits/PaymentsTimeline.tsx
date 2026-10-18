@@ -6,14 +6,7 @@ import { Search, CheckCircle, Receipt, Printer } from 'lucide-react'
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
-import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
-import { printPdfDocument } from '@/lib/credits/print-receipt'
-import { useCreditPrinting } from '@/hooks/use-credit-printing'
-import { toast } from 'sonner'
-import { createSnapshotReceiptPdf } from '@/lib/credits/receipt-snapshot'
-import { collectionResultSchema } from '@/lib/credits/collection-contract'
-import { historicalCollectionReceipt } from '@/lib/credits/historical-receipt'
-import { createGlobalPaymentReceiptPdf } from '@/lib/credits/global-payment-receipt'
+import { useReprintCreditPayment } from '@/hooks/use-reprint-credit-payment'
 
 const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
   cash:     { label: 'Efectivo',     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   dot: 'bg-green-500' },
@@ -67,7 +60,6 @@ export function PaymentsTimeline({
   isPending,
   onExportCSV,
 }: PaymentsTimelineProps) {
-  const { format, issuer } = useCreditPrinting()
   const [search, setSearch] = useState('')
 
   const filtered = search.trim()
@@ -86,37 +78,10 @@ export function PaymentsTimeline({
     return acc
   }, {})
 
-  const printPaymentReceipt = async (payment: PaymentRow) => {
-    try {
-      const response = await fetch('/api/credits/receipts?paymentId=' + encodeURIComponent(payment.id), { cache: 'no-store' })
-      const body = await response.json()
-      if (!response.ok || !body.success) throw new Error(body.error || 'No se pudo recuperar el comprobante guardado.')
-      const credit = creditById[payment.credit_id]
-      let result
-      if (body.collection) {
-        const collection = collectionResultSchema.parse(body.collection)
-        result = collection.receipt
-          ? await createSnapshotReceiptPdf(collection.receipt, format)
-          : await createGlobalPaymentReceiptPdf({ ...historicalCollectionReceipt(collection, credit?.customer_name || 'Cliente'), ...issuer }, { format })
-      } else {
-        result = await createCreditPaymentReceiptPdf({
-          paymentId: payment.id, receiptNumber: 'HIST-' + payment.id.slice(0, 10).toUpperCase(),
-          paymentDate: payment.created_at, paymentAmount: Number(payment.amount), paymentMethod: payment.payment_method,
-          notes: payment.notes, customerName: credit?.customer_name || 'Cliente', creditId: payment.credit_id,
-          historicalNote: 'Constancia de pago histórico. No se conserva el comprobante original ni el saldo a esa fecha. Datos de identificación actuales.',
-          ...issuer,
-        }, { format })
-      }
-
-      await printPdfDocument(result.doc)
-    } catch (error) {
-      // El pago YA quedo registrado en la base: el mensaje tiene que dejarlo
-      // claro para que nadie vuelva a cobrarlo creyendo que fallo el cobro.
-      toast.error('No se pudo imprimir el comprobante', {
-        description: `El pago quedó registrado. ${error instanceof Error ? error.message : 'Volvé a intentar desde el historial.'}`,
-      })
-    }
-  }
+  // La misma reimpresión que usa la ficha del cliente.
+  const reprintPayment = useReprintCreditPayment()
+  const printPaymentReceipt = (payment: PaymentRow) =>
+    reprintPayment(payment, creditById[payment.credit_id]?.customer_name || 'Cliente')
 
   return (
     <>

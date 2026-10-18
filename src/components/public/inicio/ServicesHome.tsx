@@ -1,10 +1,12 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowRight, CalendarCheck2, Clock, MapPin, MessageCircle, Navigation, Phone } from 'lucide-react'
+import { ArrowRight, CalendarCheck2, Clock, MapPin, Navigation, Phone } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/currency'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -207,7 +209,7 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
                   : 'inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:focus-visible:ring-white'
               }
             >
-              <MessageCircle aria-hidden="true" className="h-4 w-4" />
+              <WhatsAppIcon aria-hidden="true" className="h-4 w-4" />
               {bookingHref ? heroContent.ctaSecondaryText || 'Consultar' : 'Pedir turno por WhatsApp'}
             </a>
           </div>
@@ -540,7 +542,7 @@ export function ServicesLocation({ companyInfo, bookingHref }: { companyInfo: Co
             )}
             {whatsapp && (
               <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full border px-5 text-sm font-semibold transition hover:bg-muted">
-                <MessageCircle aria-hidden="true" className="h-4 w-4 text-[#25D366]" />
+                <WhatsAppIcon aria-hidden="true" className="h-4 w-4 text-[#25D366]" />
                 WhatsApp
               </a>
             )}

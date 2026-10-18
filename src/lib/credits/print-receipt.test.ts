@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { downloadPdfDocument, printPdfDocument } from './print-receipt'
+import { registerThermalPrintDocument } from './thermal-print'
 
 /**
  * El boton "Imprimir" no hacia nada: ambas pantallas abrian el PDF con
@@ -24,7 +25,7 @@ function autoResolveIframes() {
   vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     const el = original(tag)
     if (tag === 'iframe') {
-      Object.defineProperty(el, 'src', {
+      for (const property of ['src', 'srcdoc']) Object.defineProperty(el, property, {
         set() { queueMicrotask(() => el.onload?.(new Event('load'))) },
         get() { return '' },
         configurable: true,
@@ -39,7 +40,21 @@ function autoResolveIframes() {
 }
 
 describe('printPdfDocument', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => { vi.restoreAllMocks(); document.querySelectorAll('iframe').forEach(frame => frame.remove()) })
+
+  it('prints registered tickets once with native flow, bypassing PDF actual-size cropping', async () => {
+    autoResolveIframes()
+    const doc = fakeDoc()
+    registerThermalPrintDocument(doc, { title: 'PAGO', issuer: [], metadata: [], sections: [],
+      contentWidthMm: 70, fontSizePt: 7.5, footer: 'Final completo' })
+    await printPdfDocument(doc)
+    const frame = document.querySelector('iframe')!
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-modals')
+    expect(frame.style.width).not.toBe('0px')
+    expect((frame.contentWindow!.print as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1)
+    expect((doc as { autoPrint: ReturnType<typeof vi.fn> }).autoPrint).not.toHaveBeenCalled()
+    expect((doc as { output: ReturnType<typeof vi.fn> }).output).not.toHaveBeenCalled()
+  })
 
   it('no abre ventanas: entrega por iframe', async () => {
     autoResolveIframes()

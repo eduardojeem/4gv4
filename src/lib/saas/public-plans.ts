@@ -28,6 +28,11 @@ const getCachedPublicSubscriptionPlans = unstable_cache(
   },
 )
 
+/** Same cached source, but preserves failure for HTTP callers that must distinguish 503 from empty. */
+export async function getPublicSubscriptionPlansStrict() {
+  return getCachedPublicSubscriptionPlans()
+}
+
 export async function getPublicSubscriptionPlans() {
   try {
     return await getCachedPublicSubscriptionPlans()

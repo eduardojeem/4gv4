@@ -1,11 +1,14 @@
 ﻿'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
+
 import { useState, useSyncExternalStore } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowRight, MessageCircle, Search, Truck, Wrench } from 'lucide-react'
+import { ArrowRight, Search, Truck, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
@@ -160,7 +163,7 @@ export function HeroCampaign({
                   rel={phoneClean ? 'noopener noreferrer' : undefined}
                   className="inline-flex items-center gap-2"
                 >
-                  <MessageCircle aria-hidden="true" className="h-4 w-4 text-[#25D366]" />
+                  <WhatsAppIcon aria-hidden="true" className="h-4 w-4 text-[#25D366]" />
                   <span>{heroContent.ctaSecondaryText || 'Contactar por WhatsApp'}</span>
                 </a>
               </Button>}

@@ -18,6 +18,8 @@ export type Brand = BrandRow & {
 interface BrandFilters {
   search?: string
   isActive?: boolean
+  /** Solo las vinculadas al catálogo, o solo las propias. */
+  linked?: 'official' | 'own'
   page?: number
   limit?: number
   orderBy?: keyof BrandRow
@@ -87,6 +89,10 @@ export function useBrands() {
         params.set('search', active.search.trim())
       }
 
+      if (active.linked) {
+        params.set('linked', active.linked)
+      }
+
       const page = active.page || 1
       const limit = active.limit || 12
       params.set('page', String(page))
@@ -102,9 +108,10 @@ export function useBrands() {
         throw new Error(result.error || 'No se pudieron cargar las marcas')
       }
 
-      const brandsWithStats = ((result.data || []) as BrandRow[]).map(brand => ({
+      // El conteo viene del servidor; antes se completaba en 0 acá.
+      const brandsWithStats = ((result.data || []) as Brand[]).map(brand => ({
         ...brand,
-        stats: { product_count: 0 }
+        stats: { product_count: brand.stats?.product_count ?? 0 }
       }))
 
       setBrands(brandsWithStats)

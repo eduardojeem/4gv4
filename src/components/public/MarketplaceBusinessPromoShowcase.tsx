@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState, useMemo } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
@@ -10,7 +12,6 @@ import {
   ChevronRight,
   Eye,
   MapPin,
-  MessageCircle,
   Package,
   ShieldCheck, Store,
   Tag
@@ -271,7 +272,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-300 hover:text-white transition-colors py-1"
                   >
-                    <MessageCircle className="h-4 w-4 text-emerald-400" />
+                    <WhatsAppIcon className="h-4 w-4 text-emerald-400" />
                     <span>Consultar por WhatsApp</span>
                   </a>
                 )}

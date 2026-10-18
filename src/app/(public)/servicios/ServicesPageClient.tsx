@@ -1,10 +1,11 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState, useMemo } from 'react'
 import {
   CheckCircle2,
   Clock3,
-  MessageCircle,
   ShieldCheck,
   Sparkles,
   Wrench,
@@ -157,7 +158,7 @@ export function ServicesPageClient({ services, companyName, whatsapp, sectionTex
             {[
               { icon: ShieldCheck, title: 'Atención Confiable', text: 'Garantía y asesoramiento técnico profesional.' },
               { icon: Clock3, title: 'Presupuestos Transparentes', text: 'Precios claros, sin costos ocultos.' },
-              { icon: MessageCircle, title: 'Consulta Directa', text: 'Respuesta inmediata por WhatsApp.' },
+              { icon: WhatsAppIcon, title: 'Consulta Directa', text: 'Respuesta inmediata por WhatsApp.' },
             ].map(({ icon: Icon, title, text }) => (
               <div key={title} className="flex gap-3.5 rounded-2xl border border-border/60 bg-card p-4 shadow-xs backdrop-blur">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -389,7 +390,7 @@ export function ServicesPageClient({ services, companyName, whatsapp, sectionTex
                           className="h-11 w-full gap-2 rounded-xl font-bold transition-all border-primary/30 hover:border-primary hover:bg-primary hover:text-primary-foreground shadow-xs cursor-pointer"
                           onClick={() => handleContactService(service.title)}
                         >
-                          <MessageCircle className="h-4 w-4 text-emerald-600 group-hover:text-primary-foreground transition-colors" />
+                          <WhatsAppIcon className="h-4 w-4 text-emerald-600 group-hover:text-primary-foreground transition-colors" />
                           <span>Consultar por WhatsApp</span>
                         </Button>
                       )}

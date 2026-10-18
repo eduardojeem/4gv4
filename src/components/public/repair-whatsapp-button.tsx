@@ -1,6 +1,8 @@
 'use client'
 
-import { MessageCircle } from 'lucide-react'
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
+
 import { Button } from '@/components/ui/button'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 
@@ -24,7 +26,7 @@ export function RepairWhatsAppButton({
       onClick={() => trackRepair(repairId)}
       className="gap-2"
     >
-      <MessageCircle className="h-4 w-4" />
+      <WhatsAppIcon className="h-4 w-4" />
       Consultar
     </Button>
   )

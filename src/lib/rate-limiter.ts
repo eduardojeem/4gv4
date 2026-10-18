@@ -107,14 +107,17 @@ export const rateLimiter = {
    * Returns true if the request is allowed, false if rate-limited.
    * Uses Upstash when credentials are present; falls back to in-memory.
    */
-  async check(identifier: string, maxRequests = 10, windowMs = 15 * 60 * 1000): Promise<boolean> {
+  async check(identifier: string, maxRequests = 10, windowMs = 15 * 60 * 1000, options: { requireShared?: boolean } = {}): Promise<boolean> {
+    const strict = options.requireShared && process.env.NODE_ENV === 'production'
     const upstash = getUpstashRatelimiter(maxRequests, windowMs)
+    if (strict && !upstash) throw new Error('Shared rate limiter unavailable')
     if (upstash) {
       try {
         const { success } = await upstash.limit(identifier)
         return success
       } catch (err) {
-        // Upstash temporarily unreachable: fail open and use in-memory.
+        if (strict) throw new Error('Shared rate limiter unavailable')
+        // Other callers retain their existing development/availability fallback.
         console.error('[rate-limiter] Upstash error, falling back to in-memory:', err)
         return _inMemory.check(identifier, maxRequests, windowMs)
       }

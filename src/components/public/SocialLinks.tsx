@@ -2,17 +2,16 @@
 
 import { Card } from '@/components/ui/card'
 import {
-  Twitter,
   Linkedin,
   Github,
   Globe,
-  Instagram,
   ExternalLink,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { InstagramIcon, XIcon } from '@/components/public/SocialIcons'
 
 export interface SocialLink {
   platform: 'twitter' | 'linkedin' | 'github' | 'website' | 'instagram'
@@ -29,10 +28,10 @@ interface SocialLinksProps {
 
 const platformConfig = {
   twitter: {
-    name: 'Twitter',
-    icon: Twitter,
-    color: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400',
-    hoverColor: 'hover:bg-blue-500 hover:text-white'
+    name: 'X (Twitter)',
+    icon: XIcon,
+    color: 'bg-foreground/10 text-foreground',
+    hoverColor: 'hover:bg-foreground hover:text-background'
   },
   linkedin: {
     name: 'LinkedIn',
@@ -54,7 +53,7 @@ const platformConfig = {
   },
   instagram: {
     name: 'Instagram',
-    icon: Instagram,
+    icon: InstagramIcon,
     color: 'bg-pink-500/10 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400',
     hoverColor: 'hover:bg-pink-500 hover:text-white'
   }

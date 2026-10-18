@@ -1,6 +1,8 @@
 'use client'
 
-import { Building2, Globe, Calendar, Link as LinkIcon, Package, Edit, CalendarDays } from 'lucide-react'
+import { BrandMark } from '@/components/dashboard/brands/BrandMark'
+import { getDisplayLocale } from '@/lib/currency'
+import { Globe, Calendar, Link as LinkIcon, Package, Edit, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -40,10 +42,10 @@ export function BrandDetailModal({
 
   // Format creation date
   const formatCreationDate = (dateString?: string) => {
-    if (!dateString) return 'N/A'
+    if (!dateString) return '—'
     try {
       const date = new Date(dateString)
-      return new Intl.DateTimeFormat('es-ES', {
+      return new Intl.DateTimeFormat(getDisplayLocale(), {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
@@ -58,9 +60,7 @@ export function BrandDetailModal({
       <DialogContent className="max-w-md overflow-hidden rounded-[24px] border border-slate-200/50 bg-white/90 backdrop-blur-md dark:bg-slate-950/90 dark:border-slate-800/50 shadow-2xl p-6">
         <DialogHeader className="space-y-4">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center border border-blue-100/50 dark:border-blue-900/30">
-              <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
+            <BrandMark brand={brand} size="lg" />
             <div className="text-left flex-1 min-w-0">
               <DialogTitle className="text-xl font-bold text-slate-950 dark:text-slate-50 truncate">
                 {brand.name}
@@ -68,16 +68,19 @@ export function BrandDetailModal({
               <div className="flex flex-wrap gap-1.5 mt-1 items-center">
                 <Badge
                   className={cn(
-                    'text-[10px] font-bold px-2 py-0.5 border-0 text-white',
+                    'text-xs font-bold px-2 py-0.5 border-0 text-white',
                     brand.is_active 
                       ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-sm' 
                       : 'bg-slate-400 dark:bg-slate-700'
                   )}
                 >
-                  {brand.is_active ? 'Activo' : 'Inactivo'}
+                  {brand.is_active ? 'Activa' : 'Inactiva'}
+                </Badge>
+                <Badge variant="outline" className="text-xs font-medium">
+                  {brand.global_brand_id ? 'Oficial del catálogo' : 'Propia'}
                 </Badge>
                 {brand.country && (
-                  <Badge variant="outline" className="text-[10px] font-medium border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                  <Badge variant="outline" className="text-xs font-medium border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
                     <Globe className="h-2.5 w-2.5 mr-1" /> {brand.country}
                   </Badge>
                 )}
@@ -102,7 +105,7 @@ export function BrandDetailModal({
           <div className="grid grid-cols-2 gap-3">
             {/* Founded Year */}
             <div className="p-3 bg-slate-50/30 dark:bg-slate-900/20 rounded-xl border border-slate-100/30 dark:border-slate-800/30 flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <Calendar className="h-3 w-3" /> Fundación
               </span>
               <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -112,11 +115,11 @@ export function BrandDetailModal({
 
             {/* Products Associated */}
             <div className="p-3 bg-slate-50/30 dark:bg-slate-900/20 rounded-xl border border-slate-100/30 dark:border-slate-800/30 flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <Package className="h-3 w-3" /> Catálogo
               </span>
               <span className="text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
-                {productCount === 1 ? '1 Producto' : `${productCount} Productos`}
+                {productCount === 1 ? '1 producto' : `${productCount} productos`}
               </span>
             </div>
           </div>
@@ -125,8 +128,8 @@ export function BrandDetailModal({
           {brand.website && (
             <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100/30 dark:border-slate-800/30 flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1 mb-1">
-                  <LinkIcon className="h-3 w-3" /> Sitio Web Oficial
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1 mb-1">
+                  <LinkIcon className="h-3 w-3" /> Sitio web
                 </span>
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
                   {brand.website.replace(/^https?:\/\/(www\.)?/, '')}
@@ -150,7 +153,7 @@ export function BrandDetailModal({
           <Separator className="bg-slate-100 dark:bg-slate-800/50" />
 
           {/* Creation Metadata */}
-          <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 px-1">
+          <div className="flex justify-between items-center text-xs text-slate-400 dark:text-slate-500 px-1">
             <span className="flex items-center gap-1">
               <CalendarDays className="h-3 w-3" /> Registro: {formatCreationDate(brand.created_at)}
             </span>
@@ -164,7 +167,7 @@ export function BrandDetailModal({
           </Button>
           {onEdit && (
             <Button
-              className="h-10 text-xs px-4 gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+              className="h-10 text-xs px-4 gap-1.5"
               onClick={() => {
                 onClose()
                 onEdit(brand)

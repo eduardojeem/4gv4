@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock,
   Eye,
-  MessageCircle,
   Package, Sparkles,
   Store,
   Tag
@@ -29,7 +28,7 @@ import { FavoriteButton } from '@/components/public/Favorites'
 import { MarketplaceProductModal } from '@/components/public/MarketplaceProductModal'
 import { withOrgQuery } from '@/lib/saas/tenant'
 import { getSocialLinks } from '@/lib/public/social-links'
-import { SOCIAL_ICONS } from '@/components/public/SocialIcons'
+import { WhatsAppIcon, SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import { fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS } from './newest-products'
 import type { PublicProduct } from '@/types/public'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
@@ -507,7 +506,7 @@ export function StoreOffersPromoShowcase({
 
                         {displayPhone && (
                           <div className="flex items-center gap-2">
-                            <MessageCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                            <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                             <span className="truncate">
                               <span className="text-rose-300/80 font-normal">WhatsApp:</span>{' '}
                               {whatsappChatHref ? (
@@ -847,7 +846,7 @@ export function StoreOffersPromoShowcase({
                     suppressHydrationWarning
                     className="flex items-center justify-center gap-2 text-xs font-bold text-rose-300 hover:text-white transition-colors py-1"
                   >
-                    <MessageCircle className="h-4 w-4 text-emerald-400" />
+                    <WhatsAppIcon className="h-4 w-4 text-emerald-400" />
                     <span>Consultar ofertas por WhatsApp</span>
                   </a>
                 )}
@@ -1051,7 +1050,7 @@ export function StoreOffersPromoShowcase({
                                 onClick={(e) => e.stopPropagation()}
                                 className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white dark:text-[#4ADE80]"
                               >
-                                <MessageCircle className="h-3.5 w-3.5" />
+                                <WhatsAppIcon className="h-3.5 w-3.5" />
                                 <span>Preguntar</span>
                               </a>
                             ) : (

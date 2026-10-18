@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppImage as Image } from '@/components/ui/app-image'
@@ -9,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Flame,
-  MessageCircle,
   Minus,
   Package,
   Plus,
@@ -534,7 +535,7 @@ export function OfferDetailModal({
                   suppressHydrationWarning
                   onClick={onClose}
                 >
-                  <MessageCircle className="h-4 w-4" />
+                  <WhatsAppIcon className="h-4 w-4" />
                   Consultar por WhatsApp
                 </a>
               </Button>

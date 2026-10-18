@@ -14,7 +14,7 @@ export const POST=withTenantAuth({permission:'crm.customers.read',module:'crm'},
     const admin=createAdminSupabase()
     const [credits,repairs,settings]=await Promise.all([
       Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('customer_credits')
-        .select('id,customer_id,principal,interest_rate,term_months,start_date,status').eq('organization_id', organization.id)
+        .select('id,customer_id,principal,interest_rate,term_months,start_date,status,credit_code').eq('organization_id', organization.id)
         .in('customer_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
       Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('repairs')
         .select('id,customer_id,status,delivered_at,pricing_mode,labor_cost,final_cost,estimated_cost,discount_amount,paid_amount,parts:repair_parts(unit_price,unit_cost,quantity,line_type)')
@@ -27,7 +27,7 @@ export const POST=withTenantAuth({permission:'crm.customers.read',module:'crm'},
       Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('credit_installments')
         .select('id,credit_id,installment_number,due_date,amount,status,amount_paid,paid_at').in('credit_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
       Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('credit_payments')
-        .select('id,credit_id,installment_id,amount,payment_method,created_at').in('credit_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
+        .select('id,credit_id,installment_id,amount,payment_method,created_at,notes').in('credit_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
     ])
     return NextResponse.json({credits,installments,payments:payments.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))),
       repairDebts: summarizeRepairDebts(repairs),timeZone:settings.data?.timezone||'America/Asuncion'})

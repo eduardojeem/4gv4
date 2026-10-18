@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useMemo, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
@@ -12,7 +14,6 @@ import {
   Loader2,
   CheckCircle2,
   Clock,
-  MessageCircle,
   Copy,
   Banknote,
   ShieldCheck,
@@ -335,7 +336,7 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
               onClick={handleWhatsApp}
               className="h-12 w-full gap-2 bg-green-600 text-base font-semibold text-white shadow-md hover:bg-green-700 active:scale-[0.98]"
             >
-              <MessageCircle className="h-5 w-5" />
+              <WhatsAppIcon className="h-5 w-5" />
               Consultar por WhatsApp
             </Button>
             <Button

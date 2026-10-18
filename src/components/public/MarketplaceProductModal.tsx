@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { AppImage as Image } from '@/components/ui/app-image'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
@@ -10,7 +12,6 @@ import {
   ChevronRight,
   ExternalLink,
   MapPin,
-  MessageCircle,
   Package,
   ShieldCheck,
   Store,
@@ -474,7 +475,7 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
                       suppressHydrationWarning
                       className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366]/10 px-3 py-2 text-xs font-semibold text-[#128C7E] transition hover:bg-[#25D366] hover:text-white dark:text-[#4ADE80]"
                     >
-                      <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                      <WhatsAppIcon className="h-4 w-4" aria-hidden="true" />
                       {precioOculto ? 'Consultar precio por WhatsApp' : 'Consultar por WhatsApp'}
                     </a>
                   )}

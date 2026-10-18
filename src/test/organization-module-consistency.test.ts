@@ -28,7 +28,9 @@ describe('organization module consistency', () => {
     const dashboard = read('src/app/dashboard/page.tsx')
     expect(dashboard).toContain("const hasOrders = effectiveModules.includes('orders')")
     expect(dashboard).toContain("const hasServices = effectiveModules.includes('services')")
-    expect(dashboard).toContain('hasOrders ? withBranchFilter(')
+    // Las cifras salen del resumen del servidor; la tarjeta de órdenes solo
+    // aparece con el módulo de órdenes activo.
+    expect(dashboard).toContain('...(hasOrders ? [{')
   })
 
   it('only offers and accepts delivery when the delivery module is active', () => {

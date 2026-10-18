@@ -36,7 +36,8 @@ describe('customer dashboard avoids duplicate work and remains usable on mobile'
 
   it('scopes monthly sales analytics to the active organization', () => {
     expect(metrics).toContain('useOptionalActiveOrganization()')
-    expect(metrics).toContain(".eq('organization_id', organizationId)")
+    // El resumen mensual sale de un RPC acotado a la organización activa.
+    expect(metrics).toContain('p_organization_id: organizationId')
   })
 
   it('includes repair balances in the batched customer debt summary without claiming a page total is global', () => {

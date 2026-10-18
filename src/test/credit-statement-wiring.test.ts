@@ -41,10 +41,14 @@ describe('cableado del estado de cuenta', () => {
     for (const ruta of [
       'src/components/dashboard/credits/CreditDetailDialog.tsx',
       'src/components/dashboard/credits/CreditPaymentDialog.tsx',
-      'src/components/dashboard/credits/PaymentsTimeline.tsx',
     ]) {
       expect(leer(ruta), ruta).toContain('useCreditPrinting')
     }
+    // El historial y la ficha del cliente reimprimen con el mismo hook, que a
+    // su vez toma el emisor de useCreditPrinting.
+    expect(leer('src/components/dashboard/credits/PaymentsTimeline.tsx')).toContain('useReprintCreditPayment')
+    expect(leer('src/components/dashboard/customers/CustomerCreditInfo.tsx')).toContain('useReprintCreditPayment')
+    expect(leer('src/hooks/use-reprint-credit-payment.ts')).toContain('useCreditPrinting')
   })
 
   it('la pagina le pasa todos los creditos, no solo el abierto', () => {

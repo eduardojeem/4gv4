@@ -46,6 +46,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')?.trim()
     const isActive = searchParams.get('is_active')
+    // «official»: vinculadas al catálogo; «own»: propias de la empresa.
+    const linked = searchParams.get('linked')
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)))
     const from = (page - 1) * limit
@@ -61,8 +63,14 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       query = query.eq('is_active', isActive === 'true')
     }
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
+    if (linked === 'official') query = query.not('global_brand_id', 'is', null)
+    if (linked === 'own') query = query.is('global_brand_id', null)
+
+    // Sin los caracteres que arman la consulta: una coma o un paréntesis en la
+    // búsqueda rompían el filtro y la lista respondía con error.
+    const safeSearch = search?.replace(/[%_,()]/g, '').trim()
+    if (safeSearch) {
+      query = query.or(`name.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`)
     }
 
     const { data, error, count } = await query
@@ -71,7 +79,22 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data: data ?? [], count: count ?? 0 })
+    // Los productos de cada marca de la página. Antes no se enviaban y el
+    // detalle decía siempre «0 productos».
+    const rows = data ?? []
+    const counts = await Promise.all(rows.map((brand) =>
+      supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organization.id)
+        .eq('brand_id', brand.id)
+    ))
+
+    return NextResponse.json({
+      success: true,
+      data: rows.map((brand, index) => ({ ...brand, stats: { product_count: counts[index].count ?? 0 } })),
+      count: count ?? 0,
+    })
   } catch (error) {
     logger.error('Brands API GET error', { error })
     return NextResponse.json({ success: false, error: 'No se pudieron cargar las marcas.' }, { status: 500 })
@@ -165,7 +188,12 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     if (error) throw error
     return NextResponse.json({ success: true, data })
-  } catch (error) {
+  } catch (error: unknown) {
+    // Renombrar a un nombre que ya existe respondía un error genérico.
+    const code = (error as { code?: string })?.code || ''
+    if (code === '23505') {
+      return NextResponse.json({ success: false, error: 'Ya existe una marca con este nombre.' }, { status: 409 })
+    }
     logger.error('Brands API PUT error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar la marca.' }, { status: 500 })
   }

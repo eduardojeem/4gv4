@@ -1,4 +1,5 @@
 import { createReceiptDocument } from './receipt-document'
+import { registerThermalPrintDocument } from './thermal-print'
 import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { getCreditPaymentMethodLabel, getCreditPaymentReceiptTarget, usesShortLabels } from './payment-receipt'
 import { toPdfText, type CreditPaperFormat } from './paper'
@@ -253,5 +254,15 @@ export async function createGlobalPaymentReceiptPdf(
     return pieFinal + footerLines * (t.footerFontSize + 0.5) * 0.42 + t.footerBottom
   })
 
+  if (!t.isSheet) {
+    registerThermalPrintDocument(doc, {
+      title: 'COMPROBANTE DE ABONO',
+      issuer: [input.businessName || 'Comprobante de pago', input.businessRuc ? `RUC ${input.businessRuc}` : '', input.businessPhone || '', input.businessAddress || ''],
+      metadata: [`N° ${input.receiptNumber}`, new Date(input.paidAt).toLocaleString(input.locale || getDisplayLocale(), { timeZone: input.timeZone })],
+      sections: secciones.map(([title, , rows]) => ({ title, rows: rows.map(row => [row.label, row.value]) })),
+      contentWidthMm: t.contentWidthMm, fontSizePt: t.tableBodyFontSize + 0.3,
+      footer: 'Gracias por su pago. Conserve este comprobante.', signature: true,
+    })
+  }
   return { doc, receiptNumber: input.receiptNumber }
 }

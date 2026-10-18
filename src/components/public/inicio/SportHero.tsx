@@ -1,11 +1,13 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, MessageCircle, Zap } from 'lucide-react'
+import { ArrowRight, Zap } from 'lucide-react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { resolveProductImageUrl } from '@/lib/images'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -67,7 +69,7 @@ export function SportHero({ companyInfo, heroContent, contactHref, phoneClean }:
               rel={phoneClean ? 'noopener noreferrer' : undefined}
               className="inline-flex h-12 -skew-x-6 items-center gap-2 border-2 border-white/80 px-6 text-sm font-black uppercase italic tracking-wide text-white transition hover:bg-white hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
             >
-              <MessageCircle aria-hidden="true" className="h-4 w-4 skew-x-6" />
+              <WhatsAppIcon aria-hidden="true" className="h-4 w-4 skew-x-6" />
               <span className="skew-x-6">{heroContent.ctaSecondaryText || 'Consultar'}</span>
             </a>
           </div>

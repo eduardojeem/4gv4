@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AppImage as Image } from '@/components/ui/app-image'
@@ -14,8 +16,7 @@ import {
   Star,
   ShoppingCart,
   Check,
-  MessageCircle,
-} from 'lucide-react'
+  } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { OffersSectionSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
@@ -570,7 +571,7 @@ export function OffersCarouselDeck({
                     aria-label={`Pedir oferta de ${offer.title} en WhatsApp`}
                     title={`Pedir oferta de ${offer.title} en WhatsApp`}
                   >
-                    <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <WhatsAppIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </a>
                 )}
               </div>

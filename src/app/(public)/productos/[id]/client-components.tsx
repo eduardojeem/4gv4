@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { AppImage } from '@/components/ui/app-image'
 
 import { useMemo, useState, useEffect, useCallback } from 'react'
@@ -8,7 +10,6 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  MessageCircle,
   Mail,
   Phone,
   Share2,
@@ -938,7 +939,7 @@ export function ProductDetailInteractive({
               )}
               onClick={() => handleContact('whatsapp')}
             >
-              <MessageCircle className="h-4 w-4" />
+              <WhatsAppIcon className="h-4 w-4" />
               {precioOculto
                 ? 'Preguntar el precio por WhatsApp'
                 : isInStock

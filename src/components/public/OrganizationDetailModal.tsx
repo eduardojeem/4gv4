@@ -13,7 +13,6 @@ import {
   Globe,
   Mail,
   MapPin,
-  MessageCircle,
   Navigation,
   Package,
   Phone,
@@ -29,7 +28,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 import { getSocialLinks } from '@/lib/public/social-links'
-import { FacebookIcon, InstagramIcon, TikTokIcon } from '@/components/public/SocialIcons'
+import { WhatsAppIcon, FacebookIcon, InstagramIcon, TikTokIcon } from '@/components/public/SocialIcons'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -194,7 +193,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white px-3 py-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 transition-all shadow-2xs"
               >
-                <MessageCircle className="h-4 w-4 shrink-0" />
+                <WhatsAppIcon className="h-4 w-4 shrink-0" />
                 <span>WhatsApp</span>
               </a>
             ) : null}

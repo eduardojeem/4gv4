@@ -1,5 +1,7 @@
 'use client'
 
+import { WhatsAppIcon } from '@/components/public/SocialIcons'
+
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
@@ -8,7 +10,6 @@ import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import {
   ArrowRight,
-  MessageCircle,
   Sparkles,
   Tag,
   ChevronLeft,
@@ -308,7 +309,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
                     className="rounded-full font-semibold px-6 border-white/30 text-white hover:bg-white/15 hover:border-white/50 backdrop-blur-xs transition-all"
                   >
                     <a href={whatsappHref} target="_blank" rel="noopener noreferrer" suppressHydrationWarning>
-                      <MessageCircle className="h-4 w-4 mr-2 text-emerald-400" />
+                      <WhatsAppIcon className="h-4 w-4 mr-2 text-emerald-400" />
                       <span>Consultar WhatsApp</span>
                     </a>
                   </Button>

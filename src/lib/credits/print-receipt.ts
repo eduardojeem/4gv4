@@ -1,13 +1,17 @@
+import { getThermalPrintHtml } from './thermal-print'
+
 /**
- * Entrega de comprobantes en PDF: imprimir y descargar.
+ * Entrega de comprobantes: impresión nativa de tickets y PDF para hojas/descarga.
  *
  * Antes ambas pantallas hacian `doc.output('dataurlnewwindow')` despues de un
  * `await`. Al haber pasado por el await, el navegador ya no reconoce la accion
  * como originada por el clic del usuario y bloquea la ventana como emergente:
  * el boton "Imprimir" no hacia absolutamente nada, sin ventana ni aviso.
  *
- * La carga en un iframe oculto no abre ventanas, asi que ningun bloqueador
- * interviene. Ademas evita meter el PDF entero dentro de una URL de datos.
+ * Los tickets registrados usan HTML con ancho flexible: Chrome puede recortar
+ * un PDF de 80 mm al imprimirlo a tamaño real sobre un área útil más angosta.
+ * El iframe evita ventanas emergentes. A4 mantiene el visor PDF y las descargas
+ * conservan el documento original.
  */
 
 /** Lo minimo que se necesita de jsPDF, para no importar el paquete aca. */
@@ -32,19 +36,23 @@ export async function printPdfDocument(doc: PrintablePdf): Promise<void> {
     throw new Error('La impresión solo está disponible en el navegador.')
   }
 
-  // Deja la orden de imprimir dentro del propio PDF: los visores que la
-  // respetan abren el dialogo sin que haga falta llamarlo desde el iframe.
-  doc.autoPrint()
+  const thermalHtml = getThermalPrintHtml(doc)
+  // A4 retains the PDF viewer; rolls use native layout inside the printable
+  // area instead of Chrome cropping a nominal 80 mm PDF at actual size.
+  if (!thermalHtml) doc.autoPrint()
 
-  const blobUrl = URL.createObjectURL(doc.output('blob'))
+  const blobUrl = thermalHtml ? undefined : URL.createObjectURL(doc.output('blob'))
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  frame.style.cssText = thermalHtml
+    ? 'position:fixed;left:-10000px;top:0;width:800px;height:600px;border:0'
+    : 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  if (thermalHtml) frame.setAttribute('sandbox', 'allow-same-origin allow-modals')
 
   const cleanup = () => {
     window.setTimeout(() => {
       frame.remove()
-      URL.revokeObjectURL(blobUrl)
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
     }, CLEANUP_DELAY_MS)
   }
 
@@ -64,17 +72,20 @@ export async function printPdfDocument(doc: PrintablePdf): Promise<void> {
         reject(new Error('No se pudo cargar el comprobante.'))
       }
 
-      frame.src = blobUrl
+      if (thermalHtml) frame.srcdoc = thermalHtml
+      else frame.src = blobUrl!
       document.body.appendChild(frame)
     })
 
     // Respaldo para los visores que ignoran la orden embebida en el PDF.
-    frame.contentWindow?.focus()
-    frame.contentWindow?.print()
+    const printWindow = frame.contentWindow
+    if (!printWindow || typeof printWindow.print !== 'function') throw new Error('No se pudo abrir la impresión del comprobante.')
+    printWindow.focus()
+    printWindow.print()
     cleanup()
   } catch (error) {
     frame.remove()
-    URL.revokeObjectURL(blobUrl)
+    if (blobUrl) URL.revokeObjectURL(blobUrl)
     throw error
   }
 }
