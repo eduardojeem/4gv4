@@ -1,2 +1,4 @@
 # La app móvil (Expo) se compila con EAS, no en Vercel.
-mobile/
+# Anclado a la raíz: sin la barra inicial también excluía src/app/api/mobile
+# (los endpoints que usa la app) y en producción daban 404.
+/mobile/
