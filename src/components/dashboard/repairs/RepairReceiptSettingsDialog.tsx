@@ -21,6 +21,7 @@ import {
   Settings2,
   ShieldCheck,
   FileText,
+  Globe,
   Sliders,
   RotateCcw,
   Check,
@@ -267,6 +268,8 @@ export function RepairReceiptSettingsDialog({
       warrantyNotes: settings.defaultWarrantyNotes,
       // Un código de ejemplo, para que el QR también se vea en la muestra.
       verificationHash: 'muestra',
+      trackingUrl: 'https://www.mitiendapy.com/mi-tienda/mis-reparaciones/R-2026-MUESTRA?verify=muestra',
+      storeUrl: 'https://www.mitiendapy.com/mi-tienda/inicio',
       company: company?.name ? company : SAMPLE_COMPANY,
   })
 
@@ -539,6 +542,7 @@ export function RepairReceiptSettingsDialog({
                 {toggleRow('showCustomerSignature', PenLine, 'Firma del cliente al dejar el equipo', 'Recuadro de firma con aclaración y C.I.', settings.showCustomerSignature)}
                 {toggleRow('showDeliveryControl', ShieldCheck, 'Control de entrega y garantía', 'Recuadro con fecha de entrega y firmas del taller y del cliente: el mismo papel sirve de certificado de garantía.', settings.showDeliveryControl, 'accent')}
                 {toggleRow('showHash', QrCode, 'Código QR de seguimiento', 'El cliente lo escanea para ver el estado de su reparación; también valida que el comprobante es auténtico.', settings.showHash)}
+                {toggleRow('showStoreWebsite', Globe, 'Dirección de tu tienda online', 'Al pie del comprobante, por ejemplo www.mitiendapy.com/tu-tienda/inicio. Siempre con el dominio de producción.', settings.showStoreWebsite)}
               </fieldset>
             </TabsContent>
             {/* TAB 2: Términos legales */}

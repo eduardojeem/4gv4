@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_RECEIPT_SETTINGS, generateRepairShareText, printRepairReceipt } from '@/lib/repair-receipt'
 import {
   buildRepairPrintPayload,
-  fetchRepairVerificationHash,
+  fetchRepairQrSignature,
   repairPrintTicketNumber,
 } from '@/lib/repairs/print-payload'
 import type { Repair } from '@/types/repairs'
@@ -35,19 +35,20 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('lo que se imprime de una reparación guardada', () => {
   it('lleva la garantía de la orden, lo pagado y el IMEI', () => {
-    const payload = buildRepairPrintPayload(reparacion(), { name: 'Taller' }, 'hash-1')
+    const payload = buildRepairPrintPayload(reparacion(), { name: 'Taller' }, { hash: 'hash-1', trackingUrl: 'https://x.test/t/mis-reparaciones/R-2026-000010?verify=hash-1' })
     expect(payload.warrantyMonths).toBe(0)
     expect(payload.paidAmount).toBe(100_000)
     expect(payload.devices[0].imei).toBe('3589')
     expect(payload.verificationHash).toBe('hash-1')
+    expect(payload.trackingUrl).toBe('https://x.test/t/mis-reparaciones/R-2026-000010?verify=hash-1')
   })
 
   it('firma el QR con el mismo número que imprime', async () => {
-    const fetchMock = vi.fn(async () => ({ json: async () => ({ success: true, hash: 'h' }) }))
+    const fetchMock = vi.fn(async () => ({ json: async () => ({ success: true, hash: 'h', trackingUrl: 'https://x.test/t/mis-reparaciones/ABCDEF12?verify=h' }) }))
     vi.stubGlobal('fetch', fetchMock)
     const sinNumero = reparacion({ ticketNumber: undefined })
 
-    await expect(fetchRepairVerificationHash(sinNumero)).resolves.toBe('h')
+    await expect(fetchRepairQrSignature(sinNumero)).resolves.toEqual({ hash: 'h', trackingUrl: 'https://x.test/t/mis-reparaciones/ABCDEF12?verify=h' })
     const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body))
     expect(body.ticketNumber).toBe(repairPrintTicketNumber(sinNumero))
     expect(buildRepairPrintPayload(sinNumero, { name: 'T' }).ticketNumber).toBe(body.ticketNumber)
@@ -55,7 +56,19 @@ describe('lo que se imprime de una reparación guardada', () => {
 
   it('sin firma el comprobante sale igual', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('sin red') }))
-    await expect(fetchRepairVerificationHash(reparacion())).resolves.toBeUndefined()
+    await expect(fetchRepairQrSignature(reparacion())).resolves.toBeUndefined()
+  })
+
+  it('trae la tienda online junto con la firma', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => ({ success: true, hash: 'h', trackingUrl: 'https://x.test/t/mis-reparaciones/R?verify=h', storeUrl: 'https://x.test/t/inicio' }) })))
+    const signature = await fetchRepairQrSignature(reparacion())
+    expect(signature?.storeUrl).toBe('https://x.test/t/inicio')
+    expect(buildRepairPrintPayload(reparacion(), { name: 'T' }, signature).storeUrl).toBe('https://x.test/t/inicio')
+  })
+
+  it('sin URL de seguimiento no hay QR', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => ({ success: true, hash: 'h' }) })))
+    await expect(fetchRepairQrSignature(reparacion())).resolves.toBeUndefined()
   })
 })
 

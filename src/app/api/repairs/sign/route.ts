@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateRepairHash } from '@/lib/repair-qr-hash'
+import { buildRepairTrackingUrl, buildStoreHomeUrl } from '@/lib/repairs/tracking-url'
 import { createClient } from '@/lib/supabase/server'
 import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 /**
  * POST /api/repairs/sign
- * Generates a secure hash for a repair ticket to be used in QR codes
+ * Generates a secure hash for a repair ticket to be used in QR codes, and the
+ * tracking URL the QR encodes (canonical site + the organization's public
+ * repairs page; the bare /mis-reparaciones path is a legacy redirect).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -37,9 +40,19 @@ export async function POST(request: NextRequest) {
     // Generate the hash using the server-side secret
     const hash = generateRepairHash(ticketNumber, customerName, dateObj)
 
+    const trackingUrl = buildRepairTrackingUrl({
+      organizationSlug: moduleContext.organizationSlug,
+      ticketNumber: String(ticketNumber),
+      hash,
+    })
+
+    const storeUrl = buildStoreHomeUrl({ organizationSlug: moduleContext.organizationSlug })
+
     return NextResponse.json({
       success: true,
-      hash
+      hash,
+      trackingUrl,
+      storeUrl
     })
   } catch (error) {
     console.error('Error signing repair ticket:', error)

@@ -37,6 +37,7 @@ export type RepairModuleContext = {
   userId: string
   role: AppRole
   organizationId: string
+  organizationSlug: string
   organizationRole: OrganizationRole
 }
 
@@ -78,6 +79,7 @@ export async function resolveRepairModuleContext(): Promise<RepairModuleContext 
     userId: staffAuth.user.id,
     role: staffAuth.role,
     organizationId: organization.id,
+    organizationSlug: organization.slug,
     organizationRole: organization.role,
   }
 }
