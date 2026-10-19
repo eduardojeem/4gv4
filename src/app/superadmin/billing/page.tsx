@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { FinancialDashboard, type FinancialData } from '@/components/superadmin/FinancialDashboard'
 import { sumMoneyByCurrency } from '@/lib/superadmin/money-totals'
@@ -133,5 +134,8 @@ async function getFinancialData(): Promise<FinancialData> {
 
 export default async function SuperAdminBillingPage() {
   const data = await getFinancialData()
-  return <FinancialDashboard data={data} />
+  return <div className="space-y-4">
+    <div className="flex justify-end px-4 pt-4 sm:px-6"><Link href="/superadmin/billing/transfers" className="inline-flex min-h-10 items-center rounded-md border bg-background px-4 text-sm font-medium hover:bg-accent">Revisar transferencias de suscripción</Link></div>
+    <FinancialDashboard data={data} />
+  </div>
 }

@@ -372,6 +372,7 @@ export default async function AdminSubscriptionsPage() {
         subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
         canRedeemCodes={['owner', 'admin'].includes(organization.role)}
+        canPayByTransfer={['owner', 'admin'].includes(organization.role)}
         averageUsage={averageUsage}
       />
 
