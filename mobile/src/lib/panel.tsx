@@ -111,5 +111,5 @@ export function PanelProvider({ children }: PropsWithChildren) {
   return <PanelContext.Provider value={{ data, error, loading, reload, findItem, can: permission => data?.capabilities?.[permission] === true }}>{children}</PanelContext.Provider>;
 }
 
-const NATIVE_SECTIONS = new Set(['overview','products','categories','brands','customers','credits','orders','repairs','pos','cash-register','suppliers','inventory-count','after-sales','administration']);
+const NATIVE_SECTIONS = new Set(['overview','products','categories','brands','customers','credits','orders','repairs','pos','cash-register','suppliers','inventory-count','after-sales','administration','technician']);
 export const hasNativePanelSection = (key: string) => NATIVE_SECTIONS.has(key);

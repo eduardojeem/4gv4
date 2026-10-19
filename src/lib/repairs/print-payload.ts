@@ -1,6 +1,7 @@
 import { deviceTypeConfig } from '@/config/repair-constants'
 import type { CompanyInfo, RepairPrintPayload } from '@/lib/repair-receipt'
 import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
+import type { RepairQrSignature } from '@/lib/repairs/tracking-url'
 import type { Repair } from '@/types/repairs'
 
 /**
@@ -23,7 +24,7 @@ export function repairPrintTicketNumber(repair: Pick<Repair, 'ticketNumber' | 'i
 export function buildRepairPrintPayload(
   repair: Repair,
   company: CompanyInfo,
-  verificationHash?: string
+  qr?: RepairQrSignature
 ): RepairPrintPayload {
   const ticketNumber = repairPrintTicketNumber(repair)
   const customer = repair.customer
@@ -83,7 +84,9 @@ export function buildRepairPrintPayload(
     warrantyType: repair.warrantyType,
     warrantyNotes: repair.warrantyNotes,
     company,
-    verificationHash,
+    verificationHash: qr?.hash,
+    trackingUrl: qr?.trackingUrl,
+    storeUrl: qr?.storeUrl,
     financial: {
       total: financial.total,
       paid: financial.paid,
@@ -102,13 +105,13 @@ export function buildRepairPrintPayload(
 }
 
 /**
- * Pide al servidor la firma del QR de seguimiento. Sin firma el comprobante
- * sale igual, sin QR.
+ * Pide al servidor la firma del QR de seguimiento y la URL que abre. Sin firma
+ * (o sin URL) el comprobante sale igual, sin QR.
  */
-export async function fetchRepairVerificationHash(
+export async function fetchRepairQrSignature(
   repair: Pick<Repair, 'ticketNumber' | 'id' | 'createdAt' | 'customer'>,
   signal?: AbortSignal
-): Promise<string | undefined> {
+): Promise<RepairQrSignature | undefined> {
   try {
     const response = await fetch('/api/repairs/sign', {
       method: 'POST',
@@ -121,7 +124,13 @@ export async function fetchRepairVerificationHash(
       }),
     })
     const body = await response.json().catch(() => null)
-    return body?.success && typeof body.hash === 'string' ? body.hash : undefined
+    return body?.success && typeof body.hash === 'string' && typeof body.trackingUrl === 'string'
+      ? {
+          hash: body.hash,
+          trackingUrl: body.trackingUrl,
+          ...(typeof body.storeUrl === 'string' ? { storeUrl: body.storeUrl } : {}),
+        }
+      : undefined
   } catch {
     return undefined
   }

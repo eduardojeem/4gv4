@@ -191,16 +191,226 @@ export async function moderateReview(id: string, input: { moderation_status?: Re
   }
 }
 
-// ─── Lo que sigue en la web ────────────────────────────────────────────────
+// ─── Sucursales ─────────────────────────────────────────────────────────────
+
+export type BranchItem = {
+  id: string;
+  name: string;
+  code: string;
+  slug?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  manager_name?: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  users_count: number;
+  registers_count: number;
+  open_registers_count: number;
+  sales_count: number;
+  repairs_count: number;
+  revenue_total: number;
+};
+
+export async function fetchBranches() {
+  try {
+    const res = await apiFetch<{ branches: BranchItem[] }>('/api/admin/branches');
+    return res.branches ?? [];
+  } catch (error) {
+    return fail(error, 'No se pudieron cargar las sucursales.');
+  }
+}
+
+export async function createBranch(input: {
+  name: string;
+  code?: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  email?: string;
+  manager_name?: string;
+  is_active?: boolean;
+}) {
+  try {
+    await apiFetch('/api/admin/branches', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    fail(error, 'No se pudo crear la sucursal.');
+  }
+}
+
+export async function updateBranch(
+  id: string,
+  input: {
+    name?: string;
+    code?: string;
+    address?: string;
+    city?: string;
+    phone?: string;
+    email?: string;
+    manager_name?: string;
+    is_active?: boolean;
+    is_default?: boolean;
+  }
+) {
+  try {
+    await apiFetch(`/api/admin/branches/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    fail(error, 'No se pudo actualizar la sucursal.');
+  }
+}
+
+// ─── Finanzas ───────────────────────────────────────────────────────────────
+
+export type FinanceSummaryData = {
+  accrued: {
+    revenue: number;
+    directCosts: number;
+    grossProfit: number | null;
+    operatingExpenses: number;
+    payrollCost: number;
+    netProfit: number | null;
+  };
+  cash: {
+    collected: number;
+    paid: number;
+    netCashFlow: number;
+  };
+  upcomingDue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
+  overdue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
+};
+
+export async function fetchFinanceSummary(params?: { startDate?: string; endDate?: string; branchId?: string }) {
+  const query = new URLSearchParams();
+  if (params?.startDate) query.set('startDate', params.startDate);
+  if (params?.endDate) query.set('endDate', params.endDate);
+  if (params?.branchId) query.set('branchId', params.branchId);
+
+  const qs = query.toString();
+  try {
+    return await apiFetch<FinanceSummaryData>(`/api/admin/finances/summary${qs ? `?${qs}` : ''}`);
+  } catch (error) {
+    return fail(error, 'No se pudo cargar el resumen financiero.');
+  }
+}
+
+// ─── Suscripción ───────────────────────────────────────────────────────────
+
+export type SubscriptionDetails = {
+  subscription: {
+    id: string;
+    plan: string;
+    status: string;
+    trial_ends_at: string | null;
+    current_period_starts_at: string | null;
+    current_period_ends_at: string | null;
+    cancel_at_period_end: boolean;
+  } | null;
+  plan: {
+    code: string;
+    name: string;
+    limits?: Record<string, number | null>;
+    modules?: string[];
+  } | null;
+  usage: {
+    branches: number;
+    users: number;
+    products: number;
+    registers: number;
+  };
+  billingProfile: {
+    business_name: string | null;
+    ruc: string | null;
+    billing_email: string | null;
+    fiscal_address: string | null;
+    phone: string | null;
+  } | null;
+};
+
+export async function fetchSubscription() {
+  try {
+    const res = await apiFetch<{ success: boolean; data: SubscriptionDetails }>('/api/admin/subscriptions');
+    return res.data;
+  } catch (error) {
+    return fail(error, 'No se pudo cargar la información de suscripción.');
+  }
+}
+
+// ─── Configuración ─────────────────────────────────────────────────────────
+
+export type SystemSettings = {
+  companyName?: string;
+  legalName?: string;
+  ruc?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  currency?: string;
+  currencySymbol?: string;
+  taxRate?: number;
+  taxName?: string;
+  autoPrintInvoice?: boolean;
+  allowNegativeStock?: boolean;
+  inventoryAlerts?: boolean;
+  lowStockThreshold?: number;
+};
+
+export async function fetchSettings() {
+  try {
+    const res = await apiFetch<{ success: boolean; settings: SystemSettings }>('/api/settings/shared');
+    return res.settings;
+  } catch (error) {
+    return fail(error, 'No se pudo cargar la configuración.');
+  }
+}
+
+export async function updateSettings(settings: Partial<SystemSettings>) {
+  try {
+    await apiFetch('/api/admin/system/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...settings, scope: 'organization' }),
+    });
+  } catch (error) {
+    fail(error, 'No se pudo guardar la configuración.');
+  }
+}
+
+// ─── Analítica ─────────────────────────────────────────────────────────────
+
+export type WebsiteAnalytics = {
+  summary: {
+    totalVisitors: number;
+    uniqueVisitors: number;
+    pageViews: number;
+    sessions: number;
+    bounceRate: number;
+    avgSessionDuration: number;
+    topPages?: { path: string; views: number }[];
+  };
+  organization?: { name: string; slug: string } | null;
+};
+
+export async function fetchWebsiteAnalytics(days = 30) {
+  try {
+    const res = await apiFetch<{ success: boolean; data: WebsiteAnalytics }>(`/api/admin/analytics/website?days=${days}`);
+    return res.data;
+  } catch (error) {
+    return fail(error, 'No se pudo cargar la analítica del sitio web.');
+  }
+}
+
+// ─── Secciones restantes en la web ──────────────────────────────────────────
 
 export const WEB_SECTIONS: { label: string; hint: string; path: string; icon: string }[] = [
-  { label: 'Finanzas', hint: 'Gastos, nómina y rentabilidad', path: '/admin/finances', icon: 'cash-outline' },
-  { label: 'Reportes', hint: 'Informes operativos', path: '/admin/reports', icon: 'document-text-outline' },
-  { label: 'Analítica', hint: 'Análisis avanzado', path: '/admin/analytics', icon: 'analytics-outline' },
-  { label: 'Sucursales', hint: 'Multi sucursal', path: '/admin/branches', icon: 'business-outline' },
-  { label: 'Sitio web', hint: 'Tu tienda online', path: '/admin/website', icon: 'globe-outline' },
-  { label: 'Suscripción', hint: 'Plan y facturación', path: '/admin/subscriptions', icon: 'card-outline' },
-  { label: 'Seguridad', hint: 'Logs y auditoría', path: '/admin/security', icon: 'shield-checkmark-outline' },
-  { label: 'Configuración', hint: 'Impuestos, moneda, módulos', path: '/admin/settings', icon: 'settings-outline' },
+  { label: 'Sitio web', hint: 'Personalización de tu tienda online', path: '/admin/website', icon: 'globe-outline' },
+  { label: 'Seguridad', hint: 'Logs y auditoría de accesos', path: '/admin/security', icon: 'shield-checkmark-outline' },
   { label: 'Datos del negocio', hint: 'Rubro, contacto y visibilidad', path: '/admin/onboarding', icon: 'storefront-outline' },
+  { label: 'Guía del sistema', hint: 'Manual operativo paso a paso', path: '/admin/guia', icon: 'help-circle-outline' },
 ];

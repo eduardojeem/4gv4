@@ -261,6 +261,14 @@ export interface RepairPrintPayload {
   company?: CompanyInfo
   verificationHash?: string
   /**
+   * Lo que codifica el QR: la página de seguimiento de la tienda con la firma
+   * del servidor (POST /api/repairs/sign, ver lib/repairs/tracking-url). Sin
+   * ella no hay QR: armarla acá daba una ruta legacy que no llevaba a nada.
+   */
+  trackingUrl?: string
+  /** Tienda online de la organización (`/{slug}/inicio`), del mismo endpoint. */
+  storeUrl?: string
+  /**
    * Lo que cobra la orden tal como lo muestra la pantalla (resultado de
    * getRepairFinancialPresentation). Si viene, manda sobre los costos sueltos:
    * antes una orden «sin reparar · sin costo» se imprimía con el presupuesto
@@ -338,24 +346,31 @@ function orderNumbers(payload: RepairPrintPayload): string[] {
  * el cliente lo escanea y abre el estado de su reparación, y el taller valida
  * que el comprobante es auténtico.
  */
-function trackingQrSvg(ticketNumber: string, hash: string, sizePx: number): string {
+function trackingQrSvg(url: string, size: string): string {
   try {
-    // La misma URL que arma generateRepairTrackingURL; no se importa de
-    // repair-qr para que el comprobante no dependa de ese modulo (ver
-    // repair-qr-server-only.test).
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const url = `${origin}/mis-reparaciones/${encodeURIComponent(ticketNumber)}?verify=${encodeURIComponent(hash)}`
+    // La URL la arma el servidor junto con la firma (buildRepairTrackingUrl):
+    // necesita la tienda y el dominio canonico, que el navegador no sabe.
     const qr = QRCode.create(url, { errorCorrectionLevel: 'M' })
     const count = qr.modules.size
-    const margin = 2
+    // Zona blanca de 4 modulos, la del estandar: con 2 los celulares no
+    // encontraban el codigo en el papel termico.
+    const margin = 4
     const total = count + margin * 2
     let path = ''
     for (let row = 0; row < count; row++) {
-      for (let col = 0; col < count; col++) {
-        if (qr.modules.get(row, col)) path += `M${col + margin} ${row + margin}h1v1h-1z`
+      let col = 0
+      while (col < count) {
+        if (!qr.modules.get(row, col)) { col++; continue }
+        // Cada tira negra va de una pieza: con un cuadrado por modulo la
+        // impresora dejaba lineas blancas entre ellos.
+        const start = col
+        while (col < count && qr.modules.get(row, col)) col++
+        path += `M${start + margin} ${row + margin}h${col - start}v1h-${col - start}z`
       }
     }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" width="${sizePx}" height="${sizePx}" shape-rendering="crispEdges" role="img" aria-label="QR de seguimiento"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`
+    // Tamaño fijo en mm y sin encogerse: en la fila flex del ticket de 80 mm
+    // quedaba de 12 mm de ancho y ningun celular lo leia.
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" style="width: ${size}; height: ${size}; flex-shrink: 0; display: block;" shape-rendering="crispEdges" role="img" aria-label="QR de seguimiento"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`
   } catch {
     return ''
   }
@@ -527,8 +542,7 @@ export const generateRepairReceiptHTML = (
   settingsOverride?: RepairReceiptSettings
 ): string => {
   // El QR se arma con los datos crudos (no es HTML); todo lo demas, escapado.
-  const rawNumbers = orderNumbers(rawPayload)
-  const qrTicket = rawPayload.ticketNumber || (rawNumbers.length === 1 ? rawNumbers[0] : '')
+  const qrUrl = rawPayload.trackingUrl
   const payload = escapeHtmlDeep(rawPayload)
   const company = payload.company || FALLBACK_COMPANY
   // Nunca un numero inventado: antes, con varios equipos, se imprimia uno al
@@ -1030,8 +1044,8 @@ export const generateRepairReceiptHTML = (
     ...(warranty.months > 0 && !CLAUSE_TOPICS.damage.test(alreadyPrinted) ? [DAMAGE_EXCLUSION_CLAUSE] : []),
     ...(!isDelivery && !CLAUSE_TOPICS.pickup.test(alreadyPrinted) ? [PICKUP_CLAUSE] : []),
   ]
-  const qrSvg = settings.showHash && rawPayload.verificationHash && qrTicket
-    ? trackingQrSvg(qrTicket, rawPayload.verificationHash, isA4 ? 120 : 96)
+  const qrSvg = settings.showHash && qrUrl
+    ? trackingQrSvg(qrUrl, isA4 ? '32mm' : paperPref === '58mm' ? '30mm' : '34mm')
     : ''
 
   // HTML para comprobante del cliente (estructura original fiel y configurable)
@@ -1285,7 +1299,7 @@ export const generateRepairReceiptHTML = (
       </div>` : ''}
 
       ${qrSvg ? `
-      <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px; break-inside: avoid;">
+      <div style="margin-top: 10px; display: flex; ${isA4 ? 'flex-direction: row; text-align: left;' : 'flex-direction: column; text-align: center;'} align-items: center; gap: ${isA4 ? '10px' : '4px'}; break-inside: avoid; page-break-inside: avoid;">
         ${qrSvg}
         <div style="font-size: 10.5px; line-height: 1.35;">
           <strong>Seguí tu reparación</strong><br/>
@@ -1295,6 +1309,7 @@ export const generateRepairReceiptHTML = (
 
       <div class="footer">
         <div>Gracias por confiar en <strong>${company.name || 'nuestro servicio técnico'}</strong></div>
+        ${settings.showStoreWebsite && payload.storeUrl ? `<div style="margin-top: 2px; overflow-wrap: anywhere;">Visitá nuestra tienda: <strong>${payload.storeUrl}</strong></div>` : ''}
         ${copyNote ? `<div style="margin-top: 2px;">${copyNote}</div>` : ''}
       </div>
     </body>

@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { BankTransferPayment } from '@/components/admin/subscriptions/BankTransferPayment'
 import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProfileForm'
 import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
 import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
@@ -70,6 +71,7 @@ export type SubscriptionsClientViewProps = {
   billingProfile: BillingProfile | null
   subscriptionStatus: string
   canChangePlan: boolean
+  canPayByTransfer?: boolean
   canRedeemCodes: boolean
   averageUsage: number
 }
@@ -317,6 +319,7 @@ export function SubscriptionsClientView({
   subscriptionStatus,
   canChangePlan,
   canRedeemCodes,
+  canPayByTransfer = false,
   averageUsage,
 }: SubscriptionsClientViewProps) {
   const [activeTab, setActiveTab] = useState<string>('overview')
@@ -700,6 +703,7 @@ export function SubscriptionsClientView({
 
         {/* TAB 2: PLANS COMPARISON (INCLUYE GUÍA EXPLICATIVA CONTEXTUAL) */}
         <TabsContent value="plans" className="space-y-6 focus-visible:outline-none">
+          {canPayByTransfer && <Button variant="outline" asChild><a href="#bank-transfer">Pagar por transferencia bancaria</a></Button>}
           <PlansComparison
             canChangePlan={canChangePlan}
             currentPlanCode={currentPlan.code}
@@ -991,6 +995,7 @@ export function SubscriptionsClientView({
           </Card>
         </TabsContent>
       </Tabs>
+      <BankTransferPayment canPay={canPayByTransfer} />
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   Mail,
   Lock,
-  Store, Building2
+  Store, Building2,
+  Fingerprint
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -32,6 +33,7 @@ import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { siteUrl } from '@/lib/site-url'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
+import { browserSupportsPasskeys, describePasskeyError, isPasskeyCancellation } from '@/lib/auth/passkeys'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -51,6 +53,14 @@ export default function LoginPage() {
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [resetCaptchaToken, setResetCaptchaToken] = useState<string | null>(null)
   const [resetCaptchaKey, setResetCaptchaKey] = useState(0)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+  // Se decide después de montar: en el servidor no hay `window` y el botón
+  // sólo debe aparecer en navegadores con WebAuthn.
+  const [passkeySupported, setPasskeySupported] = useState(false)
+
+  useEffect(() => {
+    setPasskeySupported(browserSupportsPasskeys())
+  }, [])
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -90,6 +100,65 @@ export default function LoginPage() {
       }
     } catch (organizationError) {
       console.warn('No se pudo inicializar la organización activa:', organizationError)
+    }
+  }
+
+  const completeLogin = async (userId: string | undefined, method: 'password' | 'passkey') => {
+    if (userId) {
+      try {
+        const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
+        await logAuthEventClient({
+          userId,
+          action: 'login',
+          success: true,
+          userAgent,
+          details: { method },
+        })
+      } catch (logError) {
+        console.error('Error logging auth event from login page:', logError)
+      }
+    }
+
+    toast.success('¡Bienvenido de nuevo!')
+    await initializeActiveOrganization()
+    // Se vuelve a donde estaba la persona. Antes sólo se respetaba el
+    // marketplace y las tiendas: desde cualquier otra página pública, una
+    // cuenta con negocio terminaba en el panel sin haberlo pedido.
+    // `sanitizeRedirectPath` descarta lo que no sea una ruta interna.
+    const rawRedirectParam = searchParams.get('redirect')
+    const redirectTo = rawRedirectParam ? sanitizeRedirectPath(rawRedirectParam) : '/dashboard'
+
+    router.push(redirectTo)
+    router.refresh()
+  }
+
+  const handlePasskeyLogin = async () => {
+    if (loading || passkeyLoading) return
+    if (!captchaToken) {
+      setError('Por favor, completá la verificación de seguridad para continuar.')
+      return
+    }
+
+    setPasskeyLoading(true)
+    setError('')
+    setUnconfirmed(false)
+
+    try {
+      const { data, error: passkeyError } = await supabase.auth.signInWithPasskey({
+        options: { captchaToken },
+      })
+      if (passkeyError) {
+        if (!isPasskeyCancellation(passkeyError)) setError(describePasskeyError(passkeyError))
+        return
+      }
+      await completeLogin(data?.user?.id, 'passkey')
+    } catch (err) {
+      console.error('Unexpected passkey login error:', err)
+      setError(describePasskeyError(err))
+    } finally {
+      setPasskeyLoading(false)
+      setCaptchaToken(null)
+      setCaptchaResetKey((current) => current + 1)
     }
   }
 
@@ -160,32 +229,7 @@ export default function LoginPage() {
           setError('El correo o la contraseña no coinciden con ninguna cuenta activa.')
         }
       } else {
-        if (data?.user) {
-          try {
-            const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-            await logAuthEventClient({
-              userId: data.user.id,
-              action: 'login',
-              success: true,
-              userAgent,
-              details: {},
-            })
-          } catch (logError) {
-            console.error('Error logging auth event from login page:', logError)
-          }
-        }
-
-        toast.success('¡Bienvenido de nuevo!')
-        await initializeActiveOrganization()
-        // Se vuelve a donde estaba la persona. Antes sólo se respetaba el
-        // marketplace y las tiendas: desde cualquier otra página pública, una
-        // cuenta con negocio terminaba en el panel sin haberlo pedido.
-        // `sanitizeRedirectPath` descarta lo que no sea una ruta interna.
-        const rawRedirectParam = searchParams.get('redirect')
-        const redirectTo = rawRedirectParam ? sanitizeRedirectPath(rawRedirectParam) : '/dashboard'
-
-        router.push(redirectTo)
-        router.refresh()
+        await completeLogin(data?.user?.id, 'password')
       }
     } catch (err) {
       console.error('Unexpected login error:', err)
@@ -484,13 +528,34 @@ export default function LoginPage() {
 
               {/* Captcha */}
               <div className="flex justify-center pt-1">
-                <TurnstileChallenge action="login" onTokenChange={setCaptchaToken} resetKey={captchaResetKey} theme="auto" disabled={loading} />
+                <TurnstileChallenge action="login" onTokenChange={setCaptchaToken} resetKey={captchaResetKey} theme="auto" disabled={loading || passkeyLoading} />
               </div>
 
               {/* Submit */}
-              <Button type="submit" className="h-11 w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 font-semibold text-white shadow-md shadow-blue-500/20 transition-all active:scale-[0.99] disabled:opacity-50" disabled={loading || !captchaToken}>
+              <Button type="submit" className="h-11 w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 font-semibold text-white shadow-md shadow-blue-500/20 transition-all active:scale-[0.99] disabled:opacity-50" disabled={loading || passkeyLoading || !captchaToken}>
                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Iniciando sesión...</> : <>Iniciar sesión<ArrowRight className="ml-2 h-4 w-4" /></>}
               </Button>
+
+              {passkeySupported && (
+                <>
+                  <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                    o
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePasskeyLogin}
+                    disabled={loading || passkeyLoading || !captchaToken}
+                    className="h-11 w-full rounded-xl border-slate-200 bg-white font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-900 disabled:opacity-50"
+                  >
+                    {passkeyLoading
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Esperando tu dispositivo...</>
+                      : <><Fingerprint className="mr-2 h-4 w-4" />Ingresar con huella o Face ID</>}
+                  </Button>
+                </>
+              )}
             </form>
 
             {/* Sign up section */}

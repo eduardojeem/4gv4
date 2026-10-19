@@ -477,6 +477,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || null
     const search = (searchParams.get('search') || '').trim()
     const chargeable = searchParams.get('chargeable') === 'true'
+    const technicianId = searchParams.get('technicianId') || null
     const offset = (page - 1) * pageSize
 
     const escapedSearch = search.replace(/[%,()_]/g, (character) => `\\${character}`)
@@ -512,6 +513,10 @@ export async function GET(request: NextRequest) {
 
       if (status && status !== 'all') {
         query = query.eq('status', status)
+      }
+
+      if (technicianId) {
+        query = query.eq('technician_id', technicianId)
       }
 
       if (chargeable) {

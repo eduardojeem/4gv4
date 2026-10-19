@@ -1,5 +1,6 @@
 import { createReceiptDocument } from './receipt-document'
 import { registerThermalPrintDocument } from './thermal-print'
+import { installmentProgressLayout } from './installment-progress-layout'
 import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
@@ -546,6 +547,7 @@ export async function createCreditPaymentReceiptPdf(
 
   const receiptNumber = input.receiptNumber || buildCreditPaymentReceiptNumber(input.paymentId)
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
+  const progreso = getCreditInstallmentProgress(input)
   const doc = await createReceiptDocument(t, (doc) => {
     const pageW = doc.internal.pageSize.getWidth()
     const pageH = doc.internal.pageSize.getHeight()
@@ -557,7 +559,6 @@ export async function createCreditPaymentReceiptPdf(
     const creditRows = buildCreditInfoRows(input, { compacto })
     const paymentRows = buildPaymentDetailRows(input, { compacto })
     const planRows = buildInstallmentPlanRows(input, { compacto })
-    const progreso = getCreditInstallmentProgress(input)
     const statusRows = buildAccountStatusRows(input, { compacto })
 
     const tablaMargen = { left: izq, right: pageW - izq - t.contentWidthMm }
@@ -664,23 +665,29 @@ export async function createCreditPaymentReceiptPdf(
       // Una casilla por cuota, llenas las pagadas. Es la misma pregunta del
       // cliente respondida sin leer: cuantas van y cuantas faltan. Se dibuja en
       // vez de una barra proporcional porque las casillas SON las cuotas.
-      if (progreso.total !== null && progreso.paid !== null && progreso.total <= 60) {
-        const barraY = fin + 3
-        const alto = t.isSheet ? 4 : 3
-        const ancho = t.contentWidthMm
-        const casilla = ancho / progreso.total
+      const layout = progreso.total !== null && progreso.paid !== null
+        ? installmentProgressLayout(progreso.total, progreso.paid, t.contentWidthMm)
+        : null
+      if (layout) {
+        let barraY = fin + 3
+        if (t.isSheet && barraY + layout.height + 9 > pageH - 15) {
+          doc.addPage()
+          barraY = 15
+        }
+        const inicio = izq + (t.contentWidthMm - layout.width) / 2
 
         doc.setDrawColor(0)
         doc.setLineWidth(0.25)
         doc.setFillColor(0, 0, 0)
 
-        for (let i = 0; i < progreso.total; i++) {
-          const x = izq + i * casilla
-          doc.rect(x, barraY, casilla, alto, i < progreso.paid ? 'FD' : 'D')
+        for (const box of layout.boxes) {
+          doc.rect(inicio + box.x + 0.15, barraY + box.y + 0.15, box.size - 0.3, box.size - 0.3, box.paid ? 'FD' : 'D')
         }
+        doc.setFontSize(t.tableBodyFontSize)
+        doc.text(toPdfText(layout.label), centro, barraY + layout.height + 4, { align: 'center' })
 
         doc.setLineWidth(0.2)
-        fin = barraY + alto
+        fin = barraY + layout.height + 6
       }
     }
 
@@ -732,7 +739,12 @@ export async function createCreditPaymentReceiptPdf(
       sections: [
         { title: 'DATOS DEL CLIENTE', rows: buildCreditInfoRows(input, { compacto }) },
         { title: 'DETALLE DEL PAGO', rows: buildPaymentDetailRows(input, { compacto }) },
-        { title: 'PLAN DE CUOTAS', rows: buildInstallmentPlanRows(input, { compacto }) },
+        {
+          title: 'PLAN DE CUOTAS', rows: buildInstallmentPlanRows(input, { compacto }),
+          installmentProgress: progreso.paid !== null && progreso.total !== null
+            ? { paid: progreso.paid, total: progreso.total }
+            : undefined,
+        },
         { title: 'ESTADO DE CUENTA', rows: buildAccountStatusRows(input, { compacto }) },
       ],
       contentWidthMm: t.contentWidthMm, fontSizePt: t.tableBodyFontSize + 0.3,
