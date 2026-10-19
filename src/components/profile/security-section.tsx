@@ -32,6 +32,7 @@ import {
   Info,
 } from 'lucide-react'
 import { ChangePasswordDialog } from './change-password-dialog'
+import { PasskeysSection } from './passkeys-section'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -836,6 +837,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
               )}
             </div>
           </div>
+
+          <Separator />
+
+          {/* Bloque Passkeys */}
+          <PasskeysSection />
 
           <Separator />
 
