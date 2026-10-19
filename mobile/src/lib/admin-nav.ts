@@ -15,9 +15,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: 'Análisis',
     items: [
       { key: 'overview', label: 'Resumen', hint: 'Vista general del negocio', icon: 'speedometer-outline', route: '/admin' },
-      { key: 'analytics', label: 'Analítica', hint: 'Análisis avanzado de datos', icon: 'analytics-outline', web: '/admin/analytics' },
+      { key: 'analytics', label: 'Analítica', hint: 'Visitas web y rendimiento', icon: 'analytics-outline', route: '/admin/analytics' },
       { key: 'reports', label: 'Reportes', hint: 'Informes y resultados', icon: 'document-text-outline', web: '/admin/reports' },
-      { key: 'visits', label: 'Visitas web', hint: 'Visitas de tu tienda online', icon: 'eye-outline', web: '/admin/visitas' },
+      { key: 'visits', label: 'Visitas web', hint: 'Visitas de tu tienda online', icon: 'eye-outline', route: '/admin/analytics' },
     ],
   },
   {
@@ -25,14 +25,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { key: 'cash', label: 'Monitor de cajas', hint: 'Cajas abiertas en todas las sucursales', icon: 'cash-outline', route: '/admin/cash' },
       { key: 'inventory', label: 'Inventario', hint: 'Productos y stock', icon: 'cube-outline', web: '/admin/inventory' },
-      { key: 'finances', label: 'Finanzas', hint: 'Gastos, nómina y rentabilidad', icon: 'wallet-outline', web: '/admin/finances' },
+      { key: 'finances', label: 'Finanzas', hint: 'Gastos, nómina y rentabilidad', icon: 'wallet-outline', route: '/admin/finances' },
     ],
   },
   {
     label: 'Equipo',
     items: [
       { key: 'users', label: 'Usuarios', hint: 'Invitar, roles y accesos', icon: 'people-outline', route: '/admin/users' },
-      { key: 'branches', label: 'Sucursales', hint: 'Multi sucursal', icon: 'business-outline', web: '/admin/branches' },
+      { key: 'branches', label: 'Sucursales', hint: 'Multi sucursal', icon: 'business-outline', route: '/admin/branches' },
     ],
   },
   {
@@ -45,9 +45,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   {
     label: 'Sistema',
     items: [
-      { key: 'subscriptions', label: 'Suscripción', hint: 'Plan, pagos y límites', icon: 'card-outline', web: '/admin/subscriptions' },
+      { key: 'subscriptions', label: 'Suscripción', hint: 'Plan, cuotas y límites', icon: 'card-outline', route: '/admin/subscriptions' },
       { key: 'security', label: 'Seguridad', hint: 'Logs y auditoría', icon: 'shield-checkmark-outline', web: '/admin/security' },
-      { key: 'settings', label: 'Configuración', hint: 'Impuestos, moneda y módulos', icon: 'settings-outline', web: '/admin/settings' },
+      { key: 'settings', label: 'Configuración', hint: 'Impuestos, moneda y negocio', icon: 'settings-outline', route: '/admin/settings' },
       { key: 'business', label: 'Datos del negocio', hint: 'Rubro, contacto y visibilidad', icon: 'storefront-outline', web: '/admin/onboarding' },
     ],
   },

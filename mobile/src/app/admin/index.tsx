@@ -140,13 +140,18 @@ export default function AdministrationScreen() {
         </>
       )}
 
-      <Card title="Gestión" colors={colors}>
+      <Card title="Gestión y Operaciones" colors={colors}>
         <Link icon="people-outline" label="Usuarios y roles" hint="Invitar, cambiar rol, suspender" onPress={() => router.push('/admin/users' as never)} colors={colors} />
+        <Link icon="business-outline" label="Sucursales" hint="Locales, cajas y puntos de venta" onPress={() => router.push('/admin/branches' as never)} colors={colors} />
         <Link icon="cash-outline" label="Monitor de cajas" hint="Suspender, bloquear o cerrar a distancia" onPress={() => router.push('/admin/cash' as never)} colors={colors} />
+        <Link icon="wallet-outline" label="Finanzas" hint="Resultados económicos y flujo de caja" onPress={() => router.push('/admin/finances' as never)} colors={colors} />
+        <Link icon="analytics-outline" label="Analítica" hint="Tráfico web y rendimiento comercial" onPress={() => router.push('/admin/analytics' as never)} colors={colors} />
+        <Link icon="card-outline" label="Suscripción" hint="Plan, consumo de cuotas y facturación" onPress={() => router.push('/admin/subscriptions' as never)} colors={colors} />
+        <Link icon="settings-outline" label="Configuración" hint="Parámetros de comercio e impuestos" onPress={() => router.push('/admin/settings' as never)} colors={colors} />
         <Link icon="star-outline" label="Reseñas" hint="Aprobar, ocultar y responder" onPress={() => router.push('/admin/reviews' as never)} colors={colors} />
       </Card>
 
-      <Card title="En la web" colors={colors}>
+      <Card title="Herramientas web adicionales" colors={colors}>
         {WEB_SECTIONS.map((section) => (
           <Link key={section.path} icon={section.icon as IconName} label={section.label} hint={section.hint} web onPress={() => openWeb(section.path)} colors={colors} />
         ))}
