@@ -8,6 +8,7 @@ import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/l
 import { calculateInventoryStats, type InventoryStatsInput } from '@/lib/inventory/stock-status'
 import { calculateInventoryHealth, type InventoryHealthInput } from '@/lib/inventory/inventory-health'
 import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
+import { redactCostFields, resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
 
 /**
  * Indicadores de inventario de TODA la empresa (y de la sucursal activa), no de
@@ -107,13 +108,23 @@ export const GET = withTenantAuth(
         thresholdMap
       ) as InventoryStatsInput[]
 
+      // El valor del stock al costo, el margen y los avisos de margen negativo o
+      // costo faltante son datos de costos: solo para quien puede leerlos.
+      const costAccess = await resolveOrganizationProductCostAccess(supabase, { userId: user.id, organizationId: organization.id })
+      const health = calculateInventoryHealth(scopedProducts as InventoryHealthInput[])
+      if (!costAccess.canReadCost) {
+        const issues = { ...health.issues } as Record<string, unknown>
+        delete issues.negative_margin
+        delete issues.missing_cost
+        health.issues = issues as typeof health.issues
+      }
       return NextResponse.json({
         success: true,
         data: {
-          ...calculateInventoryStats(scopedProducts),
+          ...redactCostFields(calculateInventoryStats(scopedProducts), costAccess),
           // Diagnóstico del catálogo para el asistente: con el stock y los
           // mínimos de la sucursal activa.
-          health: calculateInventoryHealth(scopedProducts as InventoryHealthInput[]),
+          health,
           branchId: branchScope.branchId ?? null,
           branchScoped,
           // Con esto en true las cifras son parciales y la pantalla lo dice.

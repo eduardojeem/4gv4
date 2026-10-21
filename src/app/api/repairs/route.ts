@@ -11,6 +11,7 @@ import {
 } from '@/lib/repairs/create-repair-idempotency'
 import {
   isNextResponse,
+  prepareRepairResponse,
   resolveRepairRouteContext,
   type RepairRouteContext,
 } from '@/app/api/repairs/_lib'
@@ -223,7 +224,7 @@ export async function POST(request: NextRequest) {
           { status: 409, headers: { 'Retry-After': '2' } }
         )
       }
-      const repair = await signRepairRecordImages(ctx.supabase, existingResult.data)
+      const repair = await prepareRepairResponse(ctx, await signRepairRecordImages(ctx.supabase, existingResult.data))
       return NextResponse.json({ repair, replayed: true }, { status: 200 })
     }
 
@@ -328,7 +329,7 @@ export async function POST(request: NextRequest) {
             )
           }
           if (!('conflict' in replay)) {
-            const repair = await signRepairRecordImages(ctx.supabase, racedResult.data)
+            const repair = await prepareRepairResponse(ctx, await signRepairRecordImages(ctx.supabase, racedResult.data))
             return NextResponse.json({ repair, replayed: true }, { status: 200 })
           }
           return NextResponse.json(
@@ -450,7 +451,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La reparacion se creo, pero no se pudo recuperar.' }, { status: 500 })
     }
 
-    const signedRepair = await signRepairRecordImages(ctx.supabase, fullRepair)
+    const signedRepair = await prepareRepairResponse(ctx, await signRepairRecordImages(ctx.supabase, fullRepair))
     return NextResponse.json({ repair: signedRepair, replayed: false }, { status: 201 })
   } catch (error) {
     const detail = error as SupabaseError
@@ -548,7 +549,7 @@ export async function GET(request: NextRequest) {
           signRepairRecordImages(ctx.supabase, repair)
         )))
         return NextResponse.json({
-          repairs,
+          repairs: await prepareRepairResponse(ctx, repairs),
           pagination: {
             page,
             pageSize,

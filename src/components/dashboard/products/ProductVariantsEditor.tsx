@@ -49,6 +49,8 @@ export interface ProductVariantsEditorProps {
   baseSku?: string
   businessVertical: BusinessVertical
   disabled?: boolean
+  canViewCost?: boolean
+  canUpdateCost?: boolean
 }
 
 function splitOptions(value: string): string[] {
@@ -179,6 +181,8 @@ export function ProductVariantsEditor({
   baseSku = 'VAR',
   businessVertical,
   disabled = false,
+  canViewCost = true,
+  canUpdateCost = true,
 }: ProductVariantsEditorProps) {
   // Los atributos guardados en Inventario → Variantes («Talle» con sus talles)
   // se ofrecen primero, para no volver a cargarlos producto por producto.
@@ -783,7 +787,7 @@ export function ProductVariantsEditor({
                     <tr>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Variante</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">SKU</th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Costo</th>
+                      {canViewCost && <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Costo</th>}
                       <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Precio Público</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Mayorista</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Stock</th>
@@ -799,7 +803,7 @@ export function ProductVariantsEditor({
                       const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
                       const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
                       const vKey = v.clientKey || v.client_key || v.id || String(index)
-                      const margin = vPurchase > 0 && vSale > 0
+                      const margin = canViewCost && vPurchase > 0 && vSale > 0
                         ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                         : null
                       return (
@@ -822,16 +826,17 @@ export function ProductVariantsEditor({
                               onChange={(e) => updateVariant(index, { sku: e.target.value })}
                             />
                           </td>
-                          <td className="px-2 py-2">
+                          {canViewCost && <td className="px-2 py-2">
                             <Input
                               type="number"
                               min={0}
                               step="0.01"
+                              disabled={!canUpdateCost}
                               value={vPurchase}
                               className="h-8 text-xs w-24"
                               onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
                             />
-                          </td>
+                          </td>}
                           <td className="px-2 py-2">
                             <Input
                               type="number"
@@ -894,7 +899,7 @@ export function ProductVariantsEditor({
                   const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
                   const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
                   const vKey = v.clientKey || v.client_key || v.id || String(index)
-                  const margin = vPurchase > 0 && vSale > 0
+                  const margin = canViewCost && vPurchase > 0 && vSale > 0
                     ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                     : null
                   return (
@@ -943,17 +948,18 @@ export function ProductVariantsEditor({
                                 onChange={(e) => updateVariant(index, { sku: e.target.value })}
                               />
                             </label>
-                            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                            {canViewCost && <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                               Costo
                               <Input
                                 className="mt-1 h-8 text-xs"
                                 type="number"
                                 min={0}
                                 step="0.01"
+                                disabled={!canUpdateCost}
                                 value={vPurchase}
                                 onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
                               />
-                            </label>
+                            </label>}
                             <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                               Precio Público
                               <Input

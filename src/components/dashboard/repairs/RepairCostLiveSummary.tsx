@@ -31,10 +31,10 @@ export function RepairCostLiveSummary({
 
   const includedTax = summary.taxBreakdown.reduce((total, row) => total + row.taxAmount, 0)
   const discounts = summary.discountAmount + summary.deductions
-  const totalInternalCost = summary.partsInternalCost ?? 0
+  const totalInternalCost = summary.partsInternalCost ?? null
   const finalTotal = summary.finalTotal ?? 0
-  const grossProfit = Math.max(0, finalTotal - totalInternalCost)
-  const profitMargin = finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
+  const grossProfit = totalInternalCost === null ? null : Math.max(0, finalTotal - totalInternalCost)
+  const profitMargin = grossProfit === null ? null : finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
 
   // Diagnóstico financiero y de rentabilidad
   const getProfitStatus = (margin: number, total: number, internalCost: number) => {
@@ -46,9 +46,9 @@ export function RepairCostLiveSummary({
     return { label: 'Baja Rentabilidad (<15%)', color: 'rose', icon: AlertTriangle, desc: 'Revisá los precios de venta o costos de piezas' }
   }
 
-  const profitStatus = getProfitStatus(profitMargin, finalTotal, totalInternalCost)
-  const costPercentage = finalTotal > 0 ? Math.min(100, (totalInternalCost / finalTotal) * 100) : 0
-  const profitPercentage = Math.max(0, 100 - costPercentage)
+  const profitStatus = profitMargin === null || totalInternalCost === null ? { label: 'No disponible', color: 'neutral', icon: HelpCircle, desc: 'Costo interno no disponible' } : getProfitStatus(profitMargin, finalTotal, totalInternalCost)
+  const costPercentage = totalInternalCost === null ? null : finalTotal > 0 ? Math.min(100, (totalInternalCost / finalTotal) * 100) : 0
+  const profitPercentage = costPercentage === null ? null : Math.max(0, 100 - costPercentage)
 
   return (
     <aside aria-label="Resumen de costos" className="h-fit overflow-hidden rounded-xl border bg-card lg:sticky lg:top-0 shadow-xs">
@@ -76,7 +76,7 @@ export function RepairCostLiveSummary({
           <dd className="font-medium tabular-nums">{formatCurrency(summary.chargedPartsSubtotal)}</dd>
         </div>
 
-        {canViewCost && summary.includedMaterialsInternalCost > 0 && (
+        {canViewCost && summary.includedMaterialsInternalCost !== null && summary.includedMaterialsInternalCost > 0 && (
           <div className="rounded-lg bg-amber-50/80 p-2.5 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40">
             <div className="flex justify-between gap-4">
               <dt className="text-xs font-semibold text-amber-900 dark:text-amber-200">Materiales incluidos</dt>
@@ -150,7 +150,7 @@ export function RepairCostLiveSummary({
       </div>
 
       {/* Impacto Financiero y Rentabilidad (Solo usuarios autorizados) */}
-      {canViewCost && (
+      {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && costPercentage !== null && profitPercentage !== null && (
         <div className="border-t bg-gradient-to-b from-indigo-50/60 via-indigo-50/30 to-background p-4 dark:from-indigo-950/30 dark:via-indigo-950/10 dark:to-background space-y-3">
           {/* Encabezado con estado de rentabilidad */}
           <div className="flex items-center justify-between gap-2">

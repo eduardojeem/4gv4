@@ -142,9 +142,9 @@ export interface ProductDashboardStats {
   total_products: number
   active_products: number
   total_stock_value: number
-  total_cost_value: number
-  total_margin: number
-  avg_margin_percentage: number
+  total_cost_value: number | null
+  total_margin: number | null
+  avg_margin_percentage: number | null
   low_stock_count: number
   out_of_stock_count: number
   categories_count: number

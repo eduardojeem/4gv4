@@ -1,0 +1,42 @@
+-- Recuperación PUNTUAL de la 04, para usar en lugar de rollback_04.sql.
+-- rollback_04 vuelve a abrir los datos de clientes al rol `customer`: usarlo solo si
+-- la 04 rompe algo que no se pueda arreglar con uno de estos bloques.
+-- Cada bloque está comentado; descomentar y ejecutar solo el que corresponda al síntoma.
+-- Ninguno da acceso al rol `customer`.
+
+-- ─── A. El personal dejó de ver el historial de estados de reparaciones ──────
+-- begin;
+-- set local lock_timeout = '5s';
+-- create policy repair_status_history_staff_read on public.repair_status_history
+--   as permissive for select to authenticated
+--   using (exists (select 1 from public.organization_members m
+--     where m.organization_id = repair_status_history.organization_id and m.user_id = auth.uid()
+--       and m.status = 'active' and m.role <> 'customer'));
+-- commit;
+
+-- ─── B. El personal dejó de ver fotos de reparaciones ───────────────────────
+-- begin;
+-- set local lock_timeout = '5s';
+-- create policy repair_images_staff_read on public.repair_images
+--   as permissive for select to authenticated
+--   using (exists (select 1 from public.repairs r join public.organization_members m on m.organization_id = r.organization_id
+--     where r.id = repair_images.repair_id and m.user_id = auth.uid() and m.status = 'active' and m.role <> 'customer'));
+-- commit;
+
+-- ─── C. Personal sin products.read_cost necesita ver revisiones de costo ────
+-- (expone el costo interno al personal; preferible conceder products.read_cost)
+-- begin;
+-- set local lock_timeout = '5s';
+-- create policy repair_cost_revisions_staff_read on public.repair_cost_revisions
+--   as permissive for select to authenticated
+--   using (public.has_org_permission(organization_id, 'repairs.orders.update'));
+-- commit;
+
+-- ─── D. Un flujo del cliente necesita leer SU ficha por la Data API ─────────
+-- (hoy ninguno lo hace: el portal usa el rol de servicio)
+-- begin;
+-- set local lock_timeout = '5s';
+-- create policy customers_self_read on public.customers
+--   as permissive for select to authenticated
+--   using (profile_id = auth.uid());
+-- commit;

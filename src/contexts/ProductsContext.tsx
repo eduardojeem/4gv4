@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { PRODUCT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost, attachProductCosts } from '@/lib/products/cost-columns'
 
 // ============================================================================
 // Types
@@ -121,12 +122,14 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
 
             const { data, error: fetchError } = await supabase
                 .from('products')
-                .select('*, category:categories(name)')
+                .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(name)`)
                 .order('name', { ascending: true })
 
             if (fetchError) throw fetchError
 
-            const mappedProducts: Product[] = ((data as ProductDbRow[] | null) || []).map((item) => ({
+            // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+            const withCosts = await attachProductCosts(asCostRpcClient(supabase), (data as unknown as ProductDbRow[] | null) || [])
+            const mappedProducts: Product[] = (withCosts as unknown as ProductDbRow[]).map((item) => ({
                 id: item.id,
                 name: item.name,
                 description: item.description,
@@ -177,13 +180,14 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
                 is_active: data.active ?? true
             }
 
-            const { data: newProduct, error: createError } = await supabase
+            const { data: newProductRow, error: createError } = await supabase
                 .from('products')
                 .insert([dbData])
-                .select('*, category:categories(name)')
+                .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(name)`)
                 .single()
 
             if (createError) throw createError
+            const newProduct = await attachProductCost(asCostRpcClient(supabase), newProductRow as unknown as ProductDbRow)
 
             const mappedProduct: Product = {
                 id: newProduct.id,
@@ -239,14 +243,15 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
             else if (data.image_url !== undefined) dbData.images = [data.image_url]
             if (data.active !== undefined) dbData.is_active = data.active
 
-            const { data: updatedProduct, error: updateError } = await supabase
+            const { data: updatedProductRow, error: updateError } = await supabase
                 .from('products')
                 .update(dbData)
                 .eq('id', id)
-                .select('*, category:categories(name)')
+                .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(name)`)
                 .single()
 
             if (updateError) throw updateError
+            const updatedProduct = await attachProductCost(asCostRpcClient(supabase), updatedProductRow as unknown as ProductDbRow)
 
             const mappedProduct: Product = {
                 id: updatedProduct.id,
@@ -331,14 +336,15 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
                     newStock = Math.max(0, quantity)
             }
 
-            const { data: updatedProduct, error: updateError } = await supabase
+            const { data: updatedProductRow, error: updateError } = await supabase
                 .from('products')
                 .update({ stock_quantity: newStock })
                 .eq('id', id)
-                .select('*, category:categories(name)')
+                .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(name)`)
                 .single()
 
             if (updateError) throw updateError
+            const updatedProduct = await attachProductCost(asCostRpcClient(supabase), updatedProductRow as unknown as ProductDbRow)
 
             const mappedProduct: Product = {
                 id: updatedProduct.id,

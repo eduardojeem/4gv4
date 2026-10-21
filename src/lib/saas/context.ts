@@ -60,7 +60,8 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
     if (activeOrganizationId) {
       chosen = rows.find((row) => orgOf(row)?.id === activeOrganizationId) ?? null
     }
-    if (!chosen) {
+    // Never silently switch organizations after an explicit invalid selection.
+    if (!activeOrganizationId) {
       chosen = byBestRole[0] ?? null
     }
   }

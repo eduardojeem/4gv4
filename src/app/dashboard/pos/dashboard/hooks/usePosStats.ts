@@ -13,16 +13,19 @@ import { EMPTY_POS_STATS, usePosDetails, type PosStats } from './usePosDetails'
 export type { PosStats, PosSaleItem, PosRecentSale, PosEnrichedSale, PosCreditRecord, PosDeliveredRepairRecord } from './usePosDetails'
 
 const amount = z.number().finite()
+// Sin products.read_cost la base devuelve costHidden=true y estos campos en null.
+const hiddenAmount = amount.nullable()
 const summarySchema = z.object({
   totalSales: amount, netSales: amount, totalTransactions: amount, averageTicket: amount,
-  totalCost: amount, itemsWithoutCost: amount,
+  costHidden: z.boolean().optional().default(false),
+  totalCost: hiddenAmount, itemsWithoutCost: hiddenAmount,
   dailySales: z.array(z.object({ bucket_day: z.string(), sales: amount, transactions: amount })),
   topProducts: z.array(z.object({ name:z.string(), sales:amount, revenue:amount })),
   paymentMethods: z.array(z.object({ name:z.string(), value:amount })),
   recentSales: z.array(z.object({id:z.string(),created_at:z.string(),total:amount.nullable(),payment_method:z.string().nullable(),customer:z.object({name:z.string().nullable()}),customer_name:z.string().nullable(),items_count:amount})),
   creditStats:z.object({totalAmount:amount,count:amount,averageTicket:amount,pendingAmount:amount}),
   repairCreditStats:z.object({totalAmount:amount,count:amount,pendingAmount:amount}),
-  repairStats:z.object({totalAmount:amount,deliveredAmount:amount,deliveredCount:amount,readyAmount:amount,readyCount:amount,activeCount:amount,deliveredPartsCost:amount,deliveredLaborCost:amount,netProfit:amount,refundsAmount:amount}),
+  repairStats:z.object({totalAmount:amount,deliveredAmount:amount,deliveredCount:amount,readyAmount:amount,readyCount:amount,activeCount:amount,deliveredPartsCost:hiddenAmount,deliveredLaborCost:hiddenAmount,netProfit:hiddenAmount,refundsAmount:amount}),
   refunds:z.object({totalAmount:amount,salesAmount:amount,repairsAmount:amount}),
 })
 type Summary = z.infer<typeof summarySchema>
@@ -63,7 +66,7 @@ export function usePosStats(dateRange: DateRange | undefined) {
     setLoading(true); setError(null)
     try {
       const raw = await getCachedDashboardSummary<Summary>(key, async () => {
-        let query = supabase.rpc('dashboard_pos_summary' as never, { p_organization_id: organizationId, p_branch_id: branchId === 'all' ? null : branchId, p_from: from, p_to: to, p_timezone: timezone } as never)
+        let query = supabase.rpc('dashboard_pos_summary_s1' as never, { p_organization_id: organizationId, p_branch_id: branchId === 'all' ? null : branchId, p_from: from, p_to: to, p_timezone: timezone } as never)
         if (signal) query = query.abortSignal(signal)
         const { data, error } = await query
         if (error) throw new Error(error.message || 'No se pudo cargar el resumen del POS')
@@ -78,15 +81,16 @@ export function usePosStats(dateRange: DateRange | undefined) {
       if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return
       const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
       const dailyBuckets = new Map(raw.dailySales.map(day=>[day.bucket_day,day]))
-      const profit = calculateProfit({ totalSales: raw.totalSales - raw.refunds.salesAmount, netSales: raw.netSales - raw.refunds.salesAmount, totalCost: raw.totalCost, repairDeliveredAmount: raw.repairStats.netProfit })
+      const costHidden = raw.costHidden
+      const profit = calculateProfit({ totalSales: raw.totalSales - raw.refunds.salesAmount, netSales: raw.netSales - raw.refunds.salesAmount, totalCost: raw.totalCost, repairDeliveredAmount: raw.repairStats.netProfit, costUnavailable: costHidden })
       const colors: Record<string,string> = { Efectivo:'#10b981', Tarjeta:'#3b82f6', Transferencia:'#f59e0b', Credito:'#8b5cf6', Otros:'#6b7280' }
-      const next: PosStats = { ...EMPTY_POS_STATS, ...raw, allSales: [], allCredits: [], allRepairCredits: [],
-        repairStats: { ...raw.repairStats, deliveredRepairs: [] },
+      const next: PosStats = { ...EMPTY_POS_STATS, ...raw, costHidden, allSales: [], allCredits: [], allRepairCredits: [],
+        repairStats: { ...raw.repairStats, deliveredPartsCost: raw.repairStats.deliveredPartsCost, deliveredLaborCost: raw.repairStats.deliveredLaborCost, netProfit: raw.repairStats.netProfit, deliveredRepairs: [] },
         recentSales: raw.recentSales.map(sale=>({...sale,total:sale.total??null,payment_method:sale.payment_method??null,customer_name:sale.customer_name??null,customer:{name:sale.customer?.name??null}})),
         topProduct: raw.topProducts[0] ?? {name:'N/A',sales:0},
         dailySales: buildDailySales({from: new Date(from), to: new Date(to)}, []).map((day,i) => ({ ...day, sales: dailyBuckets.get(expectedDays[i])!.sales, transactions: dailyBuckets.get(expectedDays[i])!.transactions })),
         paymentMethods: raw.paymentMethods.map(method => ({ ...method, color: colors[method.name] ?? '#6b7280' })),
-        profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen mostrado es optimista.`] : [] }
+        profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen no está disponible.`] : [] }
       setSnapshot({key,stats:next})
     } catch (cause) {
       if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setError(cause instanceof Error ? cause : new Error('No se pudo cargar el resumen'))

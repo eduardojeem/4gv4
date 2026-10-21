@@ -14,8 +14,18 @@ vi.mock('@/app/api/repairs/_lib', () => ({
   isNextResponse: vi.fn(() => false),
 }))
 
+// Permisos de costo de la organización activa (los resuelve el servidor, no el rol global).
+const costAccess = vi.hoisted(() => ({ canReadCost: true, canWriteCost: true }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: vi.fn(() => ({})) }))
+vi.mock('@/lib/products/cost-access', () => ({
+  resolveOrganizationProductCostAccess: vi.fn(async (_client: unknown, scope: { userId: string; organizationId: string }) => {
+    expect(scope).toEqual({ userId: 'user-1', organizationId: 'org-1' })
+    return { ...costAccess }
+  }),
+}))
+
 describe('GET /api/repairs/inventory/search', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks(); costAccess.canReadCost = true; costAccess.canWriteCost = true })
 
   it('returns active tenant products with branch stock, cost, price and tax', async () => {
     productsLimit.mockResolvedValue({
@@ -122,5 +132,48 @@ describe('GET /api/repairs/inventory/search', () => {
       wholesalePriceApplied: false,
       wholesalePriceFallback: true,
     }))
+  })
+
+  // S2: sin permiso de costos no viaja el costo interno ni el del material incluido;
+  // solo el aviso de que el servicio trae material (el servidor resuelve el costo al guardar).
+  it('hides internal and included-material costs from users without cost permission', async () => {
+    costAccess.canReadCost = false
+    costAccess.canWriteCost = false
+    productsLimit.mockResolvedValue({
+      data: [
+        { id: 'product-1', sku: 'OLED-1', name: 'Pantalla OLED', purchase_price: 300_000, sale_price: 500_000, tax_rate: 10, unit_measure: 'unidad', updated_at: 'v1' },
+        { id: 'service-1', sku: 'SRV-LIMP', name: 'Limpieza interna', purchase_price: 100_000, sale_price: 250_000, tax_rate: 10, unit_measure: 'servicio', updated_at: 'v1' },
+      ],
+      error: null,
+    })
+    inventoryIn.mockResolvedValue({ data: [{ product_id: 'product-1', stock_quantity: 4, updated_at: 'v2' }], error: null })
+    const productBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), limit: productsLimit }
+    const inventoryBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: inventoryIn }
+    ctx.supabase.from.mockImplementation((table: string) => table === 'products' ? productBuilder : inventoryBuilder)
+
+    const { GET } = await import('./route')
+    const response = await GET(new Request('http://localhost/api/repairs/inventory/search?q=pantalla'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.items[0]).toEqual(expect.objectContaining({ productId: 'product-1', unitCost: null, includedMaterialCost: null, costHidden: true, unitPrice: 500_000 }))
+    expect(body.items[1]).toEqual(expect.objectContaining({ productId: 'service-1', unitCost: null, includedMaterialCost: null, includesMaterial: true, costHidden: true }))
+    expect(JSON.stringify(body)).not.toContain('300000')
+    expect(JSON.stringify(body)).not.toContain('100000')
+  })
+
+  it('returns internal costs to users with cost permission', async () => {
+    productsLimit.mockResolvedValue({
+      data: [{ id: 'service-1', sku: 'SRV-LIMP', name: 'Limpieza interna', purchase_price: 100_000, sale_price: 250_000, tax_rate: 10, unit_measure: 'servicio', updated_at: 'v1' }],
+      error: null,
+    })
+    inventoryIn.mockResolvedValue({ data: [], error: null })
+    const productBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), limit: productsLimit }
+    const inventoryBuilder = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: inventoryIn }
+    ctx.supabase.from.mockImplementation((table: string) => table === 'products' ? productBuilder : inventoryBuilder)
+
+    const { GET } = await import('./route')
+    const body = await (await GET(new Request('http://localhost/api/repairs/inventory/search?q=limpieza'))).json()
+    expect(body.items[0]).toEqual(expect.objectContaining({ includedMaterialCost: 100_000, includesMaterial: true, costHidden: false }))
   })
 })

@@ -13,6 +13,25 @@ const range = {from:new Date(2026,9,17),to:new Date(2026,9,17)}
 const summary = {...EMPTY_POS_STATS,totalSales:110,totalTransactions:1,netSales:100,totalCost:60,itemsWithoutCost:1,dailySales:[{bucket_day:'2026-10-17',sales:110,transactions:1}],refunds:{totalAmount:10,salesAmount:10,repairsAmount:0}}
 beforeEach(()=>{vi.clearAllMocks();state.scope.current='user:org';state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:summary,error:null}),{abortSignal(){return this}}));state.full.mockResolvedValue({...EMPTY_POS_STATS,allSales:[{id:'sale',created_at:new Date().toISOString(),cost:60,refundAmount:10,itemsCount:2,profit:40}],warnings:[]})})
 describe('POS summary and explicit detail boundary',()=>{
+ it('uses the versioned S1 RPC and preserves hidden costs as null',async()=>{
+  state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:{...summary,costHidden:true,totalCost:null,itemsWithoutCost:null,repairStats:{...summary.repairStats,deliveredPartsCost:null,deliveredLaborCost:null,netProfit:null}},error:null}),{abortSignal(){return this}}))
+  const {result}=renderHook(()=>usePosStats(range))
+  await waitFor(()=>expect(result.current.loading).toBe(false))
+  expect(state.rpc.mock.calls[0][0]).toBe('dashboard_pos_summary_s1')
+  expect(result.current.stats.profitStats.totalCost).toBeNull()
+  expect(result.current.stats.profitStats.withTax.salesProfit).toBeNull()
+  expect(result.current.stats.repairStats.deliveredPartsCost).toBeNull()
+  expect(result.current.stats.repairStats.netProfit).toBeNull()
+  expect(result.current.stats.repairStats.deliveredLaborCost).toBeNull()
+  expect(result.current.stats.profitStats.itemsWithoutCost).toBeNull()
+ })
+ it('keeps legitimate zero cost and calculates its margin',async()=>{
+  state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:{...summary,totalCost:0,itemsWithoutCost:0},error:null}),{abortSignal(){return this}}))
+  const {result}=renderHook(()=>usePosStats(range))
+  await waitFor(()=>expect(result.current.loading).toBe(false))
+  expect(result.current.stats.profitStats.totalCost).toBe(0)
+  expect(result.current.stats.profitStats.withTax.profitMargin).toBe(100)
+ })
  it('loads one aggregate RPC without raw sales, items, credits or repairs for KPI rendering',async()=>{
   const {result}=renderHook(()=>usePosStats(range))
   await waitFor(()=>expect(result.current.loading).toBe(false))

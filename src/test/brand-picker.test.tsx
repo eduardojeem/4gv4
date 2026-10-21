@@ -284,8 +284,13 @@ describe('el formulario de producto y el alta de marca', () => {
   /** La consulta no tenía tope y PostgREST corta en mil filas sin avisar. */
   it('el listado no se trae las marcas sin tope', () => {
     const hook = leer('src/hooks/useProductsSupabase.ts')
-    const marcas = hook.slice(hook.indexOf('const fetchBrands'))
-    expect(marcas.slice(0, 600)).toContain('.limit(200)')
+    const start = hook.indexOf('const fetchBrands')
+    const end = hook.indexOf('// Función para obtener proveedores', start)
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    const marcas = hook.slice(start, end)
+    expect(marcas).toContain('.limit(200)')
+    expect(marcas).toContain(".eq('organization_id', organizationId!)")
   })
 
   it('crear la marca propia es la acción principal del alta', () => {

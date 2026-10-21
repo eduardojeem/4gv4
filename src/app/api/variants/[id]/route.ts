@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { canViewProductCost } from '@/lib/auth/role-utils'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolveOrganizationProductCostAccess, hasExplicitProductCost, normalizeUnknownProductCosts, hydrateVariantCostsFromService } from '@/lib/products/cost-access'
+import { VARIANT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 type ProductSummaryRow = {
   sale_price: number | null
@@ -89,6 +91,13 @@ function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
   return null
 }
 
+// S1: la sesión del usuario ya no lee columnas de costo. Se piden las demás y el
+// costo (solo si el usuario puede verlo) se completa desde el cliente de servicio.
+const VARIANT_WITH_PRODUCT_COLUMNS = `${VARIANT_CLIENT_COLUMNS}, product:products(sale_price, wholesale_price, min_stock, max_stock)`
+async function hydrateVariantRows(rows: ProductVariantRow[], organizationId: string, canReadCost: boolean) {
+  return canReadCost ? hydrateVariantCostsFromService(createAdminSupabase(), organizationId, rows) : rows
+}
+
 function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
@@ -98,7 +107,7 @@ function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
 
   const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
   const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
-  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice) || undefined
+  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice)
 
   const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
@@ -130,13 +139,14 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
   routeContext,
 ) => {
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const supabase = await createClient()
 
     const { data, error } = await supabase
       .from('product_variants')
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -155,7 +165,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(data as ProductVariantRow, canViewProductCost(user.role)),
+      data: mapVariantRow((await hydrateVariantRows([data as unknown as ProductVariantRow], organization.id, costAccess.canReadCost))[0], costAccess.canReadCost),
     })
   } catch (error) {
     logger.error('Variants [id] GET API error', { error })
@@ -173,9 +183,16 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
   routeContext,
 ) => {
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    if(hasExplicitProductCost(rawBody) && !costAccess.canWriteCost) return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'},{status:403})
+    const body = normalizeUnknownProductCosts(rawBody,false)
+
     const supabase = await createClient()
 
     const { data: existing, error: existingError } = await supabase
@@ -288,7 +305,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       .update(patch)
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .maybeSingle()
 
     if (updateError) {
@@ -308,7 +325,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(updated as ProductVariantRow, canViewProductCost(user.role)),
+      data: mapVariantRow((await hydrateVariantRows([updated as unknown as ProductVariantRow], organization.id, costAccess.canReadCost))[0], costAccess.canReadCost),
     })
   } catch (error) {
     logger.error('Variants [id] PUT API error', { error })
@@ -326,13 +343,14 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
   routeContext,
 ) => {
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
     const supabase = await createClient()
 
     const { data: existing, error: existingError } = await supabase
       .from('product_variants')
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -370,7 +388,7 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       success: true,
       data: {
         message: 'Variante desactivada para preservar su historial',
-        deleted_variant: mapVariantRow(existing as ProductVariantRow, canViewProductCost(user.role)),
+        deleted_variant: mapVariantRow((await hydrateVariantRows([existing as unknown as ProductVariantRow], organization.id, costAccess.canReadCost))[0], costAccess.canReadCost),
       },
     })
   } catch (error) {
@@ -389,9 +407,16 @@ export const PATCH = withTenantAuth({ permission: 'products.update', module: 'in
   routeContext,
 ) => {
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const { params } = routeContext as { params: Promise<{ id: string }> }
     const { id } = await params
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    if(hasExplicitProductCost(rawBody) && !costAccess.canWriteCost) return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'},{status:403})
+    const body = normalizeUnknownProductCosts(rawBody,false)
+
     const operation = String(body?.operation || '').trim()
     const stock = toSafeNumber(body?.stock, 0)
 
@@ -449,7 +474,7 @@ export const PATCH = withTenantAuth({ permission: 'products.update', module: 'in
       .update({ stock_quantity: nextStock })
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .maybeSingle()
 
     if (updateError) {
@@ -470,7 +495,7 @@ export const PATCH = withTenantAuth({ permission: 'products.update', module: 'in
 
     return NextResponse.json({
       success: true,
-      data: mapVariantRow(updated as ProductVariantRow, canViewProductCost(user.role)),
+      data: mapVariantRow((await hydrateVariantRows([updated as unknown as ProductVariantRow], organization.id, costAccess.canReadCost))[0], costAccess.canReadCost),
     })
   } catch (error) {
     logger.error('Variants [id] PATCH API error', { error })

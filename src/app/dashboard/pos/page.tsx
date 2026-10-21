@@ -74,7 +74,7 @@ import { CartItem } from './types'
 import type { Product } from '@/types/product-unified'
 import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError, getQuickItemMargin } from './lib/quick-item'
-import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useProductCostAccess } from '@/hooks/use-can-view-cost'
 import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { useQuoteToCart } from './hooks/useQuoteToCart'
 import { useOfflineSales } from './hooks/useOfflineSales'
@@ -346,7 +346,7 @@ function POSPageContent() {
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
   // El costo se oculta a quien no tiene permiso, igual que en el resto del sistema.
-  const canViewCost = useCanViewCost()
+  const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
   const [quickItemName, setQuickItemName] = useState('')
   const [quickItemPrice, setQuickItemPrice] = useState('')
   const [quickItemQty, setQuickItemQty] = useState('1')
@@ -360,7 +360,7 @@ function POSPageContent() {
   )
   // El costo se captura al vender y queda inmutable: si se crea el item sin
   // costo, esa venta queda para siempre sin ganancia calculable en Finanzas.
-  const quickItemMissingCost = canViewCost && !(Number(quickItemPurchasePrice) > 0)
+  const quickItemMissingCost = canUpdateCost && !(Number(quickItemPurchasePrice) > 0)
   const [quickItemError, setQuickItemError] = useState('')
   const [quickItemSaving, setQuickItemSaving] = useState(false)
 
@@ -1316,7 +1316,7 @@ function POSPageContent() {
         publishToCatalog: quickItemPublishToCatalog,
         // Solo se manda el costo si el usuario puede verlo: para el resto el
         // campo no existe y el item se crea sin costo, como antes.
-        purchasePrice: canViewCost ? quickItemPurchasePrice : '',
+        purchasePrice: canUpdateCost ? quickItemPurchasePrice : '',
         wholesalePrice: quickItemWholesalePrice,
       })
       const response = await fetch('/api/products', {
@@ -1359,7 +1359,7 @@ function POSPageContent() {
     } finally {
       setQuickItemSaving(false)
     }
-  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, canViewCost, selectedBranchId, syncProduct, addToCartHook])
+  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, canUpdateCost, selectedBranchId, syncProduct, addToCartHook])
 
   return (
     <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -2500,7 +2500,7 @@ function POSPageContent() {
                         value={quickItemPurchasePrice}
                         onChange={(e) => setQuickItemPurchasePrice(e.target.value)}
                         placeholder="0"
-                        disabled={quickItemSaving}
+                        disabled={quickItemSaving || !canUpdateCost}
                       />
                       {quickItemMargin ? (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400">

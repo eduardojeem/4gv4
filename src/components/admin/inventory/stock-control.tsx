@@ -48,6 +48,7 @@ import {
   Minus
 } from 'lucide-react'
 import StockMovements from './stock-movements'
+import { asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 // Interfaces
 interface StockMovement {
@@ -220,7 +221,6 @@ const StockControl: React.FC<{ restock?: StockRestockRequest | null }> = ({ rest
           stock_quantity,
           min_stock,
           max_stock,
-          purchase_price,
           sale_price,
           category:categories(name),
           supplier:suppliers(name)
@@ -238,7 +238,8 @@ const StockControl: React.FC<{ restock?: StockRestockRequest | null }> = ({ rest
       if (productsError) throw productsError
       setProductTotalCount(productsCount || 0)
 
-      const productRows = (productsData || []) as unknown as ProductQueryRow[]
+      // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+      const productRows = (await attachProductCosts(asCostRpcClient(supabase), productsData || [])) as unknown as ProductQueryRow[]
       const { stockMap, thresholdMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
         await loadBranchInventoryStockMap(
           supabase as unknown as BranchInventoryClient,

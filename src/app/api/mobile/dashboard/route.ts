@@ -1,3 +1,4 @@
+import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
 import { roleHasPermission } from '@/lib/saas/permissions'
 import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
@@ -48,11 +49,12 @@ export async function GET() {
 
     const profileRow = profile.data as { full_name?: string | null; avatar_url?: string | null } | null
 
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:auth.user.id,organizationId:organization.id})
     return NextResponse.json({
-      capabilities: Object.fromEntries(([
+      capabilities: {...Object.fromEntries(([
         'products.create','products.update','products.delete','inventory.stock.manage',
         'crm.customers.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
-      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])),
+      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
       user: {
         email: auth.user.email ?? null,
         name: profileRow?.full_name || null,

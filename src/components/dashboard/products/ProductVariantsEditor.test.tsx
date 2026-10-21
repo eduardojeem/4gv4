@@ -170,3 +170,18 @@ describe('ProductVariantsEditor', () => {
     expect(next.variants).toHaveLength(2)
   })
 })
+
+
+it('hides variant costs without read permission and leaves other variant fields editable',()=>{
+ const onChange=vi.fn()
+ render(<ProductVariantsEditor businessVertical="clothing" value={{hasVariants:true,attributes:[{key:'size',label:'Talle',control:'select',options:['M']}],variants:[{clientKey:'size=M',name:'M',attributes:{size:'M'},sku:'SKU-M',purchasePrice:40000,salePrice:75000,minStock:0,stockQuantity:2,isActive:true}]}} basePrices={{purchasePrice:40000,salePrice:75000}} onChange={onChange} canViewCost={false} canUpdateCost={false}/> )
+ expect(screen.queryByText('Costo')).not.toBeInTheDocument()
+ expect(screen.queryByDisplayValue('40000')).not.toBeInTheDocument()
+ fireEvent.change(screen.getAllByDisplayValue('SKU-M')[0],{target:{value:'SKU-NEW'}})
+ expect(onChange.mock.calls.at(-1)?.[0].variants[0].sku).toBe('SKU-NEW')
+})
+
+it('shows cost read-only when read is allowed but update is denied',()=>{
+ render(<ProductVariantsEditor businessVertical="clothing" value={{hasVariants:true,attributes:[{key:'size',label:'Talle',control:'select',options:['M']}],variants:[{clientKey:'size=M',name:'M',attributes:{size:'M'},sku:'SKU-M',purchasePrice:40000,salePrice:75000,minStock:0,stockQuantity:2,isActive:true}]}} basePrices={{purchasePrice:40000,salePrice:75000}} onChange={vi.fn()} canViewCost canUpdateCost={false}/> )
+ for(const cost of screen.getAllByDisplayValue('40000')) expect(cost).toBeDisabled()
+})

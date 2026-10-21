@@ -45,10 +45,10 @@ export function RepairCostSummary({
   const canViewCost = useCanViewCost()
   const [history, setHistory] = useState<HistoryRow[]>([])
 
-  const totalInternalCost = Number(summary.partsInternalCost ?? 0)
+  const totalInternalCost = summary.partsInternalCost ?? null
   const finalTotal = Number(summary.finalTotal ?? 0)
-  const grossProfit = Math.max(0, finalTotal - totalInternalCost)
-  const profitMargin = finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
+  const grossProfit = totalInternalCost === null ? null : Math.max(0, finalTotal - totalInternalCost)
+  const profitMargin = grossProfit === null ? null : finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
 
   useEffect(() => {
     if (!repairId) return
@@ -112,7 +112,7 @@ export function RepairCostSummary({
       </div>
 
       {/* Tarjeta de Rentabilidad y Ganancia (Visible para usuarios con permiso de ver costo) */}
-      {canViewCost && (
+      {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && (
         <div className="rounded-2xl border border-emerald-300/80 bg-gradient-to-br from-emerald-50/80 via-background to-teal-50/40 p-4 sm:p-5 dark:border-emerald-900/80 dark:from-emerald-950/40 dark:via-background dark:to-teal-950/20 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-200/60 dark:border-emerald-900/60">
             <div className="flex items-center gap-2.5">
@@ -175,7 +175,7 @@ export function RepairCostSummary({
           <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Servicios</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.servicesSubtotal ?? 0)}</dd></div>
           <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Repuestos cobrados</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.chargedPartsSubtotal ?? summary.partsSubtotal)}</dd></div>
           {summary.laborAmount > 0 && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Mano de obra adicional</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.laborAmount)}</dd></div>}
-          {canViewCost && (summary.includedMaterialsInternalCost ?? 0) > 0 && <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex justify-between gap-3"><dt>Material incluido · interno</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.includedMaterialsInternalCost ?? 0)}</dd></div><p className="text-[10px]">Gs. 0 adicionales al cliente</p></div>}
+          {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && (summary.includedMaterialsInternalCost ?? 0) > 0 && <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex justify-between gap-3"><dt>Material incluido · interno</dt><dd className="font-medium tabular-nums">{formatCurrency(summary.includedMaterialsInternalCost ?? 0)}</dd></div><p className="text-[10px]">Gs. 0 adicionales al cliente</p></div>}
           {summary.additionalCharges > 0 && <div className="flex justify-between gap-3"><dt>Cargos adicionales</dt><dd>{formatCurrency(summary.additionalCharges)}</dd></div>}
           <Separator />
           <div className="flex justify-between gap-3 font-semibold"><dt>Subtotal</dt><dd>{formatCurrency(summary.subtotalBeforeDiscount)}</dd></div>
@@ -213,7 +213,7 @@ export function RepairCostSummary({
                   <th className="px-3 py-2.5 text-center">Tipo</th>
                   <th className="px-3 py-2.5 text-center">Cant.</th>
                   <th className="px-3 py-2.5 text-right">Precio Venta</th>
-                  {canViewCost && (
+                  {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && (
                     <>
                       <th className="px-3 py-2.5 text-right text-amber-800 dark:text-amber-300">Costo Interno</th>
                       <th className="px-4 py-2.5 text-right text-emerald-800 dark:text-emerald-300">Ganancia</th>
@@ -248,7 +248,7 @@ export function RepairCostSummary({
                       <td className="px-3 py-2.5 text-right font-bold tabular-nums text-foreground">
                         {formatCurrency(lineTotal)}
                       </td>
-                      {canViewCost && (
+                      {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && (
                         <>
                           <td className="px-3 py-2.5 text-right font-medium tabular-nums text-amber-800 dark:text-amber-300">
                             {formatCurrency(lineInternal)}

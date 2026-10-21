@@ -1,7 +1,9 @@
 import type { createClient } from '@/lib/supabase/server'
+import type { createAdminSupabase } from '@/lib/supabase/admin'
 import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 
 type Client = Awaited<ReturnType<typeof createClient>>
+type CostClient = ReturnType<typeof createAdminSupabase>
 type Page<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 
 type ProductRow = {
@@ -15,6 +17,15 @@ type ProductRow = {
   categories: { name: string } | Array<{ name: string }> | null
 }
 type VariantRow = { id: string; product_id: string; variant_name: string; sku: string | null; barcode: string | null; purchase_price: number | null }
+
+/** A count must persist a real snapshot; missing privileged data is not zero. */
+export function resolveCountUnitCost(variantCost: number | null | undefined, productCost: number | null | undefined): number {
+  const value = variantCost ?? productCost
+  if (value == null || !Number.isFinite(Number(value)) || Number(value) < 0) {
+    throw new Error('COUNT_COST_UNAVAILABLE')
+  }
+  return Number(value)
+}
 
 export type NewCountItem = {
   product_id: string
@@ -31,12 +42,17 @@ export type NewCountItem = {
  * Lo que hay que contar en la sucursal: cada producto activo (o cada variante
  * activa, si el producto tiene variantes) con el stock que el sistema tiene
  * en este momento. Los servicios no se cuentan.
+ *
+ * El costo unitario queda guardado en la toma (lo usa la valorización), así que
+ * tiene que ser el real aunque quien la abre no pueda ver costos: desde S1 la
+ * sesión del usuario ya no lee esas columnas y el costo sale de `costClient`
+ * (servicio), acotado a la organización. La respuesta lo oculta según el permiso.
  */
-export async function buildCountItems(supabase: Client, organizationId: string, branchId: string, categoryId: string | null): Promise<NewCountItem[]> {
+export async function buildCountItems(supabase: Client, organizationId: string, branchId: string, categoryId: string | null, costClient: CostClient): Promise<NewCountItem[]> {
   const products = await fetchAllRows<ProductRow>((from, to) => {
     let query = supabase
       .from('products')
-      .select('id, name, sku, barcode, purchase_price, unit_measure, has_variants, categories(name)')
+      .select('id, name, sku, barcode, unit_measure, has_variants, categories(name)')
       .eq('organization_id', organizationId)
       .eq('is_active', true)
       .order('name')
@@ -53,7 +69,7 @@ export async function buildCountItems(supabase: Client, organizationId: string, 
     fetchAllRows<VariantRow>((from, to) =>
       supabase
         .from('product_variants')
-        .select('id, product_id, variant_name, sku, barcode, purchase_price')
+        .select('id, product_id, variant_name, sku, barcode')
         .eq('organization_id', organizationId)
         .eq('is_active', true)
         .range(from, to) as unknown as Page<VariantRow>),
@@ -65,6 +81,17 @@ export async function buildCountItems(supabase: Client, organizationId: string, 
         .eq('branch_id', branchId)
         .range(from, to) as unknown as Page<{ variant_id: string; stock_quantity: number }>),
   ])
+
+  const [productCostRows, variantCostRows] = await Promise.all([
+    fetchAllRows<{ id: string; purchase_price: number | null }>((from, to) =>
+      costClient.from('products').select('id, purchase_price').eq('organization_id', organizationId).eq('is_active', true).order('id').range(from, to) as unknown as Page<{ id: string; purchase_price: number | null }>),
+    fetchAllRows<{ id: string; purchase_price: number | null }>((from, to) =>
+      costClient.from('product_variants').select('id, purchase_price').eq('organization_id', organizationId).eq('is_active', true).order('id').range(from, to) as unknown as Page<{ id: string; purchase_price: number | null }>),
+  ])
+  const productCost = new Map(productCostRows.map((row) => [row.id, row.purchase_price]))
+  const variantCost = new Map(variantCostRows.map((row) => [row.id, row.purchase_price]))
+  for (const product of countable) product.purchase_price = productCost.get(product.id) ?? null
+  for (const variant of variants) variant.purchase_price = variantCost.get(variant.id) ?? null
 
   const stock = new Map(stockRows.map((row) => [row.product_id, Number(row.stock_quantity) || 0]))
   const variantStock = new Map(variantStockRows.map((row) => [row.variant_id, Number(row.stock_quantity) || 0]))
@@ -86,7 +113,7 @@ export async function buildCountItems(supabase: Client, organizationId: string, 
         sku: variant.sku || product.sku,
         barcode: variant.barcode || null,
         category_name: category,
-        unit_cost: Number(variant.purchase_price) || Number(product.purchase_price) || 0,
+        unit_cost: resolveCountUnitCost(variant.purchase_price, product.purchase_price),
         system_qty: variantStock.get(variant.id) ?? 0,
       }))
     }
@@ -97,7 +124,7 @@ export async function buildCountItems(supabase: Client, organizationId: string, 
       sku: product.sku,
       barcode: product.barcode,
       category_name: category,
-      unit_cost: Number(product.purchase_price) || 0,
+      unit_cost: resolveCountUnitCost(undefined, product.purchase_price),
       system_qty: stock.get(product.id) ?? 0,
     }]
   })

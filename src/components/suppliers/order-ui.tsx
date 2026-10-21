@@ -12,6 +12,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 
 /** Los importes de compra son en la moneda del catalogo; por defecto guaranies. */
 export function formatMoney(value: number | null | undefined, currency = 'PYG') {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—'
     try {
         return new Intl.NumberFormat('es-PY', {
             style: 'currency',

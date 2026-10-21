@@ -25,7 +25,7 @@ import type { Repair } from '@/types/repairs'
 import { RepairCostLiveSummary } from './RepairCostLiveSummary'
 import { RepairPartsEditor, type EditableRepairPart } from './RepairPartsEditor'
 import { RepairFinanceGuideModal } from './RepairFinanceGuideModal'
-import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useCanViewCost, useCanUpdateCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
 
 const violationMessages: Record<RepairCostViolation['code'], string> = {
@@ -84,6 +84,7 @@ function RepairCostsEditorForm({
 }) {
   const { isAdmin } = useAuth()
   const canViewCost = useCanViewCost()
+  const canUpdateCost = useCanUpdateCost()
   const [step, setStep] = useState<'edit' | 'preview'>('edit')
   const [isExpanded, setIsExpanded] = useState(false)
   const [laborAmount, setLaborAmount] = useState(repair.laborCost || 0)
@@ -96,7 +97,7 @@ function RepairCostsEditorForm({
       supplier: part.supplier,
       quantity: part.quantity,
       unitPrice: part.cost,
-      unitCost: part.internalCost ?? part.cost,
+      unitCost: part.internalCost ?? null,
       discountAmount: part.discountAmount ?? 0,
       taxRate: part.taxRate ?? laborTaxRate,
       availableStock: part.stockAvailable,
@@ -151,7 +152,7 @@ function RepairCostsEditorForm({
           discountAmount,
           overrideReason: reason.trim() || null,
           idempotencyKey: crypto.randomUUID(),
-          parts,
+          parts: parts.map(({unitCost,...part}) => ({...part,...(canUpdateCost && unitCost !== null ? {unitCost} : {})})),
         }),
       })
       const body = await response.json().catch(() => ({}))
@@ -586,10 +587,10 @@ function Preview({
     { type: 'included_material', label: 'Materiales incluidos' },
   ] as const
 
-  const totalInternalCost = summary.partsInternalCost ?? 0
+  const totalInternalCost = summary.partsInternalCost ?? null
   const finalTotal = summary.finalTotal ?? 0
-  const grossProfit = Math.max(0, finalTotal - totalInternalCost)
-  const profitMargin = finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
+  const grossProfit = totalInternalCost === null ? null : Math.max(0, finalTotal - totalInternalCost)
+  const profitMargin = grossProfit === null ? null : finalTotal > 0 ? (grossProfit / finalTotal) * 100 : 0
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -648,7 +649,7 @@ function Preview({
       </section>
 
       {/* Impacto Financiero en el Taller */}
-      {canViewCost && (
+      {canViewCost && totalInternalCost !== null && grossProfit !== null && profitMargin !== null && (
         <section className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/70 via-background to-cyan-50/30 p-4 dark:border-indigo-900/60 dark:from-indigo-950/30 dark:to-card shadow-2xs">
           <div className="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-indigo-900/50">
             <div className="flex items-center gap-2 font-bold text-sm text-indigo-950 dark:text-indigo-200">

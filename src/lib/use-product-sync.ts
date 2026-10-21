@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { InventoryManager } from '@/lib/inventory-manager'
 import { config, isDemoNoDb } from '@/lib/config'
+import { asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 type DbProductRow = {
   id: string
@@ -39,7 +40,7 @@ export const useProductSync = (manager: InventoryManager) => {
     const loadInitial = async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id,name,sku,stock,min_stock,sale_price,purchase_price,description,updated_at')
+        .select('id,name,sku,stock,min_stock,sale_price,description,updated_at')
 
       if (error) {
         const msg = error.message || ''
@@ -52,7 +53,9 @@ export const useProductSync = (manager: InventoryManager) => {
         return
       }
 
-      const mapped = (data || []).map(mapRowToProduct)
+      // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+      const withCosts = await attachProductCosts(asCostRpcClient(supabase), (data || []) as Array<{ id: string }>)
+      const mapped = (withCosts as unknown as NonNullable<typeof data>).map(mapRowToProduct)
       manager.importData({ products: mapped })
     }
 

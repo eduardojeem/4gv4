@@ -11,6 +11,7 @@ import { AlertCircle, AlertTriangle, RefreshCw, Search, ShoppingCart, X } from '
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatMoney, ProductThumb } from './order-ui'
+import { asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 export interface SupplierProduct {
     id: string
@@ -18,7 +19,8 @@ export interface SupplierProduct {
     sku: string | null
     category: string | null
     /** Costo de compra: es el dato relevante frente a un proveedor. */
-    purchasePrice: number
+    /** null: el usuario no tiene permiso para ver costos. */
+    purchasePrice: number | null
     salePrice: number
     stock: number | null
     minStock: number | null
@@ -63,13 +65,15 @@ export function SupplierProductsList({ supplierId, onOrderProduct }: SupplierPro
             const supabase = createClient()
             const { data, error } = await supabase
                 .from('products')
-                .select('id, name, sku, purchase_price, sale_price, stock_quantity, min_stock, image_url, images, category:categories(name)')
+                .select('id, name, sku, sale_price, stock_quantity, min_stock, image_url, images, category:categories(name)')
                 .eq('supplier_id', supplierId)
                 .order('name')
 
             if (error) throw error
 
-            setProducts((data || []).map((row: Record<string, unknown>) => {
+            // El costo se pide aparte: solo vuelve con permiso de costos (si no, null → 0).
+            const rows = await attachProductCosts(asCostRpcClient(supabase), (data || []) as Array<Record<string, unknown>>)
+            setProducts(rows.map((row: Record<string, unknown>) => {
                 const images = Array.isArray(row.images) ? (row.images as string[]) : []
                 const category = row.category as { name?: string } | null
                 return {
@@ -77,7 +81,7 @@ export function SupplierProductsList({ supplierId, onOrderProduct }: SupplierPro
                     name: String(row.name ?? 'Producto'),
                     sku: row.sku ? String(row.sku) : null,
                     category: category?.name || null,
-                    purchasePrice: Number(row.purchase_price ?? 0),
+                    purchasePrice: row.purchase_price === null || row.purchase_price === undefined ? null : Number(row.purchase_price),
                     salePrice: Number(row.sale_price ?? 0),
                     stock: row.stock_quantity == null ? null : Number(row.stock_quantity),
                     minStock: row.min_stock == null ? null : Number(row.min_stock),
@@ -224,7 +228,7 @@ export function SupplierProductsList({ supplierId, onOrderProduct }: SupplierPro
 
                                 <div className="w-24 shrink-0 text-right">
                                     <p className="text-sm font-semibold tabular-nums">
-                                        {formatMoney(product.purchasePrice)}
+                                        {product.purchasePrice === null ? '—' : formatMoney(product.purchasePrice)}
                                     </p>
                                     <p className="text-[11px] text-muted-foreground">costo</p>
                                 </div>

@@ -62,7 +62,8 @@ import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
-import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useProductCostAccess } from '@/hooks/use-can-view-cost'
+import { omitUnauthorizedProductCosts } from '@/lib/products/cost-payload'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { ForeignPriceSection } from '@/components/dashboard/currency/ForeignPriceSection'
 import {
@@ -326,7 +327,7 @@ export function ProductModal({
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
-  const canViewCost = useCanViewCost()
+  const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
   const { businessVertical, operatingModel } = useSubscriptionStatus()
   // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
   const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
@@ -983,15 +984,7 @@ export function ProductModal({
     setSaveFeedback(null)
 
     try {
-      const cleanedData = cleanProductData(values)
-
-      // El costo (purchase_price) es editable solo por admin/super_admin.
-      // Para el resto, no se envía: en edición se preserva el valor actual y
-      // en creación queda en el default de la base.
-      if (!canViewCost) {
-        delete (cleanedData as Record<string, unknown>).purchase_price
-        delete (cleanedData as Record<string, unknown>).foreign_purchase_price
-      }
+      const cleanedData = omitUnauthorizedProductCosts(cleanProductData(values), canUpdateCost)
 
       // Ensure we're not sending an ID for new products
       if (!product && 'id' in cleanedData) {
@@ -2102,7 +2095,7 @@ export function ProductModal({
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Precios Base</h3>
                     </div>
 
-                    <ForeignPriceSection form={form} canViewCost={canViewCost} hasVariants={Boolean(watch('has_variants'))} />
+                    <ForeignPriceSection form={form} canViewCost={canViewCost && canUpdateCost} hasVariants={Boolean(watch('has_variants'))} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {canViewCost && (
@@ -2121,7 +2114,7 @@ export function ProductModal({
                                 step="0.01"
                                 className="text-lg"
                                 {...field}
-                                readOnly={isForeignPriced}
+                                readOnly={isForeignPriced || !canUpdateCost}
                                 title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                               />
                             </FormControl>
@@ -3281,6 +3274,8 @@ export function ProductModal({
                   )}
                   <ProductVariantsEditor
                     businessVertical={businessVertical}
+                    canViewCost={canViewCost}
+                    canUpdateCost={canUpdateCost}
                     value={variantValue}
                     baseSku={sku}
                     basePrices={{

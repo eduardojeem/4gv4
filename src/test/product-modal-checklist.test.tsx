@@ -21,7 +21,7 @@ vi.mock('@/hooks/useWebsiteSettings', () => ({
   useWebsiteSettings: () => ({ settings: getWebsiteSettingsDefaults(), isLoading: false, error: null }),
 }))
 
-vi.mock('@/hooks/use-can-view-cost', () => ({ useCanViewCost: () => true }))
+vi.mock('@/hooks/use-can-view-cost', () => ({ useProductCostAccess: () => ({canReadCost: true, canUpdateCost: true}), useCanViewCost: () => true }))
 vi.mock('@/hooks/useCategories', () => ({
   useCategories: () => ({ categories: [], loading: false, refetch: vi.fn(), createCategory: vi.fn() }),
 }))

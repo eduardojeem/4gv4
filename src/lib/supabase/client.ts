@@ -1,3 +1,4 @@
+import { getBrowserOrganizationId } from '@/lib/saas/active-organization'
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -16,7 +17,14 @@ export function createClient(): SupabaseClient {
   }
 
   if (!browserClient) {
-    browserClient = createBrowserClient(url, anonKey)
+    browserClient = createBrowserClient(url, anonKey, {
+      global: { fetch: (input, init) => {
+        const headers = new Headers(init?.headers)
+        const organizationId = getBrowserOrganizationId()
+        if (organizationId) headers.set('x-organization-id', organizationId)
+        return fetch(input, { ...init, headers })
+      } },
+    })
   }
 
   return browserClient

@@ -49,6 +49,9 @@ import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
+import { knownCost, costTotal, formatKnownCost } from '@/lib/products/known-cost'
+import { PRODUCT_CLIENT_COLUMNS, asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 export interface FormattedReportProduct {
   id: string
@@ -58,11 +61,11 @@ export interface FormattedReportProduct {
   stock_quantity: number
   min_stock: number
   sale_price: number
-  purchase_price: number
+  purchase_price: number | null
   total_sales: number
   revenue: number
-  profit: number
-  margin: number
+  profit: number | null
+  margin: number | null
   last_sale: string | null
   supplier: string
   status: 'active' | 'inactive'
@@ -75,11 +78,11 @@ interface ProductAggItem {
   stock_quantity: number
   min_stock: number
   sale_price: number
-  purchase_price: number
+  purchase_price: number | null
   total_sales: number
   revenue: number
-  profit: number
-  margin: number
+  profit: number | null
+  margin: number | null
   last_sale: string | null
   category: string
   supplier: string
@@ -148,14 +151,15 @@ export default function ProductReports() {
   // que sí respeta la sucursal seleccionada en todas sus consultas.
   const { selectedBranchId } = useBranch()
   const { organization } = useActiveOrganization()
+  const scopeKey = organization?.id ? `${organization.id}:${selectedBranchId ?? "all"}` : undefined
   const [_loading, setLoading] = useState(true)
-  const [products, setProducts] = useState<FormattedReportProduct[]>([])
+  const [products, setProducts] = useOrganizationScopedState<FormattedReportProduct[]>(scopeKey, [])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Datos para gráficas
-  const [salesTrendData, setSalesTrendData] = useState<SalesTrendItem[]>([])
-  const [categoryData, setCategoryData] = useState<CategoryReportItem[]>([])
-  const [topProductsData, setTopProductsData] = useState<TopProductItem[]>([])
+  const [salesTrendData, setSalesTrendData] = useOrganizationScopedState<SalesTrendItem[]>(scopeKey, [])
+  const [categoryData, setCategoryData] = useOrganizationScopedState<CategoryReportItem[]>(scopeKey, [])
+  const [topProductsData, setTopProductsData] = useOrganizationScopedState<TopProductItem[]>(scopeKey, [])
 
   // Estados de filtros - deben declararse antes del useEffect
   const [dateRange, setDateRange] = useState({
@@ -177,13 +181,15 @@ export default function ProductReports() {
         const { data: productsRaw, error: productsError } = await supabase
           .from('products')
           .select(`
-            *,
+            ${PRODUCT_CLIENT_COLUMNS},
             category:categories(name),
             supplier:suppliers(name)
           `)
           .eq('organization_id', organization.id)
 
         if (productsError) throw productsError
+        // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+        const productsWithCost = await attachProductCosts(asCostRpcClient(supabase), productsRaw ?? [], { organizationId: organization.id })
 
         // El catálogo de productos es compartido entre sucursales (misma
         // convención que /dashboard/products): no se filtra la fila, se le
@@ -191,10 +197,10 @@ export default function ProductReports() {
         const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
           supabase as unknown as BranchInventoryClient,
           selectedBranchId,
-          (productsRaw ?? []).map((p: { id: string }) => p.id)
+          productsWithCost.map((p: { id: string }) => p.id)
         )
         const productsData = applyBranchInventoryToProducts(
-          (productsRaw ?? []) as Array<{ id: string; stock_quantity?: number | null; [key: string]: unknown }>,
+          productsWithCost as Array<{ id: string; stock_quantity?: number | null; [key: string]: unknown }>,
           stockMap,
           branchScoped
         )
@@ -207,7 +213,7 @@ export default function ProductReports() {
               quantity,
               unit_price,
               subtotal,
-              product:products(name, category:categories(name), sale_price, purchase_price),
+              product:products(name, category:categories(name), sale_price),
               sale:sales!inner(created_at, status, branch_id)
             `)
             .eq('sale.organization_id', organization.id),
@@ -245,7 +251,7 @@ export default function ProductReports() {
               stock_quantity: 0,
               min_stock: 0,
               sale_price: Number(p?.sale_price) || 0,
-              purchase_price: Number(p?.purchase_price) || 0,
+              purchase_price: knownCost(productsWithCost.find(product => product.id === pid)?.purchase_price),
               total_sales: 0,
               revenue: 0,
               profit: 0,
@@ -259,8 +265,8 @@ export default function ProductReports() {
           const pa = productAgg[pid]
           pa.total_sales += qty
           pa.revenue += total
-          pa.profit += total - qty * Number(pa.purchase_price)
-          pa.margin = pa.revenue > 0 ? (pa.profit / pa.revenue) * 100 : 0
+          pa.profit = pa.purchase_price === null ? null : (pa.profit ?? 0) + total - qty * pa.purchase_price
+          pa.margin = pa.profit === null ? null : pa.revenue > 0 ? (pa.profit / pa.revenue) * 100 : 0
           pa.last_sale = !pa.last_sale || new Date(pa.last_sale) < saleDate ? saleDate.toISOString() : pa.last_sale
 
           categoryAgg[cat] = (categoryAgg[cat] || 0) + total
@@ -279,11 +285,11 @@ export default function ProductReports() {
             stock_quantity: p.stock_quantity ?? 0,
             min_stock: p.min_stock || 0,
             sale_price: p.sale_price ?? 0,
-            purchase_price: p.purchase_price || 0,
+            purchase_price: knownCost(p.purchase_price),
             total_sales: agg?.total_sales || 0,
             revenue: agg?.revenue || 0,
-            profit: agg?.profit || 0,
-            margin: agg?.margin || 0,
+            profit: knownCost(p.purchase_price) === null ? null : agg?.profit ?? 0,
+            margin: knownCost(p.purchase_price) === null ? null : agg?.margin ?? 0,
             last_sale: agg?.last_sale || null,
             supplier: p.supplier?.name || '',
             status: p.is_active ? 'active' : 'inactive'
@@ -338,9 +344,9 @@ export default function ProductReports() {
   const metrics = useMemo(() => {
     const totalProducts = filteredData.length
     const totalRevenue = filteredData.reduce((sum, product) => sum + product.revenue, 0)
-    const totalProfit = filteredData.reduce((sum, product) => sum + product.profit, 0)
+    const totalProfit = costTotal(filteredData.map(product => product.profit))
     const totalSales = filteredData.reduce((sum, product) => sum + product.total_sales, 0)
-    const averageMargin = filteredData.reduce((sum, product) => sum + product.margin, 0) / totalProducts
+    const averageMargin = costTotal(filteredData.map(product => product.margin))
     const lowStockProducts = filteredData.filter(product => product.stock_quantity <= product.min_stock).length
 
     return {
@@ -348,7 +354,7 @@ export default function ProductReports() {
       totalRevenue,
       totalProfit,
       totalSales,
-      averageMargin: averageMargin || 0,
+      averageMargin: averageMargin === null ? null : totalProducts > 0 ? averageMargin / totalProducts : 0,
       lowStockProducts
     }
   }, [filteredData])
@@ -361,7 +367,7 @@ export default function ProductReports() {
     try {
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const filename = `reporte-productos-${timestamp}`
-      const money = (n: number) => `Gs ${Math.round(n).toLocaleString('es-PY')}`
+      const money = (n: number | null) => n === null ? '—' : `Gs ${Math.round(n).toLocaleString('es-PY')}`
 
       if (fileFormat === 'csv') {
         const BOM = '\uFEFF' // UTF-8 BOM para Excel
@@ -383,7 +389,7 @@ export default function ProductReports() {
             product.sale_price,
             product.total_sales,
             product.revenue,
-            product.margin.toFixed(1)
+            formatKnownCost(product.margin, 1)
           ].map(cell).join(','))
         ].join('\n')
         
@@ -453,7 +459,7 @@ export default function ProductReports() {
           ['Ingresos Totales', money(metrics.totalRevenue)],
           ['Ganancia Total', money(metrics.totalProfit)],
           ['Ventas Totales', metrics.totalSales],
-          ['Margen Promedio', `${metrics.averageMargin.toFixed(1)}%`],
+          ['Margen Promedio', `${formatKnownCost(metrics.averageMargin, 1)}%`],
           ['Productos con Stock Bajo', metrics.lowStockProducts]
         ]
         
@@ -488,7 +494,7 @@ export default function ProductReports() {
         doc.setTextColor(0, 0, 0)
         doc.text(`Ingresos: ${money(metrics.totalRevenue)}`, 40, 95)
         doc.text(`Ganancia: ${money(metrics.totalProfit)}`, 240, 95)
-        doc.text(`Margen prom.: ${metrics.averageMargin.toFixed(1)}%`, 440, 95)
+        doc.text(`Margen prom.: ${formatKnownCost(metrics.averageMargin, 1)}%`, 440, 95)
         doc.text(`Stock bajo: ${metrics.lowStockProducts}`, 600, 95)
 
         autoTable(doc, {
@@ -502,7 +508,7 @@ export default function ProductReports() {
             money(product.sale_price),
             String(product.total_sales),
             money(product.revenue),
-            `${product.margin.toFixed(1)}%`
+            `${formatKnownCost(product.margin, 1)}%`
           ]),
           styles: { fontSize: 8 },
           headStyles: { fillColor: [37, 99, 235] },
@@ -747,7 +753,7 @@ export default function ProductReports() {
                   <div>
                     <p className="text-sm text-muted-foreground">Ganancia</p>
                     <p className="text-2xl font-bold">
-                      Gs {Math.round(metrics.totalProfit).toLocaleString('es-PY')}
+                      Gs {formatKnownCost(metrics.totalProfit, 0)}
                     </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-emerald-500" />
@@ -786,7 +792,7 @@ export default function ProductReports() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Margen Prom.</p>
-                    <p className="text-2xl font-bold">{metrics.averageMargin.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold">{formatKnownCost(metrics.averageMargin, 1)}%</p>
                   </div>
                   <PieChart className="h-8 w-8 text-orange-500" />
                 </div>
@@ -970,19 +976,19 @@ export default function ProductReports() {
                     </thead>
                     <tbody>
                       {filteredData
-                        .sort((a, b) => b.margin - a.margin)
+                        .sort((a, b) => (b.margin ?? -Infinity) - (a.margin ?? -Infinity))
                         .map((product) => (
                         <tr key={product.id} className="border-b hover:bg-muted/50">
                           <td className="p-2 font-medium">{product.name}</td>
                           <td className="p-2">Gs {product.sale_price.toLocaleString('es-PY')}</td>
-                          <td className="p-2">Gs {product.purchase_price.toLocaleString('es-PY')}</td>
+                          <td className="p-2">Gs {formatKnownCost(product.purchase_price)}</td>
                           <td className="p-2">
-                            <Badge variant={product.margin > 30 ? 'default' : product.margin > 15 ? 'secondary' : 'destructive'}>
-                              {product.margin.toFixed(1)}%
+                            <Badge variant={product.margin !== null && product.margin > 30 ? 'default' : product.margin !== null && product.margin > 15 ? 'secondary' : 'destructive'}>
+                              {formatKnownCost(product.margin, 1)}%
                             </Badge>
                           </td>
                           <td className="p-2 font-medium text-green-600">
-                            Gs {Math.round(product.profit).toLocaleString('es-PY')}
+                            Gs {formatKnownCost(product.profit, 0)}
                           </td>
                           <td className="p-2">{product.total_sales}</td>
                         </tr>

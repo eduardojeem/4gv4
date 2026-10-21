@@ -163,7 +163,7 @@ export function useAdminDashboard() {
         }
 
         // Fetch Metrics
-        const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
+        const { count: productsCount } = await supabase.from('products').select('id', { count: 'exact', head: true })
         const { data: salesData } = await supabase.from('sales').select('total_amount')
 
         const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0

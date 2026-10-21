@@ -129,7 +129,7 @@ export type CountItem = {
   sku: string | null
   barcode: string | null
   category_name: string | null
-  unit_cost: number
+  unit_cost: number | null
   system_qty: number
   counted_qty: number | null
   system_qty_at_count: number | null
@@ -149,6 +149,7 @@ export function summarizeCount(items: CountItem[]) {
   let unitsIn = 0
   let unitsOut = 0
   let valueDifference = 0
+  const costsKnown = items.every(item => item.unit_cost != null && Number.isFinite(Number(item.unit_cost)))
   for (const item of items) {
     const diff = countDifference(item)
     if (diff === null) continue
@@ -166,7 +167,7 @@ export function summarizeCount(items: CountItem[]) {
     withDifference,
     unitsIn,
     unitsOut,
-    valueDifference: Math.round(valueDifference * 100) / 100,
+    valueDifference: costsKnown ? Math.round(valueDifference * 100) / 100 : null,
     progress: items.length ? Math.round((counted / items.length) * 100) : 0,
   }
 }
@@ -210,7 +211,7 @@ export function countToCsv(items: CountItem[]) {
       item.counted_qty,
       diff,
       item.unit_cost,
-      diff === null ? null : Math.round(diff * Number(item.unit_cost || 0) * 100) / 100,
+      diff === null || item.unit_cost == null ? null : Math.round(diff * Number(item.unit_cost) * 100) / 100,
     ].map(csvCell).join(';')
   })
   return [header.join(';'), ...rows].join('\n')

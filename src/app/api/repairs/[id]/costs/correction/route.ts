@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
-    if (!['owner', 'admin'].includes(ctx.organizationRole) && ctx.role !== 'super_admin') {
+    if (!['owner', 'admin'].includes(ctx.organizationRole)) {
       return NextResponse.json({ error: 'Solo un administrador puede corregir costos históricos.' }, { status: 403 })
     }
 

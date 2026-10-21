@@ -571,7 +571,7 @@ export function RepairCostCalculator({
 
           {canViewCommission && (
             <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3 text-sm">
-              <div><p className="text-xs text-muted-foreground font-medium">Costo base compra repuestos</p><p className="font-bold">{formatCurrency(pricing.partsInternalCost)}</p></div>
+              <div><p className="text-xs text-muted-foreground font-medium">Costo base compra repuestos</p><p className="font-bold">{(pricing.partsInternalCost === null ? 'No disponible' : formatCurrency(pricing.partsInternalCost))}</p></div>
               <div><p className="text-xs text-muted-foreground font-medium">Margen bruto proyectado</p><p className={cn('font-bold', pricing.margin < 0 ? 'text-red-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatCurrency(pricing.margin)}</p></div>
             </div>
           )}

@@ -19,6 +19,8 @@ import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useProductCostAccess } from "@/hooks/use-can-view-cost";
+import { importCostPayload } from "@/lib/products/import-cost-payload";
 import type { Product, ProductAlert } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
 import {
@@ -108,7 +110,7 @@ export default function ProductsPage() {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
 
   // Permissions check
-  const canViewCost = hasPermission('cost_prices.read')
+  const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
   const canCreateProducts = hasPermission('products.create') || hasPermission('products.manage')
   void (hasPermission('products.update') || hasPermission('products.manage'));
   void (hasPermission('products.delete') || hasPermission('products.manage'));
@@ -725,6 +727,8 @@ export default function ProductsPage() {
       options?.onProgress?.(i + 1, total);
 
       try {
+        // Validate before any mutation for this row; omitted costs preserve existing values.
+        const costPayload = importCostPayload(row.purchase_price, canUpdateCost);
         const skuKey = row.sku?.toLowerCase().trim() || '';
         const barcodeKey = row.barcode?.trim() || '';
 
@@ -744,7 +748,7 @@ export default function ProductsPage() {
 
         const updatePayload: Database['public']['Tables']['products']['Update'] = {
           sale_price: row.sale_price,
-          ...(row.purchase_price !== undefined ? { purchase_price: row.purchase_price } : {}),
+          ...costPayload,
           stock_quantity: row.stock_quantity,
           ...(row.description ? { description: row.description } : {}),
           ...(row.brand ? { brand: row.brand } : {}),
@@ -771,7 +775,7 @@ export default function ProductsPage() {
             brand: row.brand || null,
             category_id: categoryId,
             supplier_id: supplierId,
-            purchase_price: row.purchase_price || 0,
+            ...costPayload,
             sale_price: row.sale_price,
             stock_quantity: row.stock_quantity || 0,
             min_stock: row.min_stock || 0,

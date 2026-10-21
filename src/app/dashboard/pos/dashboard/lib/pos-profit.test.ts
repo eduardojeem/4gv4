@@ -44,8 +44,8 @@ describe('calculateSalesCost', () => {
       item('Costo cero', 1, 50_000, 0),
     ])
 
-    expect(result.itemsWithoutCost).toBe(2)
-    expect(result.totalCost).toBe(20_000)
+    expect(result.itemsWithoutCost).toBe(1)
+    expect(result.totalCost).toBeNull()
   })
 
   it('no rompe con producto borrado ni con valores no numéricos', () => {
@@ -54,7 +54,7 @@ describe('calculateSalesCost', () => {
       { quantity: 'x', subtotal: null, product: { name: 'Raro', purchase_price: 'abc' } },
     ])
 
-    expect(result.totalCost).toBe(0)
+    expect(result.totalCost).toBeNull()
     expect(result.products.some((p) => p.name === 'Producto eliminado')).toBe(true)
   })
 
@@ -128,9 +128,10 @@ describe('calculateProfit', () => {
     const result = calculateProfit({ ...base, totalCost: 0, costUnavailable: true })
 
     expect(result.costUnavailable).toBe(true)
-    expect(result.withTax.salesProfit).toBe(0)
-    expect(result.withoutTax.salesProfit).toBe(0)
-    expect(result.withTax.profitMargin).toBe(0)
+    expect(result.totalCost).toBeNull()
+    expect(result.withTax.salesProfit).toBeNull()
+    expect(result.withoutTax.salesProfit).toBeNull()
+    expect(result.withTax.profitMargin).toBeNull()
   })
 
   it('sin ventas el margen es cero, no una división por cero', () => {

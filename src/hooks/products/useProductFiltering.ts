@@ -1,5 +1,6 @@
 'use client'
 
+import { costMargin, knownCost } from '@/lib/products/known-cost'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
@@ -77,12 +78,12 @@ export function useProductFiltering(
 
     const prices = productsStable.map(p => p.sale_price || 0).filter(p => p > 0)
     const stocks = productsStable.map(p => p.stock_quantity || 0)
-    const margins = productsStable.map(p => p.margin_percentage || 0).filter(m => m > 0)
+    const margins = productsStable.map(p => p.margin_percentage).filter((m): m is number => m !== null && m !== undefined)
 
     return {
       price: { min: Math.min(...prices), max: Math.max(...prices) },
       stock: { min: Math.min(...stocks), max: Math.max(...stocks) },
-      margin: { min: Math.min(...margins), max: Math.max(...margins) }
+      margin: margins.length ? { min: Math.min(...margins), max: Math.max(...margins) } : null
     }
   }, [productsStable])
 
@@ -120,7 +121,7 @@ export function useProductFiltering(
         ...prev,
         priceRange: { min: dataRanges.price.min, max: dataRanges.price.max },
         stockRange: { min: dataRanges.stock.min, max: dataRanges.stock.max },
-        marginRange: { min: dataRanges.margin.min, max: dataRanges.margin.max }
+        marginRange: { min: dataRanges.margin?.min ?? 0, max: dataRanges.margin?.max ?? 0 }
       }))
     }
   }, [dataRanges])
@@ -257,7 +258,8 @@ export function useProductFiltering(
 
     if (filters.marginStatus && filters.marginStatus.length > 0) {
       result = result.filter((product: Product) => {
-        const margin = product.margin_percentage || ((product.sale_price - product.purchase_price) / product.sale_price) * 100 || 0
+        const margin = product.margin_percentage ?? costMargin(product.sale_price, knownCost(product.purchase_price))
+        if (margin === null) return false
         return filters.marginStatus!.some(status => {
           switch (status) {
             case 'low': return margin < 10
@@ -302,9 +304,8 @@ export function useProductFiltering(
 
     if (filters.marginRange) {
       result = result.filter((product: Product) => {
-        const margin = product.sale_price > 0
-          ? ((product.sale_price - product.purchase_price) / product.sale_price) * 100
-          : 0
+        const margin = costMargin(product.sale_price, knownCost(product.purchase_price))
+        if (margin === null) return false
         return margin >= filters.marginRange!.min && margin <= filters.marginRange!.max
       })
     }
@@ -352,7 +353,8 @@ export function useProductFiltering(
     // Filtros de margen
     if (advancedFilters.marginRange && advancedFilters.marginRange.max > 0) {
       result = result.filter((product: Product) => {
-        const margin = ((product.sale_price - product.purchase_price) / product.sale_price) * 100
+        const margin = costMargin(product.sale_price, knownCost(product.purchase_price))
+        if (margin === null) return false
         return margin >= advancedFilters.marginRange!.min &&
           margin <= advancedFilters.marginRange!.max
       })
@@ -490,7 +492,7 @@ export function useProductFiltering(
         setAdvancedFilters({
           priceRange: { min: dataRanges.price.min, max: dataRanges.price.max },
           stockRange: { min: dataRanges.stock.min, max: dataRanges.stock.max },
-          marginRange: { min: dataRanges.margin.min, max: dataRanges.margin.max },
+          marginRange: { min: dataRanges.margin?.min ?? 0, max: dataRanges.margin?.max ?? 0 },
           dateRange: { start: null, end: null },
           tags: []
         })
@@ -619,7 +621,7 @@ export function useProductFiltering(
     // Rangos
     priceRange: dataRanges ? { min: dataRanges.price.min, max: dataRanges.price.max } : { min: 0, max: 0 },
     stockRange: dataRanges ? { min: dataRanges.stock.min, max: dataRanges.stock.max } : { min: 0, max: 0 },
-    marginRange: dataRanges ? { min: dataRanges.margin.min, max: dataRanges.margin.max } : { min: 0, max: 0 },
+    marginRange: dataRanges ? { min: dataRanges.margin?.min ?? 0, max: dataRanges.margin?.max ?? 0 } : { min: 0, max: 0 },
 
     // Rendimiento
     getPerformanceReport,

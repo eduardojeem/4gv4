@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { useInventory, Supplier } from '@/hooks/use-inventory'
 import { createClient } from '@/lib/supabase/client'
+import { asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 // Interfaces for UI state (extending the hook interface if needed)
 // We will use the Supplier interface from the hook directly
@@ -194,7 +195,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onSuppliersChan
       const to = from + SUPPLIER_PRODUCTS_PAGE_SIZE - 1
       const { data, error, count } = await supabase
         .from('products')
-        .select('id, name, sku, purchase_price, stock_quantity, status', { count: 'exact' })
+        .select('id, name, sku, stock_quantity, status', { count: 'exact' })
         .eq('supplier_id', supplierId)
         .order('name', { ascending: true })
         .range(from, to)
@@ -202,7 +203,8 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onSuppliersChan
       if (error) throw error
 
       if (data) {
-        setSupplierProducts(data.map(p => ({
+        const withCosts = await attachProductCosts(asCostRpcClient(supabase), data)
+        setSupplierProducts(withCosts.map(p => ({
           id: p.id,
           name: p.name,
           sku: p.sku,

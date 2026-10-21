@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isNextResponse, resolveRepairRouteContext } from '@/app/api/repairs/_lib'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 
 function safeSearchTerm(value: string) {
   return value.trim().replace(/[%_,().]/g, ' ').replace(/\s+/g, ' ').slice(0, 80)
@@ -66,6 +68,13 @@ export async function GET(request: NextRequest) {
     const stockByProduct = new Map(
       inventoryRows.map((row) => [row.product_id, row]),
     )
+    // El costo interno solo viaja a quien puede leer costos en este comercio. El resto
+    // no lo necesita: al guardar, el servidor toma el costo del producto (repuestos) o
+    // del servicio de origen (material incluido), nunca el que manda el cliente.
+    const { canReadCost } = await resolveOrganizationProductCostAccess(createAdminSupabase(), {
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+    })
     const items = (products ?? []).map((product) => {
       const stock = stockByProduct.get(product.id)
       const isService = isServiceLikeProduct(product)
@@ -79,8 +88,11 @@ export async function GET(request: NextRequest) {
         sku: product.sku ?? '',
         name: product.name,
         availableStock: isService ? null : Number(stock?.stock_quantity ?? 0),
-        unitCost: isService ? 0 : internalCost,
-        includedMaterialCost: isService ? internalCost : 0,
+        unitCost: canReadCost ? (isService ? 0 : internalCost) : null,
+        includedMaterialCost: canReadCost ? (isService ? internalCost : 0) : null,
+        // Sin el monto: alcanza para saber que hay que agregar la línea de material.
+        includesMaterial: isService && internalCost > 0,
+        costHidden: !canReadCost,
         unitPrice: wholesalePriceApplied ? wholesalePrice : retailPrice,
         retailPrice,
         wholesalePrice: wholesalePrice > 0 ? wholesalePrice : null,

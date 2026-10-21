@@ -1,13 +1,16 @@
 'use client'
 
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
+
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
-import type { 
-  Product, 
-  ProductFormData, 
-  ProductFilters, 
-  ProductSortOptions, 
+import type {
+  Product,
+  ProductFormData,
+  ProductFilters,
+  ProductSortOptions,
   ProductListResponse,
   ProductDashboardStats,
   Category,
@@ -17,16 +20,22 @@ import type {
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
+import { knownCost, costTotal, costProfit } from '@/lib/products/known-cost'
+import { PRODUCT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost, attachProductCosts } from '@/lib/products/cost-columns'
 
 export function useProducts() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const { organization } = useActiveOrganization()
+  const organizationId = organization?.id
+  const { selectedBranchId } = useBranch()
+  const scopeKey = organizationId ? `${organizationId}:${selectedBranchId ?? "all"}` : undefined
+
+  const [products, setProducts] = useOrganizationScopedState<Product[]>(scopeKey, [])
+  const [categories, setCategories] = useOrganizationScopedState<Category[]>(scopeKey, [])
+  const [suppliers, setSuppliers] = useOrganizationScopedState<Supplier[]>(scopeKey, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
-  const { selectedBranchId } = useBranch()
 
   const applySelectedBranchStock = useCallback(async <T extends { id: string; stock_quantity?: number | null }>(items: T[]) => {
     if (!selectedBranchId || items.length === 0) {
@@ -40,7 +49,7 @@ export function useProducts() {
     )
 
     return applyBranchInventoryToProducts(items, stockMap, branchScoped)
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId, supabase, organizationId])
 
   // Función para cargar productos con filtros y paginación
   const loadProducts = useCallback(async (
@@ -48,7 +57,7 @@ export function useProducts() {
     sort: ProductSortOptions = { field: 'created_at', direction: 'desc' },
     pagination: PaginationOptions = { page: 1, limit: 50 }
   ): Promise<ProductListResponse> => {
-    if (!config.supabase.isConfigured) {
+    if (!config.supabase.isConfigured || !organizationId) {
       return {
         products: [],
         pagination: { page: 1, limit: 50, total: 0, total_pages: 0 },
@@ -64,36 +73,36 @@ export function useProducts() {
       let query = supabase
         .from('products')
         .select(`
-          *,
+          ${PRODUCT_CLIENT_COLUMNS},
           category:categories(id, name, description),
           supplier:suppliers(id, name, contact_name, phone)
-        `)
+        `).eq('organization_id', organizationId!)
 
       // Aplicar filtros
       if (filters.search) {
         query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`)
       }
-      
+
       if (filters.category_id) {
         query = query.eq('category_id', filters.category_id)
       }
-      
+
       if (filters.supplier_id) {
         query = query.eq('supplier_id', filters.supplier_id)
       }
-      
+
       if (filters.brand) {
         query = query.ilike('brand', `%${filters.brand}%`)
       }
-      
+
       if (filters.is_active !== undefined) {
         query = query.eq('is_active', filters.is_active)
       }
-      
+
       if (filters.price_min !== undefined) {
         query = query.gte('sale_price', filters.price_min)
       }
-      
+
       if (filters.price_max !== undefined) {
         query = query.lte('sale_price', filters.price_max)
       }
@@ -132,7 +141,9 @@ export function useProducts() {
       if (queryError) throw queryError
 
       // Procesar productos con campos calculados
-      const branchAwareProducts = await applySelectedBranchStock((data || []) as Array<Product & { id: string }>)
+      // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+      const withCosts = await attachProductCosts(asCostRpcClient(supabase), (data || []) as unknown as Array<Product & { id: string }>, { organizationId })
+      const branchAwareProducts = await applySelectedBranchStock(withCosts as Array<Product & { id: string }>)
       let filteredProducts = branchAwareProducts
 
       if (filters.stock_status === 'out_of_stock') {
@@ -146,9 +157,9 @@ export function useProducts() {
       const processedProducts: Product[] = filteredProducts.map(product => ({
         ...product,
         stock_status: getStockStatus(product.stock_quantity, product.min_stock),
-        margin: product.sale_price - (product.purchase_price || 0),
-        margin_percentage: product.purchase_price > 0 
-          ? ((product.sale_price - product.purchase_price) / product.purchase_price) * 100 
+        margin: costProfit(product.sale_price, knownCost(product.purchase_price)),
+        margin_percentage: product.purchase_price == null ? null : product.purchase_price > 0
+          ? ((product.sale_price - product.purchase_price) / product.purchase_price) * 100
           : 0,
         total_value: product.stock_quantity * product.sale_price
       }))
@@ -174,33 +185,34 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [applySelectedBranchStock, selectedBranchId, supabase])
+  }, [applySelectedBranchStock, selectedBranchId, supabase, organizationId])
 
   // Función para obtener un producto por ID
   const getProduct = useCallback(async (id: string): Promise<Product | null> => {
-    if (!config.supabase.isConfigured) return null
+    if (!config.supabase.isConfigured || !organizationId) return null
 
     try {
       const { data, error } = await supabase
         .from('products')
         .select(`
-          *,
+          ${PRODUCT_CLIENT_COLUMNS},
           category:categories(id, name, description),
           supplier:suppliers(id, name, contact_name, phone)
-        `)
+        `).eq('organization_id', organizationId!)
         .eq('id', id)
         .single()
 
       if (error) throw error
 
-      const [branchAwareProduct] = await applySelectedBranchStock([data as Product & { id: string }])
+      const withCost = await attachProductCost(asCostRpcClient(supabase), data as unknown as Product & { id: string }, { organizationId })
+      const [branchAwareProduct] = await applySelectedBranchStock([withCost as Product & { id: string }])
 
       return {
         ...branchAwareProduct,
-        stock_status: getStockStatus(Number(branchAwareProduct.stock_quantity || 0), data.min_stock),
-        margin: data.sale_price - (data.purchase_price || 0),
-        margin_percentage: data.purchase_price > 0 
-          ? ((data.sale_price - data.purchase_price) / data.purchase_price) * 100 
+        stock_status: getStockStatus(Number(branchAwareProduct.stock_quantity || 0), withCost.min_stock),
+        margin: costProfit(withCost.sale_price, knownCost(withCost.purchase_price)),
+        margin_percentage: withCost.purchase_price == null ? null : withCost.purchase_price > 0
+          ? ((withCost.sale_price - withCost.purchase_price) / withCost.purchase_price) * 100
           : 0,
         total_value: Number(branchAwareProduct.stock_quantity || 0) * data.sale_price
       }
@@ -210,11 +222,11 @@ export function useProducts() {
       setError(errorMessage)
       return null
     }
-  }, [applySelectedBranchStock, supabase])
+  }, [applySelectedBranchStock, supabase, organizationId])
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: ProductFormData): Promise<Product | null> => {
-    if (!config.supabase.isConfigured) return null
+    if (!config.supabase.isConfigured || !organizationId) return null
 
     setLoading(true)
     setError(null)
@@ -223,7 +235,7 @@ export function useProducts() {
       // Validar SKU único
       const { data: existingProduct } = await supabase
         .from('products')
-        .select('id')
+        .select('id').eq('organization_id', organizationId!)
         .eq('sku', productData.sku)
         .single()
 
@@ -257,11 +269,11 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId, supabase, organizationId])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (id: string, productData: Partial<ProductFormData>): Promise<Product | null> => {
-    if (!config.supabase.isConfigured) return null
+    if (!config.supabase.isConfigured || !organizationId) return null
 
     setLoading(true)
     setError(null)
@@ -271,7 +283,7 @@ export function useProducts() {
       if (productData.sku) {
         const { data: existingProduct } = await supabase
           .from('products')
-          .select('id')
+          .select('id').eq('organization_id', organizationId!)
           .eq('sku', productData.sku)
           .neq('id', id)
           .single()
@@ -307,11 +319,11 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId, supabase, organizationId])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string): Promise<boolean> => {
-    if (!config.supabase.isConfigured) return false
+    if (!config.supabase.isConfigured || !organizationId) return false
 
     setLoading(true)
     setError(null)
@@ -337,16 +349,16 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId])
+  }, [selectedBranchId, organizationId])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
-    id: string, 
-    newStock: number, 
+    id: string,
+    newStock: number,
     movementType: 'entrada' | 'salida' | 'ajuste' = 'ajuste',
     notes?: string
   ): Promise<boolean> => {
-    if (!config.supabase.isConfigured) return false
+    if (!config.supabase.isConfigured || !organizationId) return false
 
     try {
       let error = null as { message?: string } | null
@@ -371,10 +383,10 @@ export function useProducts() {
       if (error) throw error
 
       // El trigger automáticamente registrará el movimiento
-      setProducts(prev => prev.map(p => 
-        p.id === id 
-          ? { 
-              ...p, 
+      setProducts(prev => prev.map(p =>
+        p.id === id
+          ? {
+              ...p,
               stock_quantity: newStock,
               stock_status: getStockStatus(newStock, p.min_stock),
               total_value: newStock * p.sale_price
@@ -389,16 +401,16 @@ export function useProducts() {
       setError(errorMessage)
       return false
     }
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId, supabase, organizationId])
 
   // Función para cargar categorías
   const loadCategories = useCallback(async (): Promise<Category[]> => {
-    if (!config.supabase.isConfigured) return []
+    if (!config.supabase.isConfigured || !organizationId) return []
 
     try {
       const { data, error } = await supabase
         .from('categories')
-        .select('*')
+        .select('*').eq('organization_id', organizationId!)
         .eq('is_active', true)
         .order('name')
 
@@ -412,16 +424,16 @@ export function useProducts() {
       setError(errorMessage)
       return []
     }
-  }, [supabase])
+  }, [supabase, organizationId])
 
   // Función para cargar proveedores
   const loadSuppliers = useCallback(async (): Promise<Supplier[]> => {
-    if (!config.supabase.isConfigured) return []
+    if (!config.supabase.isConfigured || !organizationId) return []
 
     try {
       const { data, error } = await supabase
         .from('suppliers')
-        .select('*')
+        .select('*').eq('organization_id', organizationId!)
         .eq('is_active', true)
         .order('name')
 
@@ -435,18 +447,18 @@ export function useProducts() {
       setError(errorMessage)
       return []
     }
-  }, [supabase])
+  }, [supabase, organizationId])
 
   // Función para obtener estadísticas del dashboard
   const getDashboardStats = useCallback(async (): Promise<ProductDashboardStats> => {
-    if (!config.supabase.isConfigured) {
+    if (!config.supabase.isConfigured || !organizationId) {
       return {
         total_products: 0,
         active_products: 0,
         total_stock_value: 0,
-        total_cost_value: 0,
-        total_margin: 0,
-        avg_margin_percentage: 0,
+        total_cost_value: null,
+        total_margin: null,
+        avg_margin_percentage: null,
         low_stock_count: 0,
         out_of_stock_count: 0,
         categories_count: 0,
@@ -463,21 +475,22 @@ export function useProducts() {
         { data: suppliers },
         { data: movements }
       ] = await Promise.all([
-        supabase.from('products').select('*'),
-        supabase.from('categories').select('id').eq('is_active', true),
-        supabase.from('suppliers').select('id').eq('status', 'active'),
+        supabase.from('products').select(PRODUCT_CLIENT_COLUMNS).eq('organization_id', organizationId!),
+        supabase.from('categories').select('id').eq('organization_id', organizationId!).eq('is_active', true),
+        supabase.from('suppliers').select('id').eq('organization_id', organizationId!).eq('status', 'active'),
         (selectedBranchId
-          ? supabase.from('product_movements').select('id').eq('branch_id', selectedBranchId)
-          : supabase.from('product_movements').select('id')
+          ? supabase.from('product_movements').select('id').eq('organization_id', organizationId!).eq('branch_id', selectedBranchId)
+          : supabase.from('product_movements').select('id').eq('organization_id', organizationId!)
         ).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       ])
 
-      const branchAwareProducts = await applySelectedBranchStock((products || []) as Array<Product & { id: string }>)
+      const withCosts = await attachProductCosts(asCostRpcClient(supabase), (products || []) as unknown as Array<Product & { id: string }>, { organizationId })
+      const branchAwareProducts = await applySelectedBranchStock(withCosts as Array<Product & { id: string }>)
       const activeProducts = branchAwareProducts.filter(p => p.is_active) || []
       const totalStockValue = activeProducts.reduce((sum, p) => sum + (p.stock_quantity * p.sale_price), 0)
-      const totalCostValue = activeProducts.reduce((sum, p) => sum + (p.stock_quantity * (p.purchase_price || 0)), 0)
-      const totalMargin = totalStockValue - totalCostValue
-      const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
+      const totalCostValue = costTotal(activeProducts.map(p => p.purchase_price == null ? null : p.stock_quantity * p.purchase_price))
+      const totalMargin = costProfit(totalStockValue, totalCostValue)
+      const avgMarginPercentage = totalCostValue === null || totalMargin === null ? null : totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
       const lowStockCount = activeProducts.filter(p => p.stock_quantity > 0 && p.stock_quantity <= p.min_stock).length
       const outOfStockCount = activeProducts.filter(p => p.stock_quantity === 0).length
       const alertsCount = lowStockCount + outOfStockCount
@@ -504,9 +517,9 @@ export function useProducts() {
         total_products: 0,
         active_products: 0,
         total_stock_value: 0,
-        total_cost_value: 0,
-        total_margin: 0,
-        avg_margin_percentage: 0,
+        total_cost_value: null,
+        total_margin: null,
+        avg_margin_percentage: null,
         low_stock_count: 0,
         out_of_stock_count: 0,
         categories_count: 0,
@@ -515,13 +528,13 @@ export function useProducts() {
         alerts_count: 0
       }
     }
-  }, [applySelectedBranchStock, selectedBranchId, supabase])
+  }, [applySelectedBranchStock, selectedBranchId, supabase, organizationId])
 
   // Cargar datos iniciales
   useEffect(() => {
     loadCategories()
     loadSuppliers()
-  }, [loadCategories, loadSuppliers])
+  }, [loadCategories, loadSuppliers, organizationId])
 
   return {
     products,

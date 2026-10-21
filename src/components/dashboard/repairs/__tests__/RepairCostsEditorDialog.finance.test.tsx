@@ -9,6 +9,7 @@ vi.mock('@/contexts/auth-context', () => ({
 }))
 
 vi.mock('@/hooks/use-can-view-cost', () => ({
+  useCanUpdateCost: () => true,
   useCanViewCost: () => true
 }))
 

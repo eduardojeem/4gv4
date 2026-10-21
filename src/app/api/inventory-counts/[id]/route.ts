@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { redactCostFields, resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { roleHasPermission, type OrganizationRole } from '@/lib/saas/permissions'
 import { countErrorMessage } from '@/lib/inventory/inventory-count'
 import { currentStock } from '@/lib/inventory/inventory-count-server'
@@ -16,7 +18,7 @@ async function countId(routeContext: unknown) {
   return z.string().uuid().safeParse(id).success ? id : null
 }
 
-export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (_request, { organization }, routeContext) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (_request, { organization, user }, routeContext) => {
   const id = await countId(routeContext)
   if (!id) return NextResponse.json({ error: 'Toma inválida' }, { status: 400 })
   const supabase = await createClient()
@@ -36,9 +38,11 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     if ((data ?? []).length < 1000) break
   }
 
+  // El costo unitario y la diferencia en guaraníes son datos de costos.
+  const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), { userId: user.id, organizationId: organization.id })
   return NextResponse.json({
-    count,
-    items,
+    count: redactCostFields(count, costAccess),
+    items: redactCostFields(items, costAccess),
     canAdjust: roleHasPermission(organization.role as OrganizationRole, 'inventory.stock.manage'),
   })
 })
@@ -97,12 +101,14 @@ export const PATCH = withTenantAuth({ permission: 'inventory.stock.manage', modu
     logger.error('No se pudo guardar el conteo', { error: failed.error.message })
     return NextResponse.json({ error: 'No se pudo guardar el conteo' }, { status: 500 })
   }
-  return NextResponse.json({ items: results.map((result) => result.data).filter(Boolean) })
+  // El costo unitario y la diferencia en guaraníes son datos de costos.
+  const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), { userId: user.id, organizationId: organization.id })
+  return NextResponse.json({ items: redactCostFields(results.map((result) => result.data).filter(Boolean), costAccess) })
 })
 
 const actionSchema = z.object({ action: z.enum(['apply', 'cancel']) })
 
-export const POST = withTenantAuth({ permission: 'inventory.stock.manage', module: 'inventory' }, async (request, { organization }, routeContext) => {
+export const POST = withTenantAuth({ permission: 'inventory.stock.manage', module: 'inventory' }, async (request, { organization, user }, routeContext) => {
   const id = await countId(routeContext)
   if (!id) return NextResponse.json({ error: 'Toma inválida' }, { status: 400 })
   const parsed = actionSchema.safeParse(await request.json().catch(() => null))
@@ -129,5 +135,7 @@ export const POST = withTenantAuth({ permission: 'inventory.stock.manage', modul
     logger.warn('No se pudo aplicar la toma de inventario', { error: error.message })
     return NextResponse.json({ error: countErrorMessage(error, 'No se pudo aplicar la toma. No se cambió ningún stock.') }, { status: 400 })
   }
-  return NextResponse.json({ ok: true, summary: data })
+  // El costo unitario y la diferencia en guaraníes son datos de costos.
+  const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), { userId: user.id, organizationId: organization.id })
+  return NextResponse.json({ ok: true, summary: redactCostFields(data, costAccess) })
 })

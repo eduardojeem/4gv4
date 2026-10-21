@@ -36,7 +36,7 @@ export type ProductVariantRecord = ProductVariantInput | {
 }
 
 // Unified Product type - extends Supabase with computed fields and compatibility
-export type Product = Omit<DbProduct, 'dimensions'> & {
+export type Product = Omit<DbProduct, 'dimensions' | 'purchase_price'> & {
   // Fix dimensions type compatibility
   dimensions?: Record<string, unknown> | null | string
   
@@ -46,7 +46,7 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   
   // Computed fields
   margin_amount?: number
-  margin_percentage?: number
+  margin_percentage?: number | null
   stock_value?: number
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
   
@@ -73,7 +73,7 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   // Legacy compatibility - ensure these exist
   stock_quantity: number
   sale_price: number
-  purchase_price: number
+  purchase_price: number | null
   
   // Optional fields for compatibility
   description?: string | null
@@ -88,7 +88,7 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   // Additional legacy fields
   recent_movements?: ProductMovement[]
   alerts?: ProductAlert[]
-  margin?: number
+  margin?: number | null
   total_value?: number
 }
 

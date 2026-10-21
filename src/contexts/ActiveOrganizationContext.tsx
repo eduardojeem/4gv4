@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { setBrowserOrganizationId } from '@/lib/saas/active-organization'
 import type { ActiveOrganizationPayload } from '@/app/api/organization-context/route'
 
 type ActiveOrganizationContextValue = {
@@ -29,6 +30,8 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
   const requestRef = useRef<AbortController | null>(null)
 
   const refresh = useCallback(async () => {
+    setBrowserOrganizationId(null)
+    setOrganization(null)
     requestRef.current?.abort()
     const controller = new AbortController()
     requestRef.current = controller
@@ -50,11 +53,13 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
 
       if (!response.ok || !payload?.activeOrganization) {
         if (response.status === 401 || response.status === 403) {
+          setBrowserOrganizationId(null)
           setOrganization(null)
         }
         throw new Error(payload?.error || 'No se pudo cargar la organización activa')
       }
 
+      setBrowserOrganizationId(payload.activeOrganization.id)
       setOrganization(payload.activeOrganization)
     } catch (cause) {
       if (controller.signal.aborted) return
@@ -66,13 +71,15 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     void refresh()
-    const handleOrganizationChange = () => {
+    const handleOrganizationChange = (event: Event) => {
+      setBrowserOrganizationId((event as CustomEvent<{organizationId?:string}>).detail?.organizationId ?? null)
       setOrganization(null)
       void refresh()
     }
     window.addEventListener('organization:changed', handleOrganizationChange)
     return () => {
       requestRef.current?.abort()
+      setBrowserOrganizationId(null)
       window.removeEventListener('organization:changed', handleOrganizationChange)
     }
   }, [refresh])

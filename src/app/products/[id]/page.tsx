@@ -28,6 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '@/components/dashboard/notification-system'
+import { PRODUCT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost } from '@/lib/products/cost-columns'
 
 // Función helper para formatear números
 const formatNumber = (num: number): string => {
@@ -119,6 +120,13 @@ export default function ProductDetailPage() {
   const { addNotification } = useNotifications()
   
   const [product, setProduct] = useState<ProductDetail | null>(null)
+  // Fila tal como la devuelve la consulta (relaciones embebidas como objeto).
+  type LoadedProductRow = Record<string, unknown> & {
+    id: string
+    stock_quantity?: number | null
+    category?: { id?: string; name?: string } | null
+    supplier?: { id?: string; name?: string } | null
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -152,7 +160,7 @@ export default function ProductDetailPage() {
         const { data: productData, error: productError } = await supabase
           .from('products')
           .select(`
-            *,
+            ${PRODUCT_CLIENT_COLUMNS},
             category:categories(id, name),
             supplier:suppliers(id, name)
           `)
@@ -161,13 +169,16 @@ export default function ProductDetailPage() {
 
         if (productError) throw productError
 
+        // El costo solo vuelve con permiso de costos en la organización (si no, null).
+        const productWithCost = await attachProductCost(asCostRpcClient(supabase), productData as unknown as LoadedProductRow)
+
         // Mapear datos al formato esperado por la UI
         const mappedProduct = {
-          ...productData,
-          category: productData.category?.name || '',
-          supplier: productData.supplier?.name || '',
-          stock_quantity: productData.stock_quantity || 0, // Asegurar que usamos el campo correcto
-        }
+          ...productWithCost,
+          category: productWithCost.category?.name || '',
+          supplier: productWithCost.supplier?.name || '',
+          stock_quantity: productWithCost.stock_quantity || 0, // Asegurar que usamos el campo correcto
+        } as unknown as ProductDetail
 
         setProduct(mappedProduct)
         
@@ -271,7 +282,7 @@ export default function ProductDetailPage() {
       const { data: updatedProduct, error: fetchError } = await supabase
         .from('products')
         .select(`
-          *,
+          ${PRODUCT_CLIENT_COLUMNS},
           category:categories(id, name),
           supplier:suppliers(id, name)
         `)
@@ -280,12 +291,13 @@ export default function ProductDetailPage() {
         
       if (fetchError) throw fetchError
 
+      const updatedWithCost = await attachProductCost(asCostRpcClient(supabase), updatedProduct as unknown as LoadedProductRow)
       const mappedProduct = {
-        ...updatedProduct,
-        category: updatedProduct.category?.name || '',
-        supplier: updatedProduct.supplier?.name || '',
-        stock_quantity: updatedProduct.stock_quantity || 0,
-      }
+        ...updatedWithCost,
+        category: updatedWithCost.category?.name || '',
+        supplier: updatedWithCost.supplier?.name || '',
+        stock_quantity: updatedWithCost.stock_quantity || 0,
+      } as unknown as ProductDetail
 
       setProduct(mappedProduct)
 

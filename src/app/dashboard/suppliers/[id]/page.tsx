@@ -89,7 +89,7 @@ export default function SupplierDetailPage() {
             // Fetch products count
             const { count: productsCount, error: countError } = await supabase
                 .from('products')
-                .select('*', { count: 'exact', head: true })
+                .select('id', { count: 'exact', head: true })
                 .eq('supplier_id', supplierId)
 
             if (countError) logger.warn('Error fetching products count', { error: countError })
@@ -653,7 +653,8 @@ export default function SupplierDetailPage() {
                     id: orderSeedProduct.id,
                     name: orderSeedProduct.name,
                     suppliersku: orderSeedProduct.sku || '',
-                    unitprice: orderSeedProduct.purchasePrice,
+                    unitprice: orderSeedProduct.purchasePrice ?? 0,
+            costHidden: orderSeedProduct.purchasePrice === null,
                     currency: getLocaleConfig().currency,
                     stock: orderSeedProduct.stock,
                     minStock: orderSeedProduct.minStock,

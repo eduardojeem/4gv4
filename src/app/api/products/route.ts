@@ -1,3 +1,4 @@
+import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
 import { NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
@@ -10,7 +11,6 @@ import { hasPublicProductChange, invalidateMarketplaceCatalog } from '@/lib/publ
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
 import type { AppRole } from '@/lib/auth/role-utils'
-import { stripProductCost, canViewProductCost, PRODUCT_COST_PERMISSION } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
@@ -23,6 +23,7 @@ import { recordStockAdjustment } from '@/lib/products/stock-movements'
 import { persistDeviceFields } from '@/lib/products/device-persist'
 import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
+import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null, previous?: Record<string, unknown>, patch?: Record<string, unknown>) {
   if (previous && patch && !hasPublicProductChange(previous, patch)) return
@@ -395,22 +396,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     // Se alcanzo el tope del barrido: lo listado y el total son parciales.
     const truncated = needsInMemoryPagination && (baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP || (count ?? 0) > baseProducts.length)
 
-    // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
-    // tenga el permiso específico products.read_cost.
-    let costPermissions: string[] | undefined
-    if (!canViewProductCost(user.role)) {
-      const { data: perms } = await supabase
-        .from('user_permissions')
-        .select('permission')
-        .eq('user_id', user.id)
-        .eq('permission', PRODUCT_COST_PERMISSION)
-        .eq('is_active', true)
-        .limit(1)
-      costPermissions = perms && perms.length > 0 ? [PRODUCT_COST_PERMISSION] : []
-    }
-    const visibleProducts = filteredProducts.map((product) =>
-      stripProductCost(product as Record<string, unknown>, user.role, costPermissions)
-    )
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
+    const visibleProducts = filteredProducts.map(product => redactProductCosts(product as Record<string, unknown>, costAccess))
 
     return NextResponse.json({
       success: true,
@@ -444,7 +431,17 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 // POST /api/products - Create new product
 export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { user, organization }) => {
   try {
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    const costClient = createAdminSupabase()
+    const costAccess = await resolveOrganizationProductCostAccess(costClient, {userId:user.id,organizationId:organization.id})
+    if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, rawBody.id))) {
+      return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
+    }
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id)
+
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
     const branchScope = await resolveBranchScopeForUser({
@@ -608,12 +605,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         )
       }
 
-      const canReadCost = canViewProductCost(user.role)
-      const visibleVariants = (variants ?? []).map((variant) => {
-        if (canReadCost) return variant
-        const { purchase_price: _purchasePrice, ...visible } = variant
-        return visible
-      })
+      const visibleVariants = (variants ?? []).map(variant => redactProductCosts(variant as Record<string, unknown>, costAccess))
 
       const dispositivo = await persistDeviceFields(admin as never, {
         productId: savedProductId,
@@ -632,7 +624,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          product: redactProductCosts({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
           variants: visibleVariants,
         },
         ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
@@ -648,7 +640,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       branchScope.branchId !== defaultBranch.id
     )
     
-    const { data: product, error } = await supabase
+    const { data: insertedProduct, error } = await supabase
       .from('products')
       .insert({
         name: validated.name,
@@ -685,7 +677,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         unit_measure: validated.unit_measure,
         ...(await productsHaveForeignPriceColumns(supabase as never) ? foreignPriceColumns(validated) : {}),
       })
-      .select()
+      .select(PRODUCT_CLIENT_COLUMNS)
       .single()
     
     if (error) {
@@ -706,6 +698,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       
       throw error
     }
+    // El costo recién guardado no vuelve por la sesión del usuario (S1): se lee del
+    // cliente de servicio y la respuesta se oculta igual según el permiso.
+    const [product] = await hydrateProductCostsFromService(costClient, organization.id, [insertedProduct as typeof insertedProduct & { id: string }])
 
     // Lote del stock inicial: queda registrado con sus unidades y su vencimiento.
     if (validated.initial_batch?.expires_on && requestedStock > 0) {
@@ -788,11 +783,14 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      data: redactProductCosts({ ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     }, { status: 201 })
   } catch (error) {
+    if (error instanceof ProductCostInputError) {
+      return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
+    }
     logger.error('Product creation error', { error })
     return NextResponse.json(
       { success: false, error: 'No se pudo crear el producto.', code: 'PRODUCT_CREATE_FAILED' },
@@ -804,7 +802,17 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 // PUT /api/products - Update product
 export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { user, organization }) => {
   try {
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    const costClient = createAdminSupabase()
+    const costAccess = await resolveOrganizationProductCostAccess(costClient, {userId:user.id,organizationId:organization.id})
+    if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, rawBody.id))) {
+      return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
+    }
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id, rawBody.id)
+
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
     const branchScope = await resolveBranchScopeForUser({
@@ -839,12 +847,18 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
     
     const validated = validationResult.data
-    const { data: existingProduct, error: existingProductError } = await supabase
+    // La sesión del usuario confirma que ve la fila (RLS); el costo ya no se lee
+    // con esa sesión (S1) y se completa desde el cliente de servicio para que
+    // save_product_with_variants reciba el producto completo, como antes.
+    const { data: existingVisible, error: existingProductError } = await supabase
       .from('products')
-      .select('*')
+      .select(PRODUCT_CLIENT_COLUMNS)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .maybeSingle()
+    const existingProduct = existingVisible
+      ? (await hydrateProductCostsFromService(costClient, organization.id, [existingVisible as Record<string, unknown> & { id: string }]))[0] as typeof existingVisible & { purchase_price: number | null; foreign_purchase_price: number | null }
+      : existingVisible
 
     if (existingProductError) {
       logger.error('Failed to verify product tenant before update', {
@@ -1060,11 +1074,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         )
       }
 
-      const visibleVariants = (variants ?? []).map((variant) => {
-        if (canViewProductCost(user.role)) return variant
-        const { purchase_price: _purchasePrice, ...visible } = variant
-        return visible
-      })
+      const visibleVariants = (variants ?? []).map(variant => redactProductCosts(variant as Record<string, unknown>, costAccess))
 
       const dispositivo = await persistDeviceFields(admin as never, {
         productId: savedProductId,
@@ -1083,7 +1093,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          product: redactProductCosts({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
           variants: visibleVariants,
         },
         warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
@@ -1140,7 +1150,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         .update(normalizedPayload)
         .eq('id', validated.id)
         .eq('organization_id', organization.id)
-        .select()
+        .select(PRODUCT_CLIENT_COLUMNS)
         .single()
 
       if (error) {
@@ -1185,10 +1195,10 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
       .from('products')
       .select(`
-        *,
+        ${PRODUCT_CLIENT_COLUMNS},
         category:categories(id, name, description),
         supplier:suppliers(id, name, contact_name, phone, address),
-        variants:product_variants(*)
+        variants:product_variants(${VARIANT_CLIENT_COLUMNS})
       `)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
@@ -1202,7 +1212,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       throw refreshedProductError
     }
 
-    product = refreshedProduct as Record<string, unknown>
+    product = (await hydrateProductCostsFromService(costClient, organization.id, [refreshedProduct as Record<string, unknown> & { id: string }], 'variants'))[0] as Record<string, unknown>
 
     logger.info('Product updated', { productId: product.id, userId: user.id })
 
@@ -1273,11 +1283,14 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      data: redactProductCosts({ ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     })
   } catch (error) {
+    if (error instanceof ProductCostInputError) {
+      return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
+    }
     logger.error('Product update error', { error })
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },

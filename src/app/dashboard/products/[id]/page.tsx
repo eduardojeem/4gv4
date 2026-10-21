@@ -64,6 +64,7 @@ import { resolveLabelCode } from '@/lib/labels/barcode-format'
 import { resolveProductImageUrl } from '@/lib/images'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
+import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost } from '@/lib/products/cost-columns'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -186,16 +187,18 @@ export default function ProductDetailPage() {
       const { data, error } = await supabase
         .from('products')
         .select(`
-          *,
+          ${PRODUCT_CLIENT_COLUMNS},
           category:categories(id, name, description),
           supplier:suppliers(id, name, contact_name, phone, address, email),
-          variants:product_variants(*)
+          variants:product_variants(${VARIANT_CLIENT_COLUMNS})
         `)
         .eq('id', productId)
         .single()
 
       if (error) throw error
-      setProduct(data as unknown as ProductWithInstallments)
+      // El costo se pide aparte: solo vuelve con permiso de costos en esta organización.
+      const withCost = await attachProductCost(asCostRpcClient(supabase), data, { variantsKey: 'variants' })
+      setProduct(withCost as unknown as ProductWithInstallments)
     } catch (e) {
       logger.error('Error loading product', { error: e })
       toast.error("No se pudo cargar el producto", {
