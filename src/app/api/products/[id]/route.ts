@@ -1,4 +1,5 @@
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
+import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -160,6 +161,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     const validated = validationResult.data
+    if (!await productReferencesBelongToOrganization(costClient, organization.id, validated)) {
+      return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
+    }
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
       .select('id')
@@ -208,6 +212,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       'installments_public',
       'installments_plans',
       'is_active',
+      'featured',
       'barcode',
       'unit_measure',
       'visibility',

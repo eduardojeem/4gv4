@@ -35,7 +35,7 @@ export interface ProductFormData {
   brand?: string | null
   brand_id?: string | null
   supplier_id?: string | null
-  purchase_price: number
+  purchase_price: number | null
   sale_price: number
   wholesale_price?: number | null
   stock_quantity: number

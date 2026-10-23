@@ -33,7 +33,7 @@ import { mergeAttributeSuggestions, type SavedAttribute } from '@/lib/inventory/
 
 interface LegacyVariantFields {
   variant_name?: string
-  purchase_price?: number
+  purchase_price?: number | null
   sale_price?: number
   wholesale_price?: number
   stock_quantity?: number
@@ -798,12 +798,12 @@ export function ProductVariantsEditor({
                     {value.variants.map((variant, index) => {
                       const v = variant as VariantItem
                       const vName = v.name || v.variant_name || `Variante ${index + 1}`
-                      const vPurchase = Number(v.purchasePrice ?? v.purchase_price ?? 0)
+                      const vPurchase = v.purchasePrice !== undefined ? v.purchasePrice : v.purchase_price ?? null
                       const vSale = Number(v.salePrice ?? v.sale_price ?? 0)
                       const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
                       const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
                       const vKey = v.clientKey || v.client_key || v.id || String(index)
-                      const margin = canViewCost && vPurchase > 0 && vSale > 0
+                      const margin = canViewCost && vPurchase !== null && vSale > 0
                         ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                         : null
                       return (
@@ -832,9 +832,9 @@ export function ProductVariantsEditor({
                               min={0}
                               step="0.01"
                               disabled={!canUpdateCost}
-                              value={vPurchase}
+                              value={vPurchase ?? ''}
                               className="h-8 text-xs w-24"
-                              onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
+                              onChange={(e) => updateVariant(index, { purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
                             />
                           </td>}
                           <td className="px-2 py-2">
@@ -894,12 +894,12 @@ export function ProductVariantsEditor({
                   const isExpanded = expandedVariant === index
                   const v = variant as VariantItem
                   const vName = v.name || v.variant_name || `Variante ${index + 1}`
-                  const vPurchase = Number(v.purchasePrice ?? v.purchase_price ?? 0)
+                  const vPurchase = v.purchasePrice !== undefined ? v.purchasePrice : v.purchase_price ?? null
                   const vSale = Number(v.salePrice ?? v.sale_price ?? 0)
                   const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
                   const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
                   const vKey = v.clientKey || v.client_key || v.id || String(index)
-                  const margin = canViewCost && vPurchase > 0 && vSale > 0
+                  const margin = canViewCost && vPurchase !== null && vSale > 0
                     ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                     : null
                   return (
@@ -956,8 +956,8 @@ export function ProductVariantsEditor({
                                 min={0}
                                 step="0.01"
                                 disabled={!canUpdateCost}
-                                value={vPurchase}
-                                onChange={(e) => updateVariant(index, { purchasePrice: Number(e.target.value) })}
+                            value={vPurchase ?? ''}
+                            onChange={(e) => updateVariant(index, { purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
                               />
                             </label>}
                             <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">

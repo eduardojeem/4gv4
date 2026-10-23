@@ -12,7 +12,7 @@ export interface GeneratedVariantCombination {
 }
 
 export interface VariantPriceDefaults {
-  purchasePrice: number
+  purchasePrice: number | null
   salePrice: number
   wholesalePrice?: number
 }

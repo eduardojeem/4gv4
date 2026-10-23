@@ -48,10 +48,10 @@ export const productSchema = z
     initial_expires_on: z.string().optional().nullable(),
 
     // Pricing
-    purchase_price: z
-      .coerce
-      .number()
-      .min(0, "El precio de compra no puede ser negativo"),
+    purchase_price: z.preprocess(
+      (value) => value === '' || value === undefined ? null : value,
+      z.coerce.number().min(0, "El precio de compra no puede ser negativo").nullable(),
+    ),
     sale_price: z
       .coerce
       .number()

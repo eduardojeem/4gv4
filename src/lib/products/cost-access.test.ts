@@ -18,15 +18,24 @@ it('unknown is omitted but zero and manipulated aliases count as writes',()=>{
  expect(hasExplicitProductCost({purchase_price:null,variants:[{purchasePrice:undefined}]})).toBe(false)
  expect(hasExplicitProductCost({variants:[{purchase_price:0}]})).toBe(true)
  expect(normalizeUnknownProductCosts({purchase_price:null,foreign_purchase_price:null},false)).toEqual({})
+ expect(normalizeUnknownProductCosts({},true)).toEqual({})
 })
 
 it('hydrates omitted variant cost with organization and product scoping and rejects foreign IDs',async()=>{
  const q={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),in:vi.fn().mockResolvedValue({data:[{id:'owned',purchase_price:27}],error:null})}
  const client={from:()=>q} as never
  const body=await prepareProductCostInput(client,{variants:[{id:'owned',purchasePrice:null},{name:'new'}]},'B','product')
- expect(body.variants).toEqual([{id:'owned',purchasePrice:27},{name:'new',purchasePrice:0}])
+ expect(body.variants).toEqual([{id:'owned',purchasePrice:27},{name:'new',purchasePrice:null}])
  expect(q.eq).toHaveBeenCalledWith('organization_id','B');expect(q.eq).toHaveBeenCalledWith('product_id','product')
  await expect(prepareProductCostInput(client,{variants:[{id:'foreign'}]},'B','product')).rejects.toThrow('no pertenece')
+})
+
+it('preserves unknown as null while preserving an explicitly legitimate zero cost',async()=>{
+ const q={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),in:vi.fn().mockResolvedValue({data:[{id:'owned',purchase_price:null}],error:null})}
+ const client={from:()=>q} as never
+ const body=await prepareProductCostInput(client,{purchase_price:null,variants:[{id:'owned',purchasePrice:null},{name:'new',purchasePrice:0}]},'B','product')
+ expect(body.purchase_price).toBeUndefined()
+ expect(body.variants).toEqual([{id:'owned',purchasePrice:null},{name:'new',purchasePrice:0}])
 })
 it('fails closed when membership cannot be verified even with caller-provided admin role',async()=>{
  const q={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),maybeSingle:vi.fn().mockResolvedValue({data:null,error:null})}

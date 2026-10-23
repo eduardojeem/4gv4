@@ -46,7 +46,7 @@ export function hasExplicitProductCost(input: Record<string, unknown>): boolean 
     || (Array.isArray(input.variants) && input.variants.some(row => row && typeof row === 'object' && hasExplicitProductCost(row)))
 }
 
-export function normalizeUnknownProductCosts(input: Record<string, unknown>, creating: boolean): Record<string, unknown> {
+export function normalizeUnknownProductCosts(input: Record<string, unknown>, _creating: boolean): Record<string, unknown> {
   const result = { ...input }
   for (const field of fields) {
     if (result[field] === null || result[field] === undefined) delete result[field]
@@ -54,7 +54,6 @@ export function normalizeUnknownProductCosts(input: Record<string, unknown>, cre
   if (Array.isArray(result.variants)) {
     result.variants = result.variants.map(row => row && typeof row === 'object' ? normalizeUnknownProductCosts(row, false) : row)
   }
-  if (creating && result.purchase_price === undefined) result.purchase_price = 0
   return result
 }
 
@@ -68,7 +67,7 @@ export async function prepareProductCostInput(
   const result = normalizeUnknownProductCosts(input, !productId)
   if (!Array.isArray(result.variants)) return result
   const ids = result.variants.filter(row => row && typeof row === 'object' && row.id).map(row => row.id as string)
-  const costs = new Map<string, number>()
+  const costs = new Map<string, number | null>()
   if (ids.length) {
     if (!productId) throw new ProductCostInputError('Las variantes nuevas no pueden usar IDs existentes.')
     const { data, error } = await client.from('product_variants').select('id,purchase_price')
@@ -81,7 +80,9 @@ export async function prepareProductCostInput(
     if (!row || typeof row !== 'object') return row
     const variant = normalizeUnknownProductCosts(row, false)
     if (variant.purchasePrice === undefined) {
-      variant.purchasePrice = variant.purchase_price ?? (variant.id ? costs.get(String(variant.id)) : 0)
+      const hasExplicitUnknown = Object.prototype.hasOwnProperty.call(row, 'purchasePrice') && row.purchasePrice === null
+        || Object.prototype.hasOwnProperty.call(row, 'purchase_price') && row.purchase_price === null
+      variant.purchasePrice = hasExplicitUnknown ? null : variant.id ? costs.get(String(variant.id)) ?? null : null
     }
     delete variant.purchase_price
     return variant

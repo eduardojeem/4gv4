@@ -22,6 +22,19 @@ const variant = {
 }
 
 describe('ProductVariantsPayloadSchema', () => {
+  it('keeps unknown variant cost distinct from an explicit zero', () => {
+    const parsed = ProductVariantsPayloadSchema.safeParse({
+      hasVariants: true,
+      attributes: [attribute],
+      variants: [
+        { ...variant, purchasePrice: null },
+        { ...variant, clientKey: 'other', attributes: { color: 'Azul' }, sku: 'REM-AZUL', purchasePrice: 0 },
+      ],
+    })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.variants.map((row) => row.purchasePrice)).toEqual([null, 0])
+  })
+
   it('rejects duplicate combinations', () => {
     const parsed = ProductVariantsPayloadSchema.safeParse({
       hasVariants: true,

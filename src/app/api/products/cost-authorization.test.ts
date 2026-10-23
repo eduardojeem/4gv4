@@ -1,24 +1,38 @@
 // @vitest-environment node
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, expect, it, vi } from 'vitest'
-const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[]}))
+const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any}))
 vi.mock('server-only',()=>({}))
 vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:any,handler:any)=>(request:any,context?:any)=>handler(request,{user:{id:'user',role:state.globalRole},organization:{id:state.org,role:state.membership,slug:'shop'}},context)}))
 function query(table:string){
  const filters:Record<string,any>={};let op='read';let payload:any
- const q:any={select:()=>q,order:()=>q,is:()=>q,limit:()=>q,range:()=>q,in:()=>q,neq:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q},update:(p:any)=>{op='update';payload=p;state.writes.push({table,payload,filters});return q},insert:(p:any)=>{op='insert';payload=p;state.writes.push({table,payload,filters});return q},delete:()=>{state.writes.push({table,op:'delete'});return q}}
+ const q:any={select:()=>q,order:()=>q,is:()=>q,limit:()=>q,range:()=>q,in:(k:string,v:any)=>{filters[k]=v;return q},neq:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q},update:(p:any)=>{op='update';payload=p;state.writes.push({table,payload,filters});return q},insert:(p:any)=>{op='insert';payload=p;state.writes.push({table,payload,filters});return q},delete:()=>{state.writes.push({table,op:'delete'});return q}}
  const result=(single=false)=>{
  state.queries.push({table,filters:{...filters},op})
  if(table==='organization_members')return {data:{role:state.membership},error:null}
  if(table==='user_permissions')return {data:state.grants.filter(g=>g.organization_id===filters.organization_id),error:null}
- if(table==='products')return {data:filters.id==='foreign'?null:(single?{id:'product',name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{purchase_price:22,purchasePrice:22}]}:[{id:'product',name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}]),error:null}
+ if(table==='products'){
+  if(filters.id==='foreign')return {data:null,error:null}
+  const created=state.createdProduct
+  const requestedIds=Array.isArray(filters.id)?filters.id:[]
+  if(created&&(filters.id===created.id||requestedIds.includes(created.id)))return {data:single?created:[created],error:null}
+  return {data:single?{id:'product',name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{purchase_price:22,purchasePrice:22}]}:[{id:'product',name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
+ }
  if(table==='product_variants')return {data:filters.id==='foreign'?null:{id:'variant',product_id:'product',sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}},error:null}
  return {data:[],error:null}
  }
  q.maybeSingle=async()=>result(true);q.single=async()=>result(true);q.then=(resolve:any)=>Promise.resolve(result()).then(resolve);return q
 }
-vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:vi.fn()})}))
-vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:query,rpc:vi.fn()})}))
+vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:async(name:string,args:any)=>{
+ state.rpcCalls.push({name,args})
+ if(name==='create_simple_product_atomic'){
+  const product=args.p_product
+  state.createdProduct={id:'created-product',name:product.name,sale_price:product.sale_price,purchase_price:product.purchase_price??null,foreign_purchase_price:product.foreign_purchase_price??null,stock_quantity:product.stock_quantity??0}
+  return {data:{product_id:state.createdProduct.id},error:null}
+ }
+ return {data:null,error:null}
+}})}))
+vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:query,rpc:async()=>({data:null,error:null})})}))
 vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:()=>null,resolveBranchScopeForUser:async()=>({branchId:null}),getDefaultBranch:async()=>null}))
 vi.mock('@/lib/branches/inventory',()=>({loadBranchInventoryStockMap:async()=>({stockMap:new Map(),branchScoped:false}),applyBranchInventoryToProducts:(rows:any)=>rows,upsertBranchInventoryStock:vi.fn()}))
 vi.mock('next/cache',()=>({revalidatePath:vi.fn(),revalidateTag:vi.fn()}))
@@ -36,7 +50,7 @@ import {PUT as updateVariants} from '../variants/route'
 import {GET as access} from './access/route'
 const request=(body?:any)=>({url:'https://app/api/products',headers:new Headers(),json:async()=>body}) as any
 const params=(id='product')=>({params:Promise.resolve({id})})
-beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[]})
+beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null})
 it('redacts detail costs for global admin who is seller here; foreign org grant grants nothing',async()=>{
  state.grants=[{organization_id:'A',permission:'products.read_cost'}]
  const response=await detail(request(),params());const body=await response.json()
@@ -57,7 +71,7 @@ it('rejects every explicit write alias on product and variant endpoints before e
  [create,{purchase_price:0}], [update,{id:'product',foreign_purchase_price:3}], [update,{id:'product',variants:[{purchasePrice:0}]}],
  [updateDetail,{purchasePrice:0},params()], [updateVariant,{cost_price:0},params('variant')], [updateVariants,{variants:[{id:'variant',name:'a'},{id:'variant2',cost_price:0}]}],
  ] as any[]){expect((await handler(request(body),context)).status).toBe(403)}
- expect(state.writes).toHaveLength(0)
+ expect(state.writes).toHaveLength(0);expect(state.rpcCalls).toHaveLength(0)
 })
 it('supports write-only grants, preserves omitted cost, allows zero and redacts write responses',async()=>{
  state.grants=[{organization_id:'B',permission:'products.update_cost'}]
@@ -79,11 +93,30 @@ it('collection PUT preserves omitted base cost and permits zero for the active o
  expect(state.writes.find(row=>row.table==='products').payload.purchase_price).toBe(0)
  expect((await response.json()).data.purchase_price).toBe(33)
 })
-it('POST uses server default for omitted costs and redacts its response for a seller',async()=>{
+it('POST uses the atomic RPC; unknown cost stays NULL and is redacted for a seller',async()=>{
  const response=await create(request({name:'Remera',sku:'REM1',sale_price:100,stock_quantity:0,min_stock:0}))
  expect(response.status).toBe(201)
- expect(state.writes.find(row=>row.table==='products').payload.purchase_price).toBe(0)
+ const call=state.rpcCalls.find(row=>row.name==='create_simple_product_atomic')
+ expect(call).toBeDefined()
+ expect(call.args.p_product).not.toHaveProperty('purchase_price')
+ expect(state.createdProduct.purchase_price).toBeNull()
  expect((await response.json()).data).not.toHaveProperty('purchase_price')
+})
+
+it('POST preserves NULL, explicit zero, and positive costs for an authorized organization admin',async()=>{
+ state.membership='admin'
+ const cases=[
+  {label:'omitted cost',body:{},expected:null},
+  {label:'explicit null cost',body:{purchase_price:null},expected:null},
+  {label:'explicit zero cost',body:{purchase_price:0},expected:0},
+  {label:'positive cost',body:{purchase_price:25},expected:25},
+ ]
+ for(const [index,testCase] of cases.entries()){
+  const response=await create(request({name:`Producto ${index}`,sku:`SKU${index}`,sale_price:100,stock_quantity:0,min_stock:0,...testCase.body}))
+  expect(response.status, testCase.label).toBe(201)
+  expect(state.createdProduct.purchase_price, testCase.label).toBe(testCase.expected)
+  expect((await response.json()).data.purchase_price, testCase.label).toBe(testCase.expected)
+ }
 })
 
 it('invalid JSON objects are rejected as 400 before writes',async()=>{

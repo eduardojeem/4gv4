@@ -212,6 +212,18 @@ export function normalizeProductVariantsForForm(product: unknown): {
       const name = String(v.name || v.variant_name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`).trim()
       const sku = String(v.sku || (product.sku ? `${product.sku}-${index + 1}` : `VAR-${index + 1}`)).trim().toUpperCase()
       const isValidUuid = typeof v.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.id)
+      const rawPurchasePrice = v.purchasePrice !== undefined
+        ? v.purchasePrice
+        : v.purchase_price !== undefined
+          ? v.purchase_price
+          : product.purchase_price
+      const purchasePrice = rawPurchasePrice == null
+        ? null
+        : typeof rawPurchasePrice === 'number'
+          ? rawPurchasePrice
+          : typeof rawPurchasePrice === 'string' && rawPurchasePrice.trim() !== ''
+            ? Number(rawPurchasePrice)
+            : null
 
       return {
         id: isValidUuid ? String(v.id) : undefined,
@@ -220,7 +232,7 @@ export function normalizeProductVariantsForForm(product: unknown): {
         attributes,
         sku: sku || `VAR-${index + 1}`,
         barcode: v.barcode ? String(v.barcode).trim() : undefined,
-        purchasePrice: Number(v.purchasePrice ?? v.purchase_price ?? product.purchase_price ?? 0),
+        purchasePrice: Number.isFinite(purchasePrice) ? purchasePrice : null,
         salePrice: Number(v.salePrice ?? v.sale_price ?? product.sale_price ?? 0),
         wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null
           ? Number(v.wholesalePrice)
@@ -362,7 +374,7 @@ export function ProductModal({
       foreign_sale_price: null,
       foreign_wholesale_price: null,
       foreign_purchase_price: null,
-      purchase_price: 0,
+      purchase_price: null,
       sale_price: 0,
       wholesale_price: 0,
       offer_price: 0,
@@ -610,7 +622,7 @@ export function ProductModal({
         device_brand: (product as { device_brand?: string | null }).device_brand || '',
         device_models: (product as { device_models?: string[] | null }).device_models ?? [],
         supplier_id: product.supplier_id || '',
-        purchase_price: product.purchase_price || 0,
+        purchase_price: product.purchase_price ?? null,
         sale_price: product.sale_price || 0,
         wholesale_price: product.wholesale_price || 0,
         ...foreignPriceDefaults(product),
@@ -658,7 +670,7 @@ export function ProductModal({
         foreign_sale_price: null,
         foreign_wholesale_price: null,
         foreign_purchase_price: null,
-        purchase_price: 0,
+        purchase_price: null,
         sale_price: 0,
         wholesale_price: 0,
         offer_price: 0,
@@ -938,7 +950,7 @@ export function ProductModal({
       // Sync legacy image_url field with the first image of the array
       image_url: images.length > 0 ? images[0] : null,
       // Asegurar tipos numéricos
-      purchase_price: Number(data.purchase_price),
+      purchase_price: data.purchase_price == null ? null : Number(data.purchase_price),
       sale_price: Number(data.sale_price),
       stock_quantity: Boolean(data.has_variants && Array.isArray(data.variants) && data.variants.length > 0)
         ? data.variants.reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
@@ -1083,12 +1095,13 @@ export function ProductModal({
   }
 
   const calculateMarginValue = () => {
+    if (purchasePrice == null) return '—'
     const pPrice = Number(purchasePrice)
     const sPrice = Number(salePrice)
     if (pPrice > 0 && sPrice > 0) {
       return ((sPrice - pPrice) / sPrice * 100).toFixed(1)
     }
-    return '0'
+    return '—'
   }
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
@@ -2106,7 +2119,7 @@ export function ProductModal({
                           <FormItem>
                             <FormLabel className="flex items-center gap-2">
                               <GSIcon className="h-4 w-4" />
-                              Precio de Compra (Costo) <FieldRequirement required />
+                              Precio de Compra (Costo) <FieldRequirement />
                             </FormLabel>
                             <FormControl>
                               <Input
@@ -2114,6 +2127,7 @@ export function ProductModal({
                                 step="0.01"
                                 className="text-lg"
                                 {...field}
+                                value={field.value ?? ''}
                                 readOnly={isForeignPriced || !canUpdateCost}
                                 title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                               />
@@ -2144,7 +2158,7 @@ export function ProductModal({
                               />
                             </FormControl>
                             <FormMessage />
-                            {canViewCost && purchasePrice > 0 && salePrice > 0 && (
+                            {canViewCost && purchasePrice != null && Number(salePrice) > 0 && (
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-gray-600 dark:text-gray-400">Margen:</span>
                                 <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -3279,7 +3293,7 @@ export function ProductModal({
                     value={variantValue}
                     baseSku={sku}
                     basePrices={{
-                      purchasePrice: Number(purchasePrice) || 0,
+                      purchasePrice: purchasePrice == null ? null : Number(purchasePrice),
                       salePrice: Number(salePrice) || 0,
                       wholesalePrice: Number(wholesalePrice) > 0 ? Number(wholesalePrice) : undefined,
                     }}

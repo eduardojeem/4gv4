@@ -438,12 +438,12 @@ export default function ProductDetailPage() {
 
   // Margin calculation
   const marginPercentage = useMemo(() => {
-    if (!product || !product.purchase_price || product.purchase_price <= 0 || product.sale_price <= 0) return null
+    if (!product || product.purchase_price == null || product.sale_price <= 0) return null
     return (((product.sale_price - product.purchase_price) / product.sale_price) * 100)
   }, [product])
 
   const marginAmount = useMemo(() => {
-    if (!product || !product.purchase_price) return 0
+    if (!product || product.purchase_price == null) return null
     return Math.max(0, product.sale_price - product.purchase_price)
   }, [product])
 
@@ -1004,7 +1004,7 @@ export default function ProductDetailPage() {
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-                    {product.purchase_price && product.purchase_price > 0
+                    {product.purchase_price != null
                       ? formatCurrency(product.purchase_price)
                       : 'No registrado'}
                   </span>
@@ -1015,9 +1015,9 @@ export default function ProductDetailPage() {
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  {marginAmount > 0
+                  {marginAmount != null && marginAmount > 0
                     ? `Ganancia: +${formatCurrency(marginAmount)} por unidad`
-                    : 'Costo base de compra (solo admin)'}
+                    : marginAmount == null ? 'Margen no disponible sin costo registrado' : 'Ganancia por unidad: ₲0'}
                 </p>
               </CardContent>
             </Card>
@@ -2255,7 +2255,7 @@ export default function ProductDetailPage() {
                           {canViewCost && (
                             <div className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-xs">
                               <span className="text-muted-foreground">Ganancia Bruta por Unidad</span>
-                              <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatCurrency(marginAmount)}</span>
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400">{marginAmount == null ? '—' : `+${formatCurrency(marginAmount)}`}</span>
                             </div>
                           )}
                           {canViewCost && (
@@ -2380,7 +2380,7 @@ export default function ProductDetailPage() {
                       )}
                     </div>
                     <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {product.purchase_price != null && product.purchase_price > 0
+                      {product.purchase_price != null
                         ? formatCurrency(product.purchase_price)
                         : 'No registrado'}
                     </p>

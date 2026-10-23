@@ -26,8 +26,8 @@ export function ProductStatsCard({ product }: ProductStatsCardProps) {
     return `Gs. ${formatted}`
   }
 
-  const calculateMargin = () => {
-    if (!product.purchase_price || product.purchase_price === 0) return 0
+  const calculateMargin = (): number | null => {
+    if (product.purchase_price == null || product.purchase_price === 0) return null
     return ((product.sale_price - product.purchase_price) / product.purchase_price) * 100
   }
 
@@ -64,7 +64,7 @@ export function ProductStatsCard({ product }: ProductStatsCardProps) {
     },
     {
       label: 'Precio de Costo',
-      value: product.purchase_price ? formatCurrency(product.purchase_price) : 'N/A',
+      value: product.purchase_price == null ? 'N/A' : formatCurrency(product.purchase_price),
       icon: BarChart3,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',
@@ -72,11 +72,11 @@ export function ProductStatsCard({ product }: ProductStatsCardProps) {
     },
     {
       label: 'Margen',
-      value: `${margin.toFixed(1)}%`,
-      icon: margin >= 20 ? TrendingUp : TrendingDown,
-      color: getMarginColor(margin),
-      bgColor: margin >= 20 ? 'bg-green-100' : 'bg-amber-100',
-      trend: margin >= 20 ? 'positive' : 'negative'
+      value: margin == null ? 'N/D' : `${margin.toFixed(1)}%`,
+      icon: margin != null && margin >= 20 ? TrendingUp : TrendingDown,
+      color: margin == null ? 'text-slate-500' : getMarginColor(margin),
+      bgColor: margin != null && margin >= 20 ? 'bg-green-100' : 'bg-amber-100',
+      trend: margin == null ? null : margin >= 20 ? 'positive' : 'negative'
     },
     {
       label: 'Stock Actual',
