@@ -4,6 +4,7 @@ export type CreditReportCredit = {
   principal: number
   interestRate: number
   createdAt: string
+  status?: string | null
 }
 
 export type CreditReportInstallment = {
@@ -60,9 +61,15 @@ function safeAmount(value: number | null | undefined): number {
 }
 
 function remainingInstallment(installment: CreditReportInstallment): number {
+  if (isCancelled(installment.status)) return 0
   const amount = safeAmount(installment.amount)
   if (installment.status === 'paid') return 0
   return Math.max(0, amount - safeAmount(installment.amountPaid))
+}
+
+const CANCELLED_STATUSES = new Set(['cancelled', 'cancelado', 'canceled'])
+function isCancelled(status: string | null | undefined): boolean {
+  return CANCELLED_STATUSES.has(String(status ?? '').toLowerCase())
 }
 
 function addDays(dateKey: string, days: number): string {
@@ -91,8 +98,9 @@ export function buildCreditReport({
   today,
   timeZone = 'America/Asuncion',
 }: BuildCreditReportInput): CreditReport {
-  const creditIds = new Set(credits.map((credit) => credit.id))
-  const periodCredits = credits.filter((credit) => {
+  const activeCredits = credits.filter((credit) => !isCancelled(credit.status))
+  const creditIds = new Set(activeCredits.map((credit) => credit.id))
+  const periodCredits = activeCredits.filter((credit) => {
     const createdAt = new Date(credit.createdAt).getTime()
     return Number.isFinite(createdAt) && createdAt >= from.getTime() && createdAt <= to.getTime()
   })
@@ -102,7 +110,7 @@ export function buildCreditReport({
   const remainingByCredit = new Map<string, number>()
   const overdueCreditIds = new Set<string>()
   const overdueCustomerIds = new Set<string>()
-  const customerByCredit = new Map(credits.map((credit) => [credit.id, credit.customerId]))
+  const customerByCredit = new Map(activeCredits.map((credit) => [credit.id, credit.customerId]))
   const dueSoonThrough = addDays(today, 30)
   let overdueAmount = 0
   let overdueInstallments = 0
@@ -110,6 +118,7 @@ export function buildCreditReport({
 
   for (const installment of installments) {
     if (!creditIds.has(installment.creditId)) continue
+    if (isCancelled(installment.status)) continue
     const amount = safeAmount(installment.amount)
     const remaining = remainingInstallment(installment)
     scheduledByCredit.set(installment.creditId, (scheduledByCredit.get(installment.creditId) || 0) + amount)
@@ -157,7 +166,7 @@ export function buildCreditReport({
   const scheduledTotal = [...scheduledByCredit.values()].reduce((sum, amount) => sum + amount, 0)
   const paidTotal = Math.max(0, scheduledTotal - outstandingAmount)
   const statusCounts = { active: 0, overdue: 0, completed: 0 }
-  for (const credit of credits) {
+  for (const credit of activeCredits) {
     const remaining = remainingByCredit.get(credit.id) || 0
     if (remaining <= 0) statusCounts.completed += 1
     else if (overdueCreditIds.has(credit.id)) statusCounts.overdue += 1
@@ -176,7 +185,7 @@ export function buildCreditReport({
         : 0,
     },
     portfolio: {
-      activeCredits: credits.filter((credit) => (remainingByCredit.get(credit.id) || 0) > 0).length,
+      activeCredits: activeCredits.filter((credit) => (remainingByCredit.get(credit.id) || 0) > 0).length,
       outstandingAmount,
       overdueAmount,
       overdueInstallments,

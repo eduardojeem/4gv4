@@ -271,6 +271,7 @@ export async function collectPayment(customerId: string, input: CollectInput, id
       }),
     });
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new Error(friendly(error, 'No se pudo registrar el cobro.'));
   }
 }
