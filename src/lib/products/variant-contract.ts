@@ -1,3 +1,4 @@
+import { getVariantCombinationKey } from './variant-safety'
 import { z } from 'zod'
 
 const normalizeText = (value: string) => value.trim()
@@ -60,11 +61,7 @@ export const ProductVariantsPayloadSchema = z.object({
   const barcodes = new Set<string>()
 
   payload.variants.forEach((variant, index) => {
-    const combination = Object.entries(variant.attributes)
-      .map(([key, value]) => [key.trim().toLowerCase(), value.trim().toLowerCase()] as const)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, value]) => `${key}=${value}`)
-      .join('|')
+    const combination = getVariantCombinationKey(variant.attributes)
 
     if (combinations.has(combination)) {
       context.addIssue({

@@ -1,3 +1,4 @@
+import { getVariantPurchaseCost, getVariantCostValue } from '@/lib/products/variant-cost'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
@@ -102,12 +103,11 @@ function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
   const baseWholesalePrice = toSafeNumber(product?.wholesale_price, 0)
-  const baseCostPrice = toSafeNumber(product?.purchase_price, 0)
   const priceAdjustment = toSafeNumber(row.price_adjustment, 0)
 
   const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
   const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
-  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice)
+  const costPrice = getVariantPurchaseCost(row.purchase_price)
 
   const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
@@ -284,8 +284,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       patch.sale_price = Math.max(0, toSafeNumber(body.price, baseSalePrice))
     }
 
-    if (body.purchase_price !== undefined || body.cost_price !== undefined) {
-      patch.purchase_price = Math.max(0, toSafeNumber(body.purchase_price ?? body.cost_price, 0))
+    if (costAccess.canWriteCost && getVariantCostValue(rawBody) !== undefined) {
+      patch.purchase_price = getVariantPurchaseCost(getVariantCostValue(rawBody))
     }
     if (body.wholesale_price !== undefined) {
       patch.wholesale_price = Math.max(0, toSafeNumber(body.wholesale_price, 0))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   Check,
   ChevronDown,
@@ -30,6 +30,8 @@ import {
   getVerticalProductCopy,
 } from '@/lib/products/vertical-attributes'
 import { mergeAttributeSuggestions, type SavedAttribute } from '@/lib/inventory/variant-sync'
+import { analyzeVariantRemovalImpact, type VariantRemovalImpact } from '@/lib/products/variant-safety'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 
 interface LegacyVariantFields {
   variant_name?: string
@@ -209,13 +211,35 @@ export function ProductVariantsEditor({
   const [expandedVariant, setExpandedVariant] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(false)
   const [selectedExampleId, setSelectedExampleId] = useState('clothing')
+  const variantReviewRef = useRef<HTMLDivElement>(null)
+  const [removalImpact, setRemovalImpact] = useState<VariantRemovalImpact | null>(null)
+
+  const requestChange = (next: ProductVariantsPayload, reason: string) => {
+    const impact = analyzeVariantRemovalImpact(value.variants, next.variants, reason)
+    if (impact.requiresReview) {
+      setRemovalImpact(impact)
+      return false
+    }
+    onChange(next)
+    return true
+  }
+
+  const requestAttributes = (attributes: ProductAttributeDefinition[], reason: string) => {
+    const proposed = mergeGeneratedVariants(generateVariantCombinations(attributes), value.variants, basePrices)
+    const impact = analyzeVariantRemovalImpact(value.variants, proposed, reason)
+    if (impact.requiresReview) {
+      setRemovalImpact(impact)
+      return
+    }
+    onChange({ ...value, attributes })
+  }
 
   /* ── Mutators ── */
   const updateAttribute = (index: number, patch: Partial<ProductAttributeDefinition>) => {
     const attributes = value.attributes.map((attr, i) =>
       i === index ? { ...attr, ...patch } : attr
     )
-    onChange({ ...value, attributes })
+    requestAttributes(attributes, 'attribute-change')
   }
 
   const addOptionToAttribute = (index: number, option: string) => {
@@ -235,10 +259,7 @@ export function ProductVariantsEditor({
   }
 
   const removeAttribute = (index: number) => {
-    onChange({
-      ...value,
-      attributes: value.attributes.filter((_, i) => i !== index),
-    })
+    requestAttributes(value.attributes.filter((_, i) => i !== index), 'remove-attribute')
   }
 
   const addSuggestion = (key: string) => {
@@ -274,7 +295,7 @@ export function ProductVariantsEditor({
       ...v,
       sku: v.sku || `${baseSku.trim().toUpperCase() || 'VAR'}-${String(i + 1).padStart(2, '0')}`,
     }))
-    onChange({ ...value, variants })
+    requestChange({ ...value, variants }, 'regenerate')
   }
 
   const applyPreset = (preset: VariantPreset) => {
@@ -288,12 +309,12 @@ export function ProductVariantsEditor({
 
     const attributes = preset.attributes.map((attribute) => ({ ...attribute, options: [...attribute.options] }))
     const generated = generateVariantCombinations(attributes)
-    const variants = mergeGeneratedVariants(generated, [], basePrices).map((variant, index) => ({
+    const variants = mergeGeneratedVariants(generated, value.variants, basePrices).map((variant, index) => ({
       ...variant,
-      sku: `${baseSku.trim().toUpperCase() || preset.skuPrefix}-${String(index + 1).padStart(2, '0')}`,
+      sku: variant.sku || `${baseSku.trim().toUpperCase() || preset.skuPrefix}-${String(index + 1).padStart(2, '0')}`,
     }))
 
-    onChange({ hasVariants: true, attributes, variants })
+    requestChange({ hasVariants: true, attributes, variants }, 'preset')
   }
 
   const configureShirt = () => applyPreset(VARIANT_PRESETS[0])
@@ -309,10 +330,10 @@ export function ProductVariantsEditor({
   }
 
   const removeVariant = (index: number) => {
-    onChange({
+    requestChange({
       ...value,
       variants: value.variants.filter((_, i) => i !== index),
-    })
+    }, 'remove-variant')
   }
 
   const previewCount = previewCombinationCount(value.attributes)
@@ -325,6 +346,32 @@ export function ProductVariantsEditor({
 
   return (
     <section className="space-y-5" aria-labelledby="product-variants-title">
+      <AlertDialog open={removalImpact !== null} onOpenChange={(open) => { if (!open) setRemovalImpact(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revisá las variantes antes de continuar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este cambio afecta {removalImpact?.variantsAffected ?? 0} variantes, de las cuales {removalImpact?.persistedVariantsAffected ?? 0} están guardadas.
+              {' '}Stock afectado: {removalImpact?.totalStockAffected ?? 0} unidades.
+              {' '}El cambio no se aplicó. No se permite retirarlas desde este editor para proteger su inventario e historial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-48 overflow-y-auto text-sm">
+            {removalImpact?.variants.map((variant, index) => <li key={variant.id ?? index}>{variant.combination} · {variant.stockAffected} unidades · {variant.active ? 'Activa' : 'Inactiva'} · Historial no verificado</li>)}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              const first = removalImpact?.variants[0]
+              const index = value.variants.findIndex(v => first?.id ? v.id === first.id : v.name === first?.combination)
+              setExpandedVariant(index >= 0 ? index : null)
+              setRemovalImpact(null)
+              variantReviewRef.current?.focus()
+              variantReviewRef.current?.scrollIntoView?.({ block: 'nearest' })
+            }}>Revisar variantes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Toggle: Producto simple vs con variantes ── */}
       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/40">
@@ -341,7 +388,7 @@ export function ProductVariantsEditor({
               size="sm"
               variant={!value.hasVariants ? 'default' : 'ghost'}
               disabled={disabled}
-              onClick={() => onChange({ hasVariants: false, attributes: [], variants: [] })}
+              onClick={() => requestChange({ hasVariants: false, attributes: [], variants: [] }, 'simple')}
               className="gap-1.5"
             >
               <Check className={`h-3.5 w-3.5 ${!value.hasVariants ? 'opacity-100' : 'opacity-0'}`} />
@@ -599,7 +646,7 @@ export function ProductVariantsEditor({
                   variant="outline"
                   size="sm"
                   disabled={disabled}
-                  onClick={() => onChange({ hasVariants: false, attributes: [], variants: [] })}
+                  onClick={() => requestChange({ hasVariants: false, attributes: [], variants: [] }, 'simple')}
                   className="text-xs gap-1.5 mt-1"
                 >
                   <Check className="h-3.5 w-3.5" />
@@ -760,14 +807,14 @@ export function ProductVariantsEditor({
             </Button>
             {value.variants.length > 0 && (
               <p className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70">
-                ⚠️ Regenerar reemplaza las combinaciones existentes. Los valores que ya editaste se intentan preservar si el nombre de variante coincide.
+                ⚠️ Regenerar reemplaza las combinaciones existentes. Los datos editados se conservan cuando la combinación de atributos coincide. Las variantes guardadas o con stock no se retiran sin revisión.
               </p>
             )}
           </div>
 
           {/* ── PASO 4: Tabla de variantes generadas ── */}
           {value.variants.length > 0 && (
-            <div className="space-y-3">
+            <div ref={variantReviewRef} tabIndex={-1} aria-label="Variantes para revisar" className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold shrink-0">4</span>
                 <div className="flex items-center justify-between flex-1 gap-2">
@@ -832,6 +879,7 @@ export function ProductVariantsEditor({
                               min={0}
                               step="0.01"
                               disabled={!canUpdateCost}
+                              placeholder="Sin costo informado"
                               value={vPurchase ?? ''}
                               className="h-8 text-xs w-24"
                               onChange={(e) => updateVariant(index, { purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
@@ -956,7 +1004,8 @@ export function ProductVariantsEditor({
                                 min={0}
                                 step="0.01"
                                 disabled={!canUpdateCost}
-                            value={vPurchase ?? ''}
+                            placeholder="Sin costo informado"
+                              value={vPurchase ?? ''}
                             onChange={(e) => updateVariant(index, { purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
                               />
                             </label>}

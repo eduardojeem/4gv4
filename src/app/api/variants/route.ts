@@ -1,3 +1,4 @@
+import { getVariantPurchaseCost, getVariantCostValue } from '@/lib/products/variant-cost'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
@@ -75,12 +76,11 @@ function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
   const baseWholesalePrice = toSafeNumber(product?.wholesale_price, 0)
-  const baseCostPrice = toSafeNumber(product?.purchase_price, 0)
   const priceAdjustment = toSafeNumber(row.price_adjustment, 0)
 
   const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
   const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
-  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice)
+  const costPrice = getVariantPurchaseCost(row.purchase_price)
 
   const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
@@ -260,7 +260,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         variant_name: name,
         attributes: body?.attributes && typeof body.attributes === 'object' ? body.attributes : {},
         barcode: body?.barcode ? String(body.barcode).trim() : null,
-        purchase_price: Math.max(0, toSafeNumber(body?.purchase_price ?? body?.cost_price, 0)),
+        purchase_price: getVariantPurchaseCost(getVariantCostValue(rawBody)),
         sale_price: Math.max(0, price),
         wholesale_price: body?.wholesale_price === undefined
           ? null
@@ -345,7 +345,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
     }
     if(hasExplicitProductCost(rawBody) && !costAccess.canWriteCost) return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'},{status:403})
-    const body = normalizeUnknownProductCosts(rawBody,false)
+    const body = rawBody
 
     const variants = Array.isArray(body?.variants) ? body.variants : null
 
@@ -448,8 +448,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         patch.sale_price = Math.max(0, toSafeNumber(variantData.price, baseSalePrice))
       }
 
-      if (variantData.purchase_price !== undefined || variantData.cost_price !== undefined) {
-        patch.purchase_price = Math.max(0, toSafeNumber(variantData.purchase_price ?? variantData.cost_price, 0))
+      if (costAccess.canWriteCost && getVariantCostValue(variantData) !== undefined) {
+        patch.purchase_price = getVariantPurchaseCost(getVariantCostValue(variantData))
       }
       if (variantData.wholesale_price !== undefined) {
         patch.wholesale_price = Math.max(0, toSafeNumber(variantData.wholesale_price, 0))

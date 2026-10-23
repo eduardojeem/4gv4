@@ -3,6 +3,36 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ProductVariantsEditor } from './ProductVariantsEditor'
 
+const persistedVariant = { id: '00000000-0000-4000-8000-000000000001', clientKey: 'legacy', name: 'Negro', attributes: { color: 'Negro' }, sku: 'KEEP', purchasePrice: null, salePrice: 50, stockQuantity: 7, minStock: 0, isActive: true }
+
+it.each(['Producto simple', 'Eliminar atributo Color', 'Quitar opción Negro', 'Eliminar variante Negro'])('blocks %s for persisted variants and allows cancel/review only', action => {
+  const onChange = vi.fn()
+  render(<ProductVariantsEditor value={{ hasVariants: true, attributes: [{ key: 'color', label: 'Color', control: 'color', options: ['Negro'] }], variants: [persistedVariant] }} onChange={onChange} basePrices={{ purchasePrice: null, salePrice: 50 }} businessVertical="general" />)
+  fireEvent.click(screen.getAllByRole('button', { name: action, exact: true })[0])
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('Stock afectado: 7 unidades')
+  expect(onChange).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Revisar variantes', exact: true }))
+  expect(onChange).not.toHaveBeenCalled()
+})
+
+it('blocks regenerating or replacing persisted combinations and allows harmless draft removal', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  const onChange = vi.fn()
+  const { rerender } = render(<ProductVariantsEditor value={{ hasVariants: true, attributes: [{ key: 'size', label: 'Talle', control: 'select', options: ['L'] }], variants: [persistedVariant] }} onChange={onChange} basePrices={{ purchasePrice: null, salePrice: 50 }} businessVertical="general" />)
+  fireEvent.click(screen.getByRole('button', { name: /Generar.*combinaciones/i }))
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  expect(onChange).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Configurar una remera' }))
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  expect(onChange).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar', exact: true }))
+  rerender(<ProductVariantsEditor value={{ hasVariants: true, attributes: [], variants: [{ ...persistedVariant, id: undefined, stockQuantity: 0 }] }} onChange={onChange} basePrices={{ purchasePrice: null, salePrice: 50 }} businessVertical="general" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Producto simple', exact: true }))
+  expect(onChange).toHaveBeenCalledWith({ hasVariants: false, attributes: [], variants: [] })
+  confirm.mockRestore()
+})
+
 describe('ProductVariantsEditor', () => {
   it('configures a shirt with size and color variants in one action', () => {
     const onChange = vi.fn()
@@ -27,7 +57,7 @@ describe('ProductVariantsEditor', () => {
     ])
     expect(configured.variants).toHaveLength(8)
     expect(configured.variants[0]).toMatchObject({
-      clientKey: 'size=S|color=Negro',
+      clientKey: 'color=negro|size=s',
       sku: 'REM-01',
       purchasePrice: 40_000,
       salePrice: 75_000,

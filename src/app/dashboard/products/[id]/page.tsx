@@ -1822,7 +1822,7 @@ export default function ProductDetailPage() {
                                     {/* Cost Price */}
                                     {canViewCost && (
                                       <td className="py-3.5 px-4 text-right font-medium text-slate-700 dark:text-slate-300">
-                                        {variant.purchasePrice != null ? formatCurrency(variant.purchasePrice) : '—'}
+                                        {variant.purchasePrice != null ? formatCurrency(variant.purchasePrice) : 'Sin costo informado'}
                                       </td>
                                     )}
 
@@ -1941,9 +1941,9 @@ export default function ProductDetailPage() {
                                         May: {formatCurrency(variant.wholesalePrice)}
                                       </p>
                                     )}
-                                    {canViewCost && variant.purchasePrice != null && (
+                                    {canViewCost && (
                                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                                        Costo: {formatCurrency(variant.purchasePrice)}
+                                        Costo: {variant.purchasePrice != null ? formatCurrency(variant.purchasePrice) : 'Sin costo informado'}
                                       </p>
                                     )}
                                   </div>

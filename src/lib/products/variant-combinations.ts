@@ -1,3 +1,4 @@
+import { getVariantCombinationKey } from './variant-safety'
 import type { ProductVariantInput } from './variant-contract'
 
 export interface CombinationAttribute {
@@ -41,14 +42,14 @@ export function generateVariantCombinations(
   return attributes.reduce<GeneratedVariantCombination[]>((combinations, definition) => {
     if (combinations.length === 0) {
       return definition.options.map((option) => ({
-        key: `${definition.key}=${option}`,
+        key: getVariantCombinationKey({ [definition.key]: option }),
         name: option,
         attributes: { [definition.key]: option },
       }))
     }
 
     return combinations.flatMap((combination) => definition.options.map((option) => ({
-      key: `${combination.key}|${definition.key}=${option}`,
+      key: getVariantCombinationKey({ ...combination.attributes, [definition.key]: option }),
       name: `${combination.name} / ${option}`,
       attributes: { ...combination.attributes, [definition.key]: option },
     })))
@@ -60,9 +61,9 @@ export function mergeGeneratedVariants(
   previous: ProductVariantInput[],
   defaults: VariantPriceDefaults,
 ): ProductVariantInput[] {
-  const previousByKey = new Map(previous.map((variant) => [variant.clientKey, variant]))
+  const previousByKey = new Map(previous.map((variant) => [getVariantCombinationKey(variant.attributes), variant]))
 
-  return generated.map((combination) => previousByKey.get(combination.key) ?? {
+  return generated.map((combination) => previousByKey.get(getVariantCombinationKey(combination.attributes)) ?? {
     clientKey: combination.key,
     name: combination.name,
     attributes: combination.attributes,

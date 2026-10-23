@@ -1,5 +1,7 @@
 'use client'
 
+import { getVariantCombinationKey } from '@/lib/products/variant-safety'
+
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { clearProductDraft, readProductDraft, scheduleProductDraft, flushProductDraft } from '@/lib/products/product-draft'
@@ -203,10 +205,7 @@ export function normalizeProductVariantsForForm(product: unknown): {
         }
       }
 
-      const attrKey = Object.entries(attributes)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, val]) => `${k}=${val}`)
-        .join('|')
+      const attrKey = getVariantCombinationKey(attributes)
       const clientKey = String(v.clientKey || v.client_key || attrKey || v.id || `variant-${index + 1}`)
 
       const name = String(v.name || v.variant_name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`).trim()
