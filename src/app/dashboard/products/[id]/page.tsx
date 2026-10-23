@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AppImage as Image } from '@/components/ui/app-image'
 import { motion } from '@/components/ui/motion'
@@ -40,8 +40,6 @@ import {
   Loader2,
   ZoomIn, ChevronRight,
   Percent,
-  Search, LayoutGrid,
-  List, X
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -62,8 +60,10 @@ import { ProductModal } from '@/components/dashboard/product-modal'
 import { PrintLabelsDialog } from '@/components/dashboard/products/labels/PrintLabelsDialog'
 import { resolveLabelCode } from '@/lib/labels/barcode-format'
 import { resolveProductImageUrl } from '@/lib/images'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
+import { VariantDetailList, type VariantBranchStock } from '@/components/dashboard/products/variants/VariantDetailList'
 import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost } from '@/lib/products/cost-columns'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -136,6 +136,7 @@ export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
   const canViewCost = useCanViewCost()
+  const { scope, currentScope, organizationId } = useTenantScope()
   const productId = params.id as string
 
   const {
@@ -171,17 +172,18 @@ export default function ProductDetailPage() {
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([])
 
-  // State for variants management & interactive viewer
-  const [variantSearch, setVariantSearch] = useState('')
-  const [variantStockFilter, setVariantStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
-  const [variantViewMode, setVariantViewMode] = useState<'table' | 'cards'>('table')
-  const [copiedVariantSku, setCopiedVariantSku] = useState<string | null>(null)
-  const [copiedVariantBarcode, setCopiedVariantBarcode] = useState<string | null>(null)
+  const loadSequence = useRef(0)
+  const [branchStockScope, setBranchStockScope] = useState('')
+  const [branchStock, setBranchStock] = useState<VariantBranchStock[]>([])
+  const [branchStockState, setBranchStockState] = useState<'loading' | 'ready' | 'error'>('loading')
 
   // ─── Data loading ──────────────────────────────────────────────────────────
 
   const loadProduct = useCallback(async () => {
+    const sequence = ++loadSequence.current
     setLoadingProduct(true)
+    setProduct(null)
+    if (!organizationId) { setLoadingProduct(false); return }
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -193,24 +195,27 @@ export default function ProductDetailPage() {
           variants:product_variants(${VARIANT_CLIENT_COLUMNS})
         `)
         .eq('id', productId)
+        .eq('organization_id', organizationId)
         .single()
 
       if (error) throw error
       // El costo se pide aparte: solo vuelve con permiso de costos en esta organización.
       const withCost = await attachProductCost(asCostRpcClient(supabase), data, { variantsKey: 'variants' })
-      setProduct(withCost as unknown as ProductWithInstallments)
+      if (sequence === loadSequence.current && currentScope.current === scope) setProduct(withCost as unknown as ProductWithInstallments)
     } catch (e) {
+      if (sequence !== loadSequence.current) return
       logger.error('Error loading product', { error: e })
       toast.error("No se pudo cargar el producto", {
         description: "Intenta nuevamente."
       })
     } finally {
-      setLoadingProduct(false)
+      if (sequence === loadSequence.current) setLoadingProduct(false)
     }
-  }, [productId])
+  }, [productId, organizationId, scope, currentScope])
 
   useEffect(() => {
     loadProduct()
+    return () => { loadSequence.current += 1 }
   }, [loadProduct])
 
   useEffect(() => {
@@ -348,6 +353,44 @@ export default function ProductDetailPage() {
     })
   }, [product])
 
+  useEffect(() => {
+    let cancelled = false
+    setBranchStockScope('')
+    setBranchStock([])
+    setBranchStockState('loading')
+    if (!product || product.id !== productId || !product.organization_id || product.organization_id !== organizationId) return
+    const targetOrganizationId = product.organization_id
+    const load = async () => {
+      try {
+        const supabase = createClient()
+        const { data: inventory, error } = await supabase.from('branch_variant_inventory')
+          .select('variant_id, branch_id, stock_quantity')
+          .eq('organization_id', targetOrganizationId).eq('product_id', product.id)
+        if (error) throw error
+        const ids = Array.from(new Set((inventory || []).map(row => row.branch_id)))
+        const names = new Map<string, string>()
+        if (ids.length) {
+          const { data: branches, error: branchError } = await supabase.from('branches')
+            .select('id, name').eq('organization_id', targetOrganizationId).in('id', ids)
+          if (branchError) throw branchError
+          branches?.forEach(branch => names.set(branch.id, branch.name))
+        }
+        if (!cancelled && currentScope.current === scope) {
+          setBranchStock((inventory || []).map(row => ({ variantId: row.variant_id, branchId: row.branch_id, branchName: names.get(row.branch_id) || 'Sucursal sin nombre visible', quantity: row.stock_quantity })))
+          setBranchStockScope(`${targetOrganizationId}:${product.id}`)
+          setBranchStockState('ready')
+        }
+      } catch {
+        if (!cancelled && currentScope.current === scope) {
+          setBranchStockScope(`${targetOrganizationId}:${product.id}`)
+          setBranchStockState('error')
+        }
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [product, productId, organizationId, scope, currentScope])
+
   const hasVariants = normalizedVariants.length > 0 || Boolean(product?.has_variants)
 
   const variantStats = useMemo(() => {
@@ -390,32 +433,7 @@ export default function ProductDetailPage() {
     }
   }, [normalizedVariants, product?.sale_price])
 
-  const filteredVariants = useMemo(() => {
-    return normalizedVariants.filter(v => {
-      // Search filter
-      if (variantSearch.trim()) {
-        const q = variantSearch.toLowerCase().trim()
-        const matchesName = v.name.toLowerCase().includes(q)
-        const matchesSku = v.sku.toLowerCase().includes(q)
-        const matchesBarcode = v.barcode ? v.barcode.toLowerCase().includes(q) : false
-        const matchesAttrs = Object.entries(v.attributes).some(([k, val]) =>
-          k.toLowerCase().includes(q) || val.toLowerCase().includes(q)
-        )
-        if (!matchesName && !matchesSku && !matchesBarcode && !matchesAttrs) {
-          return false
-        }
-      }
-      // Stock filter
-      if (variantStockFilter === 'out_of_stock') {
-        if (v.stockQuantity > 0) return false
-      } else if (variantStockFilter === 'low_stock') {
-        if (v.stockQuantity <= 0 || v.stockQuantity > (v.minStock ?? 0)) return false
-      } else if (variantStockFilter === 'in_stock') {
-        if (v.stockQuantity <= (v.minStock ?? 0)) return false
-      }
-      return true
-    })
-  }, [normalizedVariants, variantSearch, variantStockFilter])
+
 
   const calculatedStockStatus = useMemo(() => {
     const stock = hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : (product?.stock_quantity ?? 0)
@@ -504,22 +522,6 @@ export default function ProductDetailPage() {
     setCopiedSku(true)
     setTimeout(() => setCopiedSku(false), 2000)
     toast.success("SKU copiado", { description: "El SKU se copió al portapapeles." })
-  }
-
-  const handleCopyVariantSku = (sku: string) => {
-    if (!sku) return
-    navigator.clipboard.writeText(sku)
-    setCopiedVariantSku(sku)
-    setTimeout(() => setCopiedVariantSku(null), 2000)
-    toast.success("SKU de variante copiado", { description: `${sku} copiado al portapapeles.` })
-  }
-
-  const handleCopyVariantBarcode = (barcode: string) => {
-    if (!barcode) return
-    navigator.clipboard.writeText(barcode)
-    setCopiedVariantBarcode(barcode)
-    setTimeout(() => setCopiedVariantBarcode(null), 2000)
-    toast.success("Código de variante copiado", { description: `${barcode} copiado al portapapeles.` })
   }
 
   const handleCopyId = () => {
@@ -615,7 +617,7 @@ export default function ProductDetailPage() {
 
   // ─── Loading state ─────────────────────────────────────────────────────────
 
-  if (loadingProduct) {
+  if (loadingProduct || (product && (product.id !== productId || product.organization_id !== organizationId))) {
     return (
       <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
@@ -1519,458 +1521,10 @@ export default function ProductDetailPage() {
                   )}
               </TabsContent>
 
-              {/* ── Tab: Variantes & Combinaciones ─────────────────────── */}
+              {/* Variantes */}
               {hasVariants && (
                 <TabsContent value="variants" className="space-y-4">
-                  {/* Hero Summary Cards for Variants */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-4 rounded-2xl border border-pink-200/80 dark:border-pink-900/40 bg-pink-50/50 dark:bg-pink-950/20">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-pink-700 dark:text-pink-300 block">
-                        Total Variantes
-                      </span>
-                      <p className="text-2xl font-black text-pink-950 dark:text-pink-100 mt-1">
-                        {variantStats.count}
-                      </p>
-                      <p className="text-[11px] text-pink-600 dark:text-pink-400 mt-0.5">
-                        {variantStats.activeCount} activas
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">
-                        Stock en Variantes
-                      </span>
-                      <p className="text-2xl font-black text-emerald-950 dark:text-emerald-100 mt-1">
-                        {variantStats.totalStock}{' '}
-                        <span className="text-xs font-normal text-muted-foreground">{product.unit_measure || 'un.'}</span>
-                      </p>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        {variantStats.outOfStockCount > 0 ? `${variantStats.outOfStockCount} sin stock` : 'Todas en stock'}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl border border-blue-200/80 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
-                        Rango de Precios
-                      </span>
-                      <p className="text-lg font-black text-blue-950 dark:text-blue-100 mt-1 truncate">
-                        {variantStats.hasPriceRange
-                          ? `${formatCurrency(variantStats.minPrice)} – ${formatCurrency(variantStats.maxPrice)}`
-                          : formatCurrency(product.sale_price)}
-                      </p>
-                      <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
-                        {variantStats.hasPriceRange ? 'Precios personalizados' : 'Precio unificado'}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl border border-purple-200/80 dark:border-purple-900/40 bg-purple-50/50 dark:bg-purple-950/20">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 block">
-                        Valor Inventario
-                      </span>
-                      <p className="text-lg font-black text-purple-950 dark:text-purple-100 mt-1 truncate">
-                        {formatCurrency(variantStats.totalValuation)}
-                      </p>
-                      <p className="text-[11px] text-purple-600 dark:text-purple-400 mt-0.5">
-                        Suma de todas las variantes
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Main Variants Card */}
-                  <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 shadow-sm backdrop-blur-md overflow-hidden">
-                    <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                            <Layers3 className="h-4 w-4 text-pink-500" />
-                            Listado y Existencias de Variantes
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Consulta el inventario, SKU, precios y códigos de barras de cada combinación.
-                          </p>
-                        </div>
-
-                        {/* View toggle */}
-                        <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                          <Button
-                            type="button"
-                            variant={variantViewMode === 'table' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantViewMode('table')}
-                            className="h-8 px-2.5 text-xs rounded-lg gap-1"
-                          >
-                            <List className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Tabla</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={variantViewMode === 'cards' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantViewMode('cards')}
-                            className="h-8 px-2.5 text-xs rounded-lg gap-1"
-                          >
-                            <LayoutGrid className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Tarjetas</span>
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Search & Stock Filter Toolbar */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3">
-                        <div className="relative flex-1 max-w-sm">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                          <input
-                            type="text"
-                            value={variantSearch}
-                            onChange={(e) => setVariantSearch(e.target.value)}
-                            placeholder="Buscar por nombre, SKU, código o atributo..."
-                            className="w-full h-8.5 pl-8.5 pr-8 text-xs rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                          />
-                          {variantSearch && (
-                            <button
-                              type="button"
-                              onClick={() => setVariantSearch('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 text-xs">
-                          <Button
-                            type="button"
-                            variant={variantStockFilter === 'all' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantStockFilter('all')}
-                            className="h-7.5 px-2.5 text-[11px] font-semibold rounded-lg"
-                          >
-                            Todas ({normalizedVariants.length})
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={variantStockFilter === 'in_stock' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantStockFilter('in_stock')}
-                            className="h-7.5 px-2.5 text-[11px] font-semibold rounded-lg text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-                          >
-                            En Stock ({variantStats.inStockCount})
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={variantStockFilter === 'low_stock' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantStockFilter('low_stock')}
-                            className="h-7.5 px-2.5 text-[11px] font-semibold rounded-lg text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
-                          >
-                            Bajo Stock ({variantStats.lowStockCount})
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={variantStockFilter === 'out_of_stock' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setVariantStockFilter('out_of_stock')}
-                            className="h-7.5 px-2.5 text-[11px] font-semibold rounded-lg text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-                          >
-                            Agotadas ({variantStats.outOfStockCount})
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="p-0">
-                      {filteredVariants.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full mb-3">
-                            <Layers3 className="h-6 w-6 text-slate-400" />
-                          </div>
-                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                            No se encontraron variantes
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
-                            No hay variantes que coincidan con la búsqueda o filtro aplicado.
-                          </p>
-                          {(variantSearch || variantStockFilter !== 'all') && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setVariantSearch('')
-                                setVariantStockFilter('all')
-                              }}
-                              className="mt-3 text-xs h-7.5 rounded-lg"
-                            >
-                              Restablecer filtros
-                            </Button>
-                          )}
-                        </div>
-                      ) : variantViewMode === 'table' ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200/80 dark:border-slate-800">
-                              <tr>
-                                <th className="py-3 px-4">Variante / Atributos</th>
-                                <th className="py-3 px-4">SKU</th>
-                                <th className="py-3 px-4">Código de Barras</th>
-                                <th className="py-3 px-4 text-right">Precio Venta</th>
-                                <th className="py-3 px-4 text-right">Precio Mayorista</th>
-                                {canViewCost && <th className="py-3 px-4 text-right">Costo Base</th>}
-                                <th className="py-3 px-4 text-center">Stock Actual</th>
-                                <th className="py-3 px-4 text-center">Estado</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                              {filteredVariants.map((variant) => {
-                                const isOutOfStock = variant.stockQuantity <= 0
-                                const isLow = !isOutOfStock && variant.stockQuantity <= (variant.minStock ?? 0)
-                                const attrEntries = Object.entries(variant.attributes)
-                                return (
-                                  <tr
-                                    key={variant.id}
-                                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                                  >
-                                    {/* Name & Attribute Chips */}
-                                    <td className="py-3.5 px-4">
-                                      <div className="space-y-1">
-                                        <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                                          {variant.name}
-                                        </p>
-                                        {attrEntries.length > 0 && (
-                                          <div className="flex flex-wrap gap-1">
-                                            {attrEntries.map(([k, val]) => (
-                                              <Badge
-                                                key={k}
-                                                variant="secondary"
-                                                className="px-1.5 py-0 text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                                              >
-                                                <span className="text-muted-foreground mr-1">{k}:</span>
-                                                <span className="font-bold">{val}</span>
-                                              </Badge>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-
-                                    {/* SKU with Copy */}
-                                    <td className="py-3.5 px-4 font-mono">
-                                      <div className="flex items-center gap-1">
-                                        <span className="font-bold text-slate-900 dark:text-slate-100">{variant.sku}</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleCopyVariantSku(variant.sku)}
-                                          className="p-1 hover:text-foreground text-slate-400 rounded transition-colors"
-                                          title="Copiar SKU"
-                                        >
-                                          {copiedVariantSku === variant.sku ? (
-                                            <Check className="h-3 w-3 text-emerald-500" />
-                                          ) : (
-                                            <Copy className="h-3 w-3" />
-                                          )}
-                                        </button>
-                                      </div>
-                                    </td>
-
-                                    {/* Barcode with Copy */}
-                                    <td className="py-3.5 px-4 font-mono">
-                                      {variant.barcode ? (
-                                        <div className="flex items-center gap-1">
-                                          <Barcode className="h-3.5 w-3.5 text-slate-400" />
-                                          <span className="text-slate-700 dark:text-slate-300">{variant.barcode}</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCopyVariantBarcode(variant.barcode!)}
-                                            className="p-1 hover:text-foreground text-slate-400 rounded transition-colors"
-                                            title="Copiar Código"
-                                          >
-                                            {copiedVariantBarcode === variant.barcode ? (
-                                              <Check className="h-3 w-3 text-emerald-500" />
-                                            ) : (
-                                              <Copy className="h-3 w-3" />
-                                            )}
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <span className="text-muted-foreground">—</span>
-                                      )}
-                                    </td>
-
-                                    {/* Sale Price */}
-                                    <td className="py-3.5 px-4 text-right">
-                                      <p className="font-black text-slate-900 dark:text-slate-100 text-sm">
-                                        {formatCurrency(variant.salePrice)}
-                                      </p>
-                                      {variant.salePrice !== product.sale_price && (
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0 mt-0.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
-                                          Personalizado
-                                        </Badge>
-                                      )}
-                                    </td>
-
-                                    {/* Wholesale Price */}
-                                    <td className="py-3.5 px-4 text-right">
-                                      {variant.wholesalePrice ? (
-                                        <p className="font-bold text-blue-600 dark:text-blue-400 text-sm">
-                                          {formatCurrency(variant.wholesalePrice)}
-                                        </p>
-                                      ) : (
-                                        <span className="text-muted-foreground text-xs">—</span>
-                                      )}
-                                    </td>
-
-                                    {/* Cost Price */}
-                                    {canViewCost && (
-                                      <td className="py-3.5 px-4 text-right font-medium text-slate-700 dark:text-slate-300">
-                                        {variant.purchasePrice != null ? formatCurrency(variant.purchasePrice) : 'Sin costo informado'}
-                                      </td>
-                                    )}
-
-                                    {/* Stock Quantity + Badge */}
-                                    <td className="py-3.5 px-4 text-center">
-                                      <div className="inline-flex flex-col items-center gap-1">
-                                        <Badge
-                                          variant="outline"
-                                          className={cn(
-                                            'text-xs font-mono font-bold px-2.5 py-0.5 rounded-lg border shadow-xs',
-                                            isOutOfStock
-                                              ? 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800'
-                                              : isLow
-                                              ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                                              : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                                          )}
-                                        >
-                                          {isOutOfStock ? '0 un. (Agotado)' : `${variant.stockQuantity} un.`}
-                                        </Badge>
-                                        {variant.minStock != null && variant.minStock > 0 && (
-                                          <span className="text-[10px] text-muted-foreground">
-                                            Mín: {variant.minStock} un.
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-
-                                    {/* Active Status */}
-                                    <td className="py-3.5 px-4 text-center">
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          'text-[10px] font-semibold px-2 py-0.5 rounded-md',
-                                          variant.isActive
-                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                            : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                                        )}
-                                      >
-                                        {variant.isActive ? 'Activa' : 'Inactiva'}
-                                      </Badge>
-                                    </td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        /* Cards Grid View */
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 p-4 sm:p-5">
-                          {filteredVariants.map((variant) => {
-                            const isOutOfStock = variant.stockQuantity <= 0
-                            const isLow = !isOutOfStock && variant.stockQuantity <= (variant.minStock ?? 0)
-                            const attrEntries = Object.entries(variant.attributes)
-                            return (
-                              <div
-                                key={variant.id}
-                                className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-all space-y-3"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                                      {variant.name}
-                                    </h4>
-                                    <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground mt-0.5">
-                                      <span>SKU: {variant.sku}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCopyVariantSku(variant.sku)}
-                                        className="p-0.5 hover:text-foreground text-slate-400"
-                                      >
-                                        {copiedVariantSku === variant.sku ? (
-                                          <Check className="h-3 w-3 text-emerald-500" />
-                                        ) : (
-                                          <Copy className="h-3 w-3" />
-                                        )}
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      'text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0',
-                                      variant.isActive
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                                    )}
-                                  >
-                                    {variant.isActive ? 'Activa' : 'Inactiva'}
-                                  </Badge>
-                                </div>
-
-                                {attrEntries.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {attrEntries.map(([k, val]) => (
-                                      <Badge
-                                        key={k}
-                                        variant="secondary"
-                                        className="px-1.5 py-0 text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
-                                      >
-                                        <span className="text-muted-foreground mr-1">{k}:</span>
-                                        <span className="font-bold">{val}</span>
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
-                                  <div>
-                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">Precio Venta</span>
-                                    <span className="font-black text-slate-900 dark:text-slate-100 text-sm">
-                                      {formatCurrency(variant.salePrice)}
-                                    </span>
-                                    {variant.wholesalePrice && (
-                                      <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                                        May: {formatCurrency(variant.wholesalePrice)}
-                                      </p>
-                                    )}
-                                    {canViewCost && (
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                                        Costo: {variant.purchasePrice != null ? formatCurrency(variant.purchasePrice) : 'Sin costo informado'}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">Stock Actual</span>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        'text-xs font-mono font-bold px-2 py-0.5 rounded-md mt-0.5',
-                                        isOutOfStock
-                                          ? 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300'
-                                          : isLow
-                                          ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300'
-                                          : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                      )}
-                                    >
-                                      {variant.stockQuantity} un.
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <VariantDetailList key={`${product.id}:${product.organization_id}`} variants={normalizedVariants} canViewCost={canViewCost} productImage={productImages[0]?.url} branchStock={branchStockScope === `${product.organization_id}:${product.id}` ? branchStock : []} branchStockState={branchStockScope === `${product.organization_id}:${product.id}` ? branchStockState : 'loading'} formatCurrency={formatCurrency} />
                 </TabsContent>
               )}
 

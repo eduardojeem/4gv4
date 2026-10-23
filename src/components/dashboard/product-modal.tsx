@@ -1,4 +1,5 @@
 'use client'
+import { useOptionalBranch } from '@/contexts/branch-context'
 
 import { getVariantCombinationKey } from '@/lib/products/variant-safety'
 
@@ -315,13 +316,16 @@ export function ProductModal({
   const productRef = useRef(product)
   productRef.current = product
   const productId = product?.id ?? null
+  const branchScope = useOptionalBranch()
+  const variantBranchId = branchScope?.selectedBranch?.id === branchScope?.selectedBranchId ? branchScope?.selectedBranchId ?? null : null
+  const variantHydrationKey = `${productId}:${variantBranchId ?? 'unresolved'}`
+  const openedVariantBranch = useRef<string | null>(null)
   const listedVariants = (product as (Product & { variants?: unknown[] }) | null)?.variants
   const hasRecoveredVariantData = Boolean(
     product && !product.has_variants && Array.isArray(listedVariants) && listedVariants.length > 0
   )
   const productNeedsVariantHydration = Boolean(
-    product?.has_variants
-    && (!Array.isArray(listedVariants) || listedVariants.length === 0)
+    product && (product.has_variants || (Array.isArray(listedVariants) && listedVariants.length > 0))
   )
   const [hydratedVariantProductId, setHydratedVariantProductId] = useState<string | null>(null)
   const [isLoadingExistingVariants, setIsLoadingExistingVariants] = useState(false)
@@ -434,7 +438,7 @@ export function ProductModal({
   useEffect(() => {
     postSaleDefaultsRef.current = postSaleDefaultsFor(formProfile.vertical)
   }, [formProfile.vertical])
-  const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === productId
+  const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === variantHydrationKey
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
     isSubmitting: isSubmitting || isUploadingImages || isLoadingExistingVariants,
@@ -700,30 +704,41 @@ export function ProductModal({
   // incluyen `has_variants`. Recuperamos el detalle completo para mostrar las
   // combinaciones existentes y evitar que una edición las borre.
   useEffect(() => {
+    if (!isOpen) openedVariantBranch.current = null
     if (!isOpen || !productId || !productNeedsVariantHydration) {
       setIsLoadingExistingVariants(false)
       setVariantLoadError(null)
       return
     }
 
+    if (!variantBranchId || (openedVariantBranch.current && openedVariantBranch.current !== variantBranchId)) {
+      setIsLoadingExistingVariants(false)
+      setVariantLoadError('Seleccioná una sucursal y volvé a abrir el producto para cargar su stock.')
+      return
+    }
+    openedVariantBranch.current = variantBranchId
     const controller = new AbortController()
     setIsLoadingExistingVariants(true)
     setVariantLoadError(null)
     setHydratedVariantProductId(null)
 
-    void fetch(`/api/products/${productId}`, { signal: controller.signal, cache: 'no-store' })
+    void fetch(`/api/products/${productId}?variant_stock_scope=branch&branch_id=${encodeURIComponent(variantBranchId)}`, { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => null) as { success?: boolean; data?: unknown; error?: string } | null
         if (!response.ok || !payload?.success || !payload.data) {
           throw new Error(payload?.error || 'No se pudieron cargar las variantes guardadas.')
         }
 
+        if (controller.signal.aborted) return
+        if (form.getFieldState('variants').isDirty) {
+          throw new Error('Hay un borrador de variantes sin contexto de sucursal verificado. Descartalo y volvé a abrir el producto antes de editar stock.')
+        }
         const variantData = normalizeProductVariantsForForm(payload.data)
         form.reset(
           { ...form.getValues(), ...variantData },
           { keepDirty: true, keepDirtyValues: true },
         )
-        setHydratedVariantProductId(productId)
+        setHydratedVariantProductId(variantHydrationKey)
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
@@ -734,7 +749,7 @@ export function ProductModal({
       })
 
     return () => controller.abort()
-  }, [form, isOpen, productId, productNeedsVariantHydration])
+  }, [form, isOpen, productId, productNeedsVariantHydration, variantBranchId, variantHydrationKey])
 
   // Se guarda lo escrito en cada cambio, pero solo mientras el formulario esta
   // sucio: sin eso, abrir un producto y cerrarlo dejaria un borrador identico a
@@ -995,6 +1010,7 @@ export function ProductModal({
     setSaveFeedback(null)
 
     try {
+      if (!isExistingVariantDataReady) throw new Error('Esperá a que se verifique el stock de la sucursal antes de guardar.')
       const cleanedData = omitUnauthorizedProductCosts(cleanProductData(values), canUpdateCost)
 
       // Ensure we're not sending an ID for new products
@@ -1002,7 +1018,7 @@ export function ProductModal({
         delete (cleanedData as Record<string, unknown>).id
       }
 
-      await onSave(cleanedData as unknown as ProductFormData)
+      await onSave({ ...cleanedData, ...(values.has_variants && variantBranchId ? { branch_id: variantBranchId } : {}) } as unknown as ProductFormData)
 
       toast.success(
         product ? 'Producto actualizado correctamente' : 'Producto creado correctamente',

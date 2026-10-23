@@ -1,7 +1,7 @@
 // @vitest-environment node
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, expect, it, vi } from 'vitest'
-const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any,skuRace:false}))
+const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any,skuRace:false,branch:null as string|null,branchReadError:false}))
 vi.mock('server-only',()=>({}))
 vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:any,handler:any)=>(request:any,context?:any)=>handler(request,{user:{id:'user',role:state.globalRole},organization:{id:state.org,role:state.membership,slug:'shop'}},context)}))
 function query(table:string){
@@ -17,9 +17,10 @@ function query(table:string){
   const created=state.createdProduct
   const requestedIds=Array.isArray(filters.id)?filters.id:[]
   if(created&&(filters.id===created.id||requestedIds.includes(created.id)))return {data:single?created:[created],error:null}
-  return {data:single?{id:'product',name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{purchase_price:22,purchasePrice:22}]}:[{id:'product',name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
+  return {data:single?{id:'product',name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{id:'variant',stock_quantity:8,purchase_price:22,purchasePrice:22}]}:[{id:'product',name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
  }
- if(table==='product_variants')return {data:filters.id==='foreign'?null:{id:'variant',product_id:'product',sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}},error:null}
+ if(table==='branch_variant_inventory')return {data:state.branchReadError?null:[{variant_id:'variant',stock_quantity:3}],error:state.branchReadError?{code:'42501'}:null}
+ if(table==='product_variants'){const row={id:'variant',product_id:'product',sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}};return {data:filters.id==='foreign'?null:single?row:[row],error:null}}
  return {data:[],error:null}
  }
  q.maybeSingle=async()=>result(true);q.single=async()=>result(true);q.then=(resolve:any)=>Promise.resolve(result()).then(resolve);return q
@@ -35,7 +36,7 @@ vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:as
  return {data:null,error:null}
 }})}))
 vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:query,rpc:async()=>({data:null,error:null})})}))
-vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:()=>null,resolveBranchScopeForUser:async()=>({branchId:null}),getDefaultBranch:async()=>null}))
+vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:(r:Request)=>new URL(r.url).searchParams.get('branch_id'),resolveBranchScopeForUser:async()=>({branchId:state.branch}),getDefaultBranch:async()=>null}))
 vi.mock('@/lib/branches/inventory',()=>({loadBranchInventoryStockMap:async()=>({stockMap:new Map(),branchScoped:false}),applyBranchInventoryToProducts:(rows:any)=>rows,upsertBranchInventoryStock:vi.fn()}))
 vi.mock('next/cache',()=>({revalidatePath:vi.fn(),revalidateTag:vi.fn()}))
 vi.mock('@/lib/products/uniqueness',()=>({findProductConflict:async()=>null,conflictMessage:()=>''}))
@@ -52,7 +53,7 @@ import {PUT as updateVariants} from '../variants/route'
 import {GET as access} from './access/route'
 const request=(body?:any)=>({url:'https://app/api/products',headers:new Headers(),json:async()=>body}) as any
 const params=(id='product')=>({params:Promise.resolve({id})})
-beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null;state.skuRace=false})
+beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null;state.skuRace=false;state.branch=null;state.branchReadError=false})
 
 it('POST reports the authoritative SKU constraint race as 409',async()=>{
  state.skuRace=true
@@ -154,4 +155,22 @@ it('collection GET applies the same organization cost redaction',async()=>{
  const response=await list(request());expect(response.status).toBe(200)
  const body=await response.json();expect(body.data.products[0]).not.toHaveProperty('purchase_price')
  expect(body.data.products[0]).not.toHaveProperty('foreign_purchase_price')
+})
+
+it('opt-in edit read projects authorized branch stock; other consumers keep aggregates', async()=>{
+ state.membership='admin';state.branch='branch'
+ const plain=await detail(request(),params())
+ expect((await plain.json()).data.variants[0].stock_quantity).toBe(8)
+ const scoped=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=branch'},params())
+ expect(scoped.status).toBe(200)
+ expect((await scoped.json()).data.variants[0].stock_quantity).toBe(3)
+ expect(state.queries).toContainEqual(expect.objectContaining({table:'branch_variant_inventory',filters:expect.objectContaining({organization_id:'B',branch_id:'branch',variant_id:['variant']})}))
+})
+it('rejects unresolved branch edit reads and fails closed on branch inventory errors', async()=>{
+ const unresolved=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=other'},params())
+ expect(unresolved.status).toBe(400)
+ state.branch='branch';state.branchReadError=true
+ const failed=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=branch'},params())
+ expect(failed.status).toBe(500)
+ expect((await failed.json()).data).toBeUndefined()
 })

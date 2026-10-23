@@ -1,3 +1,4 @@
+import { applyVariantBranchStock, loadVariantBranchStock } from '@/lib/products/variant-branch-stock'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
@@ -72,6 +73,17 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       stockMap,
       branchScoped
     )[0]
+
+    // Only the edit form opts into branch quantities. Existing detail consumers
+    // continue receiving aggregate variant stock.
+    if (new URL(request.url).searchParams.get('variant_stock_scope') === 'branch') {
+      if (!requestedBranchId || branchScope.branchId !== requestedBranchId) {
+        return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para editar stock de variantes.', code: 'BRANCH_REQUIRED' }, { status: 400 })
+      }
+      const variants = Array.isArray(responseProduct.variants) ? responseProduct.variants as Array<{ id: string; stock_quantity?: number | null }> : []
+      const stock = await loadVariantBranchStock(supabase, organization.id, requestedBranchId, variants.map(v => v.id))
+      responseProduct.variants = applyVariantBranchStock(variants, stock)
+    }
 
     const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const safeProduct = redactProductCosts(responseProduct as Record<string, unknown>, costAccess)

@@ -1,3 +1,4 @@
+import { loadVariantBranchStock } from '@/lib/products/variant-branch-stock'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
 import { NextResponse } from 'next/server'
@@ -900,16 +901,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
       // El stock de las variantes que ya existen no lo toca el RPC: se aplica
       // despues como ajuste, para que quede el movimiento.
-      const { data: currentStockRows } = existingVariantIds.length > 0
-        ? await admin
-            .from('product_variants')
-            .select('id, stock_quantity')
-            .eq('organization_id', organization.id)
-            .in('id', existingVariantIds)
-        : { data: [] as Array<{ id: string; stock_quantity: number | null }> }
-      const currentStockById = new Map(
-        (currentStockRows ?? []).map((row) => [String(row.id), Number(row.stock_quantity ?? 0)]),
-      )
+      const currentStockById = await loadVariantBranchStock(admin, organization.id, variantBranchId, existingVariantIds)
 
       const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
         p_product: {
