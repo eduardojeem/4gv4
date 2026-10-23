@@ -3,9 +3,11 @@ BEGIN;
 DO $$
 DECLARE
   actor uuid := gen_random_uuid();
+  reader uuid := gen_random_uuid();
   org_a uuid := gen_random_uuid();
   org_b uuid := gen_random_uuid();
   branch_a uuid := gen_random_uuid();
+  branch_b uuid := gen_random_uuid();
   category_a uuid := gen_random_uuid();
   category_b uuid := gen_random_uuid();
   supplier_a uuid := gen_random_uuid();
@@ -18,13 +20,17 @@ DECLARE
 BEGIN
   INSERT INTO auth.users (id, email, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
   VALUES (actor, 'product-integrity-' || actor::text || '@example.invalid', now(), now(), '{}'::jsonb, '{}'::jsonb);
+  INSERT INTO auth.users (id, email, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+  VALUES (reader, 'product-reader-' || reader::text || '@example.invalid', now(), now(), '{}'::jsonb, '{}'::jsonb);
   INSERT INTO public.organizations (id, name, slug, owner_id)
   VALUES (org_a, 'Synthetic Product Test A', 'synthetic-product-' || org_a::text, actor),
          (org_b, 'Synthetic Product Test B', 'synthetic-product-' || org_b::text, null);
   INSERT INTO public.organization_members (organization_id, user_id, role, status)
-  VALUES (org_a, actor, 'owner', 'active');
+  VALUES (org_a, actor, 'owner', 'active'), (org_b, actor, 'owner', 'active'), (org_a, reader, 'owner', 'active');
   INSERT INTO public.branches (id, organization_id, code, name, slug, is_default)
   VALUES (branch_a, org_a, 'TEST-' || left(actor::text, 8), 'Synthetic Branch', 'synthetic-' || left(actor::text, 8), true);
+  INSERT INTO public.branches (id, organization_id, code, name, slug, is_default)
+  VALUES (branch_b, org_b, 'TEST-B-' || left(actor::text, 8), 'Synthetic Branch B', 'synthetic-b-' || left(actor::text, 8), true);
   INSERT INTO public.categories (id, organization_id, name) VALUES
     (category_a, org_a, 'Synthetic category A'), (category_b, org_b, 'Synthetic category B');
   INSERT INTO public.suppliers (id, organization_id, name) VALUES
@@ -58,6 +64,63 @@ BEGIN
     RAISE EXCEPTION 'CASE_INSENSITIVE_SKU_ACCEPTED';
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
+
+  -- Identical normalized and textual SKUs are independent across organizations.
+  PERFORM public.create_simple_product_atomic(jsonb_build_object(
+    'organization_id', org_b, 'name', 'Synthetic Other Tenant',
+    'sku', 'TEST-ZERO-' || upper(left(actor::text, 8)), 'sale_price', 100, 'stock_quantity', 0
+  ), branch_b, actor);
+  IF (SELECT count(*) FROM public.products WHERE lower(trim(sku)) = lower('TEST-ZERO-' || left(actor::text, 8))) <> 2 THEN
+    RAISE EXCEPTION 'CROSS_ORG_SKU_REJECTED';
+  END IF;
+  -- A whitespace/case conflict cannot leave product, inventory, movement or batch writes.
+  BEGIN
+    PERFORM public.create_simple_product_atomic(jsonb_build_object(
+      'organization_id', org_a, 'name', 'Synthetic Rejected Trim',
+      'sku', '  test-zero-' || left(actor::text, 8) || '  ', 'sale_price', 100, 'stock_quantity', 3,
+      'initial_batch', jsonb_build_object('expires_on', '2030-12-31')
+    ), branch_a, actor);
+    RAISE EXCEPTION 'TRIM_SKU_CONFLICT_ACCEPTED';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.products WHERE organization_id = org_a AND lower(trim(sku)) = lower('TEST-ZERO-' || left(actor::text, 8))) <> 1 THEN
+    RAISE EXCEPTION 'SKU_CONFLICT_PARTIAL_PRODUCT';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.product_movements m JOIN public.products p ON p.id=m.product_id
+    WHERE p.organization_id=org_a AND lower(trim(p.sku))=lower('TEST-ZERO-' || left(actor::text,8))) THEN
+    RAISE EXCEPTION 'SKU_CONFLICT_PARTIAL_MOVEMENT';
+  END IF;
+  -- Lookup uses the DB expression and excludes only the edited product in that tenant.
+  IF (SELECT count(*) FROM public.find_product_sku_conflict(org_a, '  test-zero-' || left(actor::text, 8) || '  ', NULL)) <> 1 THEN
+    RAISE EXCEPTION 'SKU_LOOKUP_NORMALIZATION_MISMATCH';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.find_product_sku_conflict(org_a, 'TEST-ZERO-' || upper(left(actor::text,8)),
+    (SELECT id FROM public.products WHERE organization_id=org_a AND sku='TEST-ZERO-' || upper(left(actor::text,8))))) THEN
+    RAISE EXCEPTION 'SKU_LOOKUP_SELF_CONFLICT';
+  END IF;
+  BEGIN
+    UPDATE public.products SET sku = ' test-zero-' || left(actor::text,8) || ' ' WHERE id=created_id;
+    RAISE EXCEPTION 'SKU_UPDATE_COLLISION_ACCEPTED';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT stock_quantity FROM public.products WHERE id=created_id) IS DISTINCT FROM 10
+    OR (SELECT count(*) FROM public.product_movements WHERE product_id=created_id) <> 1
+    OR (SELECT count(*) FROM public.product_batches WHERE product_id=created_id) <> 1 THEN
+    RAISE EXCEPTION 'SKU_UPDATE_CONFLICT_PARTIAL_GRAPH';
+  END IF;
+  IF has_function_privilege('anon','public.find_product_sku_conflict(uuid,text,uuid)','EXECUTE')
+    OR (SELECT prosecdef FROM pg_proc WHERE oid='public.find_product_sku_conflict(uuid,text,uuid)'::regprocedure) THEN
+    RAISE EXCEPTION 'SKU_LOOKUP_SECURITY_CONTRACT_CHANGED';
+  END IF;
+  -- SECURITY INVOKER: a caller belonging only to A can find A, never B.
+  PERFORM set_config('request.jwt.claim.sub', reader::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  IF (SELECT count(*) FROM public.find_product_sku_conflict(org_a, 'TEST-ZERO-' || upper(left(actor::text,8)), NULL)) <> 1
+    OR EXISTS (SELECT 1 FROM public.find_product_sku_conflict(org_b, 'TEST-ZERO-' || upper(left(actor::text,8)), NULL)) THEN
+    RAISE EXCEPTION 'SKU_LOOKUP_RLS_ISOLATION_FAILED';
+  END IF;
+  EXECUTE 'RESET ROLE';
+  PERFORM set_config('request.jwt.claim.sub', '', true);
 
   -- Foreign category/supplier identifiers are rejected by the DB boundary.
   FOREACH message IN ARRAY ARRAY['category_id', 'supplier_id'] LOOP

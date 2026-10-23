@@ -1027,6 +1027,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const desiredStockQuantity = validated.stock_quantity
     const updatePayload: Record<string, unknown> = {
       name: validated.name,
+      sku: validated.sku,
       description: validated.description,
       category_id: validated.category_id,
       supplier_id: validated.supplier_id,
@@ -1214,6 +1215,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
     }
     logger.error('Product update error', { error })
+    if ((error as { code?: string })?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Ya existe un producto con este SKU en la organización.', code: 'SKU_ALREADY_EXISTS' }, { status: 409 })
+    }
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },
       { status: 500 }

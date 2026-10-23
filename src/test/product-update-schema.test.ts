@@ -62,6 +62,10 @@ describe('actualizar un producto sin tocar lo que no se mandó', () => {
     expect(productUpdateSchema.safeParse({ id: ID, visibility: 'otra-cosa' }).success).toBe(false)
   })
 
+  it('normaliza el SKU editado sin agregar campos omitidos', () => {
+    expect(datos({ sku: ' aBc_123 ' })).toEqual({ id: ID, sku: 'ABC_123' })
+  })
+
   /** Si la actualización sí declara variantes, la validación sigue corriendo. */
   it('pedir variantes sin cargarlas sigue siendo un error', () => {
     const resultado = productUpdateSchema.safeParse({ id: ID, has_variants: true })

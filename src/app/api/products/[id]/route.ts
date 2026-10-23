@@ -1,6 +1,7 @@
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
+import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
@@ -187,6 +188,11 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    const conflict = await findProductConflict(supabase as never, {
+      organizationId: organization.id, sku: validated.sku, barcode: validated.barcode, excludeId: id,
+    })
+    if (conflict) return NextResponse.json({ success: false, error: conflictMessage(conflict), code: 'PRODUCT_CONFLICT' }, { status: 409 })
+
     const updatePayload: Record<string, unknown> = {}
     // Only consider stock_quantity if the client explicitly sent it
     const desiredStockQuantity = 'stock_quantity' in body && body.stock_quantity !== undefined
@@ -195,6 +201,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     const allowedKeys: Array<keyof typeof validated> = [
       'name',
+      'sku',
       'description',
       'category_id',
       'supplier_id',
@@ -388,6 +395,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error('[PRODUCTS PUT] Update failed:', errMsg, error)
+    if ((error as { code?: string })?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Ya existe un producto con este SKU en la organización.', code: 'SKU_ALREADY_EXISTS' }, { status: 409 })
+    }
     if (error instanceof ProductCostInputError) {
       return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
     }

@@ -450,9 +450,51 @@ GRANT EXECUTE ON FUNCTION public.save_product_with_variants(jsonb, jsonb, uuid, 
 
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM public.products GROUP BY lower(trim(sku)) HAVING count(*) > 1) THEN
-    RAISE EXCEPTION 'PRODUCT_SKU_CASE_INSENSITIVE_DUPLICATES: resolve duplicate normalized SKUs before applying this migration';
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.products'::regclass AND conname = 'productos_sku_unico'
+      AND (contype <> 'u' OR conkey <> ARRAY[(SELECT attnum FROM pg_attribute
+        WHERE attrelid = 'public.products'::regclass AND attname = 'sku')]::smallint[])
+  ) THEN
+    RAISE EXCEPTION 'PRODUCT_SKU_GLOBAL_CONSTRAINT_DRIFT';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.products GROUP BY organization_id, lower(trim(sku)) HAVING count(*) > 1) THEN
+    RAISE EXCEPTION 'PRODUCT_SKU_CASE_INSENSITIVE_DUPLICATES: resolve duplicate normalized SKUs within each organization before applying this migration';
   END IF;
 END $$;
-CREATE UNIQUE INDEX IF NOT EXISTS products_sku_normalized_unique ON public.products (lower(trim(sku)));
+CREATE UNIQUE INDEX IF NOT EXISTS products_org_sku_normalized_unique
+  ON public.products (organization_id, lower(trim(sku)));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_index i WHERE i.indexrelid = 'public.products_org_sku_normalized_unique'::regclass
+      AND i.indrelid = 'public.products'::regclass AND i.indisunique AND i.indisvalid
+      AND i.indnkeyatts = 2 AND i.indnatts = 2 AND i.indpred IS NULL
+      AND pg_get_indexdef(i.indexrelid, 1, true) = 'organization_id'
+      AND pg_get_indexdef(i.indexrelid, 2, true) = 'lower(TRIM(BOTH FROM sku))'
+  ) THEN RAISE EXCEPTION 'PRODUCT_SKU_TENANT_INDEX_DRIFT'; END IF;
+END $$;
+-- Install the replacement before removing global restrictions. No CASCADE:
+-- unexpected dependencies abort the whole transaction rather than being removed.
+ALTER TABLE public.products DROP CONSTRAINT IF EXISTS productos_sku_unico;
+DROP INDEX IF EXISTS public.products_sku_normalized_unique;
+
+-- Exact normalized lookup for availability checks, updates and imports.
+-- Invoker security deliberately preserves the caller's column grants and RLS.
+CREATE OR REPLACE FUNCTION public.find_product_sku_conflict(
+  p_organization_id uuid, p_sku text, p_exclude_id uuid DEFAULT NULL
+)
+RETURNS TABLE(id uuid, name text, sku text)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = ''
+AS $function$
+  SELECT p.id, p.name::text, p.sku::text
+  FROM public.products p
+  WHERE p.organization_id = p_organization_id
+    AND lower(trim(p.sku)) = lower(trim(p_sku))
+    AND (p_exclude_id IS NULL OR p.id <> p_exclude_id)
+  ORDER BY p.id
+  LIMIT 1;
+$function$;
+REVOKE ALL ON FUNCTION public.find_product_sku_conflict(uuid, text, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.find_product_sku_conflict(uuid, text, uuid) TO authenticated, service_role;
 COMMIT;

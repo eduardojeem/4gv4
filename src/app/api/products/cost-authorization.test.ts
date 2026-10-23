@@ -1,7 +1,7 @@
 // @vitest-environment node
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, expect, it, vi } from 'vitest'
-const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any}))
+const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any,skuRace:false}))
 vi.mock('server-only',()=>({}))
 vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:any,handler:any)=>(request:any,context?:any)=>handler(request,{user:{id:'user',role:state.globalRole},organization:{id:state.org,role:state.membership,slug:'shop'}},context)}))
 function query(table:string){
@@ -12,6 +12,7 @@ function query(table:string){
  if(table==='organization_members')return {data:{role:state.membership},error:null}
  if(table==='user_permissions')return {data:state.grants.filter(g=>g.organization_id===filters.organization_id),error:null}
  if(table==='products'){
+  if(op==='update' && state.skuRace)return {data:null,error:{code:'23505',message:'SKU conflict'}}
   if(filters.id==='foreign')return {data:null,error:null}
   const created=state.createdProduct
   const requestedIds=Array.isArray(filters.id)?filters.id:[]
@@ -26,6 +27,7 @@ function query(table:string){
 vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:async(name:string,args:any)=>{
  state.rpcCalls.push({name,args})
  if(name==='create_simple_product_atomic'){
+  if(state.skuRace)return {data:null,error:{code:'23505',message:'SKU conflict'}}
   const product=args.p_product
   state.createdProduct={id:'created-product',name:product.name,sale_price:product.sale_price,purchase_price:product.purchase_price??null,foreign_purchase_price:product.foreign_purchase_price??null,stock_quantity:product.stock_quantity??0}
   return {data:{product_id:state.createdProduct.id},error:null}
@@ -50,7 +52,25 @@ import {PUT as updateVariants} from '../variants/route'
 import {GET as access} from './access/route'
 const request=(body?:any)=>({url:'https://app/api/products',headers:new Headers(),json:async()=>body}) as any
 const params=(id='product')=>({params:Promise.resolve({id})})
-beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null})
+beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null;state.skuRace=false})
+
+it('POST reports the authoritative SKU constraint race as 409',async()=>{
+ state.skuRace=true
+ const response=await create(request({name:'Synthetic race',sku:' abc ',sale_price:100,stock_quantity:0,min_stock:0}))
+ expect(response.status).toBe(409)
+ expect(state.rpcCalls.find(c=>c.name==='create_simple_product_atomic').args.p_product).toMatchObject({organization_id:'B',sku:'ABC'})
+})
+it('both update APIs persist normalized SKU and report DB conflicts as 409',async()=>{
+ const id='11111111-1111-4111-8111-111111111111'
+ expect((await update(request({id,sku:' abc '}))).status).toBe(200)
+ expect(state.writes.find(w=>w.table==='products')?.payload.sku).toBe('ABC')
+ state.writes=[]
+ expect((await updateDetail(request({sku:' def '}),params(id))).status).toBe(200)
+ expect(state.writes.find(w=>w.table==='products')?.payload.sku).toBe('DEF')
+ state.skuRace=true
+ expect((await update(request({id,sku:' abc '}))).status).toBe(409)
+ expect((await updateDetail(request({sku:' abc '}),params(id))).status).toBe(409)
+})
 it('redacts detail costs for global admin who is seller here; foreign org grant grants nothing',async()=>{
  state.grants=[{organization_id:'A',permission:'products.read_cost'}]
  const response=await detail(request(),params());const body=await response.json()

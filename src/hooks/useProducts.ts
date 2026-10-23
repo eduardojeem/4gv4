@@ -232,17 +232,7 @@ export function useProducts() {
     setError(null)
 
     try {
-      // Validar SKU único
-      const { data: existingProduct } = await supabase
-        .from('products')
-        .select('id').eq('organization_id', organizationId!)
-        .eq('sku', productData.sku)
-        .single()
-
-      if (existingProduct) {
-        throw new Error('Ya existe un producto con este SKU')
-      }
-
+      // Availability checks are advisory; the tenant DB constraint handles races.
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: {
@@ -279,20 +269,7 @@ export function useProducts() {
     setError(null)
 
     try {
-      // Si se está actualizando el SKU, validar que sea único
-      if (productData.sku) {
-        const { data: existingProduct } = await supabase
-          .from('products')
-          .select('id').eq('organization_id', organizationId!)
-          .eq('sku', productData.sku)
-          .neq('id', id)
-          .single()
-
-        if (existingProduct) {
-          throw new Error('Ya existe un producto con este SKU')
-        }
-      }
-
+      // The API validates the normalized SKU in the active organization.
       const response = await fetch(`/api/products/${id}`, {
         method: 'PUT',
         headers: {
