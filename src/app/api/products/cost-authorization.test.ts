@@ -188,6 +188,14 @@ it('sets branch stock by target through the atomic RPC and propagates request id
  expect(saveCall?.args.p_variants[0].stock_quantity).toBe(0)
  expect(state.writes.some(row=>row.table==='branch_variant_inventory'&&row.op==='upsert')).toBe(false)
 })
+it('keeps a safe namespaced idempotency fallback for legacy update callers without a header',async()=>{
+ state.membership='admin';state.branch='33333333-3333-4333-8333-333333333333'
+ const body={id:'11111111-1111-4111-8111-111111111111',name:'Test',has_variants:true,variant_attribute_config:[{key:'size',label:'Tamaño',control:'select',options:['M']}],variants:[{id:'22222222-2222-4222-8222-222222222222',clientKey:'variant-1',name:'Black M',attributes:{size:'M'},sku:'SKU',salePrice:100,minStock:0,stockQuantity:10,isActive:true}]}
+ const response=await update(request(body))
+ expect(response.status,JSON.stringify(await response.clone().json())).toBe(200)
+ const targetCall=state.rpcCalls.find(row=>row.name==='set_variant_branch_stock_target')
+ expect(targetCall?.args.p_idempotency_key).toMatch(/^variant-target:[0-9a-f-]{36}:22222222-2222-4222-8222-222222222222$/i)
+})
 it('rejects unresolved branch edit reads and fails closed on branch inventory errors', async()=>{
  const unresolved=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=other'},params())
  expect(unresolved.status).toBe(400)

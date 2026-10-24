@@ -16,6 +16,7 @@ import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
 import { knownCost, costTotal, costProfit } from '@/lib/products/known-cost'
 import { PRODUCT_CLIENT_COLUMNS, asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
+import { classifyProductUpdateResponse, createUpdateSaveIdempotency, executeUpdateSaveAttempt } from '@/lib/products/update-save-idempotency'
 
 interface ProductFilters {
   search?: string
@@ -136,6 +137,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
   const organizationId = organization?.id
   const { selectedBranchId } = useBranch()
   const scopeKey = organizationId ? `${organizationId}:${selectedBranchId ?? "all"}` : undefined
+  const updateSaveAttempts = useMemo(() => createUpdateSaveIdempotency(), [])
 
   const enabled = options?.enabled ?? true
   const loadAllProducts = options?.loadAllProducts ?? false
@@ -598,15 +600,27 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       // producto y sus variantes de forma atómica. La ruta por id conserva el
       // CRUD simple para otros consumidores, pero no debe usarse desde este
       // editor porque validaba variantes sin persistirlas.
-      const response = await fetch('/api/products', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...branchHeaders(selectedBranchId),
+      const requestBody = { ...productData, id }
+      const actionId = `${organizationId ?? 'unknown'}:${selectedBranchId ?? 'all'}:${id}`
+      const { response, payload } = await executeUpdateSaveAttempt({
+        attempts: updateSaveAttempts,
+        actionId,
+        payload: requestBody,
+        execute: async (idempotencyKey) => {
+          const response = await fetch('/api/products', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': idempotencyKey,
+              ...branchHeaders(selectedBranchId),
+            },
+            body: JSON.stringify(requestBody),
+          })
+          const payload = await response.json().catch(() => null) as ProductApiPayload | null
+          return { response, payload }
         },
-        body: JSON.stringify({ ...productData, id }),
+        classify: ({ response, payload }) => classifyProductUpdateResponse(response, payload),
       })
-      const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       const responseData = payload?.data
       avisarSiFaltoElCelular(payload)
@@ -666,7 +680,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: errorMessage
       }
     }
-  }, [selectedBranchId, fetchDashboardStats, organizationId])
+  }, [selectedBranchId, fetchDashboardStats, organizationId, updateSaveAttempts])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string) => {

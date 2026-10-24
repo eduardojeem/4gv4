@@ -90,8 +90,11 @@ describe('el stock objetivo de una variante existente', () => {
     expect(ruta).toContain('p_idempotency_key: idempotencyKey')
     expect(ruta).not.toContain('planVariantStockAdjustments')
     expect(ruta).not.toContain("admin.rpc('adjust_variant_stock_atomic'")
-    expect(leer('src/hooks/useProductsSupabase.ts')).toContain("'Idempotency-Key': globalThis.crypto.randomUUID()")
-    expect(leer('src/hooks/useProductsSupabase.ts')).toContain('toast.warning(warning)')
+    const hook = leer('src/hooks/useProductsSupabase.ts')
+    expect(hook).toContain("'Idempotency-Key': globalThis.crypto.randomUUID()")
+    expect(hook).toContain("'Idempotency-Key': idempotencyKey")
+    expect(hook).toContain('executeUpdateSaveAttempt')
+    expect(hook).toContain('toast.warning(warning)')
   })
 
   it('existing variants reach metadata save with stock zero; new variants keep initial stock', () => {
