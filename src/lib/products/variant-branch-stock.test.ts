@@ -2,8 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { applyVariantBranchStock, loadVariantBranchStock } from './variant-branch-stock'
-import { planVariantStockAdjustments } from './variant-stock-sync'
-it('calculates the delta from selected branch stock, never the aggregate', async () => {
+it('loads stock scoped to the selected branch, never the aggregate', async () => {
   const inQuery = vi.fn().mockResolvedValue({ data: [{ variant_id: 'v', stock_quantity: 3 }], error: null })
   const eq = vi.fn().mockReturnThis()
   const query = { select: vi.fn().mockReturnThis(), eq, in: inQuery }
@@ -13,9 +12,8 @@ it('calculates the delta from selected branch stock, never the aggregate', async
   expect(eq).toHaveBeenCalledWith('organization_id', 'org')
   expect(eq).toHaveBeenCalledWith('branch_id', 'branch')
   expect(inQuery).toHaveBeenCalledWith('variant_id', ['v'])
-  // Global stock could be 8, but branch stock is 3: target 10 needs +7, not +2.
-  const adjustments = planVariantStockAdjustments(stocks, [{ id: 'v', stockQuantity: 10 }] as never)
-  expect(adjustments[0].delta).toBe(7)
+  // The API passes an absolute target to PostgreSQL; it does not derive a delta from this read.
+  expect(stocks.get('v')).toBe(3)
 })
 it('fails closed on an inventory read error', async () => {
   const q = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockResolvedValue({ data: null, error: { message: 'denied' } }) }
@@ -27,7 +25,6 @@ it('hydrates only variant stock for an opt-in branch read and name-only save has
   const rows = applyVariantBranchStock(original, new Map([['v', 3]]))
   expect(rows).toEqual([{ id: 'v', stock_quantity: 3, sku: 'KEEP', purchase_price: null }])
   expect(original[0].stock_quantity).toBe(8)
-  expect(planVariantStockAdjustments(new Map([['v', 3]]), [{ id: 'v', stockQuantity: rows[0].stock_quantity }] as never)).toEqual([])
   expect(applyVariantBranchStock([{ id: 'missing', stock_quantity: 9 }], new Map())[0].stock_quantity).toBe(0)
 })
 

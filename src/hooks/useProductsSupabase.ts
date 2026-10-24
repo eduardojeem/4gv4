@@ -533,6 +533,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': globalThis.crypto.randomUUID(),
           ...branchHeaders(selectedBranchId),
         },
         body: JSON.stringify(productData),

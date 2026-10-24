@@ -1,6 +1,6 @@
-import { loadVariantBranchStock } from '@/lib/products/variant-branch-stock'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -18,7 +18,6 @@ import { canCreateResource } from '@/lib/saas/subscription-service'
 import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
 import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
-import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
 import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { recordStockAdjustment } from '@/lib/products/stock-movements'
 import { persistDeviceFields } from '@/lib/products/device-persist'
@@ -866,43 +865,17 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
       const admin = createAdminSupabase()
 
-      // Asegurar que las variantes existentes tengan su fila en branch_variant_inventory
-      // para evitar que el RPC intente registrar movimientos iniciales con ON CONFLICT inválido.
-      const existingVariantIds = variantPayload.data.variants
-        .map((v) => v.id)
-        .filter((id): id is string => Boolean(id))
-
-      if (existingVariantIds.length > 0) {
-        const { data: existingBvi } = await admin
-          .from('branch_variant_inventory')
-          .select('variant_id')
-          .eq('organization_id', organization.id)
-          .eq('branch_id', variantBranchId)
-          .in('variant_id', existingVariantIds)
-
-        const presentIds = new Set((existingBvi || []).map((row) => row.variant_id))
-        const missingFromBvi = variantPayload.data.variants.filter(
-          (v) => v.id && !presentIds.has(v.id),
-        )
-
-        if (missingFromBvi.length > 0) {
-          await admin.from('branch_variant_inventory').insert(
-            missingFromBvi.map((v) => ({
-              organization_id: organization.id,
-              branch_id: variantBranchId,
-              product_id: validated.id,
-              variant_id: v.id!,
-              stock_quantity: v.stockQuantity ?? 0,
-              min_stock: v.minStock ?? 0,
-            })),
-          )
-        }
+      // Existing variant stock is managed only by the target RPC. Sending zero here
+      // prevents the legacy metadata RPC from initializing a missing branch row
+      // from a stale UI quantity; new variants still receive their initial stock.
+      const requestIdempotencyKey = request.headers.get('idempotency-key')?.trim() || randomUUID()
+      if (!/^[A-Za-z0-9._:-]{1,128}$/.test(requestIdempotencyKey)) {
+        return NextResponse.json({ success: false, error: 'La clave de idempotencia no es válida.', code: 'INVALID_IDEMPOTENCY_KEY' }, { status: 400 })
       }
 
-      // El stock de las variantes que ya existen no lo toca el RPC: se aplica
-      // despues como ajuste, para que quede el movimiento.
-      const currentStockById = await loadVariantBranchStock(admin, organization.id, variantBranchId, existingVariantIds)
-
+      const variantsForMetadata = toVariantRpcRows(variantPayload.data.variants).map((row) => (
+        row.id ? { ...row, stock_quantity: 0 } : row
+      ))
       const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
         p_product: {
           ...existingProduct,
@@ -915,7 +888,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
           has_variants: variantPayload.data.hasVariants,
           variant_attribute_config: variantPayload.data.attributes,
         },
-        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_variants: variantsForMetadata,
         p_branch_id: variantBranchId,
         p_actor_id: user.id,
       })
@@ -948,31 +921,30 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? validated.id)
 
       const stockWarnings: string[] = []
-      for (const adjustment of planVariantStockAdjustments(currentStockById, variantPayload.data.variants)) {
-        const { error: adjustError } = await admin.rpc('adjust_variant_stock_atomic', {
+      for (const variant of variantPayload.data.variants) {
+        if (!variant.id) continue // New variants already receive their initial stock in save_product_with_variants.
+        const idempotencyKey = 'variant-target:' + requestIdempotencyKey + ':' + variant.id
+        const { error: targetError } = await admin.rpc('set_variant_branch_stock_target', {
           p_organization_id: organization.id,
           p_branch_id: variantBranchId,
-          p_variant_id: adjustment.variantId,
-          p_quantity_delta: adjustment.delta,
-          p_movement_type: 'adjustment',
-          p_idempotency_key: adjustment.idempotencyKey,
+          p_variant_id: variant.id,
+          p_target_quantity: variant.stockQuantity,
+          p_idempotency_key: idempotencyKey,
           p_actor_id: user.id,
           p_reference_type: 'product_edit',
           p_reference_id: savedProductId,
           p_reason: 'Ajuste de stock desde la ficha del producto',
-          p_metadata: { source: 'product-editor', from: adjustment.from, to: adjustment.to },
+          p_metadata: { source: 'product-editor', target: variant.stockQuantity },
         })
 
-        if (adjustError) {
-          logger.error('Failed to adjust variant stock after product save', {
-            variantId: adjustment.variantId,
+        if (targetError) {
+          logger.error('Failed to set variant branch stock target after product save', {
+            variantId: variant.id,
             productId: savedProductId,
             organizationId: organization.id,
-            error: adjustError.message,
+            error: targetError.message,
           })
-          stockWarnings.push(
-            `No se pudo ajustar el stock de ${adjustment.variantName}: quedó en ${adjustment.from}.`,
-          )
+          stockWarnings.push('No se pudo fijar el stock de ' + variant.name + ' en la sucursal seleccionada.')
         }
       }
 

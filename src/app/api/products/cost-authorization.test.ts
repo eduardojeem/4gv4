@@ -6,7 +6,7 @@ vi.mock('server-only',()=>({}))
 vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:any,handler:any)=>(request:any,context?:any)=>handler(request,{user:{id:'user',role:state.globalRole},organization:{id:state.org,role:state.membership,slug:'shop'}},context)}))
 function query(table:string){
  const filters:Record<string,any>={};let op='read';let payload:any
- const q:any={select:()=>q,order:()=>q,is:()=>q,limit:()=>q,range:()=>q,in:(k:string,v:any)=>{filters[k]=v;return q},neq:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q},update:(p:any)=>{op='update';payload=p;state.writes.push({table,payload,filters});return q},insert:(p:any)=>{op='insert';payload=p;state.writes.push({table,payload,filters});return q},delete:()=>{state.writes.push({table,op:'delete'});return q}}
+ const q:any={select:()=>q,order:()=>q,is:()=>q,limit:()=>q,range:()=>q,in:(k:string,v:any)=>{filters[k]=v;return q},neq:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q},update:(p:any)=>{op='update';payload=p;state.writes.push({table,payload,filters});return q},insert:(p:any)=>{op='insert';payload=p;state.writes.push({table,payload,filters});return q},upsert:(p:any,options:any)=>{op='upsert';payload=p;state.writes.push({table,payload,filters,options});return q},delete:()=>{state.writes.push({table,op:'delete'});return q}}
  const result=(single=false)=>{
  state.queries.push({table,filters:{...filters},op})
  if(table==='organization_members')return {data:{role:state.membership},error:null}
@@ -17,10 +17,10 @@ function query(table:string){
   const created=state.createdProduct
   const requestedIds=Array.isArray(filters.id)?filters.id:[]
   if(created&&(filters.id===created.id||requestedIds.includes(created.id)))return {data:single?created:[created],error:null}
-  return {data:single?{id:'product',name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{id:'variant',stock_quantity:8,purchase_price:22,purchasePrice:22}]}:[{id:'product',name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
+  const productId=typeof filters.id==='string'?filters.id:Array.isArray(filters.id)?filters.id[0]:'product';return {data:single?{id:productId,name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{id:'variant',stock_quantity:8,purchase_price:22,purchasePrice:22}]}:[{id:productId,name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
  }
- if(table==='branch_variant_inventory')return {data:state.branchReadError?null:[{variant_id:'variant',stock_quantity:3}],error:state.branchReadError?{code:'42501'}:null}
- if(table==='product_variants'){const row={id:'variant',product_id:'product',sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}};return {data:filters.id==='foreign'?null:single?row:[row],error:null}}
+ if(table==='branch_variant_inventory'){const ids=Array.isArray(filters.variant_id)?filters.variant_id:['variant'];return {data:state.branchReadError?null:ids.map(variant_id=>({variant_id,stock_quantity:3})),error:state.branchReadError?{code:'42501'}:null}}
+ if(table==='product_variants'){const id=Array.isArray(filters.id)?filters.id[0]:filters.id||'variant';const row={id,product_id:filters.product_id||'product',organization_id:filters.organization_id||state.org,sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}};return {data:filters.id==='foreign'?null:single?row:[row],error:null}}
  return {data:[],error:null}
  }
  q.maybeSingle=async()=>result(true);q.single=async()=>result(true);q.then=(resolve:any)=>Promise.resolve(result()).then(resolve);return q
@@ -33,10 +33,11 @@ vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:as
   state.createdProduct={id:'created-product',name:product.name,sale_price:product.sale_price,purchase_price:product.purchase_price??null,foreign_purchase_price:product.foreign_purchase_price??null,stock_quantity:product.stock_quantity??0}
   return {data:{product_id:state.createdProduct.id},error:null}
  }
+ if(name==='set_variant_branch_stock_target')return {data:{idempotent:false,movement_id:'movement',stock_before:3,stock_after:args.p_target_quantity,applied_delta:args.p_target_quantity-3},error:null}
  return {data:null,error:null}
 }})}))
 vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:query,rpc:async()=>({data:null,error:null})})}))
-vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:(r:Request)=>new URL(r.url).searchParams.get('branch_id'),resolveBranchScopeForUser:async()=>({branchId:state.branch}),getDefaultBranch:async()=>null}))
+vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:(r:Request)=>new URL(r.url).searchParams.get('branch_id'),resolveBranchScopeForUser:async(args:any)=>({branchId:args.requestedBranchId&&args.requestedBranchId!==state.branch?null:state.branch}),getDefaultBranch:async()=>null}))
 vi.mock('@/lib/branches/inventory',()=>({loadBranchInventoryStockMap:async()=>({stockMap:new Map(),branchScoped:false}),applyBranchInventoryToProducts:(rows:any)=>rows,upsertBranchInventoryStock:vi.fn()}))
 vi.mock('next/cache',()=>({revalidatePath:vi.fn(),revalidateTag:vi.fn()}))
 vi.mock('@/lib/products/uniqueness',()=>({findProductConflict:async()=>null,conflictMessage:()=>''}))
@@ -165,6 +166,27 @@ it('opt-in edit read projects authorized branch stock; other consumers keep aggr
  expect(scoped.status).toBe(200)
  expect((await scoped.json()).data.variants[0].stock_quantity).toBe(3)
  expect(state.queries).toContainEqual(expect.objectContaining({table:'branch_variant_inventory',filters:expect.objectContaining({organization_id:'B',branch_id:'branch',variant_id:['variant']})}))
+})
+it('rejects a requested branch outside the resolved scope before saving variants', async()=>{
+ state.membership='admin';state.branch='33333333-3333-4333-8333-333333333333'
+ const body={id:'11111111-1111-4111-8111-111111111111',name:'Test',has_variants:true,variant_attribute_config:[{key:'size',label:'Tamaño',control:'select',options:['M']}],variants:[{id:'22222222-2222-4222-8222-222222222222',clientKey:'variant-1',name:'Black M',attributes:{size:'M'},sku:'SKU',salePrice:100,minStock:0,stockQuantity:10,isActive:true}]}
+ const response=await update({...request(body),url:'https://app/api/products?branch_id=44444444-4444-4444-8444-444444444444'})
+ expect(response.status).toBe(400)
+ expect(state.rpcCalls.some(row=>row.name==='save_product_with_variants'||row.name==='set_variant_branch_stock_target')).toBe(false)
+})
+
+it('sets branch stock by target through the atomic RPC and propagates request idempotency', async()=>{
+ state.membership='admin';state.branch='33333333-3333-4333-8333-333333333333'
+ const headers=new Headers({'Idempotency-Key':'request-123'})
+ const body={id:'11111111-1111-4111-8111-111111111111',name:'Test',has_variants:true,variant_attribute_config:[{key:'size',label:'Tamaño',control:'select',options:['M']}],variants:[{id:'22222222-2222-4222-8222-222222222222',clientKey:'variant-1',name:'Black M',attributes:{size:'M'},sku:'SKU',salePrice:100,minStock:0,stockQuantity:10,isActive:true}]}
+ const response=await update({...request(body),url:'https://app/api/products?branch_id=33333333-3333-4333-8333-333333333333',headers})
+ expect(response.status, JSON.stringify(await response.clone().json())).toBe(200)
+ const targetCall=state.rpcCalls.find(row=>row.name==='set_variant_branch_stock_target')
+ expect(targetCall?.args).toMatchObject({p_organization_id:'B',p_branch_id:'33333333-3333-4333-8333-333333333333',p_variant_id:'22222222-2222-4222-8222-222222222222',p_target_quantity:10,p_actor_id:'user',p_idempotency_key:'variant-target:request-123:22222222-2222-4222-8222-222222222222'})
+ expect(state.rpcCalls.some(row=>row.name==='adjust_variant_stock_atomic')).toBe(false)
+ const saveCall=state.rpcCalls.find(row=>row.name==='save_product_with_variants')
+ expect(saveCall?.args.p_variants[0].stock_quantity).toBe(0)
+ expect(state.writes.some(row=>row.table==='branch_variant_inventory'&&row.op==='upsert')).toBe(false)
 })
 it('rejects unresolved branch edit reads and fails closed on branch inventory errors', async()=>{
  const unresolved=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=other'},params())
