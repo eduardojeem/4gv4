@@ -56,3 +56,15 @@ describe('VariantEditableGrid', () => {
     expect(within(card).getByRole('button', { name: 'Editar' })).toHaveAttribute('aria-expanded', 'true')
   })
 })
+
+it('retains desktop editing of secondary variant fields in an expandable row', () => {
+ const props=setup()
+ render(<VariantEditableGrid {...props}/> )
+ expect(screen.queryByLabelText('Código de barras · Azul / M · tabla ampliada')).not.toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button',{name:'Editar detalles de Azul / M'}))
+ const barcode=screen.getByLabelText('Código de barras · Azul / M · tabla ampliada')
+ fireEvent.change(barcode,{target:{value:'SYNTHETIC-123'}})
+ expect(props.onUpdate).toHaveBeenCalledWith(3,{barcode:'SYNTHETIC-123'})
+ expect(screen.getByLabelText('Precio mayorista · Azul / M · tabla ampliada')).toBeInTheDocument()
+ expect(screen.getByLabelText('Stock mínimo · Azul / M · tabla ampliada')).toBeInTheDocument()
+})
