@@ -1,16 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, CreditCard, QrCode } from 'lucide-react'
+import { AlertTriangle, CreditCard, Globe, QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { PagoparPaymentMethodSelector } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
-import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
+import {
+  PagoparPaymentMethodSelector,
+  type SubscriptionPaymentMethod,
+} from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 
 type PagoparPaymentButtonProps = {
   missingFields?: string[]
   isPaidPlan: boolean
   planName: string
   planAmount: string
+  stripeEnabled?: boolean
 }
 
 type PagoparCheckoutErrorPayload = { error?: string; correlationId?: string } | null
@@ -22,17 +25,19 @@ export function getPagoparCheckoutErrorMessage(
   return payload?.error || `No se pudo iniciar el pago. Código: ${payload?.correlationId || requestCorrelationId}`
 }
 
-export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName, planAmount }: PagoparPaymentButtonProps) {
+export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName, planAmount, stripeEnabled = false }: PagoparPaymentButtonProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<PagoparPaymentMethod>('card')
+  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>('card')
 
   if (!isPaidPlan) return null
+
+  const providerName = paymentMethod === 'stripe' ? 'Stripe' : 'Pagopar'
 
   async function startPayment() {
     if (missingFields.length > 0) {
       setStatus('error')
-      setMessage('Completa los datos de facturacion antes de pagar con Pagopar.')
+      setMessage(`Completa los datos de facturacion antes de pagar con ${providerName}.`)
       return
     }
 
@@ -41,14 +46,19 @@ export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName,
 
     try {
       const correlationId = crypto.randomUUID()
-      const response = await fetch('/api/admin/subscriptions/payments/pagopar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Correlation-ID': correlationId,
+      const response = await fetch(
+        paymentMethod === 'stripe'
+          ? '/api/admin/subscriptions/payments/stripe'
+          : '/api/admin/subscriptions/payments/pagopar',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Correlation-ID': correlationId,
+          },
+          body: JSON.stringify(paymentMethod === 'stripe' ? {} : { paymentMethod }),
         },
-        body: JSON.stringify({ paymentMethod }),
-      })
+      )
       const payload = await response.json().catch(() => null) as ({ checkoutUrl?: string } & PagoparCheckoutErrorPayload) | null
 
       if (!response.ok || !payload?.checkoutUrl) {
@@ -60,11 +70,11 @@ export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName,
       window.location.assign(payload.checkoutUrl)
     } catch {
       setStatus('error')
-      setMessage('No se pudo conectar con Pagopar. Intentá nuevamente.')
+      setMessage(`No se pudo conectar con ${providerName}. Intentá nuevamente.`)
     }
   }
 
-  const PaymentIcon = paymentMethod === 'qr' ? QrCode : CreditCard
+  const PaymentIcon = paymentMethod === 'qr' ? QrCode : paymentMethod === 'stripe' ? Globe : CreditCard
 
   return (
     <div className="w-full max-w-sm space-y-3">
@@ -72,14 +82,17 @@ export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName,
         value={paymentMethod}
         onChange={setPaymentMethod}
         disabled={status === 'loading'}
+        includeStripe={stripeEnabled}
       />
       <Button type="button" onClick={startPayment} disabled={status === 'loading'} className="w-full gap-2">
         <PaymentIcon className="h-4 w-4" />
         {status === 'loading'
-          ? 'Conectando con Pagopar...'
+          ? `Conectando con ${providerName}...`
           : paymentMethod === 'qr'
             ? 'Pagar con QR'
-            : 'Pagar con tarjeta'}
+            : paymentMethod === 'stripe'
+              ? 'Pagar con Stripe'
+              : 'Pagar con tarjeta'}
       </Button>
       <p className="text-xs text-muted-foreground">{planName} · {planAmount}/mes</p>
       {missingFields.length > 0 && (

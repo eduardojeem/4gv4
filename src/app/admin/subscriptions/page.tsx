@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
+import { isStripeConfigured } from '@/lib/payments/stripe'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
 
@@ -190,9 +191,11 @@ export default async function AdminSubscriptionsPage() {
 
   const paymentProvider = subscription?.provider === 'pagopar'
     ? 'Pagopar'
-    : subscription?.provider === 'mercado_pago'
-      ? 'Mercado Pago'
-      : 'Pago manual'
+    : subscription?.provider === 'stripe'
+      ? 'Stripe'
+      : subscription?.provider === 'mercado_pago'
+        ? 'Mercado Pago'
+        : 'Pago manual'
 
   const notices = buildNotices({
     status: subscriptionStatus,
@@ -253,6 +256,7 @@ export default async function AdminSubscriptionsPage() {
               isPaidPlan={state.currentPlan.price_monthly > 0}
               planName={state.currentPlan.name}
               planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
+              stripeEnabled={isStripeConfigured()}
             />
             {canChangePlan && (
               <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">

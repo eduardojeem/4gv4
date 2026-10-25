@@ -8,11 +8,22 @@ import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { isValidPagoparOrderHash, type PagoparOrderDisplayStatus } from '@/lib/payments/pagopar'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { verifySubscriptionPagoparPayment } from '@/lib/saas/pagopar-subscription-status'
+import { isValidStripeCheckoutSessionId } from '@/lib/payments/stripe'
+import {
+  verifySubscriptionStripePayment,
+  type StripeSessionDisplayStatus,
+} from '@/lib/saas/stripe-subscription-status'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-type PageProps = { searchParams: Promise<{ hash?: string | string[] }> }
+type PageProps = { searchParams: Promise<{ hash?: string | string[]; stripe_session?: string | string[] }> }
+
+const STRIPE_STATUS: Record<StripeSessionDisplayStatus, PagoparOrderDisplayStatus> = {
+  approved: 'approved',
+  pending: 'pending',
+  expired: 'cancelled',
+}
 
 const STATUS_CONTENT: Record<PagoparOrderDisplayStatus, {
   title: string
@@ -79,14 +90,20 @@ function VerificationError({ title, description }: { title: string; description:
 export default async function SubscriptionPaymentsPage({ searchParams }: PageProps) {
   const params = await searchParams
   const hash = Array.isArray(params.hash) ? params.hash[0] : params.hash
+  const stripeSession = Array.isArray(params.stripe_session) ? params.stripe_session[0] : params.stripe_session
 
-  if (!hash) redirect('/admin/subscriptions#payment-history')
+  if (!hash && !stripeSession) redirect('/admin/subscriptions#payment-history')
 
   const auth = await resolveRequestAuthUser()
   if (!auth.authenticated) return redirect('/login')
 
   const organization = await getCurrentOrganizationContext(auth.user.id)
   if (!organization || !['owner', 'admin'].includes(organization.role)) redirect('/forbidden')
+
+  if (stripeSession) {
+    return <StripePaymentStatus organizationId={organization.id} sessionId={stripeSession} />
+  }
+  if (!hash) redirect('/admin/subscriptions#payment-history')
 
   const verification = isValidPagoparOrderHash(hash)
     ? await verifySubscriptionPagoparPayment(organization.id, hash)
@@ -146,6 +163,72 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button asChild variant="outline"><Link href="/admin/subscriptions#payment-history">Ver historial de pagos</Link></Button>
         <Button asChild><Link href={`/admin/subscriptions/payments?hash=${encodeURIComponent(hash)}`}>Verificar nuevamente</Link></Button>
+      </div>
+      <p className="text-center text-xs text-muted-foreground">Esta pantalla solamente consulta y muestra el estado. No activa planes desde el navegador.</p>
+    </main>
+  )
+}
+
+async function StripePaymentStatus({ organizationId, sessionId }: { organizationId: string; sessionId: string }) {
+  const verification = isValidStripeCheckoutSessionId(sessionId)
+    ? await verifySubscriptionStripePayment(organizationId, sessionId)
+    : null
+
+  return (
+    <main className="mx-auto w-full max-w-2xl space-y-5 py-4 sm:py-8">
+      <div className="flex items-center justify-between gap-3">
+        <Button asChild variant="ghost" size="sm" className="-ml-2">
+          <Link href="/admin/subscriptions#payment-history"><ArrowLeft className="mr-2 h-4 w-4" />Volver a suscripciones</Link>
+        </Button>
+        <Badge variant="outline" className="gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />Verificación segura</Badge>
+      </div>
+
+      {!verification && <VerificationError title="Enlace de pago inválido" description="El identificador recibido no tiene el formato esperado. Volvé al historial y verificá el estado desde allí." />}
+      {verification?.kind === 'not_found' && <VerificationError title="Pago no encontrado" description="No encontramos un pago Stripe de esta organización asociado con el identificador recibido." />}
+      {verification?.kind === 'mismatch' && <VerificationError title="No se pudo validar el pago" description="La información devuelta por Stripe no coincide con el pago registrado. No se realizó ningún cambio en la suscripción." />}
+      {verification?.kind === 'unavailable' && <VerificationError title="No se pudo verificar el pago" description="Stripe no respondió correctamente. Tu pago no fue modificado; intentá nuevamente en unos instantes." />}
+
+      {verification?.kind === 'verified' && (() => {
+        const { localPayment, amount } = verification
+        const status = STRIPE_STATUS[verification.status]
+        const content = STATUS_CONTENT[status]
+        const StatusIcon = content.icon
+        const subscriptionApplied = localPayment.status === 'paid'
+
+        return (
+          <section className={`rounded-xl border p-5 sm:p-6 ${content.tone}`}>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-background/80">
+                <StatusIcon className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold">{content.title}</h1>
+                  <Badge variant="secondary">{content.badge}</Badge>
+                </div>
+                <p className="mt-2 text-sm leading-6 opacity-80">{content.description.replace('Pagopar', 'Stripe')}</p>
+
+                <dl className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2">
+                  <div><dt className="text-xs opacity-65">Monto verificado</dt><dd className="mt-0.5 font-semibold">{money(amount, localPayment.currency)}</dd></div>
+                  <div><dt className="text-xs opacity-65">Plan solicitado</dt><dd className="mt-0.5 font-semibold">{localPayment.plan_id || 'Suscripción'}</dd></div>
+                  <div><dt className="text-xs opacity-65">Método</dt><dd className="mt-0.5 font-semibold">Stripe</dd></div>
+                  <div><dt className="text-xs opacity-65">Referencia</dt><dd className="mt-0.5 font-mono font-semibold">…{localPayment.external_reference.slice(-10)}</dd></div>
+                </dl>
+
+                {status === 'approved' && (
+                  <p className="mt-4 rounded-lg border border-current/15 bg-background/55 px-3 py-2 text-xs font-medium">
+                    {subscriptionApplied ? 'El webhook ya confirmó y aplicó este pago.' : 'Stripe aprobó el pago. La activación aparecerá cuando llegue la notificación segura del webhook.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        )
+      })()}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button asChild variant="outline"><Link href="/admin/subscriptions#payment-history">Ver historial de pagos</Link></Button>
+        <Button asChild><Link href={`/admin/subscriptions/payments?stripe_session=${encodeURIComponent(sessionId)}`}>Verificar nuevamente</Link></Button>
       </div>
       <p className="text-center text-xs text-muted-foreground">Esta pantalla solamente consulta y muestra el estado. No activa planes desde el navegador.</p>
     </main>
