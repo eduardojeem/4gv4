@@ -1,14 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Barcode, CheckCircle2, ImageOff, Info, Layers, Loader2, Sparkles, Tag } from 'lucide-react'
+import { Barcode, CheckCircle2, ImageOff, Info, Layers, Loader2, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/components/ui/dialog'
 
 export type GlobalProductDraft = {
   id?: string
@@ -55,7 +53,6 @@ export function GlobalProductFormDialog({
   if (!draft || !current) return null
 
   const cleanGtin = current.gtin.trim().replace(/\D/g, '')
-  const isStandardGtin = [8, 12, 13, 14].includes(cleanGtin.length)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

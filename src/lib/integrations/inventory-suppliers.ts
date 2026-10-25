@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import React from 'react'
+import { PRODUCT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 // Interfaces para proveedores de inventario
 export interface SupplierProduct {
@@ -823,14 +824,23 @@ export class SupplierManager {
     // Obtener productos con stock bajo
     // `products` ya esta acotada por inquilino, asi que su organization_id es
     // la fuente para estampar la reposicion (inventory_reorders lo exige).
-    const { data: lowStockProducts } = await this.supabase
+    const { data: lowStockRows } = await this.supabase
       .from('products')
       .select(`
-        *,
-        organization_id,
+        ${PRODUCT_CLIENT_COLUMNS},
         supplier_products(*)
       `)
       .lt('stock_quantity', 'reorder_point')
+    // Columnas heredadas de un esquema anterior (reorder_point/quantity): se
+    // conserva la forma que este código esperaba de `select('*')`.
+    const lowStockProducts = lowStockRows as unknown as Array<{
+      id: string
+      organization_id: string | null
+      stock_quantity: number
+      reorder_point: number
+      reorder_quantity?: number | null
+      supplier_products?: Array<{ supplierId: string; unitPrice: number; minimumOrderQuantity: number }>
+    }> | null
 
     const reorders: InventoryReorder[] = []
 
@@ -871,7 +881,7 @@ export class SupplierManager {
       .from('inventory_reorders')
       .select(`
         *,
-        product:products(*),
+        product:products(${PRODUCT_CLIENT_COLUMNS}),
         supplier_product:supplier_products(*)
       `)
       .eq('id', reorderId)

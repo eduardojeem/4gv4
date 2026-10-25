@@ -96,11 +96,13 @@ export function RepairPosStatsCards({ stats, detailsLoaded = true, ...detailProp
                             Ganancia Neta (Taller)
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-indigo-700 dark:text-indigo-400">
-                            {formatCurrency(repairStats.netProfit)}
+                            {stats.costHidden || repairStats.netProfit == null ? '—' : formatCurrency(repairStats.netProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Facturación - Repuestos ({formatCurrency(repairStats.deliveredPartsCost)})
-                            {repairStats.refundsAmount > 0 && ` - Devoluciones (${formatCurrency(repairStats.refundsAmount)})`}
+                            {stats.costHidden || repairStats.deliveredPartsCost == null
+                                ? 'Requiere permiso para ver costos'
+                                : <>Facturación - Repuestos ({repairStats.deliveredPartsCost == null ? '—' : formatCurrency(repairStats.deliveredPartsCost)})
+                                    {repairStats.refundsAmount > 0 && ` - Devoluciones (${formatCurrency(repairStats.refundsAmount)})`}</>}
                         </p>
                     </CardContent>
                 </Card>
@@ -158,9 +160,9 @@ export function RepairPosStatsCards({ stats, detailsLoaded = true, ...detailProp
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                         {repairStats.deliveredRepairs.map((r) => {
                                             const totalBilled = Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0)
-                                            const partsCost = Number(r.parts_cost ?? 0)
+                                            const partsCost = stats.costHidden || r.parts_cost == null ? null : Number(r.parts_cost)
                                             void (Number(r.labor_cost ?? 0));
-                                            const net = totalBilled - partsCost
+                                            const net = partsCost === null ? null : totalBilled - partsCost
                                             
                                             // Normalizar status de pago
                                             const paymentStatus = (r.payment_status || 'desconocido').toLowerCase()
@@ -186,10 +188,10 @@ export function RepairPosStatsCards({ stats, detailsLoaded = true, ...detailProp
                                                         {formatCurrency(totalBilled)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right text-slate-500">
-                                                        {formatCurrency(partsCost)}
+                                                        {partsCost === null ? '—' : formatCurrency(partsCost)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                                                        {formatCurrency(net)}
+                                                        {net === null ? '—' : formatCurrency(net)}
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         {paymentBadge}
@@ -361,19 +363,19 @@ export function RepairPosStatsCards({ stats, detailsLoaded = true, ...detailProp
                                 <div className="space-y-1 text-right">
                                     <p className="text-xs text-slate-500 uppercase">Ganancia Neta</p>
                                     <p className="font-bold text-indigo-600 dark:text-indigo-400">
-                                        {formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0) - Number(selectedRepair.parts_cost ?? 0))}
+                                        {stats.costHidden || selectedRepair.parts_cost == null ? '—' : formatCurrency(Number(selectedRepair.final_cost ?? selectedRepair.estimated_cost ?? selectedRepair.paid_amount ?? 0) - Number(selectedRepair.parts_cost))}
                                     </p>
                                 </div>
                                 <div className="space-y-1">
                                     <p className="text-xs text-slate-500 uppercase">Costo Repuestos</p>
                                     <p className="font-medium text-slate-700 dark:text-slate-300">
-                                        {formatCurrency(Number(selectedRepair.parts_cost ?? 0))}
+                                        {stats.costHidden || selectedRepair.parts_cost == null ? '—' : formatCurrency(Number(selectedRepair.parts_cost))}
                                     </p>
                                 </div>
                                 <div className="space-y-1 text-right">
                                     <p className="text-xs text-slate-500 uppercase">Mano de Obra</p>
                                     <p className="font-medium text-slate-700 dark:text-slate-300">
-                                        {formatCurrency(Number(selectedRepair.labor_cost ?? 0))}
+                                        {stats.costHidden || selectedRepair.labor_cost == null ? '—' : formatCurrency(Number(selectedRepair.labor_cost))}
                                     </p>
                                 </div>
                             </div>

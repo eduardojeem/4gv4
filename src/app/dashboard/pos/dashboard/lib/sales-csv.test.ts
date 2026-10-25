@@ -19,6 +19,14 @@ const venta = (over: Record<string, unknown> = {}) => ({
 const filas = (csv: string) => csv.split('\r\n')
 
 describe('exportar las ventas del período', () => {
+  it('exports unknown costs and profits as empty cells, preserving real zero', () => {
+    const hidden = filas(buildSalesCsv([venta({cost:null,profit:null})]))[1].split(',')
+    const zero = filas(buildSalesCsv([venta({cost:0,profit:0})]))[1].split(',')
+    expect(hidden[6]).toBe('""')
+    expect(hidden[8]).toBe('""')
+    expect(zero[6]).toBe('"0"')
+    expect(zero[8]).toBe('"0"')
+  })
   it('exporta todas las ventas que recibe, no un recorte', () => {
     // Antes exportaba las 10 más recientes aunque el período tuviera 200.
     const ventas = Array.from({ length: 25 }, (_, i) => venta({ id: `id-${i}-0000000`, code: `V-${i}` }))

@@ -1,5 +1,6 @@
 import { AppImage } from '@/components/ui/app-image'
 import React, { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -61,7 +62,8 @@ import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/C
 import { RepairWarrantyCase } from './RepairWarrantyCase'
 import { DeviceHistoryTimeline } from './DeviceHistoryTimeline'
 import { printRepairReceipt, printRepairReceiptWhenReady, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
-import { buildRepairPrintPayload, fetchRepairVerificationHash } from '@/lib/repairs/print-payload'
+import { buildRepairPrintPayload, fetchRepairQrSignature } from '@/lib/repairs/print-payload'
+import type { RepairQrSignature } from '@/lib/repairs/tracking-url'
 import {
   getWarrantyStatus,
   getDaysRemaining,
@@ -170,6 +172,7 @@ export function RepairDetailDialog({
   onTechnicianChange,
   onWarrantyChange,
 }: RepairDetailDialogProps) {
+  const router = useRouter()
   const [isMaximized, setIsMaximized] = useState(false)
   const { isAdmin } = useAuth()
   const { planName, repairPhotoLimit: photoLimit, repairPhotoUpgradePlan } = useSubscriptionStatus()
@@ -191,7 +194,7 @@ export function RepairDetailDialog({
   const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
   const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
   const { settings } = useSharedSettings()
-  const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
+  const [qrSignature, setQrSignature] = useState<RepairQrSignature | undefined>(undefined)
   const [deliveredEditWarningOpen, setDeliveredEditWarningOpen] = useState(false)
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false)
   const [isCustomerDetailOpen, setIsCustomerDetailOpen] = useState(false)
@@ -292,11 +295,11 @@ export function RepairDetailDialog({
     if (activeRepair && open) {
       // Firmado con el mismo número que se imprime: antes se firmaba con el id
       // completo y se imprimía el id corto, y el QR no validaba.
-      void fetchRepairVerificationHash(activeRepair, controller.signal).then((hash) => {
-        if (hash && !controller.signal.aborted) setVerificationHash(hash)
+      void fetchRepairQrSignature(activeRepair, controller.signal).then((signature) => {
+        if (signature && !controller.signal.aborted) setQrSignature(signature)
       })
     } else {
-      setVerificationHash(undefined)
+      setQrSignature(undefined)
     }
     return () => controller.abort()
     // Solo lo que entra en la firma: antes se volvía a pedir con cada edición
@@ -589,7 +592,7 @@ export function RepairDetailDialog({
     }
   }
 
-  const getPrintPayload = (hash: string | undefined = verificationHash): RepairPrintPayload => {
+  const getPrintPayload = (signature: RepairQrSignature | undefined = qrSignature): RepairPrintPayload => {
     if (!repair) throw new Error("No repair")
     return buildRepairPrintPayload(repair, {
       name: settings.companyName,
@@ -597,19 +600,19 @@ export function RepairDetailDialog({
       address: settings.companyAddress,
       email: settings.companyEmail,
       logo: settings.companyLogo || undefined,
-    }, hash)
+    }, signature)
   }
 
   const handlePrint = (type: 'customer' | 'technician' | 'technician_detailed') => {
     if (!repair) return
     // Si se imprime antes de que llegue la firma, se espera: antes salía sin QR
     // y sin avisar. La ventana se abre igual en el mismo clic.
-    if (type === 'customer' && !verificationHash) {
+    if (type === 'customer' && !qrSignature) {
       void printRepairReceiptWhenReady(
         type,
-        fetchRepairVerificationHash(repair).then((hash) => {
-          if (hash) setVerificationHash(hash)
-          return getPrintPayload(hash)
+        fetchRepairQrSignature(repair).then((signature) => {
+          if (signature) setQrSignature(signature)
+          return getPrintPayload(signature)
         })
       )
       return
@@ -2597,7 +2600,7 @@ export function RepairDetailDialog({
               className="min-h-11 gap-2 sm:min-h-9"
               onClick={() => {
                 if (repair.customer?.id) {
-                  window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                  router.push(`/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`)
                 }
                 onClose()
               }}

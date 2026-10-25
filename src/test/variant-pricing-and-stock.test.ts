@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
-import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
@@ -82,53 +81,26 @@ describe('la vitrina, el detalle y el cobro usan la misma regla', () => {
   })
 })
 
-describe('el stock que se edita en una variante existente', () => {
-  const ahora = new Date('2026-09-12T03:20:45.000Z')
-  const actual = new Map([['v1', 10], ['v2', 4]])
-
-  it('sin cambios no genera ningún movimiento', () => {
-    expect(planVariantStockAdjustments(actual, [
-      { id: 'v1', name: 'M Negro', stockQuantity: 10 },
-      { id: 'v2', name: 'L Negro', stockQuantity: 4 },
-    ], ahora)).toEqual([])
-  })
-
-  it('calcula la diferencia para subir y para bajar', () => {
-    const ajustes = planVariantStockAdjustments(actual, [
-      { id: 'v1', name: 'M Negro', stockQuantity: 14 },
-      { id: 'v2', name: 'L Negro', stockQuantity: 1 },
-    ], ahora)
-
-    expect(ajustes.map((a) => [a.variantId, a.from, a.to, a.delta])).toEqual([
-      ['v1', 10, 14, 4],
-      ['v2', 4, 1, -3],
-    ])
-  })
-
-  it('las variantes nuevas no se ajustan: su stock lo carga el guardado', () => {
-    expect(planVariantStockAdjustments(actual, [
-      { name: 'XL Negro', stockQuantity: 7 },
-      { id: 'v9', name: 'S Negro', stockQuantity: 3 },
-    ], ahora)).toEqual([])
-  })
-
-  it('repetir el mismo guardado no duplica el ajuste, pero otro cambio sí es nuevo', () => {
-    const [primero] = planVariantStockAdjustments(actual, [{ id: 'v1', name: 'M', stockQuantity: 14 }], ahora)
-    const [repetido] = planVariantStockAdjustments(actual, [{ id: 'v1', name: 'M', stockQuantity: 14 }], new Date('2026-09-12T03:20:59.000Z'))
-    const [otro] = planVariantStockAdjustments(actual, [{ id: 'v1', name: 'M', stockQuantity: 15 }], ahora)
-
-    expect(repetido.idempotencyKey).toBe(primero.idempotencyKey)
-    expect(otro.idempotencyKey).not.toBe(primero.idempotencyKey)
-  })
-
-  it('el guardado aplica esos ajustes como movimiento trazable', () => {
+describe('el stock objetivo de una variante existente', () => {
+  it('aplica un objetivo absoluto en la sucursal mediante el RPC idempotente', () => {
     const ruta = leer('src/app/api/products/route.ts')
-    expect(ruta).toContain('planVariantStockAdjustments(currentStockById, variantPayload.data.variants)')
-    expect(ruta).toContain("p_movement_type: 'adjustment'")
-    expect(ruta).toContain("p_reason: 'Ajuste de stock desde la ficha del producto'")
-    // Si el ajuste falla, el usuario se entera.
-    expect(ruta).toContain('stockWarnings.push(')
-    expect(leer('src/hooks/useProductsSupabase.ts')).toContain('toast.warning(warning)')
+    expect(ruta).toContain("admin.rpc('set_variant_branch_stock_target'")
+    expect(ruta).toContain('p_target_quantity: variant.stockQuantity')
+    expect(ruta).toContain('p_branch_id: variantBranchId')
+    expect(ruta).toContain('p_idempotency_key: idempotencyKey')
+    expect(ruta).not.toContain('planVariantStockAdjustments')
+    expect(ruta).not.toContain("admin.rpc('adjust_variant_stock_atomic'")
+    const hook = leer('src/hooks/useProductsSupabase.ts')
+    expect(hook).toContain("'Idempotency-Key': globalThis.crypto.randomUUID()")
+    expect(hook).toContain("'Idempotency-Key': idempotencyKey")
+    expect(hook).toContain('executeUpdateSaveAttempt')
+    expect(hook).toContain('toast.warning(warning)')
+  })
+
+  it('existing variants reach metadata save with stock zero; new variants keep initial stock', () => {
+    const ruta = leer('src/app/api/products/route.ts')
+    expect(ruta).toContain('row.id ? { ...row, stock_quantity: 0 } : row')
+    expect(ruta).toContain('p_variants: variantsForMetadata')
   })
 })
 

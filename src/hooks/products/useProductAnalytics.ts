@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { costTotal, costProfit } from '@/lib/products/known-cost'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/types'
@@ -42,7 +43,7 @@ interface SupplierAnalytics {
   name: string
   productCount: number
   totalValue: number
-  avgMargin: number
+  avgMargin: number | null
   totalStock: number
   reliability: number
 }
@@ -52,9 +53,9 @@ type AnalyticsMovementRow = Database['public']['Tables']['product_movements']['R
 interface InventoryAnalytics {
   totalProducts: number
   totalValue: number
-  totalCost: number
-  totalMargin: number
-  avgMarginPercent: number
+  totalCost: number | null
+  totalMargin: number | null
+  avgMarginPercent: number | null
   stockDistribution: {
     inStock: number
     lowStock: number
@@ -324,11 +325,10 @@ export function useProductAnalytics(
 
     const activeProducts = products.filter(p => p.is_active)
     const totalStockValue = products.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0)
-    const totalCostValue = products.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0)
-    const totalMargin = totalStockValue - totalCostValue
-    const avgMarginPercentage = products.length > 0
-      ? products.reduce((sum, p) => sum + (p.margin_percentage || 0), 0) / products.length
-      : 0
+    const totalCostValue = costTotal(products.map(p => p.purchase_price == null ? null : p.purchase_price * (p.stock_quantity || 0)))
+    const totalMargin = costProfit(totalStockValue, totalCostValue)
+    const marginSum = costTotal(products.map(p => p.margin_percentage))
+    const avgMarginPercentage = marginSum === null ? null : products.length > 0 ? marginSum / products.length : 0
 
     const lowStockCount = products.filter(p => p.stock_status === 'low_stock').length
     const outOfStockCount = products.filter(p => p.stock_status === 'out_of_stock').length
@@ -422,14 +422,14 @@ export function useProductAnalytics(
         existing.productCount++
         existing.totalValue += (product.sale_price || 0) * (product.stock_quantity || 0)
         existing.totalStock += product.stock_quantity || 0
-        existing.avgMargin += product.margin_percentage || 0
+        existing.avgMargin = costTotal([existing.avgMargin, product.margin_percentage])
       } else {
         supplierMap.set(supplierId, {
           id: supplierId,
           name: product.supplier.name || 'Sin nombre',
           productCount: 1,
           totalValue: (product.sale_price || 0) * (product.stock_quantity || 0),
-          avgMargin: product.margin_percentage || 0,
+          avgMargin: product.margin_percentage ?? null,
           totalStock: product.stock_quantity || 0,
           reliability: 100 // Placeholder - se puede calcular basado en entregas
         })
@@ -439,7 +439,7 @@ export function useProductAnalytics(
     // Calcular promedios
     const result = Array.from(supplierMap.values()).map(supplier => ({
       ...supplier,
-      avgMargin: supplier.avgMargin / supplier.productCount || 0
+      avgMargin: supplier.avgMargin === null ? null : supplier.avgMargin / supplier.productCount
     })).sort((a, b) => b.totalValue - a.totalValue)
 
     const duration = performance.now() - startTime
@@ -518,10 +518,10 @@ export function useProductAnalytics(
     const startTime = performance.now()
 
     const result = products
-      .filter(p => p.is_active)
+      .filter(p => p.is_active && p.margin_percentage != null)
       .sort((a, b) => {
-        const aValue = (a.sale_price || 0) * (a.stock_quantity || 0) * (a.margin_percentage || 0)
-        const bValue = (b.sale_price || 0) * (b.stock_quantity || 0) * (b.margin_percentage || 0)
+        const aValue = (a.sale_price || 0) * (a.stock_quantity || 0) * a.margin_percentage!
+        const bValue = (b.sale_price || 0) * (b.stock_quantity || 0) * b.margin_percentage!
         return bValue - aValue
       })
       .slice(0, 10)
@@ -545,7 +545,7 @@ export function useProductAnalytics(
       p.stock_status === 'out_of_stock' ||
       !p.supplier ||
       !p.category ||
-      (p.margin_percentage || 0) < 10
+      (p.margin_percentage != null && p.margin_percentage < 10)
     )
 
     const duration = performance.now() - startTime

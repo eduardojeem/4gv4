@@ -508,6 +508,8 @@ function RepairsPageContent() {
         if (validRepairs.length > 0) {
           
           let verificationHash: string | undefined = undefined
+          let trackingUrl: string | undefined = undefined
+          let storeUrl: string | undefined = undefined
           let dateObj = new Date()
 
           // If single repair, fetch secure hash from server
@@ -530,6 +532,9 @@ function RepairsPageContent() {
               const json = await res.json()
               if (json.success) {
                 verificationHash = json.hash
+                // La URL del QR la arma el servidor: lleva la tienda y el dominio.
+                trackingUrl = typeof json.trackingUrl === 'string' ? json.trackingUrl : undefined
+                storeUrl = typeof json.storeUrl === 'string' ? json.storeUrl : undefined
               }
             } catch (e) {
               logger.error('Failed to sign ticket', { error: e })
@@ -559,6 +564,8 @@ function RepairsPageContent() {
             warrantyType: data.warrantyType,
             warrantyNotes: data.warrantyNotes,
             verificationHash,
+            trackingUrl,
+            storeUrl,
             devices: data.devices.map((deviceFormData, index) => {
               const createdRepair = createdRepairs[index]
               if (!createdRepair) return null

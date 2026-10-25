@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,7 @@ import {
   Info,
 } from 'lucide-react'
 import { ChangePasswordDialog } from './change-password-dialog'
+import { PasskeysSection } from './passkeys-section'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -86,6 +88,7 @@ function parseUserAgent(ua: string): { browser: string; os: string; deviceType: 
 }
 
 export function SecuritySection({ userId, role }: SecuritySectionProps) {
+  const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
   const [sessions, setSessions] = useState<SessionRecord[]>([])
@@ -553,7 +556,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       await supabase.auth.signOut({ scope: 'global' })
       toast.success('Todas las sesiones fueron cerradas. Redirigiendo al login...')
       setTimeout(() => {
-        window.location.href = '/login'
+        router.push('/login')
       }, 800)
     } catch (error) {
       logger.error('Error closing all sessions', { error })
@@ -836,6 +839,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
               )}
             </div>
           </div>
+
+          <Separator />
+
+          {/* Bloque Passkeys */}
+          <PasskeysSection />
 
           <Separator />
 

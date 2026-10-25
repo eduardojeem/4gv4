@@ -18,7 +18,7 @@ type ForeignPriceFields = {
   foreign_purchase_price?: number | null
   sale_price: number
   wholesale_price?: number | null
-  purchase_price: number
+  purchase_price?: number | null
 }
 
 const LOCAL = '__local__'

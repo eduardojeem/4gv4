@@ -48,9 +48,9 @@ export function buildSalesCsv(sales: readonly ExportableSale[]): string {
     sale.payment_method ?? '',
     sale.itemsCount ?? '',
     importe(sale.total),
-    importe(sale.cost),
+    sale.cost == null ? '' : importe(sale.cost),
     importe(sale.refundAmount),
-    importe(sale.profit),
+    sale.profit == null ? '' : importe(sale.profit),
   ])
 
   return [SALES_CSV_HEADERS, ...filas].map((fila) => fila.map(celda).join(',')).join('\r\n')

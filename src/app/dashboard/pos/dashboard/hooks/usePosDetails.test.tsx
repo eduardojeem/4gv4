@@ -61,7 +61,7 @@ const venta = (id: string, total: number) => ({
 const UN_DIA = { from: new Date(2026, 8, 10) }
 
 beforeEach(() => {
-  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({branches:[{id:'branch-1',organization_id:'org-1',is_active:true},{id:'branch-2',organization_id:'org-1',is_active:true}]})}))
+  vi.stubGlobal('fetch',vi.fn().mockImplementation(async (url: string) => url === '/api/products/access' ? {ok:true,json:async()=>({organizationId:control.organizacion?.id,canReadCost:true})} : {ok:true,json:async()=>({branches:[{id:'branch-1',organization_id:'org-1',is_active:true},{id:'branch-2',organization_id:'org-1',is_active:true}]})}))
   control.organizacion = { id: 'org-1' }
   control.organizacionCargando = false
   control.sucursal = { organization_id: 'org-1' }
@@ -204,7 +204,25 @@ it('constrains all-branch detail to the one authoritative accessible branch list
  await waitFor(()=>expect(control.ventasPendientes).toHaveLength(1))
  const primary=control.llamadas.filter(query=>['sales','customer_credits','repairs'].includes(query.tabla))
  for(const query of primary)expect(query.filtros).toContainEqual(['or','branch_id.is.null,branch_id.in.(branch-1,branch-2)'])
- expect(fetch).toHaveBeenCalledTimes(1)
+ expect(vi.mocked(fetch).mock.calls.filter(([url])=>url === '/api/branches')).toHaveLength(1)
+})
+
+it('does not request internal repair costs or fabricate profits without org cost permission', async () => {
+ vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => url === '/api/products/access'
+  ? {ok:true,json:async()=>({organizationId:'org-1',canReadCost:false})}
+  : {ok:true,json:async()=>({branches:[{id:'branch-1',organization_id:'org-1',is_active:true}]})}))
+ const { result } = renderHook(() => usePosStats(UN_DIA))
+ await waitFor(() => expect(control.ventasPendientes).toHaveLength(1))
+ await act(async () => { control.ventasPendientes[0].resolver({data:[venta('synthetic',100)],error:null}) })
+ await waitFor(() => expect(result.current.loading).toBe(false))
+ expect(result.current.stats.costHidden).toBe(true)
+ expect(result.current.stats.allSales[0]).toMatchObject({cost:null,profit:null})
+ expect(result.current.stats.profitStats.withTax.salesProfit).toBeNull()
+ expect(result.current.stats.repairStats).toMatchObject({deliveredPartsCost:null,deliveredLaborCost:null,netProfit:null})
+ for (const query of control.llamadas.filter(query => query.tabla === 'repairs')) {
+  const columns = String(query.filtros.find(filter => filter[0] === 'select')?.[1])
+  expect(columns).not.toMatch(/parts_cost|labor_cost/)
+ }
 })
 
 it('restricts refund parent rows in the server query before downloading branch data',async()=>{

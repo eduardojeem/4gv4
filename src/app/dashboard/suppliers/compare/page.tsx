@@ -44,6 +44,7 @@ import type { SectionGuideData } from '@/components/dashboard/common/SectionGuid
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
 import { ProductThumb } from '@/components/suppliers/order-ui'
 import { formatCurrency, getLocaleConfig } from '@/lib/currency'
+import { knownCost } from '@/lib/products/known-cost'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -57,6 +58,8 @@ interface SupplierProduct {
   category?: string
   unitprice: number
   saleprice: number
+  /** La API ocultó el costo (sin products.read_cost): unitprice no es un costo. */
+  costHidden?: boolean
   currency: string
   supplier_id: string
   stock: number | null
@@ -465,6 +468,7 @@ export default function PriceComparisonPage() {
     minStock?: number | null
     imageUrl?: string | null
     source?: 'own' | 'supplier'
+    costHidden?: boolean
   } | null>(null)
 
   const fetchProducts = useCallback(async () => {
@@ -505,12 +509,15 @@ export default function PriceComparisonPage() {
         }
       }
 
-      const mapped: SupplierProduct[] = allProducts.map((p) => {
+      const mapped: SupplierProduct[] = allProducts.flatMap((p) => {
         const supplierObj = p.supplier as SupplierProduct['suppliers'] | undefined
         const categoryObj = p.category as { name?: string } | undefined
         const images = Array.isArray(p.images) ? (p.images as string[]) : []
-        const purchasePrice = Number(p.purchase_price ?? p.cost_price ?? 0)
+        const purchasePrice = knownCost(p.purchase_price ?? p.cost_price)
         const salePrice = Number(p.sale_price ?? 0)
+        // La API quita la clave del costo cuando el usuario no puede verlo.
+        const costHidden = purchasePrice === null
+        if (purchasePrice === null) return []
 
         return {
           id: String(p.id),
@@ -520,8 +527,9 @@ export default function PriceComparisonPage() {
           barcode: p.barcode ? String(p.barcode) : undefined,
           category: categoryObj?.name || undefined,
           // Corrección clave: El valor a comparar es el costo de compra del proveedor
-          unitprice: purchasePrice > 0 ? purchasePrice : salePrice,
+          unitprice: purchasePrice,
           saleprice: salePrice,
+          costHidden,
           currency: getLocaleConfig().currency,
           supplier_id: String(p.supplier_id || supplierObj?.id || ''),
           stock: p.stock_quantity == null ? null : Number(p.stock_quantity),
@@ -752,6 +760,8 @@ export default function PriceComparisonPage() {
       minStock: offer.minStock,
       imageUrl: offer.imageUrl,
       source: 'own',
+      // Sin costo visible, el precio de venta no puede sembrar un pedido como costo.
+      costHidden: offer.costHidden,
     })
     setOrderModalOpen(true)
   }
@@ -1416,7 +1426,7 @@ export default function PriceComparisonPage() {
                         const diff = offer.unitprice - group.minPrice
                         const percent = group.minPrice > 0 ? (diff / group.minPrice) * 100 : 0
                         const isBestPrice = index === 0
-                        const margin = group.salePrice > 0 && offer.unitprice > 0
+                        const margin = !offer.costHidden && group.salePrice > 0 && offer.unitprice > 0
                           ? ((group.salePrice - offer.unitprice) / group.salePrice) * 100
                           : null
 
@@ -1454,7 +1464,7 @@ export default function PriceComparisonPage() {
                               {offer.suppliersku || '-'}
                             </TableCell>
                             <TableCell className="text-right font-extrabold font-mono text-sm tabular-nums">
-                              {formatCurrency(offer.unitprice)}
+                              {offer.costHidden ? 'Costo no visible' : formatCurrency(offer.unitprice)}
                             </TableCell>
                             <TableCell className="text-right">
                               {isBestPrice ? (

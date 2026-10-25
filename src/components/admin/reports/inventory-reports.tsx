@@ -1,5 +1,8 @@
 'use client'
 
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
+
 import React, { useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,7 +34,8 @@ import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
-import { formatCurrency } from '@/lib/currency'
+import { knownCost, costTotal, costProfit, costMargin } from '@/lib/products/known-cost'
+import { formatCurrency as currency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
@@ -39,16 +43,20 @@ import {
   loadBranchInventoryStockMap,
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
+import { asCostRpcClient, attachProductCosts, fillEmbeddedProductCosts } from '@/lib/products/cost-columns'
+
+const formatCurrency = (value: number | null) => value === null ? '—' : currency(value)
+const percent = (value: number | null) => value === null ? '—' : `${value}%`
 
 // Interfaces
 interface ReportData {
   totalProducts: number
-  totalValue: number
+  totalValue: number | null
   lowStockItems: number
   outOfStockItems: number
   totalSuppliers: number
   totalCategories: number
-  averageMargin: number
+  averageMargin: number | null
   totalRevenue: number
   topSellingProducts: ProductSales[]
   categoryDistribution: CategoryData[]
@@ -63,16 +71,16 @@ interface ProductSales {
   category: string
   unitsSold: number
   revenue: number
-  profit: number
-  margin: number
+  profit: number | null
+  margin: number | null
 }
 
 interface CategoryData {
   name: string
   productCount: number
-  totalValue: number
-  percentage: number
-  averageMargin: number
+  totalValue: number | null
+  percentage: number | null
+  averageMargin: number | null
   color: string
 }
 
@@ -89,19 +97,19 @@ interface StockMovement {
   type: 'entrada' | 'salida' | 'ajuste' | 'transferencia'
   product: string
   quantity: number
-  value: number
+  value: number | null
   reason: string
 }
 
 interface ProfitData {
   product: string
   category: string
-  cost: number
+  cost: number | null
   price: number
-  margin: number
-  profit: number
+  margin: number | null
+  profit: number | null
   volume: number
-  totalProfit: number
+  totalProfit: number | null
 }
 
 interface ReportSaleItemRow {
@@ -231,7 +239,7 @@ async function exportInventoryPdf(data: ReportData) {
       ['Valor inventario', formatCurrency(data.totalValue)],
       ['Stock bajo', String(data.lowStockItems)],
       ['Sin stock', String(data.outOfStockItems)],
-      ['Margen promedio', `${data.averageMargin}%`],
+      ['Margen promedio', percent(data.averageMargin)],
       ['Ventas del periodo', formatCurrency(data.totalRevenue)],
     ],
     styles: { fontSize: 9 },
@@ -247,7 +255,7 @@ async function exportInventoryPdf(data: ReportData) {
       String(p.unitsSold),
       formatCurrency(p.revenue),
       formatCurrency(p.profit),
-      `${p.margin}%`,
+      percent(p.margin),
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [16, 185, 129] },
@@ -265,7 +273,7 @@ async function exportInventoryPdf(data: ReportData) {
         p.category,
         formatCurrency(p.cost),
         formatCurrency(p.price),
-        `${p.margin}%`,
+        percent(p.margin),
         formatCurrency(p.totalProfit),
       ]),
       styles: { fontSize: 8 },
@@ -309,11 +317,15 @@ function InventoryKpiCard({
 }
 
 const InventoryReports: React.FC = () => {
-  const supabase = createClient()
+  const { organization } = useActiveOrganization()
+  const organizationId = organization?.id
   const { selectedBranchId } = useBranch()
+  const scopeKey = organizationId ? `${organizationId}:${selectedBranchId ?? "all"}` : undefined
+
+  const supabase = createClient()
 
   // Estados
-  const [reportData, setReportData] = useState<ReportData | null>(null)
+  const [reportData, setReportData] = useOrganizationScopedState<ReportData | null>(scopeKey, null)
   const [selectedDateRange, setSelectedDateRange] = useState<{from: Date, to: Date}>({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
@@ -327,6 +339,7 @@ const InventoryReports: React.FC = () => {
   const [isPartial, setIsPartial] = useState(false)
 
   const generateReport = useCallback(async () => {
+    if (!organizationId) return
     setIsGenerating(true)
     setLoadError(null)
     try {
@@ -334,15 +347,17 @@ const InventoryReports: React.FC = () => {
       const { data: products, error: productsError } = await supabase
         .from('products')
         .select(`
-          id, name, stock_quantity, sale_price, purchase_price, min_stock, is_active,
+          id, name, stock_quantity, sale_price, min_stock, is_active,
           category:categories(name)
-        `)
+        `).eq('organization_id', organizationId!)
         // Una fila de mas para saber si el barrido quedo corto: con `.limit(2000)`
         // a secas, el valor del inventario de una empresa con 2.400 productos
         // salia mal y parecia bien.
         .limit(PRODUCT_SCAN_CAP + 1)
 
       if (productsError) throw productsError
+      // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+      const productsWithCost = await attachProductCosts(asCostRpcClient(supabase), products || [], { organizationId })
       const productsTruncated = (products || []).length > PRODUCT_SCAN_CAP
       setIsPartial(productsTruncated)
 
@@ -359,7 +374,7 @@ const InventoryReports: React.FC = () => {
         )
       }
       const branchAwareProducts = applyBranchInventoryToProducts(
-        (products || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
+        productsWithCost as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
         branchStock.stockMap,
         branchStock.branchScoped,
         branchStock.thresholdMap
@@ -368,7 +383,7 @@ const InventoryReports: React.FC = () => {
       // 2. Fetch Suppliers (solo columnas usadas)
       const { data: suppliers, error: suppliersError } = await supabase
         .from('suppliers')
-        .select('id, name, rating')
+        .select('id, name, rating').eq('organization_id', organizationId!)
         .limit(1000)
 
       if (suppliersError) throw suppliersError
@@ -385,8 +400,8 @@ const InventoryReports: React.FC = () => {
           quantity,
           reason,
           notes,
-          product:products(name, sale_price, purchase_price)
-        `)
+          product:products(id, name, sale_price)
+        `).eq('organization_id', organizationId!)
         .gte('created_at', selectedDateRange.from.toISOString())
         .lte('created_at', selectedDateRange.to.toISOString())
         .order('created_at', { ascending: false })
@@ -409,9 +424,9 @@ const InventoryReports: React.FC = () => {
             product_id,
             quantity,
             subtotal,
-            products (name, category:categories(name), purchase_price)
+            products (id, name, category:categories(name))
           )
-        `)
+        `).eq('organization_id', organizationId!)
         .gte('created_at', selectedDateRange.from.toISOString())
         .lte('created_at', selectedDateRange.to.toISOString()),
         selectedBranchId
@@ -419,30 +434,38 @@ const InventoryReports: React.FC = () => {
 
       if (salesError) throw salesError
 
+      // Costo de los productos embebidos en movimientos y ventas, con la misma regla.
+      const embedded = (value: unknown) => (Array.isArray(value) ? value : [value]) as Array<Record<string, unknown> | null>
+      await fillEmbeddedProductCosts(asCostRpcClient(supabase), [
+        ...(movements || []).flatMap(movement => embedded((movement as { product?: unknown }).product)),
+        ...(salesData || []).flatMap(sale => ((sale as { sale_items?: unknown[] }).sale_items || [])
+          .flatMap(item => embedded((item as { products?: unknown }).products))),
+      ], { organizationId })
+
       // --- CALCULATIONS ---
 
       // Inventory Stats
       const totalProducts = branchAwareProducts?.length || 0
-      const totalValue = branchAwareProducts?.reduce((sum, p) => sum + (Number(p.stock_quantity || 0) * Number(p.purchase_price || 0)), 0) || 0
+      const totalValue = costTotal((branchAwareProducts || []).map(p => p.purchase_price == null ? null : Number(p.stock_quantity || 0) * Number(p.purchase_price)))
       const lowStockItems = branchAwareProducts?.filter(p => Number(p.stock_quantity || 0) <= Number(p.min_stock || 0) && Number(p.stock_quantity || 0) > 0).length || 0
       const outOfStockItems = branchAwareProducts?.filter(p => Number(p.stock_quantity || 0) === 0).length || 0
       const totalSuppliers = suppliers?.length || 0
-      
+
       // Category Distribution
-      const categoryMap = new Map<string, { count: number; value: number; marginSum: number }>()
+      const categoryMap = new Map<string, { count: number; value: number | null; marginSum: number | null }>()
       branchAwareProducts?.forEach(p => {
         const product = p as ReportProductRow
         const catName = product.category?.name || 'Sin Categoria'
         const current = categoryMap.get(catName) || { count: 0, value: 0, marginSum: 0 }
-        
+
         const salePrice = Number(p.sale_price || 0)
-        const purchasePrice = Number(p.purchase_price || 0)
-        const margin = salePrice > 0 ? ((salePrice - purchasePrice) / salePrice) * 100 : 0
-        
+        const purchasePrice = knownCost(p.purchase_price)
+        const margin = costMargin(salePrice, purchasePrice)
+
         categoryMap.set(catName, {
           count: current.count + 1,
-          value: current.value + (Number(p.stock_quantity || 0) * purchasePrice),
-          marginSum: current.marginSum + margin
+          value: costTotal([current.value, purchasePrice === null ? null : Number(p.stock_quantity || 0) * purchasePrice]),
+          marginSum: costTotal([current.marginSum, margin])
         })
       })
 
@@ -450,29 +473,23 @@ const InventoryReports: React.FC = () => {
         name,
         productCount: data.count,
         totalValue: data.value,
-        percentage: totalValue > 0 ? Number(((data.value / totalValue) * 100).toFixed(1)) : 0,
-        averageMargin: data.count > 0 ? Number((data.marginSum / data.count).toFixed(1)) : 0,
+        percentage: totalValue === null || data.value === null ? null : totalValue > 0 ? Number(((data.value / totalValue) * 100).toFixed(1)) : 0,
+        averageMargin: data.marginSum === null ? null : data.count > 0 ? Number((data.marginSum / data.count).toFixed(1)) : 0,
         color: REPORT_COLORS[index % REPORT_COLORS.length]
-      })).sort((a, b) => b.totalValue - a.totalValue)
+      })).sort((a, b) => (b.totalValue ?? -Infinity) - (a.totalValue ?? -Infinity))
 
       const totalCategories = categoryDistribution.length
-      const averageMargin = branchAwareProducts && branchAwareProducts.length > 0 
-        ? branchAwareProducts.reduce((sum, p) => {
-            const salePrice = Number(p.sale_price || 0)
-            const purchasePrice = Number(p.purchase_price || 0)
-            const m = salePrice > 0 ? ((salePrice - purchasePrice) / salePrice) * 100 : 0
-            return sum + m
-          }, 0) / branchAwareProducts.length
-        : 0
+      const marginSum = costTotal((branchAwareProducts || []).map(p => costMargin(Number(p.sale_price || 0), knownCost(p.purchase_price))))
+      const averageMargin = marginSum === null ? null : branchAwareProducts.length > 0 ? marginSum / branchAwareProducts.length : 0
 
       // Sales Analysis
       let totalRevenue = 0
-      const productSalesMap = new Map<string, { 
-        name: string; 
-        category: string; 
-        units: number; 
-        revenue: number; 
-        cost: number 
+      const productSalesMap = new Map<string, {
+        name: string;
+        category: string;
+        units: number;
+        revenue: number;
+        cost: number | null
       }>()
 
       // Sumaba TODAS las ventas del periodo, anuladas incluidas, mientras
@@ -487,23 +504,23 @@ const InventoryReports: React.FC = () => {
         if (Array.isArray(items)) {
           items.forEach((item) => {
             const pid = item.product_id
-            const current = productSalesMap.get(pid) || { 
-              name: item.products?.name || 'Desconocido', 
-              category: item.products?.category?.name || 'N/A', 
-              units: 0, 
-              revenue: 0, 
-              cost: 0 
+            const current = productSalesMap.get(pid) || {
+              name: item.products?.name || 'Desconocido',
+              category: item.products?.category?.name || 'N/A',
+              units: 0,
+              revenue: 0,
+              cost: 0
             }
-            
+
             // Estimación de costo basada en el producto actual (limitación: no histórico)
-            const unitCost = item.products?.purchase_price || 0
-            
+            const unitCost = knownCost(item.products?.purchase_price)
+
             productSalesMap.set(pid, {
               name: current.name,
               category: current.category,
               units: current.units + Number(item.quantity || 0),
               revenue: current.revenue + Number(item.subtotal || 0),
-              cost: current.cost + (Number(item.quantity || 0) * Number(unitCost || 0))
+              cost: costTotal([current.cost, unitCost === null ? null : Number(item.quantity || 0) * unitCost])
             })
           })
         }
@@ -511,8 +528,8 @@ const InventoryReports: React.FC = () => {
 
       const topSellingProducts: ProductSales[] = Array.from(productSalesMap.entries())
         .map(([id, data]) => {
-          const profit = data.revenue - data.cost
-          const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0
+          const profit = costProfit(data.revenue, data.cost)
+          const margin = costMargin(data.revenue, data.cost)
           return {
             id,
             name: data.name,
@@ -520,7 +537,7 @@ const InventoryReports: React.FC = () => {
             unitsSold: data.units,
             revenue: data.revenue,
             profit,
-            margin: Number(margin.toFixed(1)),
+            margin: margin === null ? null : Number(margin.toFixed(1)),
           }
         })
         .sort((a, b) => b.revenue - a.revenue)
@@ -530,23 +547,23 @@ const InventoryReports: React.FC = () => {
       // Profitability Analysis
       const profitabilityAnalysis: ProfitData[] = Array.from(productSalesMap.values())
         .map(data => {
-          const profit = data.revenue - data.cost
-          const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0
+          const profit = costProfit(data.revenue, data.cost)
+          const margin = costMargin(data.revenue, data.cost)
           const avgPrice = data.units > 0 ? data.revenue / data.units : 0
-          const avgCost = data.units > 0 ? data.cost / data.units : 0
-          
+          const avgCost = data.cost === null ? null : data.units > 0 ? data.cost / data.units : 0
+
           return {
             product: data.name,
             category: data.category,
             cost: avgCost,
             price: avgPrice,
-            margin: Number(margin.toFixed(1)),
-            profit: profit / (data.units || 1),
+            margin: margin === null ? null : Number(margin.toFixed(1)),
+            profit: profit === null ? null : profit / (data.units || 1),
             volume: data.units,
             totalProfit: profit
           }
         })
-        .sort((a, b) => b.totalProfit - a.totalProfit)
+        .sort((a, b) => (b.totalProfit ?? -Infinity) - (a.totalProfit ?? -Infinity))
       // Sin slice aqui: se recorta tras filtrar por categoria (ver filteredProfitability).
 
       // Stock Movements
@@ -556,7 +573,7 @@ const InventoryReports: React.FC = () => {
         type: (m.type || m.movement_type || 'ajuste') as StockMovement['type'],
         product: m.product?.name || 'Desconocido',
         quantity: Number(m.quantity || 0),
-        value: Math.abs(Number(m.quantity || 0) * Number(m.product?.purchase_price || 0)), // Estimado
+        value: m.product?.purchase_price == null ? null : Math.abs(Number(m.quantity || 0) * Number(m.product.purchase_price)), // Estimado
         reason: m.reason || m.notes || '',
       }))
 
@@ -576,7 +593,7 @@ const InventoryReports: React.FC = () => {
         outOfStockItems,
         totalSuppliers,
         totalCategories,
-        averageMargin: Number(averageMargin.toFixed(1)),
+        averageMargin: averageMargin === null ? null : Number(averageMargin.toFixed(1)),
         totalRevenue,
         topSellingProducts,
         categoryDistribution,
@@ -602,7 +619,7 @@ const InventoryReports: React.FC = () => {
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedBranchId, supabase, selectedDateRange])
+  }, [selectedBranchId, supabase, selectedDateRange, organizationId, setReportData])
 
   // Datos filtrados por los selectores de Categoría / Proveedor.
   // El recorte (top-N) se aplica DESPUÉS del filtro para que elegir una categoría
@@ -839,7 +856,7 @@ const InventoryReports: React.FC = () => {
         />
         <InventoryKpiCard
           title="Margen promedio"
-          value={`${reportData.averageMargin}%`}
+          value={percent(reportData.averageMargin)}
           hint={`Sin ponderar · ${kpiScopeHint}`}
           accent={{ border: 'border-l-violet-500', icon: 'text-violet-500' }}
           icon={Target}
@@ -917,14 +934,14 @@ const InventoryReports: React.FC = () => {
                   {reportData.categoryDistribution.slice(0, 5).map((category) => (
                     <div key={category.name} className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <div 
+                        <div
                           className="w-3 h-3 rounded-full mr-3"
                           style={{ backgroundColor: category.color }}
                         />
                         <span className="text-sm font-medium dark:text-gray-300">{category.name}</span>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-foreground">{category.percentage}%</p>
+                        <p className="text-sm font-semibold text-foreground">{percent(category.percentage)}</p>
                         <p className="text-xs text-muted-foreground">{category.productCount} productos</p>
                       </div>
                     </div>
@@ -970,7 +987,7 @@ const InventoryReports: React.FC = () => {
                           <td className="text-right py-3 dark:text-gray-300">{product.unitsSold.toLocaleString()}</td>
                           <td className="text-right py-3 dark:text-gray-300">{formatCurrency(product.revenue)}</td>
                           <td className="text-right py-3 dark:text-gray-300">{formatCurrency(product.profit)}</td>
-                          <td className="text-right py-3 dark:text-gray-300">{product.margin}%</td>
+                          <td className="text-right py-3 dark:text-gray-300">{percent(product.margin)}</td>
                         </tr>
                       ))
                     )}
@@ -989,7 +1006,7 @@ const InventoryReports: React.FC = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-foreground">
                     <span>{category.name}</span>
-                    <div 
+                    <div
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: category.color }}
                     />
@@ -1007,11 +1024,11 @@ const InventoryReports: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Participación:</span>
-                      <span className="font-semibold text-foreground">{category.percentage}%</span>
+                      <span className="font-semibold text-foreground">{percent(category.percentage)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Margen Promedio:</span>
-                      <span className="font-semibold text-foreground">{category.averageMargin}%</span>
+                      <span className="font-semibold text-foreground">{percent(category.averageMargin)}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -1104,7 +1121,7 @@ const InventoryReports: React.FC = () => {
                         </td>
                         <td className="text-right py-3">
                           <span className={movement.value > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                            {formatCurrency(Math.abs(movement.value))}
+                            {formatCurrency(movement.value === null ? null : Math.abs(movement.value))}
                           </span>
                         </td>
                         <td className="py-3 dark:text-gray-300">{movement.reason}</td>
@@ -1152,8 +1169,8 @@ const InventoryReports: React.FC = () => {
                           <td className="text-right py-3 dark:text-gray-300">{formatCurrency(item.cost)}</td>
                           <td className="text-right py-3 dark:text-gray-300">{formatCurrency(item.price)}</td>
                           <td className="text-right py-3">
-                            <span className={`font-semibold ${item.margin >= 30 ? 'text-green-600 dark:text-green-400' : item.margin >= 20 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {item.margin}%
+                            <span className={`font-semibold ${item.margin !== null && item.margin >= 30 ? 'text-green-600 dark:text-green-400' : item.margin !== null && item.margin >= 20 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {percent(item.margin)}
                             </span>
                           </td>
                           <td className="text-right py-3 font-semibold text-green-600 dark:text-green-400">

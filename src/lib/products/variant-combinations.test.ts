@@ -12,10 +12,10 @@ describe('variant combinations', () => {
     ])
 
     expect(result.map((item) => item.key)).toEqual([
-      'color=Negro|size=M',
-      'color=Negro|size=L',
-      'color=Blanco|size=M',
-      'color=Blanco|size=L',
+      'color=negro|size=m',
+      'color=negro|size=l',
+      'color=blanco|size=m',
+      'color=blanco|size=l',
     ])
   })
 
@@ -24,7 +24,7 @@ describe('variant combinations', () => {
       { key: ' color ', options: [' Negro ', 'negro', ''] },
     ])
 
-    expect(result).toEqual([{ key: 'color=Negro', attributes: { color: 'Negro' }, name: 'Negro' }])
+    expect(result).toEqual([{ key: 'color=negro', attributes: { color: 'Negro' }, name: 'Negro' }])
   })
 
   it('preserves edited values when combinations are regenerated', () => {
@@ -51,6 +51,6 @@ describe('variant combinations', () => {
     })
 
     expect(merged[0]).toMatchObject({ sku: 'REM-N-M', salePrice: 95000, stockQuantity: 4 })
-    expect(merged[1]).toMatchObject({ clientKey: 'color=Negro|size=L', salePrice: 90000, stockQuantity: 0 })
+    expect(merged[1]).toMatchObject({ clientKey: 'color=negro|size=l', salePrice: 90000, stockQuantity: 0 })
   })
 })

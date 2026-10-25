@@ -8,7 +8,7 @@ export type RepairCostPartInput = {
   key: string
   quantity: number
   unitPrice: number
-  unitCost: number
+  unitCost: number | null
   discountAmount: number
   taxRate: RepairTaxRate
   lineType?: RepairLineType | null
@@ -57,8 +57,8 @@ export type RepairCostSummary = {
   partsSubtotal: number
   servicesSubtotal: number
   chargedPartsSubtotal: number
-  includedMaterialsInternalCost: number
-  partsInternalCost: number
+  includedMaterialsInternalCost: number | null
+  partsInternalCost: number | null
   additionalCharges: number
   deductions: number
   discountAmount: number
@@ -94,6 +94,8 @@ export function calculateRepairCost(input: RepairCostInput): RepairCostSummary {
   const components: Array<{ rate: RepairTaxRate; gross: number }> = [
     { rate: input.laborTaxRate, gross: laborAmount + additionalCharges },
   ]
+  let unknownInternalCost = false
+  let unknownIncludedCost = false
   let partsSubtotal = 0
   let partsInternalCost = 0
   let servicesSubtotal = 0
@@ -110,7 +112,11 @@ export function calculateRepairCost(input: RepairCostInput): RepairCostSummary {
     if (lineType === 'service') {
       servicesSubtotal += subtotal
     } else {
-      const internalCost = finiteNonNegative(part.unitCost) * quantity
+      if (part.unitCost === null) {
+        unknownInternalCost = true
+        if (lineType === 'included_material') unknownIncludedCost = true
+      }
+      const internalCost = part.unitCost === null ? 0 : finiteNonNegative(part.unitCost) * quantity
       partsInternalCost += internalCost
       if (lineType === 'included_material') includedMaterialsInternalCost += internalCost
       else chargedPartsSubtotal += subtotal
@@ -170,8 +176,8 @@ export function calculateRepairCost(input: RepairCostInput): RepairCostSummary {
     partsSubtotal,
     servicesSubtotal,
     chargedPartsSubtotal,
-    includedMaterialsInternalCost,
-    partsInternalCost,
+    includedMaterialsInternalCost: unknownIncludedCost ? null : includedMaterialsInternalCost,
+    partsInternalCost: unknownInternalCost ? null : partsInternalCost,
     additionalCharges,
     deductions,
     discountAmount,
@@ -201,7 +207,7 @@ export function validateRepairCost(
 
   let needsAdminOverride = false
   for (const part of input.parts ?? []) {
-    const values = [part.quantity, part.unitPrice, part.unitCost, part.discountAmount]
+    const values = [part.quantity, part.unitPrice, part.discountAmount, ...(part.unitCost === null ? [] : [part.unitCost])]
     if (values.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
       if (!violations.some((item) => item.code === 'NEGATIVE_AMOUNT')) {
         violations.push({ code: 'NEGATIVE_AMOUNT', partKey: part.key })
@@ -216,7 +222,7 @@ export function validateRepairCost(
       ? Math.max(0, gross - part.discountAmount) / part.quantity
       : 0
     if (normalizeRepairLineType(part.lineType) === 'charged_part'
-      && part.quantity > 0 && netUnitPrice < part.unitCost) {
+      && part.unitCost !== null && part.quantity > 0 && netUnitPrice < part.unitCost) {
       needsAdminOverride = true
       if (!policy.isAdmin) violations.push({ code: 'PART_BELOW_COST', partKey: part.key })
     }

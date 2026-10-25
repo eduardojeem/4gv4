@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Barcode, CheckCircle2, Copy, ExternalLink, ImageOff, ScanLine, Search, Store, XCircle } from 'lucide-react'
+import { Barcode, CheckCircle2, Copy, ImageOff, ScanLine, Store, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 
 type GlobalProduct = {

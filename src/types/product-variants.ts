@@ -33,7 +33,7 @@ export interface ProductVariant {
   // Precios específicos de la variante
   price: number
   wholesale_price?: number
-  cost_price?: number
+  cost_price?: number | null
   
   // Inventario específico de la variante
   stock: number
@@ -80,7 +80,7 @@ export interface ProductWithVariants {
   // Precio base (si no tiene variantes)
   base_price?: number
   base_wholesale_price?: number
-  base_cost_price?: number
+  base_cost_price?: number | null
   
   // Stock base (si no tiene variantes)
   base_stock?: number

@@ -62,6 +62,10 @@ describe('actualizar un producto sin tocar lo que no se mandó', () => {
     expect(productUpdateSchema.safeParse({ id: ID, visibility: 'otra-cosa' }).success).toBe(false)
   })
 
+  it('normaliza el SKU editado sin agregar campos omitidos', () => {
+    expect(datos({ sku: ' aBc_123 ' })).toEqual({ id: ID, sku: 'ABC_123' })
+  })
+
   /** Si la actualización sí declara variantes, la validación sigue corriendo. */
   it('pedir variantes sin cargarlas sigue siendo un error', () => {
     const resultado = productUpdateSchema.safeParse({ id: ID, has_variants: true })
@@ -81,6 +85,12 @@ describe('crear un producto no cambió', () => {
     expect(data.min_stock).toBe(0)
     expect(data.is_active).toBe(true)
     expect(data.unit_measure).toBe('unidad')
+  })
+
+  it('distingue un costo desconocido de un costo cero explícito', () => {
+    expect(productSchema.safeParse({ name: 'Producto sin costo', sku: 'SIN-COSTO', sale_price: 100 }).success).toBe(true)
+    expect(productSchema.safeParse({ name: 'Producto gratis', sku: 'COSTO-CERO', sale_price: 100, purchase_price: 0 }).success).toBe(true)
+    expect(productSchema.safeParse({ name: 'Costo null', sku: 'COSTO-NULL', sale_price: 100, purchase_price: null }).success).toBe(true)
   })
 
   it('un producto con variantes sigue necesitando sus variantes', () => {

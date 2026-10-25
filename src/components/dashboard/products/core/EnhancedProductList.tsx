@@ -69,12 +69,13 @@ const getStockStatus = (product: Product) => {
 }
 
 const getMarginInfo = (product: Product) => {
-  if (product.purchase_price <= 0 || product.sale_price <= 0) {
-    return { margin: 0, marginPercent: 0, status: 'unknown' }
+  if (product.purchase_price == null) {
+    return { margin: null, marginPercent: null, status: 'unknown' }
   }
-  
+  if (product.sale_price <= 0) return { margin: null, marginPercent: null, status: 'unknown' }
   const margin = product.sale_price - product.purchase_price
-  const marginPercent = (margin / product.purchase_price) * 100
+  const marginPercent = product.purchase_price > 0 ? (margin / product.purchase_price) * 100 : null
+  if (marginPercent === null) return { margin, marginPercent, status: 'unknown' }
   
   let status = 'good'
   if (marginPercent < 10) status = 'low'
@@ -265,13 +266,13 @@ const ProductTableRow = ({
               marginInfo.status === 'good' && 'text-emerald-600',
               marginInfo.status === 'high' && 'text-blue-600'
             )}>
-              {marginInfo.marginPercent.toFixed(1)}%
+              {marginInfo.marginPercent === null ? '—' : `${marginInfo.marginPercent.toFixed(1)}%`}
             </span>
             {marginInfo.status === 'low' && <TrendingDown className="h-4 w-4 text-red-600" />}
             {marginInfo.status === 'high' && <TrendingUp className="h-4 w-4 text-blue-600" />}
           </div>
           <div className="text-xs text-emerald-600 font-medium">
-            +{formatCurrency(marginInfo.margin)}
+            {marginInfo.margin === null ? 'Margen no disponible' : `+${formatCurrency(marginInfo.margin)}`}
           </div>
         </div>
       </TableCell>
@@ -442,7 +443,7 @@ const ProductCard = ({
                       marginInfo.status === 'good' && 'text-emerald-600',
                       marginInfo.status === 'high' && 'text-blue-600'
                     )}>
-                      {marginInfo.marginPercent.toFixed(1)}%
+                      {marginInfo.marginPercent === null ? '—' : `${marginInfo.marginPercent.toFixed(1)}%`}
                     </span>
                     {marginInfo.status === 'low' && <TrendingDown className="h-4 w-4 text-red-600" />}
                     {marginInfo.status === 'high' && <TrendingUp className="h-4 w-4 text-blue-600" />}
@@ -461,7 +462,7 @@ const ProductCard = ({
                 <div className="text-center">
                   <p className="text-xs text-gray-600">Ganancia</p>
                   <p className="text-sm font-semibold text-emerald-600">
-                    {formatCurrency(marginInfo.margin)}
+                    {marginInfo.margin === null ? '—' : formatCurrency(marginInfo.margin)}
                   </p>
                 </div>
               </div>

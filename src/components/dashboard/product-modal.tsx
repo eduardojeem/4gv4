@@ -1,4 +1,7 @@
 'use client'
+import { useOptionalBranch } from '@/contexts/branch-context'
+
+import { getVariantCombinationKey } from '@/lib/products/variant-safety'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
@@ -62,7 +65,8 @@ import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
-import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useProductCostAccess } from '@/hooks/use-can-view-cost'
+import { omitUnauthorizedProductCosts } from '@/lib/products/cost-payload'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { ForeignPriceSection } from '@/components/dashboard/currency/ForeignPriceSection'
 import {
@@ -202,15 +206,24 @@ export function normalizeProductVariantsForForm(product: unknown): {
         }
       }
 
-      const attrKey = Object.entries(attributes)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, val]) => `${k}=${val}`)
-        .join('|')
+      const attrKey = getVariantCombinationKey(attributes)
       const clientKey = String(v.clientKey || v.client_key || attrKey || v.id || `variant-${index + 1}`)
 
       const name = String(v.name || v.variant_name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`).trim()
       const sku = String(v.sku || (product.sku ? `${product.sku}-${index + 1}` : `VAR-${index + 1}`)).trim().toUpperCase()
       const isValidUuid = typeof v.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.id)
+      const rawPurchasePrice = v.purchasePrice !== undefined
+        ? v.purchasePrice
+        : v.purchase_price !== undefined
+          ? v.purchase_price
+          : product.purchase_price
+      const purchasePrice = rawPurchasePrice == null
+        ? null
+        : typeof rawPurchasePrice === 'number'
+          ? rawPurchasePrice
+          : typeof rawPurchasePrice === 'string' && rawPurchasePrice.trim() !== ''
+            ? Number(rawPurchasePrice)
+            : null
 
       return {
         id: isValidUuid ? String(v.id) : undefined,
@@ -219,7 +232,7 @@ export function normalizeProductVariantsForForm(product: unknown): {
         attributes,
         sku: sku || `VAR-${index + 1}`,
         barcode: v.barcode ? String(v.barcode).trim() : undefined,
-        purchasePrice: Number(v.purchasePrice ?? v.purchase_price ?? product.purchase_price ?? 0),
+        purchasePrice: Number.isFinite(purchasePrice) ? purchasePrice : null,
         salePrice: Number(v.salePrice ?? v.sale_price ?? product.sale_price ?? 0),
         wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null
           ? Number(v.wholesalePrice)
@@ -303,13 +316,16 @@ export function ProductModal({
   const productRef = useRef(product)
   productRef.current = product
   const productId = product?.id ?? null
+  const branchScope = useOptionalBranch()
+  const variantBranchId = branchScope?.selectedBranch?.id === branchScope?.selectedBranchId ? branchScope?.selectedBranchId ?? null : null
+  const variantHydrationKey = `${productId}:${variantBranchId ?? 'unresolved'}`
+  const openedVariantBranch = useRef<string | null>(null)
   const listedVariants = (product as (Product & { variants?: unknown[] }) | null)?.variants
   const hasRecoveredVariantData = Boolean(
     product && !product.has_variants && Array.isArray(listedVariants) && listedVariants.length > 0
   )
   const productNeedsVariantHydration = Boolean(
-    product?.has_variants
-    && (!Array.isArray(listedVariants) || listedVariants.length === 0)
+    product && (product.has_variants || (Array.isArray(listedVariants) && listedVariants.length > 0))
   )
   const [hydratedVariantProductId, setHydratedVariantProductId] = useState<string | null>(null)
   const [isLoadingExistingVariants, setIsLoadingExistingVariants] = useState(false)
@@ -326,7 +342,7 @@ export function ProductModal({
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
-  const canViewCost = useCanViewCost()
+  const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
   const { businessVertical, operatingModel } = useSubscriptionStatus()
   // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
   const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
@@ -361,7 +377,7 @@ export function ProductModal({
       foreign_sale_price: null,
       foreign_wholesale_price: null,
       foreign_purchase_price: null,
-      purchase_price: 0,
+      purchase_price: null,
       sale_price: 0,
       wholesale_price: 0,
       offer_price: 0,
@@ -422,7 +438,7 @@ export function ProductModal({
   useEffect(() => {
     postSaleDefaultsRef.current = postSaleDefaultsFor(formProfile.vertical)
   }, [formProfile.vertical])
-  const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === productId
+  const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === variantHydrationKey
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
     isSubmitting: isSubmitting || isUploadingImages || isLoadingExistingVariants,
@@ -609,7 +625,7 @@ export function ProductModal({
         device_brand: (product as { device_brand?: string | null }).device_brand || '',
         device_models: (product as { device_models?: string[] | null }).device_models ?? [],
         supplier_id: product.supplier_id || '',
-        purchase_price: product.purchase_price || 0,
+        purchase_price: product.purchase_price ?? null,
         sale_price: product.sale_price || 0,
         wholesale_price: product.wholesale_price || 0,
         ...foreignPriceDefaults(product),
@@ -657,7 +673,7 @@ export function ProductModal({
         foreign_sale_price: null,
         foreign_wholesale_price: null,
         foreign_purchase_price: null,
-        purchase_price: 0,
+        purchase_price: null,
         sale_price: 0,
         wholesale_price: 0,
         offer_price: 0,
@@ -688,30 +704,41 @@ export function ProductModal({
   // incluyen `has_variants`. Recuperamos el detalle completo para mostrar las
   // combinaciones existentes y evitar que una edición las borre.
   useEffect(() => {
+    if (!isOpen) openedVariantBranch.current = null
     if (!isOpen || !productId || !productNeedsVariantHydration) {
       setIsLoadingExistingVariants(false)
       setVariantLoadError(null)
       return
     }
 
+    if (!variantBranchId || (openedVariantBranch.current && openedVariantBranch.current !== variantBranchId)) {
+      setIsLoadingExistingVariants(false)
+      setVariantLoadError('Seleccioná una sucursal y volvé a abrir el producto para cargar su stock.')
+      return
+    }
+    openedVariantBranch.current = variantBranchId
     const controller = new AbortController()
     setIsLoadingExistingVariants(true)
     setVariantLoadError(null)
     setHydratedVariantProductId(null)
 
-    void fetch(`/api/products/${productId}`, { signal: controller.signal, cache: 'no-store' })
+    void fetch(`/api/products/${productId}?variant_stock_scope=branch&branch_id=${encodeURIComponent(variantBranchId)}`, { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => null) as { success?: boolean; data?: unknown; error?: string } | null
         if (!response.ok || !payload?.success || !payload.data) {
           throw new Error(payload?.error || 'No se pudieron cargar las variantes guardadas.')
         }
 
+        if (controller.signal.aborted) return
+        if (form.getFieldState('variants').isDirty) {
+          throw new Error('Hay un borrador de variantes sin contexto de sucursal verificado. Descartalo y volvé a abrir el producto antes de editar stock.')
+        }
         const variantData = normalizeProductVariantsForForm(payload.data)
         form.reset(
           { ...form.getValues(), ...variantData },
           { keepDirty: true, keepDirtyValues: true },
         )
-        setHydratedVariantProductId(productId)
+        setHydratedVariantProductId(variantHydrationKey)
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
@@ -722,7 +749,7 @@ export function ProductModal({
       })
 
     return () => controller.abort()
-  }, [form, isOpen, productId, productNeedsVariantHydration])
+  }, [form, isOpen, productId, productNeedsVariantHydration, variantBranchId, variantHydrationKey])
 
   // Se guarda lo escrito en cada cambio, pero solo mientras el formulario esta
   // sucio: sin eso, abrir un producto y cerrarlo dejaria un borrador identico a
@@ -937,7 +964,7 @@ export function ProductModal({
       // Sync legacy image_url field with the first image of the array
       image_url: images.length > 0 ? images[0] : null,
       // Asegurar tipos numéricos
-      purchase_price: Number(data.purchase_price),
+      purchase_price: data.purchase_price == null ? null : Number(data.purchase_price),
       sale_price: Number(data.sale_price),
       stock_quantity: Boolean(data.has_variants && Array.isArray(data.variants) && data.variants.length > 0)
         ? data.variants.reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
@@ -983,22 +1010,15 @@ export function ProductModal({
     setSaveFeedback(null)
 
     try {
-      const cleanedData = cleanProductData(values)
-
-      // El costo (purchase_price) es editable solo por admin/super_admin.
-      // Para el resto, no se envía: en edición se preserva el valor actual y
-      // en creación queda en el default de la base.
-      if (!canViewCost) {
-        delete (cleanedData as Record<string, unknown>).purchase_price
-        delete (cleanedData as Record<string, unknown>).foreign_purchase_price
-      }
+      if (!isExistingVariantDataReady) throw new Error('Esperá a que se verifique el stock de la sucursal antes de guardar.')
+      const cleanedData = omitUnauthorizedProductCosts(cleanProductData(values), canUpdateCost)
 
       // Ensure we're not sending an ID for new products
       if (!product && 'id' in cleanedData) {
         delete (cleanedData as Record<string, unknown>).id
       }
 
-      await onSave(cleanedData as unknown as ProductFormData)
+      await onSave({ ...cleanedData, ...(values.has_variants && variantBranchId ? { branch_id: variantBranchId } : {}) } as unknown as ProductFormData)
 
       toast.success(
         product ? 'Producto actualizado correctamente' : 'Producto creado correctamente',
@@ -1090,12 +1110,13 @@ export function ProductModal({
   }
 
   const calculateMarginValue = () => {
+    if (purchasePrice == null) return '—'
     const pPrice = Number(purchasePrice)
     const sPrice = Number(salePrice)
     if (pPrice > 0 && sPrice > 0) {
       return ((sPrice - pPrice) / sPrice * 100).toFixed(1)
     }
-    return '0'
+    return '—'
   }
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
@@ -2102,7 +2123,7 @@ export function ProductModal({
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Precios Base</h3>
                     </div>
 
-                    <ForeignPriceSection form={form} canViewCost={canViewCost} hasVariants={Boolean(watch('has_variants'))} />
+                    <ForeignPriceSection form={form} canViewCost={canViewCost && canUpdateCost} hasVariants={Boolean(watch('has_variants'))} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {canViewCost && (
@@ -2113,7 +2134,7 @@ export function ProductModal({
                           <FormItem>
                             <FormLabel className="flex items-center gap-2">
                               <GSIcon className="h-4 w-4" />
-                              Precio de Compra (Costo) <FieldRequirement required />
+                              Precio de Compra (Costo) <FieldRequirement />
                             </FormLabel>
                             <FormControl>
                               <Input
@@ -2121,7 +2142,8 @@ export function ProductModal({
                                 step="0.01"
                                 className="text-lg"
                                 {...field}
-                                readOnly={isForeignPriced}
+                                value={field.value ?? ''}
+                                readOnly={isForeignPriced || !canUpdateCost}
                                 title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                               />
                             </FormControl>
@@ -2151,7 +2173,7 @@ export function ProductModal({
                               />
                             </FormControl>
                             <FormMessage />
-                            {canViewCost && purchasePrice > 0 && salePrice > 0 && (
+                            {canViewCost && purchasePrice != null && Number(salePrice) > 0 && (
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-gray-600 dark:text-gray-400">Margen:</span>
                                 <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -3281,10 +3303,12 @@ export function ProductModal({
                   )}
                   <ProductVariantsEditor
                     businessVertical={businessVertical}
+                    canViewCost={canViewCost}
+                    canUpdateCost={canUpdateCost}
                     value={variantValue}
                     baseSku={sku}
                     basePrices={{
-                      purchasePrice: Number(purchasePrice) || 0,
+                      purchasePrice: purchasePrice == null ? null : Number(purchasePrice),
                       salePrice: Number(salePrice) || 0,
                       wholesalePrice: Number(wholesalePrice) > 0 ? Number(wholesalePrice) : undefined,
                     }}

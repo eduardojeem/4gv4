@@ -58,44 +58,11 @@ export async function createSubscriptionPagoparCheckout(params: {
     throw new SubscriptionCheckoutError('Pagopar no está configurado.', 501)
   }
 
-  const state = await getCurrentOrganizationSubscription(organization.id)
-  const requestedCode = targetPlanCode
-    ? normalizePlanCode(targetPlanCode)
-    : normalizePlanCode(state.currentPlan.code)
-  const targetPlan = state.plans.find((plan) => plan.code === requestedCode)
-
-  if (!targetPlan) {
-    throw new SubscriptionCheckoutError('El plan solicitado no existe o no está disponible.', 404)
-  }
-
-  const isPlanChange = targetPlan.code !== state.currentPlan.code
-  if (isPlanChange && !canChangePlan) {
-    throw new SubscriptionCheckoutError('Solo el propietario puede cambiar el plan.', 403)
-  }
-
-  if (isPlanChange) {
-    const assessment = await assessPlanChange(organization.id, targetPlan.code)
-    if (assessment.success === false) {
-      throw new SubscriptionCheckoutError(
-        assessment.error,
-        assessment.conflictingResources ? 409 : 400,
-        assessment.conflictingResources,
-      )
-    }
-  }
-
-  const amountPyg = getPagoparAmountInPyg(targetPlan.price_monthly, targetPlan.currency)
-  if (amountPyg <= 0) {
-    throw new SubscriptionCheckoutError('El plan solicitado no tiene monto para cobrar.', 400)
-  }
-
-  const missingFields = getMissingBillingFields(state.billingProfile)
-  if (missingFields.length > 0) {
-    throw new SubscriptionCheckoutError(
-      `Completa los datos de facturación antes de pagar: ${missingFields.join(', ')}.`,
-      400,
-    )
-  }
+  const { state, targetPlan, amountPyg } = await resolveSubscriptionCheckoutTarget({
+    organizationId: organization.id,
+    targetPlanCode,
+    canChangePlan,
+  })
 
   const admin = createAdminSupabase()
   const pendingPaymentMethod = paymentMethod === 'qr' ? 'Pagopar QR' : 'Pagopar Tarjeta'
@@ -195,4 +162,56 @@ export async function createSubscriptionPagoparCheckout(params: {
       error instanceof PagoparOrderCreationError ? error.correlationId : correlationId,
     )
   }
+}
+
+/**
+ * Valida plan, permisos, límites y datos de facturación antes de cobrar.
+ * Compartido por todos los proveedores de pago de la suscripción.
+ */
+export async function resolveSubscriptionCheckoutTarget(params: {
+  organizationId: string
+  targetPlanCode?: string | null
+  canChangePlan: boolean
+}) {
+  const { organizationId, targetPlanCode, canChangePlan } = params
+  const state = await getCurrentOrganizationSubscription(organizationId)
+  const requestedCode = targetPlanCode
+    ? normalizePlanCode(targetPlanCode)
+    : normalizePlanCode(state.currentPlan.code)
+  const targetPlan = state.plans.find((plan) => plan.code === requestedCode)
+
+  if (!targetPlan) {
+    throw new SubscriptionCheckoutError('El plan solicitado no existe o no está disponible.', 404)
+  }
+
+  const isPlanChange = targetPlan.code !== state.currentPlan.code
+  if (isPlanChange && !canChangePlan) {
+    throw new SubscriptionCheckoutError('Solo el propietario puede cambiar el plan.', 403)
+  }
+
+  if (isPlanChange) {
+    const assessment = await assessPlanChange(organizationId, targetPlan.code)
+    if (assessment.success === false) {
+      throw new SubscriptionCheckoutError(
+        assessment.error,
+        assessment.conflictingResources ? 409 : 400,
+        assessment.conflictingResources,
+      )
+    }
+  }
+
+  const amountPyg = getPagoparAmountInPyg(targetPlan.price_monthly, targetPlan.currency)
+  if (amountPyg <= 0) {
+    throw new SubscriptionCheckoutError('El plan solicitado no tiene monto para cobrar.', 400)
+  }
+
+  const missingFields = getMissingBillingFields(state.billingProfile)
+  if (missingFields.length > 0) {
+    throw new SubscriptionCheckoutError(
+      `Completa los datos de facturación antes de pagar: ${missingFields.join(', ')}.`,
+      400,
+    )
+  }
+
+  return { state, targetPlan, amountPyg }
 }

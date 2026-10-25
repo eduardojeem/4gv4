@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Check, Loader2, ReceiptText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -19,6 +20,7 @@ export function RepairFinalPriceCorrectionDialog({ open, repair, onOpenChange, o
 function FinalPriceForm({ open, repair, onOpenChange, onSaved }: {
   open: boolean; repair: Repair; onOpenChange: (open: boolean) => void; onSaved: () => void | Promise<void>
 }) {
+  const router = useRouter()
   const currentTotal = repair.finalCost ?? repair.estimatedCost ?? 0
   const paid = repair.paidAmount ?? 0
   const [newTotal, setNewTotal] = useState(currentTotal)
@@ -61,7 +63,7 @@ function FinalPriceForm({ open, repair, onOpenChange, onSaved }: {
           <div className="rounded-xl border bg-muted/30 p-4 text-sm"><p>Precio actual: <strong>{formatCurrency(currentTotal)}</strong></p><p className="mt-1">Pagado: <strong>{formatCurrency(paid)}</strong></p></div>
           <div><Label htmlFor="corrected-final-price">Nuevo precio final</Label><div className="relative mt-1"><Input id="corrected-final-price" type="number" min={0} value={newTotal} onChange={(event) => setNewTotal(Number(event.target.value) || 0)} className="h-12 pr-12 text-right text-lg font-bold" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Gs.</span></div></div>
           <div><Label htmlFor="final-price-correction-reason">Motivo obligatorio</Label><Input id="final-price-correction-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ej.: El precio final fue digitado incorrectamente" className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Mínimo 10 caracteres. Quedará registrado con tu usuario y fecha.</p></div>
-          {overpayment > 0 && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex gap-2 font-semibold"><AlertTriangle className="h-4 w-4 shrink-0" />Existe un excedente de {formatCurrency(overpayment)}</div><p className="text-xs">No se puede reducir el precio por debajo de lo pagado sin registrar qué ocurrió con ese dinero. Creá y resolvé primero un caso de devolución o saldo a favor en Posventa.</p><Button type="button" variant="outline" size="sm" onClick={() => { window.location.href = `/dashboard/after-sales?repairId=${repair.id}` }}>Ir a Posventa</Button></div>}
+          {overpayment > 0 && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex gap-2 font-semibold"><AlertTriangle className="h-4 w-4 shrink-0" />Existe un excedente de {formatCurrency(overpayment)}</div><p className="text-xs">No se puede reducir el precio por debajo de lo pagado sin registrar qué ocurrió con ese dinero. Creá y resolvé primero un caso de devolución o saldo a favor en Posventa.</p><Button type="button" variant="outline" size="sm" onClick={() => { router.push(`/dashboard/after-sales?repairId=${repair.id}`) }}>Ir a Posventa</Button></div>}
           {error && <div role="alert" className="flex gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
         </div> : <div className="space-y-4"><div className="rounded-xl border bg-card p-4"><h3 className="font-semibold">Resumen antes de confirmar</h3><dl className="mt-4 space-y-3 text-sm"><AmountRow label="Precio anterior" value={currentTotal} /><AmountRow label="Nuevo precio final" value={newTotal} strong /><AmountRow label="Diferencia" value={difference} /><hr /><AmountRow label="Pagado (sin cambios)" value={paid} /><AmountRow label="Nuevo saldo pendiente" value={newBalance} strong /><div className="flex justify-between"><dt className="text-muted-foreground">Estado financiero</dt><dd className="font-semibold">{newStatus}</dd></div></dl></div><div className="rounded-xl border bg-muted/30 p-3 text-sm"><strong>Motivo:</strong> {reason.trim()}</div><p className="text-xs text-muted-foreground">No se modificarán pagos existentes, caja, costo interno, piezas ni inventario.</p></div>}
       </div>

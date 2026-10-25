@@ -17,7 +17,6 @@ import {
   RotateCcw,
   ScanLine,
   Search,
-  Sparkles,
   Store,
   Tag,
   Trash2,
@@ -131,7 +130,7 @@ export function GlobalProductsManager() {
   const [products, setProducts] = useState<GlobalProduct[]>([])
   const [candidates, setCandidates] = useState<GlobalProductCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
-  const [productsWithBarcode, setProductsWithBarcode] = useState(0)
+  const [_productsWithBarcode, setProductsWithBarcode] = useState(0)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [metrics, setMetrics] = useState({ active: 0, used: 0, uncategorized: 0, unbranded: 0, withoutImage: 0, inactive: 0 })
@@ -244,11 +243,6 @@ export function GlobalProductsManager() {
       ),
     [categories, categoryName],
   )
-
-  const active = useMemo(() => products.filter((p) => p.is_active), [products])
-  const used = useMemo(() => active.filter((p) => p.stores > 0), [active])
-  const noCat = useMemo(() => active.filter((p) => !p.global_category_id), [active])
-  const noBrand = useMemo(() => active.filter((p) => !p.global_brand_id), [active])
 
   // Filtrado y búsqueda
   const visible = useMemo(() => {

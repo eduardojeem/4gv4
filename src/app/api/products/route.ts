@@ -1,4 +1,6 @@
+import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -8,21 +10,21 @@ import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-b
 import { logger } from '@/lib/logger'
 import { hasPublicProductChange, invalidateMarketplaceCatalog } from '@/lib/public/cache-invalidation'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
-import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
+import { foreignPriceErrorMessage } from '@/lib/products/foreign-price'
 import type { AppRole } from '@/lib/auth/role-utils'
-import { stripProductCost, canViewProductCost, PRODUCT_COST_PERMISSION } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
 import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
-import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
 import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { recordStockAdjustment } from '@/lib/products/stock-movements'
 import { persistDeviceFields } from '@/lib/products/device-persist'
 import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
+import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
+import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null, previous?: Record<string, unknown>, patch?: Record<string, unknown>) {
   if (previous && patch && !hasPublicProductChange(previous, patch)) return
@@ -73,6 +75,7 @@ const VARIANT_ERROR_STATUS: Record<string, number> = {
   VARIANT_BRANCH_FORBIDDEN: 403,
   VARIANT_ACTOR_FORBIDDEN: 403,
   VARIANT_PRODUCT_NOT_IN_ORGANIZATION: 404,
+  VARIANT_PRODUCT_REFERENCE_FORBIDDEN: 400,
 }
 
 function getVariantErrorCode(error: { message?: string | null }): string | null {
@@ -86,7 +89,7 @@ function toVariantRpcRows(variants: Array<{
   attributes: Record<string, string>
   sku?: string
   barcode?: string
-  purchasePrice: number
+  purchasePrice?: number | null
   salePrice: number
   wholesalePrice?: number
   minStock: number
@@ -395,22 +398,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     // Se alcanzo el tope del barrido: lo listado y el total son parciales.
     const truncated = needsInMemoryPagination && (baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP || (count ?? 0) > baseProducts.length)
 
-    // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
-    // tenga el permiso específico products.read_cost.
-    let costPermissions: string[] | undefined
-    if (!canViewProductCost(user.role)) {
-      const { data: perms } = await supabase
-        .from('user_permissions')
-        .select('permission')
-        .eq('user_id', user.id)
-        .eq('permission', PRODUCT_COST_PERMISSION)
-        .eq('is_active', true)
-        .limit(1)
-      costPermissions = perms && perms.length > 0 ? [PRODUCT_COST_PERMISSION] : []
-    }
-    const visibleProducts = filteredProducts.map((product) =>
-      stripProductCost(product as Record<string, unknown>, user.role, costPermissions)
-    )
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
+    const visibleProducts = filteredProducts.map(product => redactProductCosts(product as Record<string, unknown>, costAccess))
 
     return NextResponse.json({
       success: true,
@@ -444,7 +433,17 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 // POST /api/products - Create new product
 export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { user, organization }) => {
   try {
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    const costClient = createAdminSupabase()
+    const costAccess = await resolveOrganizationProductCostAccess(costClient, {userId:user.id,organizationId:organization.id})
+    if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, rawBody.id))) {
+      return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
+    }
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id)
+
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
     const branchScope = await resolveBranchScopeForUser({
@@ -474,6 +473,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     }
     
     const validated = validationResult.data
+    if (!await productReferencesBelongToOrganization(costClient, organization.id, validated)) {
+      return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
+    }
     const resourceType = validated.unit_measure === 'servicio' ? 'services' : 'products'
     const resourceLabel = resourceType === 'services' ? 'servicio' : 'producto'
     const planGate = await canCreateResource(organization.id, resourceType)
@@ -608,12 +610,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         )
       }
 
-      const canReadCost = canViewProductCost(user.role)
-      const visibleVariants = (variants ?? []).map((variant) => {
-        if (canReadCost) return variant
-        const { purchase_price: _purchasePrice, ...visible } = variant
-        return visible
-      })
+      const visibleVariants = (variants ?? []).map(variant => redactProductCosts(variant as Record<string, unknown>, costAccess))
 
       const dispositivo = await persistDeviceFields(admin as never, {
         productId: savedProductId,
@@ -632,7 +629,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          product: redactProductCosts({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
           variants: visibleVariants,
         },
         ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
@@ -641,130 +638,47 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     }
 
     const requestedStock = Number(validated.stock_quantity || 0)
-    const branchScopedCreate = Boolean(branchScope.branchId)
-    const shouldZeroGlobalStock = Boolean(
-      branchScope.branchId &&
-      defaultBranch?.id &&
-      branchScope.branchId !== defaultBranch.id
-    )
-    
-    const { data: product, error } = await supabase
-      .from('products')
-      .insert({
-        name: validated.name,
-        organization_id: organization.id,
-        sku: validated.sku,
-        description: validated.description,
-        category_id: validated.category_id,
-        supplier_id: validated.supplier_id,
-        brand: validated.brand,
-        brand_id: validated.brand_id,
-        tags: validated.tags,
-        stock_quantity: shouldZeroGlobalStock ? 0 : requestedStock,
-        min_stock: validated.min_stock,
-        max_stock: validated.max_stock,
-        purchase_price: validated.purchase_price,
-        sale_price: validated.sale_price,
-        wholesale_price: validated.wholesale_price,
-        offer_price: validated.offer_price,
-        has_offer: validated.has_offer,
-        installments_enabled: validated.installments_enabled,
-        installments_public: validated.installments_public,
-        installments_plans: validated.installments_plans,
-        is_active: validated.is_active,
-        visibility: validated.visibility,
-        warranty_months: validated.warranty_months,
-        warranty_info: validated.warranty_info,
-        return_window_days: validated.return_window_days,
-        exchange_window_days: validated.exchange_window_days,
-        return_policy: validated.return_policy,
-        exchange_policy: validated.exchange_policy,
-        images: validated.images,
-        image_url: validated.image_url,
-        barcode: validated.barcode,
-        unit_measure: validated.unit_measure,
-        ...(await productsHaveForeignPriceColumns(supabase as never) ? foreignPriceColumns(validated) : {}),
-      })
-      .select()
-      .single()
-    
-    if (error) {
-      logger.error('Failed to create product', { error: error.message, code: error.code })
+    const targetBranchId = branchScope.branchId ?? defaultBranch?.id ?? null
+    if (requestedStock > 0 && !targetBranchId) {
+      return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para asignar el stock inicial.', code: 'BRANCH_REQUIRED' }, { status: 400 })
+    }
+    const admin = createAdminSupabase()
+    const { data: created, error } = await admin.rpc('create_simple_product_atomic', {
+      p_product: { ...validated, organization_id: organization.id },
+      p_branch_id: targetBranchId,
+      p_actor_id: user.id,
+    })
 
+    if (error) {
+      logger.error('Failed to create product atomically', { code: error.code, message: error.message })
+      const message = error.message ?? ''
+      if (message.includes('PRODUCT_REFERENCE_FORBIDDEN')) {
+        return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
+      }
+      if (message.includes('PRODUCT_BRANCH_REQUIRED')) {
+        return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para asignar el stock inicial.', code: 'BRANCH_REQUIRED' }, { status: 400 })
+      }
+      if (error.code === '23505') {
+        return NextResponse.json({ success: false, error: 'Ya existe un producto con este SKU.', code: 'SKU_ALREADY_EXISTS' }, { status: 409 })
+      }
       const foreignPriceError = foreignPriceErrorMessage(error)
       if (foreignPriceError) {
         return NextResponse.json({ success: false, error: foreignPriceError, code: 'EXCHANGE_RATE_MISSING', field: 'price_currency' }, { status: 400 })
       }
-      
-      // Handle unique constraint violations
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { success: false, error: 'Ya existe un producto con este SKU.', code: 'SKU_ALREADY_EXISTS' },
-          { status: 409 }
-        )
-      }
-      
       throw error
     }
+    const productId = String((created as { product_id?: unknown } | null)?.product_id ?? '')
+    if (!productId) throw new Error('Atomic product create returned no product id.')
+    const { data: insertedProduct, error: reloadError } = await admin.from('products')
+      .select(PRODUCT_CLIENT_COLUMNS).eq('id', productId).eq('organization_id', organization.id).single()
+    if (reloadError || !insertedProduct) throw new Error('Product was created but could not be reloaded.')
+    // El costo recién guardado no vuelve por la sesión del usuario (S1): se lee del
+    // cliente de servicio y la respuesta se oculta igual según el permiso.
+    const [product] = await hydrateProductCostsFromService(costClient, organization.id, [insertedProduct as typeof insertedProduct & { id: string }])
 
-    // Lote del stock inicial: queda registrado con sus unidades y su vencimiento.
-    if (validated.initial_batch?.expires_on && requestedStock > 0) {
-      const { error: batchError } = await supabase.from('product_batches').insert({
-        organization_id: organization.id,
-        product_id: product.id,
-        lot_code: validated.initial_batch.lot_code || null,
-        expires_on: validated.initial_batch.expires_on,
-        quantity: requestedStock,
-        created_by: user.id,
-      })
-      if (batchError) logger.warn('Se creó el producto pero no su lote inicial', { error: batchError.message })
-    }
-
-    if (branchScopedCreate && branchScope.branchId) {
-      try {
-        // Tenant, permission, and branch scope were already validated above.
-        // Use service role only for this scoped write because branch_inventory
-        // RLS can otherwise reject the post-insert synchronization.
-        const branchInventoryClient = createAdminSupabase() as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase']
-
-        if (defaultBranch?.id && defaultBranch.id !== branchScope.branchId) {
-          await upsertBranchInventoryStock({
-            supabase: branchInventoryClient,
-            branchId: defaultBranch.id,
-            productId: product.id,
-            stockQuantity: 0,
-          })
-        }
-
-        await upsertBranchInventoryStock({
-          supabase: branchInventoryClient,
-          branchId: branchScope.branchId,
-          productId: product.id,
-          stockQuantity: requestedStock,
-        })
-      } catch (branchError) {
-        logger.error('Failed to sync branch inventory after product creation', {
-          error: branchError instanceof Error ? branchError.message : branchError,
-          productId: product.id,
-          branchId: branchScope.branchId,
-        })
-
-        await createAdminSupabase()
-          .from('products')
-          .delete()
-          .eq('id', product.id)
-          .eq('organization_id', organization.id)
-
-        return NextResponse.json(
-          { success: false, error: 'No se pudo sincronizar el stock inicial de la sucursal.', code: 'BRANCH_STOCK_SYNC_FAILED' },
-          { status: 500 }
-        )
-      }
-    }
-    
     logger.info('Product created', { productId: product.id, userId: user.id })
 
-    const responseProduct = branchScopedCreate && branchScope.branchId
+    const responseProduct = targetBranchId
       ? applyBranchInventoryToProducts(
           [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
           new Map([[product.id, requestedStock]]),
@@ -788,11 +702,14 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      data: redactProductCosts({ ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     }, { status: 201 })
   } catch (error) {
+    if (error instanceof ProductCostInputError) {
+      return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
+    }
     logger.error('Product creation error', { error })
     return NextResponse.json(
       { success: false, error: 'No se pudo crear el producto.', code: 'PRODUCT_CREATE_FAILED' },
@@ -804,7 +721,17 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 // PUT /api/products - Update product
 export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { user, organization }) => {
   try {
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    const costClient = createAdminSupabase()
+    const costAccess = await resolveOrganizationProductCostAccess(costClient, {userId:user.id,organizationId:organization.id})
+    if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, rawBody.id))) {
+      return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
+    }
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id, rawBody.id)
+
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
     const branchScope = await resolveBranchScopeForUser({
@@ -839,12 +766,21 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
     
     const validated = validationResult.data
-    const { data: existingProduct, error: existingProductError } = await supabase
+    if (!await productReferencesBelongToOrganization(createAdminSupabase(), organization.id, validated)) {
+      return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
+    }
+    // La sesión del usuario confirma que ve la fila (RLS); el costo ya no se lee
+    // con esa sesión (S1) y se completa desde el cliente de servicio para que
+    // save_product_with_variants reciba el producto completo, como antes.
+    const { data: existingVisible, error: existingProductError } = await supabase
       .from('products')
-      .select('*')
+      .select(PRODUCT_CLIENT_COLUMNS)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .maybeSingle()
+    const existingProduct = existingVisible
+      ? (await hydrateProductCostsFromService(costClient, organization.id, [existingVisible as Record<string, unknown> & { id: string }]))[0] as typeof existingVisible & { purchase_price: number | null; foreign_purchase_price: number | null }
+      : existingVisible
 
     if (existingProductError) {
       logger.error('Failed to verify product tenant before update', {
@@ -929,52 +865,17 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
       const admin = createAdminSupabase()
 
-      // Asegurar que las variantes existentes tengan su fila en branch_variant_inventory
-      // para evitar que el RPC intente registrar movimientos iniciales con ON CONFLICT inválido.
-      const existingVariantIds = variantPayload.data.variants
-        .map((v) => v.id)
-        .filter((id): id is string => Boolean(id))
-
-      if (existingVariantIds.length > 0) {
-        const { data: existingBvi } = await admin
-          .from('branch_variant_inventory')
-          .select('variant_id')
-          .eq('organization_id', organization.id)
-          .eq('branch_id', variantBranchId)
-          .in('variant_id', existingVariantIds)
-
-        const presentIds = new Set((existingBvi || []).map((row) => row.variant_id))
-        const missingFromBvi = variantPayload.data.variants.filter(
-          (v) => v.id && !presentIds.has(v.id),
-        )
-
-        if (missingFromBvi.length > 0) {
-          await admin.from('branch_variant_inventory').insert(
-            missingFromBvi.map((v) => ({
-              organization_id: organization.id,
-              branch_id: variantBranchId,
-              product_id: validated.id,
-              variant_id: v.id!,
-              stock_quantity: v.stockQuantity ?? 0,
-              min_stock: v.minStock ?? 0,
-            })),
-          )
-        }
+      // Existing variant stock is managed only by the target RPC. Sending zero here
+      // prevents the legacy metadata RPC from initializing a missing branch row
+      // from a stale UI quantity; new variants still receive their initial stock.
+      const requestIdempotencyKey = request.headers.get('idempotency-key')?.trim() || randomUUID()
+      if (!/^[A-Za-z0-9._:-]{1,128}$/.test(requestIdempotencyKey)) {
+        return NextResponse.json({ success: false, error: 'La clave de idempotencia no es válida.', code: 'INVALID_IDEMPOTENCY_KEY' }, { status: 400 })
       }
 
-      // El stock de las variantes que ya existen no lo toca el RPC: se aplica
-      // despues como ajuste, para que quede el movimiento.
-      const { data: currentStockRows } = existingVariantIds.length > 0
-        ? await admin
-            .from('product_variants')
-            .select('id, stock_quantity')
-            .eq('organization_id', organization.id)
-            .in('id', existingVariantIds)
-        : { data: [] as Array<{ id: string; stock_quantity: number | null }> }
-      const currentStockById = new Map(
-        (currentStockRows ?? []).map((row) => [String(row.id), Number(row.stock_quantity ?? 0)]),
-      )
-
+      const variantsForMetadata = toVariantRpcRows(variantPayload.data.variants).map((row) => (
+        row.id ? { ...row, stock_quantity: 0 } : row
+      ))
       const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
         p_product: {
           ...existingProduct,
@@ -987,7 +888,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
           has_variants: variantPayload.data.hasVariants,
           variant_attribute_config: variantPayload.data.attributes,
         },
-        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_variants: variantsForMetadata,
         p_branch_id: variantBranchId,
         p_actor_id: user.id,
       })
@@ -1020,31 +921,30 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? validated.id)
 
       const stockWarnings: string[] = []
-      for (const adjustment of planVariantStockAdjustments(currentStockById, variantPayload.data.variants)) {
-        const { error: adjustError } = await admin.rpc('adjust_variant_stock_atomic', {
+      for (const variant of variantPayload.data.variants) {
+        if (!variant.id) continue // New variants already receive their initial stock in save_product_with_variants.
+        const idempotencyKey = 'variant-target:' + requestIdempotencyKey + ':' + variant.id
+        const { error: targetError } = await admin.rpc('set_variant_branch_stock_target', {
           p_organization_id: organization.id,
           p_branch_id: variantBranchId,
-          p_variant_id: adjustment.variantId,
-          p_quantity_delta: adjustment.delta,
-          p_movement_type: 'adjustment',
-          p_idempotency_key: adjustment.idempotencyKey,
+          p_variant_id: variant.id,
+          p_target_quantity: variant.stockQuantity,
+          p_idempotency_key: idempotencyKey,
           p_actor_id: user.id,
           p_reference_type: 'product_edit',
           p_reference_id: savedProductId,
           p_reason: 'Ajuste de stock desde la ficha del producto',
-          p_metadata: { source: 'product-editor', from: adjustment.from, to: adjustment.to },
+          p_metadata: { source: 'product-editor', target: variant.stockQuantity },
         })
 
-        if (adjustError) {
-          logger.error('Failed to adjust variant stock after product save', {
-            variantId: adjustment.variantId,
+        if (targetError) {
+          logger.error('Failed to set variant branch stock target after product save', {
+            variantId: variant.id,
             productId: savedProductId,
             organizationId: organization.id,
-            error: adjustError.message,
+            error: targetError.message,
           })
-          stockWarnings.push(
-            `No se pudo ajustar el stock de ${adjustment.variantName}: quedó en ${adjustment.from}.`,
-          )
+          stockWarnings.push('No se pudo fijar el stock de ' + variant.name + ' en la sucursal seleccionada.')
         }
       }
 
@@ -1060,11 +960,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         )
       }
 
-      const visibleVariants = (variants ?? []).map((variant) => {
-        if (canViewProductCost(user.role)) return variant
-        const { purchase_price: _purchasePrice, ...visible } = variant
-        return visible
-      })
+      const visibleVariants = (variants ?? []).map(variant => redactProductCosts(variant as Record<string, unknown>, costAccess))
 
       const dispositivo = await persistDeviceFields(admin as never, {
         productId: savedProductId,
@@ -1083,7 +979,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          product: redactProductCosts({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
           variants: visibleVariants,
         },
         warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
@@ -1095,6 +991,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const desiredStockQuantity = validated.stock_quantity
     const updatePayload: Record<string, unknown> = {
       name: validated.name,
+      sku: validated.sku,
       description: validated.description,
       category_id: validated.category_id,
       supplier_id: validated.supplier_id,
@@ -1140,7 +1037,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         .update(normalizedPayload)
         .eq('id', validated.id)
         .eq('organization_id', organization.id)
-        .select()
+        .select(PRODUCT_CLIENT_COLUMNS)
         .single()
 
       if (error) {
@@ -1185,10 +1082,10 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
       .from('products')
       .select(`
-        *,
+        ${PRODUCT_CLIENT_COLUMNS},
         category:categories(id, name, description),
         supplier:suppliers(id, name, contact_name, phone, address),
-        variants:product_variants(*)
+        variants:product_variants(${VARIANT_CLIENT_COLUMNS})
       `)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
@@ -1202,7 +1099,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       throw refreshedProductError
     }
 
-    product = refreshedProduct as Record<string, unknown>
+    product = (await hydrateProductCostsFromService(costClient, organization.id, [refreshedProduct as Record<string, unknown> & { id: string }], 'variants'))[0] as Record<string, unknown>
 
     logger.info('Product updated', { productId: product.id, userId: user.id })
 
@@ -1273,12 +1170,18 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      data: redactProductCosts({ ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, costAccess),
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     })
   } catch (error) {
+    if (error instanceof ProductCostInputError) {
+      return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
+    }
     logger.error('Product update error', { error })
+    if ((error as { code?: string })?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Ya existe un producto con este SKU en la organización.', code: 'SKU_ALREADY_EXISTS' }, { status: 409 })
+    }
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { summarizeCustomerCreditBalances } from '@/lib/customers/credit-balance'
 
 async function getCustomerId(routeContext: unknown): Promise<string | null> {
   const params = (routeContext as { params?: { id?: string } | Promise<{ id?: string }> } | undefined)?.params
@@ -53,42 +54,19 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 
     // 2. Obtener saldo pendiente total de cuotas si existen
     const creditIds = creditList.map((c) => c.id)
-    let pendingBalance = 0
-    let totalInstallments = 0
-    let pendingInstallments = 0
-    // Lo financiado y lo cobrado salen de las cuotas, no del capital: con
-    // interes el total a pagar es mayor al principal, y el detalle del cliente
-    // tiene que cuadrar (financiado = pagado + faltante).
-    let financedTotal = 0
-    let paidTotal = 0
+    let balanceSummary = { totalInstallments: 0, pendingInstallments: 0, financedTotal: 0, paidTotal: 0, pendingBalance: 0 }
 
     if (creditIds.length > 0) {
       const { data: installments, error: installmentsError } = await supabase
         .from('credit_installments')
-        .select('id, amount, amount_paid, status')
+        .select('id, credit_id, amount, amount_paid, status')
         .in('credit_id', creditIds)
 
       if (installmentsError) {
         return NextResponse.json({ error: 'No se pudieron cargar las cuotas' }, { status: 500 })
       }
 
-      if (installments) {
-        totalInstallments = installments.length
-        pendingInstallments = installments.filter((i) => i.status !== 'paid').length
-        pendingBalance = installments.reduce((sum, i) => {
-          const amt = Number(i.amount || 0)
-          const paid = Number(i.amount_paid || 0)
-          return sum + Math.max(0, amt - paid)
-        }, 0)
-        financedTotal = installments.reduce((sum, i) => sum + Math.max(0, Number(i.amount || 0)), 0)
-        paidTotal = installments.reduce((sum, i) => {
-          const amt = Math.max(0, Number(i.amount || 0))
-          // Una cuota marcada como pagada cuenta entera aunque no registre el
-          // monto abonado; el resto cuenta lo que efectivamente se cobro.
-          const paid = i.status === 'paid' ? amt : Math.min(amt, Math.max(0, Number(i.amount_paid || 0)))
-          return sum + paid
-        }, 0)
-      }
+      balanceSummary = summarizeCustomerCreditBalances(creditList, installments ?? [])
     }
 
     return NextResponse.json({
@@ -98,11 +76,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
         totalCredits,
         activeCredits,
         totalPrincipal,
-        financedTotal,
-        paidTotal,
-        pendingBalance,
-        totalInstallments,
-        pendingInstallments,
+        ...balanceSummary,
       },
     })
   } catch (error) {

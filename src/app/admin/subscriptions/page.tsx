@@ -9,6 +9,7 @@ import {
   CreditCard,
   Gauge,
   Info,
+  RefreshCw,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -35,6 +36,8 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
+import { isStripeConfigured } from '@/lib/payments/stripe'
+import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
 
@@ -190,9 +193,11 @@ export default async function AdminSubscriptionsPage() {
 
   const paymentProvider = subscription?.provider === 'pagopar'
     ? 'Pagopar'
-    : subscription?.provider === 'mercado_pago'
-      ? 'Mercado Pago'
-      : 'Pago manual'
+    : subscription?.provider === 'stripe'
+      ? 'Stripe'
+      : subscription?.provider === 'mercado_pago'
+        ? 'Mercado Pago'
+        : 'Pago manual'
 
   const notices = buildNotices({
     status: subscriptionStatus,
@@ -253,7 +258,16 @@ export default async function AdminSubscriptionsPage() {
               isPaidPlan={state.currentPlan.price_monthly > 0}
               planName={state.currentPlan.name}
               planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
+              stripeEnabled={isStripeConfigured()}
             />
+            {canChangePlan && isPagoparRecurringEnabled() && (
+              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
+                <Link href="/admin/subscriptions/autopay">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  Débito automático
+                </Link>
+              </Button>
+            )}
             {canChangePlan && (
               <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/change-plan">
@@ -372,6 +386,7 @@ export default async function AdminSubscriptionsPage() {
         subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
         canRedeemCodes={['owner', 'admin'].includes(organization.role)}
+        canPayByTransfer={['owner', 'admin'].includes(organization.role)}
         averageUsage={averageUsage}
       />
 

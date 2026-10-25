@@ -26,6 +26,15 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { AdminNavBadges } from '@/hooks/use-admin-nav-badges'
 import { cn } from '@/lib/utils'
 
+export type AdminDrawerUser = {
+  role?: string | null
+  email?: string | null
+  profile?: {
+    name?: string | null
+    avatar_url?: string | null
+  } | null
+}
+
 interface AdminMobileDrawerProps {
   open: boolean
   onClose: () => void
@@ -36,7 +45,7 @@ interface AdminMobileDrawerProps {
   navBadges: AdminNavBadges
   onOpenSearch: () => void
   onOpenLogout: () => void
-  user: any
+  user: AdminDrawerUser | null
   userInitials: string
 }
 

@@ -83,7 +83,7 @@ export function useProducts() {
 
       let base = supabase
         .from('products')
-        .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category,category_id,supplier,supplier_id,margin_percent', { count: 'exact' })
+        .select('id,name,sku,stock,min_stock,sale_price,description,created_at,category,category_id,supplier,supplier_id,margin_percent', { count: 'exact' })
         .order(orderField, { ascending: sortDirection === 'asc' })
         .range(from, to)
 
@@ -134,7 +134,7 @@ export function useProducts() {
       if (error && stockFilter === 'low-stock' && /is_low_stock/.test(error.message || '')) {
         const { data: data2, error: error2, count: count2 } = await supabase
           .from('products')
-          .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category_id,supplier_id', { count: 'exact' })
+          .select('id,name,sku,stock,min_stock,sale_price,description,created_at,category_id,supplier_id', { count: 'exact' })
           .order(orderField, { ascending: sortDirection === 'asc' })
           .range(from, to)
         if (error2) {
@@ -157,7 +157,7 @@ export function useProducts() {
         // Fallback for margin filter: fetch without margin_percent and filter in JS
         const { data: data3, error: error3, count: count3 } = await supabase
           .from('products')
-          .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category,category_id,supplier,supplier_id', { count: 'exact' })
+          .select('id,name,sku,stock,min_stock,sale_price,description,created_at,category,category_id,supplier,supplier_id', { count: 'exact' })
           .order(orderField, { ascending: sortDirection === 'asc' })
           .range(from, to)
         if (error3) {
@@ -167,7 +167,7 @@ export function useProducts() {
           return
         }
         const [minM, maxM] = marginRange
-        const filteredByMargin = ((data3 as DBProduct[] | null) || []).filter(p => {
+        const filteredByMargin = ((data3 as unknown as DBProduct[] | null) || []).filter(p => {
           const purchase = Number(p.purchase_price ?? 0)
           const sale = Number(p.sale_price ?? 0)
           const margin = purchase > 0 ? ((sale - purchase) / purchase) * 100 : 0
@@ -217,7 +217,7 @@ export function useProducts() {
         // Re-query without ordering by margin_percent and sort in JS
         let baseNoOrder = supabase
           .from('products')
-          .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category,category_id,supplier,supplier_id', { count: 'exact' })
+          .select('id,name,sku,stock,min_stock,sale_price,description,created_at,category,category_id,supplier,supplier_id', { count: 'exact' })
           .range(from, to)
 
         if (debouncedSearch && debouncedSearch.length > 0) {
@@ -249,7 +249,7 @@ export function useProducts() {
           return
         }
 
-        const rawNoOrder = (dataNoOrder || []) as DBProduct[]
+        const rawNoOrder = (dataNoOrder || []) as unknown as DBProduct[]
         setTotal(typeof countNoOrder === 'number' ? countNoOrder : rawNoOrder.length)
 
         const categoryIds = Array.from(new Set(rawNoOrder.map(p => p.category_id).filter(Boolean))) as string[]
@@ -299,7 +299,7 @@ export function useProducts() {
         setLoading(false)
         return
       }
-      const raw = (data || []) as DBProduct[]
+      const raw = (data || []) as unknown as DBProduct[]
       setTotal(typeof count === 'number' ? count : raw.length)
 
       // Build relation maps for category and supplier names

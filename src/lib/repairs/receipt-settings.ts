@@ -16,6 +16,8 @@ export interface RepairReceiptSettings {
   showAccessories: boolean
   showImei: boolean
   showHash: boolean
+  /** Imprime la dirección de la tienda online (`/{slug}/inicio`) al pie. */
+  showStoreWebsite: boolean
   showCustomerSignature: boolean
   legalText: string
   /** Días tras la notificación para considerar abandonado el equipo. 0 = no se imprime. */
@@ -63,6 +65,7 @@ export const DEFAULT_RECEIPT_SETTINGS: RepairReceiptSettings = {
   showAccessories: true,
   showImei: true,
   showHash: true,
+  showStoreWebsite: false,
   showCustomerSignature: true,
   // Antes decía «declaro haber leído los términos y condiciones», pero esos
   // términos no estaban en el papel: ahora el texto es la condición misma.
@@ -87,6 +90,7 @@ const fields = {
   showAccessories: z.boolean(),
   showImei: z.boolean(),
   showHash: z.boolean(),
+  showStoreWebsite: z.boolean(),
   showCustomerSignature: z.boolean(),
   legalText: z.string().trim()
     .max(RECEIPT_LEGAL_TEXT_MAX, `El texto legal admite hasta ${RECEIPT_LEGAL_TEXT_MAX} caracteres.`),
@@ -117,6 +121,7 @@ export const RepairReceiptSettingsSchema = z.object({
   showAccessories: fields.showAccessories.optional(),
   showImei: fields.showImei.optional(),
   showHash: fields.showHash.optional(),
+  showStoreWebsite: fields.showStoreWebsite.optional(),
   showCustomerSignature: fields.showCustomerSignature.optional(),
   legalText: fields.legalText.optional(),
   abandonmentDays: fields.abandonmentDays.optional(),

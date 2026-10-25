@@ -364,7 +364,7 @@ export function EditUserForm({
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Ver precios de costo</h4>
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    Permite ver el costo y el margen de los productos. Los administradores ya lo ven siempre.
+                    Permite ver el costo y el margen de los productos. La lectura no permite modificar costos. El acceso se resuelve para la organización activa.
                   </p>
                   <p className="text-[11px] font-mono text-emerald-700/80 dark:text-emerald-300/80">
                     {PRODUCT_COST_PERMISSION}

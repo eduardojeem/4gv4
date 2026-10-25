@@ -61,9 +61,9 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                         {allSales.map((sale) => {
                                             const total = Number(sale.total || 0)
-                                            const cost = Number(sale.cost || 0)
+                                            const cost = sale.cost
                                             const refund = Number(sale.refundAmount || 0)
-                                            const profit = Number(sale.profit || 0)
+                                            const profit = sale.profit
                                             const customerName = sale.customer?.name || 'Consumidor Final'
                                             const code = sale.code || sale.id.substring(0, 8).toUpperCase()
                                             
@@ -82,10 +82,10 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                                                         {formatCurrency(total)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right text-slate-500">
-                                                        {formatCurrency(cost)}
+                                                        {cost == null ? '—' : formatCurrency(cost)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                                                        {formatCurrency(profit)}
+                                                        {profit == null ? '—' : formatCurrency(profit)}
                                                         {refund > 0 && (
                                                             <div className="text-[10px] text-rose-500 font-normal mt-0.5 whitespace-nowrap">
                                                                 (-{formatCurrency(refund)})

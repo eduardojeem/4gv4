@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/currency'
 import type { RepairTaxRate } from '@/lib/repairs/cost-breakdown'
 import type { RepairLineType } from '@/lib/repairs/line-types'
-import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useCanViewCost, useCanUpdateCost } from '@/hooks/use-can-view-cost'
 
 export type EditableRepairPart = {
   key: string
@@ -18,11 +18,13 @@ export type EditableRepairPart = {
   supplier?: string | null
   quantity: number
   unitPrice: number
-  unitCost: number
+  unitCost: number | null
   discountAmount: number
   taxRate: RepairTaxRate
   availableStock?: number | null
   lineType: RepairLineType
+  /** Material incluido: el servicio del que sale; el servidor toma su costo de ahí. */
+  sourceProductId?: string | null
 }
 
 type InventorySuggestion = {
@@ -30,7 +32,8 @@ type InventorySuggestion = {
   sku: string
   name: string
   availableStock: number | null
-  unitCost: number
+  /** null cuando el usuario no puede ver costos: el servidor lo resuelve al guardar. */
+  unitCost: number | null
   unitPrice: number
   taxRate: RepairTaxRate
   version: string
@@ -38,7 +41,8 @@ type InventorySuggestion = {
   wholesalePriceApplied?: boolean
   wholesalePriceFallback?: boolean
   lineType: 'service' | 'charged_part'
-  includedMaterialCost?: number
+  includedMaterialCost?: number | null
+  includesMaterial?: boolean
 }
 
 function NumericField({
@@ -49,7 +53,7 @@ function NumericField({
   isCurrency = false
 }: {
   label: string
-  value: number
+  value: number | null
   onChange: (value: number) => void
   disabled?: boolean
   isCurrency?: boolean
@@ -60,7 +64,7 @@ function NumericField({
         aria-label={label}
         type="number"
         min={0}
-        value={value}
+        value={value ?? ''}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value) || 0)}
         className="h-9 tabular-nums text-right font-mono text-xs"
@@ -92,6 +96,7 @@ export function RepairPartsEditor({
   invalidPartKeys?: ReadonlySet<string>
 }) {
   const canViewCost = useCanViewCost()
+  const canUpdateCost = useCanUpdateCost()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<InventorySuggestion[]>([])
   const [loading, setLoading] = useState(false)
@@ -147,7 +152,7 @@ export function RepairPartsEditor({
         lineType: suggestion.lineType,
       }
       const includedMaterial: EditableRepairPart[] =
-        suggestion.lineType === 'service' && Number(suggestion.includedMaterialCost) > 0
+        suggestion.lineType === 'service' && (suggestion.includesMaterial || Number(suggestion.includedMaterialCost) > 0)
           ? [
               {
                 key: `included-${suggestion.productId}-${Date.now()}`,
@@ -157,11 +162,12 @@ export function RepairPartsEditor({
                 supplier: 'Incluido en el servicio',
                 quantity: 1,
                 unitPrice: 0,
-                unitCost: Number(suggestion.includedMaterialCost),
+                unitCost: suggestion.includedMaterialCost ?? null,
                 discountAmount: 0,
                 taxRate: suggestion.taxRate,
                 availableStock: null,
                 lineType: 'included_material',
+                sourceProductId: suggestion.productId,
               },
             ]
           : []
@@ -181,7 +187,7 @@ export function RepairPartsEditor({
         supplier: 'Carga manual',
         quantity: 1,
         unitPrice: 0,
-        unitCost: 0,
+        unitCost: canViewCost ? 0 : null,
         discountAmount: 0,
         taxRate: 10,
         availableStock: null,
@@ -343,13 +349,13 @@ export function RepairPartsEditor({
                       <td className="p-2 tabular-nums text-right">
                         {part.productId ? (
                           <div className="font-mono text-slate-700 dark:text-slate-300">
-                            {formatCurrency(part.unitCost)}
+                            {(part.unitCost === null ? 'No disponible' : formatCurrency(part.unitCost))}
                           </div>
                         ) : (
                           <NumericField
                             label={`Costo interno de ${part.name}`}
                             value={part.unitCost}
-                            disabled={disabled}
+                            disabled={disabled || !canUpdateCost}
                             onChange={(unitCost) => update(index, { unitCost })}
                             isCurrency
                           />
@@ -449,7 +455,7 @@ export function RepairPartsEditor({
                       </>
                     )}
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {canViewCost && `Costo: ${formatCurrency(part.unitCost)} · `}
+                      {canViewCost && `Costo: ${(part.unitCost === null ? 'No disponible' : formatCurrency(part.unitCost))} · `}
                       IVA: {part.taxRate}%
                     </p>
                   </div>

@@ -3,6 +3,17 @@ project_id = "4gv4"
 [auth]
 pwned_passwords_protection_enabled = true
 
+# Passkeys (huella, Face ID, Windows Hello) para el stack local. En el proyecto
+# hosteado se habilitan en Authentication → Passkeys con el dominio de producción
+# como RP ID. Ver docs/passkeys.md.
+[auth.passkey]
+enabled = true
+
+[auth.webauthn]
+rp_display_name = "MiTiendaPY"
+rp_id = "localhost"
+rp_origins = ["http://localhost:3000"]
+
 # Local development only. Avoid the unused log collector and its Docker TCP
 # dependency; production observability is configured on the hosted project.
 [analytics]

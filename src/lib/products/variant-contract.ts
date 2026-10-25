@@ -1,3 +1,4 @@
+import { getVariantCombinationKey } from './variant-safety'
 import { z } from 'zod'
 
 const normalizeText = (value: string) => value.trim()
@@ -18,7 +19,7 @@ export const ProductVariantInputSchema = z.object({
   attributes: z.record(z.string(), z.string().transform(normalizeText).pipe(z.string().min(1))),
   sku: z.string().transform(normalizeCode).pipe(z.string().min(1, 'El SKU es obligatorio')),
   barcode: z.string().trim().optional(),
-  purchasePrice: z.number().min(0),
+  purchasePrice: z.number().min(0).nullable().optional(),
   salePrice: z.number().min(0),
   wholesalePrice: z.number().min(0).optional(),
   minStock: z.number().int().min(0),
@@ -60,11 +61,7 @@ export const ProductVariantsPayloadSchema = z.object({
   const barcodes = new Set<string>()
 
   payload.variants.forEach((variant, index) => {
-    const combination = Object.entries(variant.attributes)
-      .map(([key, value]) => [key.trim().toLowerCase(), value.trim().toLowerCase()] as const)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, value]) => `${key}=${value}`)
-      .join('|')
+    const combination = getVariantCombinationKey(variant.attributes)
 
     if (combinations.has(combination)) {
       context.addIssue({

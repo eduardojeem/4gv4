@@ -66,6 +66,9 @@ describe('el comprobante impreso', () => {
     customer: { name: 'Ana Pérez', phone: '0981000000' },
     devices: [{ typeLabel: 'Celular', brand: 'Samsung', model: 'A54', issue: 'Pantalla rota' }],
     verificationHash,
+    trackingUrl: verificationHash
+      ? `https://www.mitiendapy.com/taller/mis-reparaciones/R-260913-0001?verify=${verificationHash}`
+      : undefined,
   })
 
   const imprimir = (p: RepairPrintPayload) => {
@@ -90,6 +93,43 @@ describe('el comprobante impreso', () => {
     const html = imprimir(payload('a1b2c3d4e5f60718'))
     expect(html).toContain('aria-label="QR de seguimiento"')
     expect(html).toContain('Seguí tu reparación')
+  })
+
+  // Con la firma sola armaba `/mis-reparaciones/…` con el origen del navegador:
+  // una ruta legacy que el proxy manda a /marketplace. Sin la URL del servidor
+  // no hay QR.
+  // En el ticket de 80 mm la fila flex lo encogía a 12 mm de ancho y, con
+  // solo 2 módulos de zona blanca, ningún celular lo leía en el papel.
+  it('el QR sale con tamaño fijo en mm, sin encogerse y con zona blanca', () => {
+    const html = imprimir(payload('a1b2c3d4e5f60718'))
+    const svg = html.match(/<svg[^>]*aria-label="QR de seguimiento"[^>]*>/)?.[0] ?? ''
+    expect(svg).toContain('width: 34mm; height: 34mm; flex-shrink: 0')
+    const [, , , total] = (svg.match(/viewBox="([^"]+)"/)?.[1] ?? '').split(' ').map(Number)
+    // Versión 6 (41 módulos) + 4 de margen por lado.
+    expect(total).toBe(41 + 8)
+  })
+
+  it('imprime la dirección de la tienda online solo si está activada', () => {
+    const conTienda = { ...payload('a1b2c3d4e5f60718'), storeUrl: 'https://www.mitiendapy.com/4g-celulares/inicio' }
+    const imprimirCon = (showStoreWebsite: boolean, p: RepairPrintPayload = conTienda) => {
+      let html = ''
+      vi.spyOn(window, 'open').mockReturnValue({
+        document: { write: (h: string) => { html = h }, close: () => {} },
+        closed: false,
+        focus: () => {},
+      } as unknown as Window)
+      printRepairReceipt('customer', p, '80mm', { ...DEFAULT_RECEIPT_SETTINGS, showStoreWebsite })
+      return html
+    }
+
+    expect(imprimirCon(true)).toContain('Visitá nuestra tienda: <strong>https://www.mitiendapy.com/4g-celulares/inicio</strong>')
+    expect(imprimirCon(false)).not.toContain('Visitá nuestra tienda')
+    expect(imprimirCon(true, payload('a1b2c3d4e5f60718'))).not.toContain('Visitá nuestra tienda')
+  })
+
+  it('sin la URL de seguimiento del servidor no arma un QR por su cuenta', () => {
+    const html = imprimir({ ...payload('a1b2c3d4e5f60718'), trackingUrl: undefined })
+    expect(html).not.toContain('QR de seguimiento')
   })
 
   /**

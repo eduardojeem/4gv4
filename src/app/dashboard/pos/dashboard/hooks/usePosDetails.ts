@@ -9,6 +9,7 @@ import { useBranch } from '@/contexts/branch-context'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
 import { buildDailySales, rangeBounds } from '../lib/pos-dashboard-range'
+import { asCostRpcClient, fetchProductCosts } from '@/lib/products/cost-columns'
 
 export type PosSaleItem = SaleItemRow & { sale_id: string }
 
@@ -64,10 +65,10 @@ export interface PosEnrichedSale {
     total?: number | null
     payment_method?: string | null
     customer?: { name?: string | null } | null
-    cost: number
+    cost: number | null
     refundAmount: number
     itemsCount: number
-    profit: number
+    profit: number | null
     [key: string]: unknown
 }
 
@@ -129,9 +130,9 @@ export interface PosStats {
         readyAmount: number
         readyCount: number
         activeCount: number
-        deliveredPartsCost: number
-        deliveredLaborCost: number
-        netProfit: number
+        deliveredPartsCost: number | null
+        deliveredLaborCost: number | null
+        netProfit: number | null
         refundsAmount: number
         deliveredRepairs: PosDeliveredRepairRecord[]
     }
@@ -145,10 +146,12 @@ export interface PosStats {
     /** Ganancia calculada sobre ambas bases: el interruptor no refetchea. */
     profitStats: ProfitResult & {
         /** Items cuyo producto no tiene costo cargado. */
-        itemsWithoutCost: number
+        itemsWithoutCost: number | null
     }
     /** Consultas que fallaron. La UI avisa en vez de mostrar ceros. */
     warnings: string[]
+    /** El usuario no tiene products.read_cost: costo, ganancia y repuestos no se informan. */
+    costHidden?: boolean
 }
 
 const EMPTY_FIGURES = { revenue: 0, salesProfit: 0, totalProfit: 0, profitMargin: 0 }
@@ -257,6 +260,9 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
 
         try {
             const { from, to } = bounds
+            const accessResponse = await fetch('/api/products/access', { cache: 'no-store', signal: controller.signal })
+            const access = accessResponse.ok ? await accessResponse.json() as { organizationId?: string; canReadCost?: boolean } : null
+            const canReadCost = access?.organizationId === organizationId && access.canReadCost === true
             // One authoritative branch lookup per explicit detail load, not one per row.
             const branchResponse = await fetch('/api/branches', { cache: 'no-store', signal: controller.signal })
             const branchPayload = await branchResponse.json() as { branches?: Array<{id:string;organization_id:string;is_active:boolean}>; error?:string }
@@ -354,8 +360,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
                     final_cost,
                     estimated_cost,
                     paid_amount,
-                    parts_cost,
-                    labor_cost,
+                    ${canReadCost ? 'parts_cost, labor_cost,' : ''}
                     payment_status
                 `, { count: 'exact' })
                 .eq('organization_id', organizationId)
@@ -447,7 +452,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
             // --- Secondary Query: Fetch items for the retrieved sale IDs ---
             const saleIds = (salesData || []).map(s => s.id)
             let itemsData: PosSaleItem[] = []
-            let costUnavailable = false
+            let costUnavailable = !canReadCost
 
             for (let offset = 0; offset < saleIds.length; offset += 100) {
                 const { data: items, error: itemsError } = await completeDashboardQuery(supabase
@@ -457,7 +462,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
                         quantity,
                         subtotal,
                         sale_id,
-                        product:products(name, purchase_price)
+                        product:products(id, name)
                     `, { count: 'exact' })
                     .in('sale_id', saleIds.slice(offset, offset + 100)), controller.signal)
 
@@ -470,6 +475,22 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
                     break
                 } else {
                     itemsData.push(...((items || []) as PosSaleItem[]))
+                }
+            }
+
+            // El costo de cada producto vendido se pide aparte y solo vuelve con
+            // permiso de costos en la organización; sin permiso no hay ganancia.
+            if (!costUnavailable && itemsData.length > 0) {
+                const productIds = itemsData.map(item => (item as { product?: { id?: unknown } | null }).product?.id)
+                try {
+                    const costs = await fetchProductCosts(asCostRpcClient(supabase), productIds, organizationId)
+                    if (costs.size === 0 && productIds.some(Boolean)) costUnavailable = true
+                    for (const item of itemsData) {
+                        const product = (item as { product?: Record<string, unknown> | null }).product
+                        if (product) product.purchase_price = costs.get(String(product.id))?.purchase_price ?? null
+                    }
+                } catch {
+                    costUnavailable = true
                 }
             }
 
@@ -540,8 +561,8 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
             const repairDeliveredAmount = repairsDelivered.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0) || 0), 0)
             const repairDeliveredCount = repairsDelivered.length
 
-            const repairDeliveredPartsCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.parts_cost) || 0), 0)
-            const repairDeliveredLaborCost = repairsDelivered.reduce((sum, r) => sum + (Number(r.labor_cost) || 0), 0)
+            const repairDeliveredPartsCost = !canReadCost || repairsDelivered.some(r => r.parts_cost == null) ? null : repairsDelivered.reduce((sum, r) => sum + Number(r.parts_cost), 0)
+            const repairDeliveredLaborCost = !canReadCost || repairsDelivered.some(r => r.labor_cost == null) ? null : repairsDelivered.reduce((sum, r) => sum + Number(r.labor_cost), 0)
 
             // Procesar reembolsos resueltos
             const afterSales = (afterSalesData || []).filter(item => {
@@ -559,7 +580,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
             const totalRefundsAmount = repairRefundsAmount + saleRefundsAmount
 
             // Ganancia neta de taller descuenta costo de repuestos y devoluciones
-            const repairNetProfit = repairDeliveredAmount - repairDeliveredPartsCost - repairRefundsAmount
+            const repairNetProfit = repairDeliveredPartsCost === null ? null : repairDeliveredAmount - repairDeliveredPartsCost - repairRefundsAmount
 
             const repairsReady = (repairsReadyData || []) as unknown as RepairRow[]
             const repairReadyAmount = repairsReady.reduce((sum, r) => sum + (Number(r.final_cost ?? r.estimated_cost ?? 0) || 0), 0)
@@ -578,7 +599,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
 
             if (!costUnavailable && costBreakdown.itemsWithoutCost > 0) {
                 warnings.push(
-                    `${costBreakdown.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen mostrado es optimista.`
+                    `${costBreakdown.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen no está disponible.`
                 )
             }
 
@@ -623,7 +644,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
             const validSalesData = (salesData || []) as SalesDataRow[]
             const allSales: PosEnrichedSale[] = validSalesData.map(sale => {
                 const saleItems = itemsData.filter(i => i.sale_id === sale.id)
-                const saleCost = calculateSalesCost(saleItems).totalCost
+                const saleCost = costUnavailable ? null : calculateSalesCost(saleItems).totalCost
                 const refundAmount = saleRefundsAmount > 0
                     ? afterSales.filter(c => ['sale', 'venta', 'product', 'sale_item'].includes(c.source_type) && c.sale_id === sale.id && (c.status === 'completed' || c.status === 'completado')).reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
                     : 0
@@ -632,7 +653,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
                     cost: saleCost,
                     refundAmount,
                     itemsCount: saleItems.reduce((n, i) => n + (Number(i.quantity) || 0), 0),
-                    profit: (sale.total || 0) - saleCost - refundAmount
+                    profit: saleCost === null ? null : (sale.total || 0) - saleCost - refundAmount
                 }
             })
 
@@ -656,6 +677,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
 
             const nextStats: PosStats = {
                 totalSales,
+                costHidden: !canReadCost,
                 totalTransactions: validSalesData.length,
                 averageTicket,
                 topProduct,

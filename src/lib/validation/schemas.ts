@@ -34,9 +34,11 @@ const productBaseSchema = z.object({
     .max(200, 'El nombre no puede superar los 200 caracteres'),
   
   sku: z.string()
+    .trim()
     .min(1, 'El SKU es obligatorio')
     .max(50, 'El SKU no puede superar los 50 caracteres')
-    .regex(/^[A-Z0-9-_]+$/i, 'El SKU solo admite letras, números, guiones y guiones bajos'),
+    .regex(/^[A-Z0-9-_]+$/i, 'El SKU solo admite letras, números, guiones y guiones bajos')
+    .transform((value) => value.toUpperCase()),
   
   description: z.string()
     .max(2000, 'La descripción no puede superar los 2000 caracteres')
@@ -85,7 +87,9 @@ const productBaseSchema = z.object({
     .nullable(),
   
   purchase_price: z.number()
-    .nonnegative('El precio de compra no puede ser negativo'),
+    .nonnegative('El precio de compra no puede ser negativo')
+    .nullable()
+    .optional(),
   
   sale_price: z.number()
     .positive('El precio de venta debe ser mayor a 0'),
@@ -120,6 +124,9 @@ const productBaseSchema = z.object({
     .default(true),
 
   visibility: z.enum(['public', 'wholesale', 'hidden']).optional(),
+
+  /** Destacado en la tienda pública (prioridad en el orden «destacados»). */
+  featured: z.boolean().optional(),
 
   warranty_months: z.number()
     .int('Los meses de garantía deben ser un número entero')

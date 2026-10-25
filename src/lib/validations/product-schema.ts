@@ -16,11 +16,13 @@ export const productSchema = z
       .max(200, "El nombre no puede exceder 200 caracteres"),
     sku: z
       .string()
+      .trim()
       .min(3, "El SKU debe tener al menos 3 caracteres")
       .regex(
         /^[A-Z0-9-_]+$/i,
         "El SKU solo puede contener letras, numeros, guiones y guion bajo",
-      ),
+      )
+      .transform((value) => value.toUpperCase()),
     description: z
       .string()
       .max(2000, "La descripcion no puede exceder 2000 caracteres")
@@ -48,10 +50,10 @@ export const productSchema = z
     initial_expires_on: z.string().optional().nullable(),
 
     // Pricing
-    purchase_price: z
-      .coerce
-      .number()
-      .min(0, "El precio de compra no puede ser negativo"),
+    purchase_price: z.preprocess(
+      (value) => value === '' || value === undefined ? null : value,
+      z.coerce.number().min(0, "El precio de compra no puede ser negativo").nullable(),
+    ),
     sale_price: z
       .coerce
       .number()

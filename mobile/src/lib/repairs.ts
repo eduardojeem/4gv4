@@ -100,11 +100,24 @@ export const FILTERS: { key: RepairFilter; label: string }[] = [
 
 export type RepairPage = { repairs: Repair[]; pagination: { page: number; total: number; totalPages: number } };
 
-export function fetchRepairs({ page, filter, search }: { page: number; filter: RepairFilter; search: string }) {
-  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+export function fetchRepairs({
+  page,
+  filter,
+  search,
+  technicianId,
+  pageSize = 25,
+}: {
+  page: number;
+  filter: RepairFilter;
+  search: string;
+  technicianId?: string;
+  pageSize?: number;
+}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filter === 'active') params.set('chargeable', 'true');
   else if (filter !== 'all') params.set('status', filter);
   if (search.trim()) params.set('search', search.trim());
+  if (technicianId) params.set('technicianId', technicianId);
   return apiFetch<RepairPage>(`/api/repairs?${params.toString()}`);
 }
 
@@ -238,7 +251,15 @@ export class DuplicateCustomerError extends Error {
     super(message);
   }
 }
-export type Technician = { id: string; name: string | null; specialty?: string | null };
+export type Technician = {
+  id: string;
+  name: string | null;
+  specialty?: string | null;
+  activeJobs?: number;
+  completedThisMonth?: number;
+  totalCompleted?: number;
+  avgCompletionDays?: number;
+};
 
 export const DEVICE_TYPES: { key: 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'; label: string }[] = [
   { key: 'smartphone', label: 'Celular' },

@@ -185,7 +185,8 @@ const nextConfig: NextConfig = {
         // Security headers para todas las rutas.
         // CSP efectiva: las fuentes requeridas por Supabase y Turnstile están
         // declaradas explícitamente; cualquier otra carga queda bloqueada.
-        source: '/(.*)',
+        // /auth/pagopar-tarjeta queda afuera: ver la regla siguiente.
+        source: '/((?!auth/pagopar-tarjeta).*)',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -202,7 +203,8 @@ const nextConfig: NextConfig = {
               "font-src 'self' data:",
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org",
               // Google Maps: el mapa de la ubicación en la sección de contacto de cada tienda.
-              `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
+              // Pagopar: formulario de uPay para guardar la tarjeta del débito automático.
+              `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com https://www.pagopar.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
               "worker-src 'self' blob:",
               "manifest-src 'self'",
               ...(isProd ? ['upgrade-insecure-requests'] : []),
@@ -216,6 +218,36 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
           },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains',
+          },
+        ],
+      },
+      {
+        // Retorno del formulario de tarjeta de uPay: Pagopar puede cargarlo dentro
+        // de su iframe, así que además del propio sitio se permite www.pagopar.com
+        // como ancestro. La página no lee datos; solo sale del iframe hacia el panel.
+        source: '/auth/pagopar-tarjeta',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "frame-ancestors 'self' https://www.pagopar.com",
+              "form-action 'self'",
+              scriptSrc,
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data:",
+              "font-src 'self' data:",
+              "connect-src 'self'",
+              ...(isProd ? ['upgrade-insecure-requests'] : []),
+            ].join('; '),
+          },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains',

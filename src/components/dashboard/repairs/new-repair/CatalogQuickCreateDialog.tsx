@@ -1,5 +1,7 @@
 'use client'
 
+import { useCanViewCost, useCanUpdateCost } from '@/hooks/use-can-view-cost'
+import { omitUnauthorizedProductCosts } from '@/lib/products/cost-payload'
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Loader2, PackagePlus, Wrench } from 'lucide-react'
 import { branchHeaders } from '@/lib/branches/client'
@@ -45,6 +47,8 @@ export function CatalogQuickCreateDialog({
   onOpenChange,
   onCreated,
 }: CatalogQuickCreateDialogProps) {
+  const canViewCost = useCanViewCost()
+  const canUpdateCost = useCanUpdateCost()
   const [values, setValues] = useState(initialValues)
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -110,7 +114,7 @@ export function CatalogQuickCreateDialog({
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...branchHeaders(branchId) },
-        body: JSON.stringify(toProductCreatePayload(parsed.data as CatalogQuickCreateInput, branchId)),
+        body: JSON.stringify(omitUnauthorizedProductCosts(toProductCreatePayload(parsed.data as CatalogQuickCreateInput, branchId), canUpdateCost)),
       })
       const payload = await response.json().catch(() => ({})) as ApiResponse
       if (!response.ok || !payload.success || !payload.data) {
@@ -182,11 +186,11 @@ export function CatalogQuickCreateDialog({
               <Label htmlFor="catalog-wholesale-price">Precio mayorista (opcional)</Label>
               <Input id="catalog-wholesale-price" inputMode="numeric" value={values.wholesalePrice} onChange={(e) => updateValue('wholesalePrice', e.target.value)} />
             </div>
-            <div className="space-y-2">
+            {canViewCost && <div className="space-y-2">
               <Label htmlFor="catalog-purchase-price">Costo interno</Label>
-              <Input id="catalog-purchase-price" inputMode="numeric" value={values.purchasePrice} onChange={(e) => updateValue('purchasePrice', e.target.value)} aria-invalid={Boolean(fieldErrors.purchasePrice)} />
+              <Input disabled={!canUpdateCost} id="catalog-purchase-price" inputMode="numeric" value={values.purchasePrice} onChange={(e) => updateValue('purchasePrice', e.target.value)} aria-invalid={Boolean(fieldErrors.purchasePrice)} />
               {fieldErrors.purchasePrice && <p className="text-sm text-red-600">{fieldErrors.purchasePrice}</p>}
-            </div>
+            </div>}
             {kind === 'part' && (
               <div className="space-y-2">
                 <Label htmlFor="catalog-initial-stock">Stock inicial en esta sucursal</Label>

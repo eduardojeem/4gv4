@@ -16,6 +16,7 @@ type CreditRow = {
   interest_rate: number | null
   created_at: string | null
   branch_id: string | null
+  status: string | null
 }
 
 type InstallmentRow = {
@@ -95,7 +96,7 @@ export const GET = withTenantAuth({ permission: 'analytics.read', module: 'credi
     const credits = await fetchAllPages<CreditRow>((from, to) => {
       let query = supabase
         .from('customer_credits')
-        .select('id, customer_id, principal, interest_rate, created_at, branch_id')
+        .select('id, customer_id, principal, interest_rate, created_at, branch_id, status')
         .eq('organization_id', organization.id)
       if (branchId) query = query.eq('branch_id', branchId)
       return query.order('id', { ascending: true }).range(from, to)
@@ -133,6 +134,7 @@ export const GET = withTenantAuth({ permission: 'analytics.read', module: 'credi
         principal: Number(credit.principal || 0),
         interestRate: Number(credit.interest_rate || 0),
         createdAt: String(credit.created_at || ''),
+        status: credit.status,
       })),
       installments: installments.map((installment) => ({
         creditId: String(installment.credit_id),

@@ -1,18 +1,22 @@
 'use client'
 
-import { CreditCard, QrCode } from 'lucide-react'
+import { CreditCard, Globe, QrCode } from 'lucide-react'
 import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
 import { cn } from '@/lib/utils'
 
+/** Tarjeta y QR van por Pagopar; 'stripe' abre Stripe Checkout. */
+export type SubscriptionPaymentMethod = PagoparPaymentMethod | 'stripe'
+
 type PagoparPaymentMethodSelectorProps = {
-  value: PagoparPaymentMethod
-  onChange: (method: PagoparPaymentMethod) => void
+  value: SubscriptionPaymentMethod
+  onChange: (method: SubscriptionPaymentMethod) => void
   disabled?: boolean
   className?: string
+  includeStripe?: boolean
 }
 
 const options: Array<{
-  value: PagoparPaymentMethod
+  value: SubscriptionPaymentMethod
   label: string
   description: string
   icon: typeof CreditCard
@@ -29,6 +33,12 @@ const options: Array<{
     description: 'App bancaria',
     icon: QrCode,
   },
+  {
+    value: 'stripe',
+    label: 'Stripe',
+    description: 'Tarjeta internacional',
+    icon: Globe,
+  },
 ]
 
 export function PagoparPaymentMethodSelector({
@@ -36,14 +46,17 @@ export function PagoparPaymentMethodSelector({
   onChange,
   disabled = false,
   className,
+  includeStripe = false,
 }: PagoparPaymentMethodSelectorProps) {
+  const visibleOptions = includeStripe ? options : options.filter((option) => option.value !== 'stripe')
+
   return (
     <div
-      className={cn('grid grid-cols-2 gap-1 rounded-md border bg-muted/40 p-1', className)}
+      className={cn('grid gap-1 rounded-md border bg-muted/40 p-1', includeStripe ? 'grid-cols-3' : 'grid-cols-2', className)}
       role="group"
-      aria-label="Forma de pago con Pagopar"
+      aria-label={includeStripe ? 'Forma de pago' : 'Forma de pago con Pagopar'}
     >
-      {options.map((option) => {
+      {visibleOptions.map((option) => {
         const Icon = option.icon
         const selected = value === option.value
 

@@ -30,7 +30,7 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
 
     // Sin costo no hay ganancia que afirmar: se avisa en lugar de mostrar
     // numeros que parecerian calculados.
-    if (profitStats.costUnavailable) {
+    if (profitStats.costUnavailable || profitStats.withTax.salesProfit === null || profitStats.withoutTax.salesProfit === null) {
         return (
             <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -42,7 +42,9 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
                 <Card className="border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20">
                     <CardContent className="p-5 space-y-1">
                         <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                            No se pudo calcular el costo de mercadería
+                            {stats.costHidden
+                                ? 'Tu usuario no tiene permiso para ver costos'
+                                : 'No se pudo calcular el costo de mercadería'}
                         </p>
                         <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
                             La ganancia y el margen no se muestran para no informar cifras sin respaldo.
@@ -60,7 +62,7 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
     // ganancia. El interruptor no vuelve a consultar: ambas bases ya vienen
     // calculadas.
     const figures = figuresForMode(profitStats, taxMode)
-    const isLoss = figures.salesProfit < 0
+    const isLoss = figures.salesProfit !== null && figures.salesProfit < 0
     const withoutTax = taxMode === 'without-tax'
 
     return (
@@ -116,12 +118,12 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
                             Ganancia Bruta Ventas
                         </p>
                         <p className={`text-2xl font-bold tracking-tight tabular-nums ${isLoss ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                            {formatCurrency(figures.salesProfit)}
+                            {figures.salesProfit === null ? '—' : formatCurrency(figures.salesProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {withoutTax ? 'Ventas sin IVA' : 'Ventas'} ({formatCurrency(figures.revenue)}) - Costos ({formatCurrency(profitStats.totalCost)})
+                            {withoutTax ? 'Ventas sin IVA' : 'Ventas'} ({formatCurrency(figures.revenue)}) - Costos ({profitStats.totalCost === null ? '—' : formatCurrency(profitStats.totalCost)})
                             {stats.refunds?.salesAmount > 0 && ` - Devoluciones (${formatCurrency(stats.refunds.salesAmount)})`}
-                            {profitStats.itemsWithoutCost > 0 && (
+                            {profitStats.itemsWithoutCost !== null && profitStats.itemsWithoutCost > 0 && (
                                 <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
                                     {profitStats.itemsWithoutCost} ítem(s) sin costo cargado
                                 </span>
@@ -142,7 +144,7 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
                             Margen (Solo Ventas)
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-teal-700 dark:text-teal-400">
-                            {figures.profitMargin.toFixed(2)}%
+                            {figures.profitMargin === null ? '—' : `${figures.profitMargin.toFixed(2)}%`}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Rentabilidad sobre las ventas
@@ -163,7 +165,7 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
                             Ganancia por Taller
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-amber-700 dark:text-amber-400">
-                            {formatCurrency(profitStats.repairProfit)}
+                            {profitStats.repairProfit === null ? '—' : formatCurrency(profitStats.repairProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Recaudado por reparaciones entregadas
@@ -184,10 +186,10 @@ export function ProfitStatsCards({ stats, showRepairs = true }: ProfitStatsCards
                             Ganancia Total Combinada
                         </p>
                         <p className="text-2xl font-bold tracking-tight tabular-nums text-indigo-700 dark:text-indigo-400">
-                            {formatCurrency(figures.totalProfit)}
+                            {figures.totalProfit === null ? '—' : formatCurrency(figures.totalProfit)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {showRepairs || profitStats.repairProfit > 0
+                            {showRepairs || (profitStats.repairProfit !== null && profitStats.repairProfit > 0)
                                 ? 'Ventas + Reparaciones Entregadas'
                                 : 'Ventas del período'}
                         </p>

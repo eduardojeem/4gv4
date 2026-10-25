@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { redactCostFields, resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { buildCountItems } from '@/lib/inventory/inventory-count-server'
 import { roleHasPermission, type OrganizationRole } from '@/lib/saas/permissions'
 
@@ -11,7 +13,7 @@ export const dynamic = 'force-dynamic'
 const MISSING_TABLE = /does not exist|could not find|schema cache/i
 const COUNT_COLUMNS = 'id, number, name, status, branch_id, category_id, notes, created_at, applied_at, summary, branches(name), categories(name)'
 
-export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (_request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (_request, { organization, user }) => {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('inventory_counts')
@@ -39,9 +41,11 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
   }
 
   const { data: categories } = await supabase.from('categories').select('id, name').eq('organization_id', organization.id).order('name').limit(500)
+  // El costo unitario y la diferencia en guaraníes son datos de costos.
+  const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), { userId: user.id, organizationId: organization.id })
   return NextResponse.json({
     available: true,
-    counts: data ?? [],
+    counts: redactCostFields(data ?? [], costAccess),
     progress,
     categories: categories ?? [],
     canAdjust: roleHasPermission(organization.role as OrganizationRole, 'inventory.stock.manage'),
@@ -79,7 +83,7 @@ export const POST = withTenantAuth({ permission: 'inventory.stock.manage', modul
 
   let items
   try {
-    items = await buildCountItems(supabase, organization.id, parsed.data.branch_id, parsed.data.category_id ?? null)
+    items = await buildCountItems(supabase, organization.id, parsed.data.branch_id, parsed.data.category_id ?? null, createAdminSupabase())
   } catch (error) {
     logger.error('No se pudo leer el stock para la toma', { error })
     return NextResponse.json({ error: 'No se pudo leer el stock de la sucursal' }, { status: 500 })

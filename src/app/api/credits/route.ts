@@ -26,7 +26,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const supabase = createAdminSupabase()
     const params = new URL(request.url).searchParams
     const filters = z.object({
-      status: z.enum(['pending', 'paid', 'late', '']).optional(),
+      status: z.enum(['pending', 'paid', 'late', 'cancelled', '']).optional(),
       fromDate: z.string().refine(value => !value || creditCalendarDate(value) === value).optional(),
       toDate: z.string().refine(value => !value || creditCalendarDate(value) === value).optional(),
       minAmount: z.string().refine(value => !value || (Number.isFinite(Number(value)) && Number(value) >= 0)).optional(),
@@ -65,8 +65,16 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     ])
     const saleItems = (await Promise.all(chunkIds(sales.map(row=>String(row.id)),200).map(ids=>readAllCreditRows((from,to)=>
       supabase.from('sale_items').select('id,sale_id,quantity,unit_price,subtotal,product:products(id,name)').in('sale_id',ids).order('id').range(from,to))))).flat()
-    const orderedInstallments = installments.map((row): Record<string, unknown> => ({...row, status: row.status === 'paid' ? 'paid' :
-      creditInstallmentIsOverdue(String(row.due_date), String(row.status), timeZone) ? 'late' : 'pending'}))
+    const isCancelled = (value: unknown) => ['cancelled','cancelado','canceled'].includes(String(value ?? '').toLowerCase())
+    const creditById = new Map(creditRows.map(row => [String(row.id), row]))
+    const orderedInstallments = installments.map((row): Record<string, unknown> => {
+      const parent = creditById.get(String(row.credit_id))
+      const status = isCancelled(row.status) || isCancelled(parent?.status)
+        ? 'cancelled'
+        : row.status === 'paid' ? 'paid'
+          : creditInstallmentIsOverdue(String(row.due_date), String(row.status), timeZone) ? 'late' : 'pending'
+      return { ...row, status }
+    })
       .sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)) || Number(a.installment_number)-Number(b.installment_number))
     const statuses = new Map(orderedInstallments.map(row => [String(row.id), row.status]))
     const orderedPayments = [...payments].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)) || String(b.id).localeCompare(String(a.id)))
@@ -75,7 +83,8 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       orderedInstallments as unknown as Parameters<typeof summarizeCreditPortfolio>[1], timeZone)
     const filtered = orderedInstallments.filter(row=>{
       const credit=creditRows.find(c=>String(c.id)===String(row.credit_id))
-      if (['cancelled','cancelado','canceled'].includes(String(credit?.status))) return false
+      if (isCancelled(credit?.status)) return false
+      if (isCancelled(row.status) && params.get('status') !== 'cancelled') return false
       if (credit?.status === 'completed' && row.status !== 'paid') return false
       const status=params.get('status')
       if (status && row.status !== status) return false
@@ -91,10 +100,10 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       creditRows as unknown as Parameters<typeof summarizeCreditPortfolio>[0],
       filtered as unknown as Parameters<typeof summarizeCreditPortfolio>[1], timeZone)
     return NextResponse.json({ success:true,data:{
-      credits:creditRows,installments:page===null?orderedInstallments:filtered.slice((page-1)*perPage,page*perPage),
+      credits:creditRows,installments:page===null?filtered:filtered.slice((page-1)*perPage,page*perPage),
       payments:orderedPayments,summary,installmentsProgress:installmentsProgress.map(row => ({...row,status_effective:statuses.get(String(row.id)) ?? row.status_effective})),customers,sales,saleItems,
       globalSummary,filteredSummary,timeZone,asOf:new Date().toISOString(),
-      pagination:{page:page??1,perPage:page===null?orderedInstallments.length:perPage,total:filtered.length,complete:page===null},
+      pagination:{page:page??1,perPage:page===null?filtered.length:perPage,total:filtered.length,complete:page===null},
     } })
   } catch {
     logger.error('Credit portfolio read failed')

@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo, useRef } from 'react'
 import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
@@ -715,14 +716,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 // Hook para requerir autenticación
 export function useRequireAuth() {
+  const router = useRouter()
   const { user, loading } = useAuth()
 
   useEffect(() => {
     if (!loading && !user) {
       // Redirigir a login si no está autenticado
-      window.location.href = '/login'
+      router.push('/login')
     }
-  }, [user, loading])
+  }, [user, loading, router])
 
   return { user, loading }
 }

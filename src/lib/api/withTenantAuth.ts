@@ -40,8 +40,12 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
       const auth = await resolveRequestAuthUser()
 
       if ('reason' in auth) {
+        // `code` le dice a la app que se perdió el acceso (no solo un permiso), para
+        // descartar los datos privados en vez de tratarlo como un 403 cualquiera.
         return NextResponse.json(
-          { error: auth.reason === 'unauthenticated' ? 'Unauthorized' : 'Forbidden' },
+          auth.reason === 'unauthenticated'
+            ? { error: 'Unauthorized' }
+            : { error: 'Forbidden', code: 'ACCOUNT_INACTIVE' },
           { status: auth.reason === 'unauthenticated' ? 401 : 403 }
         )
       }
@@ -50,7 +54,7 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
 
       if (!organization) {
         return NextResponse.json(
-          { error: 'Organization required', message: 'No active organization membership was found.' },
+          { error: 'Organization required', code: 'ORGANIZATION_REQUIRED', message: 'No active organization membership was found.' },
           { status: 403 }
         )
       }

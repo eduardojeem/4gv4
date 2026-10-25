@@ -4,6 +4,12 @@ import { SubscriptionsClientView } from '@/components/admin/subscriptions/Subscr
 import type { PlanRecord, SubscriptionPayment } from '@/lib/saas/subscription-service'
 
 // Mock next/navigation
+// El pago por transferencia tiene sus propios tests (BankTransferPayment.test)
+// y necesita la sesión del AuthProvider, que esta vista no monta.
+vi.mock('@/components/admin/subscriptions/BankTransferPayment', () => ({
+  BankTransferPayment: () => null,
+}))
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),

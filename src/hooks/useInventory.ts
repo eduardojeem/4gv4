@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { PRODUCT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 export interface InventoryProduct {
     id: string
@@ -44,7 +45,8 @@ export function useInventory() {
 
             let query = supabase
                 .from('products')
-                .select('*')
+                // El POS no necesita el costo: sin select('*') (S1).
+                .select(PRODUCT_CLIENT_COLUMNS)
                 .eq('organization_id', organization.id)
                 .order('name', { ascending: true })
 
@@ -56,7 +58,7 @@ export function useInventory() {
 
             if (error) throw error
 
-            setProducts(data || [])
+            setProducts((data || []) as unknown as InventoryProduct[])
 
             // Calculate low stock alerts
             const alerts: LowStockAlert[] = (data || [])
@@ -102,7 +104,7 @@ export function useInventory() {
         try {
             const { data, error } = await supabase
                 .from('products')
-                .select('*')
+                .select(PRODUCT_CLIENT_COLUMNS)
                 .eq('organization_id', organization.id)
                 .eq('barcode', barcode)
                 .eq('is_active', true)

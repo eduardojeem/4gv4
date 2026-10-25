@@ -1,4 +1,8 @@
+import { applyVariantBranchStock, loadVariantBranchStock } from '@/lib/products/variant-branch-stock'
+import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
+import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
+import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
@@ -8,9 +12,6 @@ import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPrice
 import { logger } from '@/lib/logger'
 import {
   type AppRole,
-  stripProductCost,
-  canViewProductCost,
-  PRODUCT_COST_PERMISSION,
 } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import {
@@ -19,6 +20,7 @@ import {
   upsertBranchInventoryStock,
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
+import { PRODUCT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 type ProductRouteContext = { params: Promise<{ id: string }> }
 
@@ -72,20 +74,19 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScoped
     )[0]
 
-    // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
-    // tenga el permiso específico products.read_cost.
-    let costPermissions: string[] | undefined
-    if (!canViewProductCost(user.role)) {
-      const { data: perms } = await supabase
-        .from('user_permissions')
-        .select('permission')
-        .eq('user_id', user.id)
-        .eq('permission', PRODUCT_COST_PERMISSION)
-        .eq('is_active', true)
-        .limit(1)
-      costPermissions = perms && perms.length > 0 ? [PRODUCT_COST_PERMISSION] : []
+    // Only the edit form opts into branch quantities. Existing detail consumers
+    // continue receiving aggregate variant stock.
+    if (new URL(request.url).searchParams.get('variant_stock_scope') === 'branch') {
+      if (!requestedBranchId || branchScope.branchId !== requestedBranchId) {
+        return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para editar stock de variantes.', code: 'BRANCH_REQUIRED' }, { status: 400 })
+      }
+      const variants = Array.isArray(responseProduct.variants) ? responseProduct.variants as Array<{ id: string; stock_quantity?: number | null }> : []
+      const stock = await loadVariantBranchStock(supabase, organization.id, requestedBranchId, variants.map(v => v.id))
+      responseProduct.variants = applyVariantBranchStock(variants, stock)
     }
-    const safeProduct = stripProductCost(responseProduct as Record<string, unknown>, user.role, costPermissions)
+
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
+    const safeProduct = redactProductCosts(responseProduct as Record<string, unknown>, costAccess)
 
     return NextResponse.json({
       success: true,
@@ -109,7 +110,17 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
   try {
     const { params } = routeContext as ProductRouteContext
     const { id } = await params
-    const body = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    const costClient = createAdminSupabase()
+    const costAccess = await resolveOrganizationProductCostAccess(costClient, {userId:user.id,organizationId:organization.id})
+    if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, id))) {
+      return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
+    }
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id, id)
+
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
 
@@ -163,6 +174,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     const validated = validationResult.data
+    if (!await productReferencesBelongToOrganization(costClient, organization.id, validated)) {
+      return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
+    }
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
       .select('id')
@@ -186,6 +200,11 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    const conflict = await findProductConflict(supabase as never, {
+      organizationId: organization.id, sku: validated.sku, barcode: validated.barcode, excludeId: id,
+    })
+    if (conflict) return NextResponse.json({ success: false, error: conflictMessage(conflict), code: 'PRODUCT_CONFLICT' }, { status: 409 })
+
     const updatePayload: Record<string, unknown> = {}
     // Only consider stock_quantity if the client explicitly sent it
     const desiredStockQuantity = 'stock_quantity' in body && body.stock_quantity !== undefined
@@ -194,6 +213,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     const allowedKeys: Array<keyof typeof validated> = [
       'name',
+      'sku',
       'description',
       'category_id',
       'supplier_id',
@@ -211,6 +231,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       'installments_public',
       'installments_plans',
       'is_active',
+      'featured',
       'barcode',
       'unit_measure',
       'visibility',
@@ -235,6 +256,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     if (await productsHaveForeignPriceColumns(supabase as never)) {
       Object.assign(updatePayload, foreignPriceColumns(validated, (key) => key in body))
+      if (!('foreign_purchase_price' in body)) delete updatePayload.foreign_purchase_price
     }
 
     // Marca: si se tocó, el texto y el vínculo quedan de acuerdo. Si llega
@@ -278,7 +300,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         .update(updatePayload)
         .eq('id', id)
         .eq('organization_id', organization.id)
-        .select('*, category:categories(id, name)')
+        .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(id, name)`)
         .maybeSingle()
 
       if (error) {
@@ -347,7 +369,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
       .from('products')
-      .select('*, category:categories(id, name)')
+      .select(`${PRODUCT_CLIENT_COLUMNS}, category:categories(id, name)`)
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -364,7 +386,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
-    updatedProduct = refreshedProduct as Record<string, unknown>
+    // El costo ya no vuelve por la sesión del usuario (S1): se completa desde el
+    // cliente de servicio y se oculta abajo según el permiso, como antes.
+    updatedProduct = (await hydrateProductCostsFromService(costClient, organization.id, [refreshedProduct as Record<string, unknown> & { id: string }]))[0] as Record<string, unknown>
 
     // Only apply branch inventory overlay when the request explicitly changed stock
     let responseProduct = updatedProduct
@@ -378,11 +402,17 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     return NextResponse.json({
       success: true,
-      data: responseProduct,
+      data: redactProductCosts(responseProduct as Record<string, unknown>, costAccess),
     })
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error('[PRODUCTS PUT] Update failed:', errMsg, error)
+    if ((error as { code?: string })?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Ya existe un producto con este SKU en la organización.', code: 'SKU_ALREADY_EXISTS' }, { status: 409 })
+    }
+    if (error instanceof ProductCostInputError) {
+      return NextResponse.json({success:false,error:error.message,code:'INVALID_VARIANT_SCOPE'},{status:400})
+    }
     logger.error('Product update by id API error', { error })
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor', _debug: errMsg },
@@ -394,12 +424,13 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 // DELETE /api/products/[id] - Eliminar producto especifico (staff only)
 export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (
   _request: NextRequest,
-  { organization },
+  { organization, user },
   routeContext?: unknown
 ) => {
   const { params } = routeContext as ProductRouteContext
   const { id } = await params
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const adminSupabase = createAdminSupabase()
 
     const { data: existing, error: existingError } = await adminSupabase
@@ -476,7 +507,7 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       success: true,
       data: {
         message: 'Producto eliminado exitosamente',
-        deleted_product: existing,
+        deleted_product: redactProductCosts(existing as Record<string,unknown>,costAccess),
       },
     })
   } catch (error: unknown) {

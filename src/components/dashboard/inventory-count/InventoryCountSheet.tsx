@@ -77,7 +77,7 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
       return
     }
     setCount(body.count)
-    setItems(body.items.map((item: CountItem) => ({ ...item, unit_cost: Number(item.unit_cost) })))
+    setItems(body.items.map((item: CountItem) => ({ ...item, unit_cost: item.unit_cost == null ? null : Number(item.unit_cost) })))
     setCanAdjust(Boolean(body.canAdjust))
     setLoading(false)
   }, [countId, router])
@@ -166,7 +166,7 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
   }, [items, filter, search])
 
   const differences = useMemo(
-    () => items.filter((item) => (countDifference(item) ?? 0) !== 0).sort((a, b) => Math.abs((countDifference(b) ?? 0) * b.unit_cost) - Math.abs((countDifference(a) ?? 0) * a.unit_cost)),
+    () => items.filter((item) => (countDifference(item) ?? 0) !== 0).sort((a, b) => Math.abs((countDifference(b) ?? 0) * (b.unit_cost ?? 1)) - Math.abs((countDifference(a) ?? 0) * (a.unit_cost ?? 1))),
     [items],
   )
 
@@ -269,7 +269,7 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
         </CardContent></Card>
         <Card className="rounded-xl"><CardContent className="p-4">
           <p className="text-xs font-medium text-muted-foreground">Diferencia valorizada (al costo)</p>
-          <p className={cn('text-xl font-bold tabular-nums', showSystem && summary.valueDifference < 0 && 'text-red-600')}>{showSystem ? formatCurrency(summary.valueDifference) : '—'}</p>
+          <p className={cn('text-xl font-bold tabular-nums', showSystem && summary.valueDifference !== null && summary.valueDifference < 0 && 'text-red-600')}>{showSystem && summary.valueDifference !== null ? formatCurrency(summary.valueDifference) : '—'}</p>
         </CardContent></Card>
         <Card className="rounded-xl"><CardContent className="p-4">
           <p className="text-xs font-medium text-muted-foreground">Sin contar</p>
@@ -417,7 +417,7 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
             <div className="rounded-lg border p-2"><dt className="text-xs text-muted-foreground">Contados</dt><dd className="text-lg font-bold">{summary.counted}</dd></div>
             <div className="rounded-lg border p-2"><dt className="text-xs text-muted-foreground">A ajustar</dt><dd className="text-lg font-bold">{summary.withDifference}</dd></div>
             <div className="rounded-lg border p-2"><dt className="text-xs text-muted-foreground">Unidades</dt><dd className="text-lg font-bold"><span className="text-blue-600">+{summary.unitsIn}</span> <span className="text-red-600">−{summary.unitsOut}</span></dd></div>
-            <div className="rounded-lg border p-2"><dt className="text-xs text-muted-foreground">Al costo</dt><dd className={cn('text-lg font-bold', summary.valueDifference < 0 && 'text-red-600')}>{formatCurrency(summary.valueDifference)}</dd></div>
+            <div className="rounded-lg border p-2"><dt className="text-xs text-muted-foreground">Al costo</dt><dd className={cn('text-lg font-bold', summary.valueDifference !== null && summary.valueDifference < 0 && 'text-red-600')}>{summary.valueDifference === null ? '—' : formatCurrency(summary.valueDifference)}</dd></div>
           </dl>
           {differences.length > 0 && (
             <div className="max-h-64 overflow-auto rounded-lg border">

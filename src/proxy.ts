@@ -208,7 +208,11 @@ export async function proxy(request: NextRequest) {
   if (tenantSlug) {
     requestHeaders.set('x-tenant-slug', tenantSlug)
   } else {
-    const activeOrganizationId = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
+    // A Bearer client has no organization cookie. This is a selector only;
+    // getCurrentOrganizationContext verifies active membership before using it.
+    const mobileOrganizationId = /^Bearer\s+/i.test(request.headers.get('authorization') ?? '')
+      ? request.headers.get('x-organization-id') : null
+    const activeOrganizationId = mobileOrganizationId ?? request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
     if (activeOrganizationId) {
       requestHeaders.set('x-organization-id', activeOrganizationId)
     }
@@ -380,7 +384,7 @@ export async function proxy(request: NextRequest) {
         const adminSupabase = createAdminClient(adminUrl, serviceKey, {
           auth: { autoRefreshToken: false, persistSession: false },
         })
-        const activeOrganizationId = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
+        const activeOrganizationId = requestHeaders.get('x-organization-id')
         let membershipQuery = adminSupabase
           .from('organization_members')
           .select('role,organization_id')

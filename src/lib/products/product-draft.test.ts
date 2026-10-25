@@ -3,7 +3,9 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearProductDraft, flushProductDraft, readProductDraft, saveProductDraft, scheduleProductDraft } from './product-draft'
 
-const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+// Los repositorios Windows pueden conservar CRLF. Las aserciones de estructura
+// deben probar el código, no el formato de fin de línea del checkout.
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8').replace(/\r\n/g, '\n')
 
 /**
  * El modal guarda todo en estado de React: cualquier cosa que desmonte el árbol

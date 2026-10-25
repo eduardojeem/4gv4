@@ -19,13 +19,17 @@ export async function getRequestBearerToken(): Promise<string | null> {
 export async function createClient() {
   const cookieStore = await cookies()
   const bearer = await getRequestBearerToken()
+  const organizationId = (await headers()).get('x-organization-id')
 
   const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       // Con token, las consultas viajan como ese usuario y RLS aplica igual que en la web.
-      ...(bearer ? { global: { headers: { Authorization: `Bearer ${bearer}` } } } : {}),
+      global: { headers: {
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        ...(organizationId ? { 'x-organization-id': organizationId } : {}),
+      } },
       cookies: {
         getAll() {
           return cookieStore.getAll()

@@ -12,6 +12,7 @@ export interface Permission {
 
 export const WHOLESALE_PRICE_PERMISSION = 'products.read_wholesale_prices'
 export const PRODUCT_COST_PERMISSION = 'products.read_cost'
+export const PRODUCT_COST_UPDATE_PERMISSION = 'products.update_cost'
 
 export interface RolePermissions {
   role: UserRole
@@ -50,6 +51,13 @@ export const PERMISSIONS: Record<string, Permission> = {
     description: 'Permite ver el costo y el margen de los productos (además de admin)',
     resource: 'products',
     action: 'read'
+  },
+  [PRODUCT_COST_UPDATE_PERMISSION]: {
+    id: PRODUCT_COST_UPDATE_PERMISSION,
+    name: 'Editar Precios de Costo',
+    description: 'Permite modificar el costo interno de productos y variantes en la organización',
+    resource: 'products',
+    action: 'update'
   },
   'products.update': {
     id: 'products.update',

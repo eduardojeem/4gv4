@@ -234,3 +234,59 @@ export function renderPlanDeactivatedEmail(params: {
     footerNote: 'Tu historial de ventas y tus reportes se conservan siempre.',
   })
 }
+
+// ---------------------------------------------------------------------------
+// Débito automático de la suscripción rechazado
+// ---------------------------------------------------------------------------
+
+function escapeText(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+export function renderAutopayFailedEmail(params: {
+  companyName: string
+  planName: string
+  amountPyg: number
+  attempt: number
+  maxAttempts: number
+  /** null cuando fue el último intento y el débito quedó suspendido. */
+  nextAttemptAt: Date | null
+  reason: string
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, planName, amountPyg, attempt, maxAttempts, nextAttemptAt, reason, manageUrl, brand } = params
+  const amount = new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(amountPyg)
+  const nextDate = nextAttemptAt
+    ? new Intl.DateTimeFormat('es-PY', { day: 'numeric', month: 'long', timeZone: 'America/Asuncion' }).format(nextAttemptAt)
+    : null
+
+  return renderBrandedEmail({
+    title: nextDate
+      ? 'No pudimos cobrar tu suscripción'
+      : 'Se suspendió el débito automático',
+    preview: nextDate
+      ? `Vamos a reintentar el ${nextDate}.`
+      : 'Pagá a mano o actualizá tu tarjeta para no perder el plan.',
+    intro: `Hola, intentamos cobrar ${amount} del plan ${planName} de "${companyName}" con la tarjeta guardada y no se pudo (intento ${attempt} de ${maxAttempts}).`,
+    bodyHtml: `
+      <p>Motivo informado: <strong>${escapeText(reason)}</strong></p>
+      ${nextDate
+        ? `<p>Vamos a reintentar automáticamente el <strong>${escapeText(nextDate)}</strong>. Si querés, podés
+          cambiar la tarjeta o pagar ahora desde el panel.</p>`
+        : `<p>Después de ${maxAttempts} intentos <strong>dejamos de cobrar automáticamente</strong>. Para mantener
+          tu plan, pagá desde el panel o guardá otra tarjeta y volvé a activar el débito.</p>`}
+    `,
+    cta: { label: nextDate ? 'Revisar mi tarjeta' : 'Pagar o cambiar tarjeta', url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiPOS',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: 'Tus datos y tu historial se conservan siempre.',
+  })
+}

@@ -1,5 +1,8 @@
 'use client'
 
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -17,12 +20,14 @@ import { AlertTriangle, Package, Plus, Search, ShoppingCart, Trash2, X } from 'l
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatMoney, ProductThumb, QuantityStepper } from './order-ui'
+import { knownCost, costTotal } from '@/lib/products/known-cost'
+import { asCostRpcClient, attachProductCosts } from '@/lib/products/cost-columns'
 
 export interface SupplierProduct {
     id: string
     name: string
     suppliersku: string
-    unitprice: number
+    unitprice: number | null
     currency: string
     /** Stock actual en la organizacion (solo para productos propios). */
     stock?: number | null
@@ -36,6 +41,12 @@ export interface SupplierProduct {
      * (ej. la vista de comparacion) no necesita conocer el origen.
      */
     source?: 'own' | 'supplier'
+    /**
+     * El usuario no puede ver el costo de este producto propio (sin
+     * products.read_cost). No se usa 0 como precio: el pedido no se puede crear
+     * con ese producto hasta que alguien con permiso lo cargue.
+     */
+    costHidden?: boolean
 }
 
 interface OrderItem {
@@ -43,10 +54,11 @@ interface OrderItem {
     name: string
     sku: string
     quantity: number
-    unitPrice: number
-    total: number
+    unitPrice: number | null
+    total: number | null
     currency: string
     imageUrl?: string | null
+    costHidden?: boolean
 }
 
 interface CreateOrderModalProps {
@@ -137,7 +149,7 @@ function ProductCard({
 
             <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
                 <span className="text-sm font-semibold tabular-nums">
-                    {formatMoney(product.unitprice, product.currency)}
+                    {product.costHidden ? 'Costo no visible' : formatMoney(product.unitprice, product.currency)}
                 </span>
 
                 {inOrder ? (
@@ -166,8 +178,12 @@ export function CreateOrderModal({
     onOrderCreated,
     initialProduct,
 }: CreateOrderModalProps) {
-    const [products, setProducts] = useState<SupplierProduct[]>([])
-    const [items, setItems] = useState<OrderItem[]>([])
+  const { organization } = useActiveOrganization()
+  const organizationId = organization?.id
+  const scopeKey = organizationId ? `${organizationId}:${supplierId}` : undefined
+
+    const [products, setProducts] = useOrganizationScopedState<SupplierProduct[]>(scopeKey, [])
+    const [items, setItems] = useOrganizationScopedState<OrderItem[]>(scopeKey, [])
     const [loading, setLoading] = useState(false)
     const [search, setSearch] = useState('')
     const [submitting, setSubmitting] = useState(false)
@@ -183,13 +199,14 @@ export function CreateOrderModal({
      *    mostraba nada cuando leia unicamente de ahi.
      */
     const fetchProducts = useCallback(async () => {
+        if (!organizationId) return
         try {
             setLoading(true)
 
             const [ownResult, catalogResult] = await Promise.all([
                 supabase
                     .from('products')
-                    .select('id, name, sku, purchase_price, stock_quantity, min_stock, image_url, images')
+                    .select('id, name, sku, stock_quantity, min_stock, image_url, images').eq('organization_id', organizationId!)
                     .eq('supplier_id', supplierId)
                     .order('name', { ascending: true }),
                 supabase
@@ -200,14 +217,18 @@ export function CreateOrderModal({
 
             if (ownResult.error && catalogResult.error) throw ownResult.error
 
-            const own: SupplierProduct[] = (ownResult.data || []).map((row: Record<string, unknown>) => {
+            // El costo se pide aparte: solo vuelve con permiso de costos (si no, null, nunca cero).
+            const ownRows = await attachProductCosts(asCostRpcClient(supabase), (ownResult.data || []) as Array<Record<string, unknown>>, { organizationId })
+            const own: SupplierProduct[] = ownRows.map((row: Record<string, unknown>) => {
                 const images = Array.isArray(row.images) ? (row.images as string[]) : []
                 return {
                     id: String(row.id),
                     name: String(row.name ?? 'Producto'),
                     suppliersku: row.sku ? String(row.sku) : '',
-                    // Para comprar importa el costo, no el precio de venta.
-                    unitprice: Number(row.purchase_price ?? 0),
+                    // Para comprar importa el costo, no el precio de venta. Sin
+                    // permiso de costos llega null: no se reemplaza por 0.
+                    unitprice: knownCost(row.purchase_price),
+                    costHidden: row.purchase_price === null || row.purchase_price === undefined,
                     currency: 'PYG',
                     stock: row.stock_quantity == null ? null : Number(row.stock_quantity),
                     minStock: row.min_stock == null ? null : Number(row.min_stock),
@@ -236,7 +257,7 @@ export function CreateOrderModal({
         } finally {
             setLoading(false)
         }
-    }, [supabase, supplierId])
+    }, [supabase, supplierId, organizationId, setProducts])
 
     useEffect(() => {
         if (!isOpen || !supplierId) return
@@ -253,9 +274,10 @@ export function CreateOrderModal({
                 total: initialProduct.unitprice,
                 currency: initialProduct.currency,
                 imageUrl: initialProduct.imageUrl,
+                costHidden: initialProduct.costHidden,
             }]
             : [])
-    }, [isOpen, supplierId, initialProduct, fetchProducts])
+    }, [isOpen, supplierId, initialProduct, fetchProducts, organizationId, setItems])
 
     const filteredProducts = useMemo(() => {
         const term = search.trim().toLowerCase()
@@ -281,7 +303,8 @@ export function CreateOrderModal({
     ), [products])
 
     const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0)
-    const orderTotal = items.reduce((sum, item) => sum + item.total, 0)
+    const orderTotal = costTotal(items.map(item => item.total))
+    const hiddenCostItems = items.filter((item) => item.costHidden)
     const currency = items[0]?.currency || 'PYG'
 
     const addItem = (product: SupplierProduct) => {
@@ -289,7 +312,7 @@ export function CreateOrderModal({
             const existing = current.find((item) => item.productId === product.id)
             if (existing) {
                 return current.map((item) => item.productId === product.id
-                    ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.unitPrice }
+                    ? { ...item, quantity: item.quantity + 1, total: item.unitPrice === null ? null : (item.quantity + 1) * item.unitPrice }
                     : item)
             }
             return [...current, {
@@ -301,6 +324,7 @@ export function CreateOrderModal({
                 total: product.unitprice,
                 currency: product.currency,
                 imageUrl: product.imageUrl,
+                costHidden: product.costHidden,
             }]
         })
     }
@@ -311,7 +335,7 @@ export function CreateOrderModal({
             return
         }
         setItems((current) => current.map((item) => item.productId === productId
-            ? { ...item, quantity, total: quantity * item.unitPrice }
+            ? { ...item, quantity, total: item.unitPrice === null ? null : quantity * item.unitPrice }
             : item))
     }
 
@@ -336,9 +360,10 @@ export function CreateOrderModal({
                         sku: product.suppliersku,
                         quantity,
                         unitPrice: product.unitprice,
-                        total: quantity * product.unitprice,
+                        total: product.unitprice === null ? null : quantity * product.unitprice,
                         currency: product.currency,
                         imageUrl: product.imageUrl,
+                        costHidden: product.costHidden,
                     }
                 })
 
@@ -353,7 +378,8 @@ export function CreateOrderModal({
     }
 
     const handleCreateOrder = async () => {
-        if (items.length === 0) return
+        // Sin costo visible no se guarda un pedido con precio 0 inventado.
+        if (items.length === 0 || hiddenCostItems.length > 0 || orderTotal === null || items.some(item => item.unitPrice === null)) return
 
         try {
             setSubmitting(true)
@@ -362,7 +388,7 @@ export function CreateOrderModal({
             // acotado por inquilino. Sin este dato el RLS rechaza el insert.
             const { data: supplier, error: supplierError } = await supabase
                 .from('suppliers')
-                .select('organization_id')
+                .select('organization_id').eq('organization_id', organizationId!)
                 .eq('id', supplierId)
                 .maybeSingle()
 
@@ -371,7 +397,7 @@ export function CreateOrderModal({
                 throw new Error('El proveedor no tiene una organización asociada.')
             }
 
-            const organizationId = supplier.organization_id
+            const orderOrganizationId = supplier.organization_id
             // Fecha + aleatorio: `Date.now().slice(-6)` se repetia cada ~16 min y
             // ahora la numeracion es unica por organizacion.
             const orderNumber = `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
@@ -379,7 +405,7 @@ export function CreateOrderModal({
             const { data: order, error: orderError } = await supabase
                 .from('purchase_orders')
                 .insert({
-                    organization_id: organizationId,
+                    organization_id: orderOrganizationId,
                     supplierid: supplierId,
                     ordernumber: orderNumber,
                     status: 'draft',
@@ -397,7 +423,7 @@ export function CreateOrderModal({
             const { error: itemsError } = await supabase
                 .from('purchase_order_items')
                 .insert(items.map((item) => ({
-                    organization_id: organizationId,
+                    organization_id: orderOrganizationId,
                     order_id: order.id,
                     product_id: item.productId,
                     suppliersku: item.sku,
@@ -561,7 +587,7 @@ export function CreateOrderModal({
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {item.quantity} × {formatMoney(item.unitPrice, item.currency)}
+                                                    {item.costHidden ? 'Costo no visible para tu usuario' : `${item.quantity} × ${formatMoney(item.unitPrice, item.currency)}`}
                                                 </p>
                                             </div>
                                         </li>
@@ -583,10 +609,15 @@ export function CreateOrderModal({
                                 </span>
                             </div>
 
+                            {hiddenCostItems.length > 0 && (
+                                <p className="text-xs text-amber-700 dark:text-amber-400" role="status">
+                                    Tu usuario no puede ver el costo de {hiddenCostItems.length === 1 ? 'un producto' : `${hiddenCostItems.length} productos`} del pedido. Pedile a alguien con permiso de costos que lo cree.
+                                </p>
+                            )}
                             <Button
                                 className="w-full gap-2"
                                 onClick={handleCreateOrder}
-                                disabled={submitting || items.length === 0}
+                                disabled={submitting || items.length === 0 || hiddenCostItems.length > 0 || orderTotal === null}
                             >
                                 {submitting ? 'Creando pedido…' : 'Crear pedido'}
                             </Button>

@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
+import { knownCost, costTotal, costProfit } from '@/lib/products/known-cost'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { endOfDay, format, isAfter, isBefore, startOfDay, subDays } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
@@ -9,6 +12,7 @@ import {
 } from '@/lib/branches/inventory'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
+import { asCostRpcClient, attachProductCosts, fillEmbeddedProductCosts } from '@/lib/products/cost-columns'
 
 export type AnalyticsPreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -61,7 +65,7 @@ export interface FinanceComparisonPoint {
   label: string
   ingresos: number
   egresos: number
-  ganancia: number
+  ganancia: number | null
 }
 
 export interface AnalyticsTableRow {
@@ -500,6 +504,10 @@ function buildInsights(snapshot: AdminAnalyticsSnapshot): AnalyticsInsight[] {
 }
 
 export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
+  const { organization } = useActiveOrganization()
+  const organizationId = organization?.id
+  const scopeKey = organizationId ? `${organizationId}:${filters.branch}` : undefined
+
   const supabase = useMemo(() => {
     try {
       return createClient()
@@ -508,7 +516,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
     }
   }, [])
 
-  const [state, setState] = useState<HookState>({
+  const [state, setState] = useOrganizationScopedState<HookState>(scopeKey, {
     snapshot: EMPTY_SNAPSHOT,
     branchOptions: [],
     loading: true,
@@ -519,8 +527,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
   // Cache control: avoid re-fetching if data is fresh
   const lastFetchRef = useRef<{ timestamp: number; key: string } | null>(null)
   const filterKey = useMemo(
-    () => `${filters.from.toISOString()}_${filters.to.toISOString()}_${filters.branch}`,
-    [filters.from, filters.to, filters.branch]
+    () => `${organizationId}_${filters.from.toISOString()}_${filters.to.toISOString()}_${filters.branch}`,
+    [organizationId, filters.from, filters.to, filters.branch]
   )
 
   const isCacheFresh = useCallback(() => {
@@ -530,7 +538,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
   }, [filterKey])
 
   const fetchAnalytics = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
-    if (!supabase) {
+    if (!supabase || !organizationId) {
       setState((previous) => ({
         ...previous,
         loading: false,
@@ -582,17 +590,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         // Sales: only select needed fields (not full row)
         supabase
           .from('sales')
-          .select('id, created_at, total_amount, status, customer_id, created_by, branch_id')
+          .select('id, created_at, total_amount, status, customer_id, created_by, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
           .lte('created_at', windowEnd.toISOString()),
         supabase
           .from('sales')
-          .select('id, created_at, total_amount, status, branch_id')
+          .select('id, created_at, total_amount, status, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         supabase
           .from('repairs')
-          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)')
+          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)').eq('organization_id', organizationId!)
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         // Entregas hechas DENTRO del periodo, por su propia fecha. La consulta
@@ -602,50 +610,50 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         // mes pasado y se entrego este no aparecia en ningun lado.
         supabase
           .from('repairs')
-          .select('id, delivered_at, branch_id, final_cost, estimated_cost')
+          .select('id, delivered_at, branch_id, final_cost, estimated_cost').eq('organization_id', organizationId!)
           .eq('status', 'entregado')
           .gte('delivered_at', selectedFrom.toISOString())
           .lte('delivered_at', selectedTo.toISOString()),
         // Previous repairs: only need counts and revenue, minimal fields
         supabase
           .from('repairs')
-          .select('id, status, final_cost, estimated_cost, branch_id')
+          .select('id, status, final_cost, estimated_cost, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         supabase
           .from('cash_closures')
-          .select('id, created_at, branch_id, date, status, discrepancy')
+          .select('id, created_at, branch_id, date, status, discrepancy').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
           .lte('created_at', windowEnd.toISOString()),
         supabase
           .from('cash_movements')
-          .select('session_id, created_at, type, amount')
+          .select('session_id, created_at, type, amount').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
           .lte('created_at', windowEnd.toISOString()),
         supabase
           .from('cash_alerts')
-          .select('session_id, created_at, is_resolved, severity')
+          .select('session_id, created_at, is_resolved, severity, register:cash_registers!inner(organization_id)').eq('register.organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
           .lte('created_at', windowEnd.toISOString()),
         supabase
           .from('products')
-          .select('id, name, purchase_price, sale_price, stock_quantity, min_stock, is_active, category:categories(name)')
+          .select('id, name, sale_price, stock_quantity, min_stock, is_active, category:categories(name)').eq('organization_id', organizationId!)
           .eq('is_active', true)
           .limit(2000),
         // Product movements: only need product_id for the "moved" set
         supabase
           .from('product_movements')
-          .select('product_id, branch_id')
+          .select('product_id, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         supabase
           .from('customers')
-          .select('*', { count: 'exact', head: true })
+          .select('*', { count: 'exact', head: true }).eq('organization_id', organizationId!)
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         supabase
           .from('customers')
-          .select('*', { count: 'exact', head: true })
+          .select('*', { count: 'exact', head: true }).eq('organization_id', organizationId!)
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         fetchFinanceSummary(filters),
@@ -697,7 +705,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
-      const baseProducts = (productsResponse.data || []) as Array<ProductRecord & { id: string; stock_quantity?: number | string | null }>
+      // El costo se pide aparte: solo vuelve con permiso de costos (si no, null).
+      const baseProducts = (await attachProductCosts(asCostRpcClient(supabase), productsResponse.data || [], { organizationId })) as Array<ProductRecord & { id: string; stock_quantity?: number | string | null }>
       const inventoryProducts = baseProducts.map((product) => ({
         ...product,
         stock_quantity: toNumber(product.stock_quantity),
@@ -782,7 +791,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             chunkQueryValues(selectedSaleIds).map((saleIds) =>
               supabase
                 .from('sale_items')
-                .select('id, sale_id, product_id, quantity, subtotal, unit_price, product:products(id, name, purchase_price, stock_quantity, category:categories(name))')
+                .select('id, sale_id, product_id, quantity, subtotal, unit_price, product:products(id, name, stock_quantity, category:categories(name))')
                 .in('sale_id', saleIds)
             )
           )
@@ -791,6 +800,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
           selectedSaleItems = responses.flatMap(
             (response) => (response.data ?? []) as unknown as SaleItemRecord[]
+          )
+          await fillEmbeddedProductCosts(
+            asCostRpcClient(supabase),
+            selectedSaleItems.map((item) => (item as { product?: { id?: unknown } | null }).product),
+            { organizationId }
           )
         } catch (e) {
           // Sin los items vendidos el reporte se contradice a si mismo: mostraria
@@ -811,7 +825,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
       const [customersResponse, profilesResponse] = await Promise.all([
         customerIds.length > 0
-          ? supabase.from('customers').select('id, first_name, last_name, customer_type').in('id', customerIds)
+          ? supabase.from('customers').select('id, first_name, last_name, customer_type').eq('organization_id', organizationId!).in('id', customerIds)
           : Promise.resolve({ data: [], error: null }),
         cashierIds.length > 0
           ? supabase.from('profiles').select('id, full_name, email').in('id', cashierIds)
@@ -937,13 +951,13 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const turnover = totalStockVisible > 0 ? (totalUnitsSold / totalStockVisible) * 100 : 0
 
       const categoryMap = new Map<string, { revenue: number; quantity: number }>()
-      const productMap = new Map<string, { id: string; name: string; revenue: number; quantity: number; profit: number; stock: number }>()
+      const productMap = new Map<string, { id: string; name: string; revenue: number; quantity: number; profit: number | null; stock: number }>()
 
       selectedSaleItems.forEach((item) => {
         const quantity = toNumber(item.quantity)
         const revenue = toNumber(item.subtotal ?? item.total ?? quantity * toNumber(item.unit_price ?? item.price))
-        const purchasePrice = toNumber(item.product?.purchase_price)
-        const profit = revenue - (quantity * purchasePrice)
+        const purchasePrice = knownCost(item.product?.purchase_price)
+        const profit = costProfit(revenue, purchasePrice === null ? null : quantity * purchasePrice)
         const categoryName = String(item.product?.category?.name || 'Sin categoria')
         const productId = String(item.product_id || item.product?.id || item.id)
         const productName = String(item.product?.name || 'Producto sin nombre')
@@ -963,7 +977,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         }
         productCurrent.revenue += revenue
         productCurrent.quantity += quantity
-        productCurrent.profit += profit
+        productCurrent.profit = costTotal([productCurrent.profit, profit])
         productMap.set(productId, productCurrent)
       })
 
@@ -984,7 +998,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           label: product.name,
           metric: formatMoney(product.revenue),
           secondary: `${product.quantity} uds`,
-          detail: `Margen ${formatMoney(product.profit)} · Stock ${product.stock}`,
+          detail: `Margen ${product.profit === null ? 'No disponible' : formatMoney(product.profit)} · Stock ${product.stock}`,
         }))
 
       const customerStats = new Map<string, { name: string; orders: number; total: number }>()
@@ -1192,7 +1206,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           label: 'Actual',
           ingresos: financeSummary.accrued.revenue,
           egresos: financeExpenses,
-          ganancia: financeSummary.accrued.netProfit ?? 0,
+          ganancia: financeSummary.accrued.netProfit,
         },
         {
           label: 'Anterior',
@@ -1201,7 +1215,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             financeSummary.comparison.accrued.directCosts +
             financeSummary.comparison.accrued.operatingExpenses +
             financeSummary.comparison.accrued.payrollCost,
-          ganancia: financeSummary.comparison.accrued.netProfit ?? 0,
+          ganancia: financeSummary.comparison.accrued.netProfit,
         },
       ]
 
@@ -1379,11 +1393,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         error: 'No se pudo construir el dashboard analytics con los datos actuales.',
       }))
     }
-  }, [filters, supabase, isCacheFresh, filterKey])
+  }, [filters, supabase, isCacheFresh, filterKey, organizationId, setState])
 
   useEffect(() => {
     fetchAnalytics('initial')
-  }, [fetchAnalytics])
+  }, [fetchAnalytics, organizationId])
 
   // No auto-refresh — analytics is a report, not a live feed.
   // User can click "Actualizar" to refresh manually when needed.

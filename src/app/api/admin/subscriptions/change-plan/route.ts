@@ -12,6 +12,8 @@ import {
   SubscriptionCheckoutError,
 } from '@/lib/saas/pagopar-subscription-checkout'
 import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
+import { getBrowserRequestOrigin, isStripeConfigured } from '@/lib/payments/stripe'
+import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 
 export async function GET() {
   const auth = await resolveRequestAuthUser()
@@ -28,7 +30,7 @@ export async function GET() {
 
   try {
     const data = await getChangePlanData(organization.id)
-    return NextResponse.json(data)
+    return NextResponse.json({ ...data, stripeEnabled: isStripeConfigured() })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'No se pudieron cargar los planes.' },
@@ -53,7 +55,8 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const newPlan = typeof body.plan === 'string' ? body.plan.trim() : ''
-  const paymentMethod = parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
+  const useStripe = body.paymentMethod === 'stripe'
+  const paymentMethod = useStripe ? null : parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
 
   if (!newPlan) {
     return NextResponse.json({ error: 'Falta el campo plan.' }, { status: 400 })
@@ -69,6 +72,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (planRequiresPayment(assessment.targetPlan)) {
+      if (useStripe) {
+        const checkout = await createSubscriptionStripeCheckout({
+          organization,
+          userEmail: auth.user.email,
+          targetPlanCode: assessment.targetPlan.code,
+          canChangePlan: true,
+          requestOrigin: getBrowserRequestOrigin(request),
+        })
+        return NextResponse.json({ success: true, pendingPayment: true, ...checkout })
+      }
+
       if (!paymentMethod) {
         return NextResponse.json({ error: 'Forma de pago de Pagopar no válida.' }, { status: 400 })
       }

@@ -1,3 +1,4 @@
+import { isTenantManagedPermission, isManagedPermissionVisible, syncManagedUserPermissions } from '@/lib/auth/managed-user-permissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -474,8 +475,7 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
 
       for (const row of perms ?? []) {
         if (
-          row.permission === WHOLESALE_PRICE_PERMISSION &&
-          row.organization_id !== context.organizationId
+          !isManagedPermissionVisible(row, context.organizationId)
         ) {
           continue
         }
@@ -567,7 +567,7 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
   if (profileIds.length > 0) {
     const { data: perms, error: permsError } = await supabaseAdmin
       .from('user_permissions')
-      .select('user_id, permission')
+      .select('user_id, permission, organization_id')
       .in('user_id', profileIds)
       .eq('is_active', true)
 
@@ -575,6 +575,7 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
       logger.warn('Could not load user permissions for admin users list', { error: permsError.message })
     } else {
       for (const row of perms ?? []) {
+        if (!isManagedPermissionVisible(row,context.organizationId)) continue
         const uid = String(row.user_id)
         const cur = permissionsByUserId.get(uid) ?? []
         cur.push(String(row.permission))
@@ -719,6 +720,9 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   }
   // Lo validado pisa lo que vino: el resto del cuerpo (branches, mayorista) sigue igual.
   const body = { ...rawBody, ...parsed.data }
+  if (!context.organizationId && Array.isArray(body.permissions) && body.permissions.some((permission:unknown)=>isTenantManagedPermission(String(permission)))) {
+    return NextResponse.json({error:'Seleccioná una organización antes de asignar permisos de precios o costos.'},{status:400})
+  }
 
   const canAccessUser = await assertUserInOrganization(supabaseAdmin, userId, context)
   if (!canAccessUser) {
@@ -900,67 +904,7 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   }
 
   if (Array.isArray(body?.permissions)) {
-    const { data: currentPermissions, error: currentPermissionsError } = await supabaseAdmin
-      .from('user_permissions')
-      .select('permission, organization_id')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-
-    if (currentPermissionsError) throw currentPermissionsError
-
-    const currentSet = new Set<string>(
-      (currentPermissions ?? [])
-        .filter((row) =>
-          row.permission !== WHOLESALE_PRICE_PERMISSION ||
-          row.organization_id === context.organizationId
-        )
-        .map((row) => String(row.permission))
-    )
-    const nextSet = new Set<string>(body.permissions.map((p: unknown) => String(p)))
-    const toInsert = Array.from(nextSet).filter((p) => !currentSet.has(p))
-    const toRevoke = Array.from(currentSet).filter((p) => !nextSet.has(p))
-
-    if (toInsert.includes(WHOLESALE_PRICE_PERMISSION) && !context.organizationId) {
-      return NextResponse.json(
-        { error: 'Selecciona una organizacion antes de asignar acceso mayorista.' },
-        { status: 400 }
-      )
-    }
-
-    if (toInsert.length > 0) {
-      const { error } = await supabaseAdmin
-        .from('user_permissions')
-        .insert(toInsert.map((p) => ({
-          user_id: userId,
-          organization_id: p === WHOLESALE_PRICE_PERMISSION ? context.organizationId : null,
-          permission: p,
-          is_active: true,
-        })))
-      if (error) throw error
-    }
-
-    // Soft-delete: mark as inactive instead of hard delete for auditability
-    const revokeWholesale = toRevoke.includes(WHOLESALE_PRICE_PERMISSION)
-    const revokeGlobal = toRevoke.filter((permission) => permission !== WHOLESALE_PRICE_PERMISSION)
-
-    if (revokeGlobal.length > 0) {
-      const { error } = await supabaseAdmin
-        .from('user_permissions')
-        .update({ is_active: false })
-        .eq('user_id', userId)
-        .in('permission', revokeGlobal)
-      if (error) throw error
-    }
-
-    if (revokeWholesale && context.organizationId) {
-      const { error } = await supabaseAdmin
-        .from('user_permissions')
-        .update({ is_active: false })
-        .eq('user_id', userId)
-        .eq('organization_id', context.organizationId)
-        .eq('permission', WHOLESALE_PRICE_PERMISSION)
-      if (error) throw error
-    }
+    await syncManagedUserPermissions(supabaseAdmin,userId,context.organizationId,body.permissions.map((permission:unknown)=>String(permission)))
   }
 
   await supabaseAdmin.from('audit_log').insert({

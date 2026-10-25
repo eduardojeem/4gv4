@@ -64,4 +64,21 @@ describe('buildCreditReport', () => {
     expect(report.portfolio.activeCredits).toBe(0)
     expect(report.statusDistribution).toEqual([{ status: 'completed', count: 1 }])
   })
+
+  it('excludes cancelled credits and installments from granted, outstanding, late and due-soon totals', () => {
+    const report = buildCreditReport({
+      credits: [
+        { id: 'active', customerId: 'customer-a', principal: 100, interestRate: 0, createdAt: '2026-08-15T12:00:00Z', status: 'active' },
+        { id: 'cancelled-credit', customerId: 'customer-b', principal: 500, interestRate: 0, createdAt: '2026-08-15T12:00:00Z', status: 'cancelled' },
+      ],
+      installments: [
+        { creditId: 'active', amount: 100, amountPaid: 0, status: 'cancelled', dueDate: '2026-08-01' },
+        { creditId: 'cancelled-credit', amount: 500, amountPaid: 0, status: 'cancelled', dueDate: '2026-08-01' },
+      ],
+      payments: [], from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-08-31T23:59:59Z'), today: '2026-08-15',
+    })
+    expect(report.period.grantedCount).toBe(1)
+    expect(report.portfolio).toMatchObject({ activeCredits: 0, outstandingAmount: 0, overdueAmount: 0, overdueInstallments: 0, overdueCustomers: 0, dueSoonAmount: 0 })
+    expect(report.statusDistribution).toEqual([{ status: 'completed', count: 1 }])
+  })
 })

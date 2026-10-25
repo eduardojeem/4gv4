@@ -47,9 +47,9 @@ export interface DashboardStats {
   totalProducts: number
   activeProducts: number
   totalStockValue: number
-  totalCostValue: number
-  totalMargin: number
-  avgMarginPercentage: number
+  totalCostValue: number | null
+  totalMargin: number | null
+  avgMarginPercentage: number | null
   lowStockCount: number
   outOfStockCount: number
   categoriesCount: number

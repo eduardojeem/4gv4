@@ -1,6 +1,6 @@
 'use client'
 
-import { Barcode, CheckCircle2, FolderTree, Sparkles, Store, Tag } from 'lucide-react'
+import { Barcode, FolderTree, Store, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type StatCell = {
@@ -28,7 +28,7 @@ export function GlobalProductStats({
   usedCount,
   uncategorizedCount,
   unbrandedCount,
-  candidatesCount,
+  candidatesCount: _candidatesCount,
   currentFilter,
   onSelectFilter,
 }: GlobalProductStatsProps) {

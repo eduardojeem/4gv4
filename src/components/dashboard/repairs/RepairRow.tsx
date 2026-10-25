@@ -26,7 +26,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { WarrantyBadge } from './WarrantyBadge'
 import { printRepairReceipt, printRepairReceiptWhenReady, RepairPrintPayload } from '@/lib/repair-receipt'
-import { buildRepairPrintPayload, fetchRepairVerificationHash } from '@/lib/repairs/print-payload'
+import { buildRepairPrintPayload, fetchRepairQrSignature } from '@/lib/repairs/print-payload'
+import type { RepairQrSignature } from '@/lib/repairs/tracking-url'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
@@ -105,14 +106,14 @@ export const RepairRow = memo<RepairRowProps>(
 
     // El mismo armado que el detalle: antes la fila dejaba afuera la garantía de
     // la orden, lo pagado, el IMEI y el QR.
-    const getPrintPayload = (verificationHash?: string): RepairPrintPayload =>
+    const getPrintPayload = (qrSignature?: RepairQrSignature): RepairPrintPayload =>
       buildRepairPrintPayload(repair, {
         name: resolvedCompanyInfo.name,
         phone: resolvedCompanyInfo.phone,
         address: resolvedCompanyInfo.address,
         email: resolvedCompanyInfo.email,
         logo: resolvedCompanyInfo.logo,
-      }, verificationHash)
+      }, qrSignature)
 
     return (
       <TableRow
@@ -266,7 +267,7 @@ export const RepairRow = memo<RepairRowProps>(
               <DropdownMenuItem
                 onClick={() => void printRepairReceiptWhenReady(
                   'customer',
-                  fetchRepairVerificationHash(repair).then((hash) => getPrintPayload(hash))
+                  fetchRepairQrSignature(repair).then((signature) => getPrintPayload(signature))
                 )}
                 className="dark:hover:bg-muted/50"
               >

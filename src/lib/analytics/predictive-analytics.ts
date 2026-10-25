@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { PRODUCT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 
 // Interfaces para analytics predictivo
 export interface PredictiveModel {
@@ -296,7 +297,7 @@ class PredictiveAnalyticsEngine {
     try {
       const { data: product } = await this.supabase
         .from('products')
-        .select('*')
+        .select(PRODUCT_CLIENT_COLUMNS)
         .eq('id', productId)
         .single()
 
@@ -310,7 +311,7 @@ class PredictiveAnalyticsEngine {
         throw new Error('Insufficient data for price optimization')
       }
 
-      const currentPrice = product.sale_price || product.price || 0
+      const currentPrice = product.sale_price || (product as { price?: number | null }).price || 0
 
       // Calcular elasticidad de precio
       const elasticity = this.calculatePriceElasticity(salesHistory)

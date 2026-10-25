@@ -17,6 +17,13 @@ type Fila = { id: string; name: string | null; sku: string | null; barcode: stri
 function clienteCon(filas: Fila[], error: { message: string } | null = null) {
   const visto: { tabla?: string; columna?: string; valor?: string; filtro?: string } = {}
   const client = {
+    rpc: async (_name: string, args: { p_organization_id: string; p_sku: string; p_exclude_id: string | null }) => {
+      visto.tabla = 'products'
+      visto.columna = 'organization_id'
+      visto.valor = args.p_organization_id
+      visto.filtro = args.p_sku
+      return { data: error ? null : filas.filter(row => row.sku?.trim().toLowerCase() === args.p_sku && row.id !== args.p_exclude_id), error }
+    },
     from: (tabla: string) => {
       visto.tabla = tabla
       return {
@@ -81,18 +88,17 @@ describe('el SKU y el código de barras no se repiten dentro de la tienda', () =
   it('un producto sin SKU ni código no consulta nada', async () => {
     const consulta = vi.fn()
     const conflicto = await findProductConflict(
-      { from: consulta as never },
+      { from: consulta as never, rpc: consulta as never },
       { organizationId: 'org', sku: '   ', barcode: null },
     )
     expect(conflicto).toBeNull()
     expect(consulta).not.toHaveBeenCalled()
   })
 
-  /** Comas y paréntesis rompen el filtro `or` de PostgREST. */
-  it('un SKU con comas no rompe la consulta', async () => {
+  it('el SKU se pasa como parámetro sin construir un filtro PostgREST', async () => {
     const { client, visto } = clienteCon([])
     await findProductConflict(client, { organizationId: 'org', sku: 'A,B(C)' })
-    expect(visto.filtro).toBe('sku.eq.ABC')
+    expect(visto.filtro).toBe('a,b(c)')
   })
 
   it('si la consulta falla, no se hace de cuenta que no había conflicto', async () => {

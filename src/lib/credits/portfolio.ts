@@ -20,6 +20,7 @@ export function summarizeCreditPortfolio(credits:Credit[],installments:Installme
   for (const row of installments) {
     const credit=authorized.get(row.credit_id)
     if (!credit) continue
+    if (['cancelled','cancelado','canceled'].includes(String(row.status).toLowerCase())) continue
     const amount=Number(row.amount||0),paidAmount=Math.min(amount,Math.max(0,Number(row.amount_paid||0)))
     if (!Number.isFinite(amount) || !Number.isFinite(paidAmount)) throw new Error('Importe crediticio inválido.')
     const open=credit.status==='completed' ? 0 : Math.max(0,amount-paidAmount)

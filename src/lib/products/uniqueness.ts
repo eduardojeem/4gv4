@@ -8,6 +8,8 @@
  * lector no puede distinguirlos y se cobra el equivocado.
  */
 
+import { findProductSku, type SkuLookupClient } from './sku'
+
 export type ConflictField = 'sku' | 'barcode'
 
 export type ProductConflict = {
@@ -21,7 +23,7 @@ export type ProductConflict = {
 type ConflictRow = { id: string; name: string | null; sku: string | null; barcode: string | null }
 
 /** Lo mínimo que hace falta de Supabase para esta consulta. */
-export type ConflictClient = {
+export type ConflictClient = SkuLookupClient & {
   from: (table: string) => {
     select: (columns: string) => {
       eq: (column: string, value: string) => {
@@ -62,8 +64,12 @@ export async function findProductConflict(
   const skuLimpio = limpio(sku)
   const barcodeLimpio = limpio(barcode)
 
+  if (skuLimpio) {
+    const match = await findProductSku(client, organizationId, skuLimpio, excludeId)
+    if (match) return { field: 'sku', value: skuLimpio, name: match.name ?? 'otro producto', id: match.id }
+  }
+
   const filtros: string[] = []
-  if (skuLimpio) filtros.push(`sku.eq.${seguro(skuLimpio)}`)
   if (barcodeLimpio) filtros.push(`barcode.eq.${seguro(barcodeLimpio)}`)
   if (filtros.length === 0) return null
 

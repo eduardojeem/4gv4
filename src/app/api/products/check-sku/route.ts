@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { findProductSku } from '@/lib/products/sku'
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,26 +24,17 @@ export async function GET(request: NextRequest) {
     }
 
     const sku = request.nextUrl.searchParams.get('sku')
-    if (!sku) {
+    if (!sku?.trim()) {
       return NextResponse.json({ error: 'SKU is required' }, { status: 400 })
     }
 
     const supabase = await createClient()
 
-    // Unicidad acotada a la organización del usuario (limit(1), nunca maybeSingle).
-    const { data, error } = await supabase
-      .from('products')
-      .select('id')
-      .eq('sku', sku)
-      .eq('organization_id', organization.id)
-      .limit(1)
-
-    if (error) {
-      console.error('Error checking SKU:', error)
-      return NextResponse.json({ error: 'Error checking SKU' }, { status: 500 })
+    const excludeId = request.nextUrl.searchParams.get('excludeId') || undefined
+    if (excludeId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(excludeId)) {
+      return NextResponse.json({ error: 'Id de producto inválido' }, { status: 400 })
     }
-
-    const exists = (data?.length ?? 0) > 0
+    const exists = Boolean(await findProductSku(supabase, organization.id, sku, excludeId))
     return NextResponse.json({ isUnique: !exists, exists })
   } catch (error) {
     console.error('Error in check-sku endpoint:', error)

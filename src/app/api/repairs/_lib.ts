@@ -1,3 +1,5 @@
+import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
+import { redactRepairInternalCosts } from '@/lib/repairs/cost-redaction'
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
@@ -37,6 +39,7 @@ export type RepairModuleContext = {
   userId: string
   role: AppRole
   organizationId: string
+  organizationSlug: string
   organizationRole: OrganizationRole
 }
 
@@ -78,6 +81,7 @@ export async function resolveRepairModuleContext(): Promise<RepairModuleContext 
     userId: staffAuth.user.id,
     role: staffAuth.role,
     organizationId: organization.id,
+    organizationSlug: organization.slug,
     organizationRole: organization.role,
   }
 }
@@ -146,7 +150,7 @@ export async function fetchRepairById(ctx: RepairRouteContext, repairId: string)
   if (result.error || !result.data) return result
   return {
     ...result,
-    data: await signRepairRecordImages(ctx.supabase, result.data),
+    data: await prepareRepairResponse(ctx, await signRepairRecordImages(ctx.supabase, result.data)),
   }
 }
 
@@ -161,4 +165,10 @@ export async function assertRepairExists(ctx: RepairRouteContext, repairId: stri
 
   if (error) throw error
   return Boolean(data)
+}
+
+/** Only serialize after checking permissions in the same validated organization. */
+export async function prepareRepairResponse<T>(ctx: RepairRouteContext, value: T): Promise<T> {
+ const access = await resolveOrganizationProductCostAccess(ctx.supabase, {userId:ctx.userId,organizationId:ctx.organizationId})
+ return redactRepairInternalCosts(value, access.canReadCost)
 }

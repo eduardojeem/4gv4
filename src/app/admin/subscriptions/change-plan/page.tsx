@@ -16,15 +16,18 @@ import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { PagoparPaymentMethodSelector } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
+import {
+  PagoparPaymentMethodSelector,
+  type SubscriptionPaymentMethod,
+} from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 import { cn } from '@/lib/utils'
 import type { CommercialPlan, OrganizationUsage } from '@/lib/saas/subscription-service'
-import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
 
 type PageData = {
   currentPlan: CommercialPlan
   usage: OrganizationUsage
   plans: CommercialPlan[]
+  stripeEnabled?: boolean
 }
 
 type ConflictResource = { resource: string; current: number; limit: number }
@@ -172,7 +175,7 @@ export default function ChangePlanPage() {
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<ConflictResource[]>([])
   const [success, setSuccess] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<PagoparPaymentMethod>('card')
+  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>('card')
   // La comparativa manda el plan en la URL. Se resalta y se lleva a la vista,
   // pero no se cambia nada solo: el cobro lo confirma la persona.
   const [targetPlan, setTargetPlan] = useState<string | null>(null)
@@ -281,7 +284,7 @@ export default function ChangePlanPage() {
       <Alert>
         <CreditCard className="h-4 w-4" />
         <AlertDescription>
-          Los planes pagos se activan únicamente después de que Pagopar confirme el cobro.
+          Los planes pagos se activan únicamente después de que {data?.stripeEnabled ? 'Pagopar o Stripe' : 'Pagopar'} confirme el cobro.
         </AlertDescription>
       </Alert>
 
@@ -298,6 +301,7 @@ export default function ChangePlanPage() {
           value={paymentMethod}
           onChange={setPaymentMethod}
           disabled={changingPlanCode !== null}
+          includeStripe={data?.stripeEnabled === true}
         />
       </section>
 

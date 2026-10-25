@@ -1,8 +1,11 @@
+import { getVariantPurchaseCost, getVariantCostValue } from '@/lib/products/variant-cost'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { canViewProductCost } from '@/lib/auth/role-utils'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolveOrganizationProductCostAccess, hasExplicitProductCost, normalizeUnknownProductCosts, hydrateVariantCostsFromService } from '@/lib/products/cost-access'
+import { VARIANT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 import { deriveVariantAttributeConfig, normalizeVariantAttributeValues } from '@/lib/products/variant-attributes'
 
 type ProductSummaryRow = {
@@ -62,16 +65,22 @@ function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
   return null
 }
 
+// S1: la sesión del usuario ya no lee columnas de costo. Se piden las demás y el
+// costo (solo si el usuario puede verlo) se completa desde el cliente de servicio.
+const VARIANT_WITH_PRODUCT_COLUMNS = `${VARIANT_CLIENT_COLUMNS}, product:products(sale_price, wholesale_price, min_stock, max_stock)`
+async function hydrateVariantRows(rows: ProductVariantRow[], organizationId: string, canReadCost: boolean) {
+  return canReadCost ? hydrateVariantCostsFromService(createAdminSupabase(), organizationId, rows) : rows
+}
+
 function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
   const baseWholesalePrice = toSafeNumber(product?.wholesale_price, 0)
-  const baseCostPrice = toSafeNumber(product?.purchase_price, 0)
   const priceAdjustment = toSafeNumber(row.price_adjustment, 0)
 
   const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
   const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
-  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice) || undefined
+  const costPrice = getVariantPurchaseCost(row.purchase_price)
 
   const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
@@ -103,6 +112,7 @@ function isTruthy(value: string | null): boolean {
 // GET /api/variants - Obtener todas las variantes con filtros
 export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { organization, user }) => {
   try {
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('product_id')
     const sku = searchParams.get('sku')
@@ -114,7 +124,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const supabase = await createClient()
     let query = supabase
       .from('product_variants')
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
 
@@ -137,8 +147,8 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       throw error
     }
 
-    const includeCost = canViewProductCost(user.role)
-    const mappedVariants = ((data || []) as ProductVariantRow[]).map((row) => mapVariantRow(row, includeCost))
+    const includeCost = costAccess.canReadCost
+    const mappedVariants = (await hydrateVariantRows((data || []) as unknown as ProductVariantRow[], organization.id, includeCost)).map((row) => mapVariantRow(row, includeCost))
     const filteredVariants = lowStock
       ? mappedVariants.filter((variant) => variant.stock <= variant.min_stock)
       : mappedVariants
@@ -168,7 +178,14 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 // POST /api/variants - Crear nueva variante (staff only)
 export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { organization, user }) => {
   try {
-    const body = await request.json()
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    if(hasExplicitProductCost(rawBody) && !costAccess.canWriteCost) return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'},{status:403})
+    const body = normalizeUnknownProductCosts(rawBody,false)
+
     const productId = String(body?.product_id || '').trim()
     const sku = String(body?.sku || '').trim()
     const name = String(body?.name || '').trim()
@@ -243,7 +260,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         variant_name: name,
         attributes: body?.attributes && typeof body.attributes === 'object' ? body.attributes : {},
         barcode: body?.barcode ? String(body.barcode).trim() : null,
-        purchase_price: Math.max(0, toSafeNumber(body?.purchase_price ?? body?.cost_price, 0)),
+        purchase_price: getVariantPurchaseCost(getVariantCostValue(rawBody)),
         sale_price: Math.max(0, price),
         wholesale_price: body?.wholesale_price === undefined
           ? null
@@ -253,7 +270,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         stock_quantity: Math.max(0, toSafeNumber(body?.stock, 0)),
         is_active: body?.active !== false,
       })
-      .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .select(VARIANT_WITH_PRODUCT_COLUMNS)
       .single()
 
     if (insertError) {
@@ -293,11 +310,11 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       await supabase
         .from('product_variants')
         .delete()
-        .eq('id', insertedVariant.id)
+        .eq('id', (insertedVariant as unknown as ProductVariantRow).id)
         .eq('organization_id', organization.id)
       logger.error('Failed to synchronize variant product parent', {
         productId,
-        variantId: insertedVariant.id,
+        variantId: (insertedVariant as unknown as ProductVariantRow).id,
         error: parentUpdateError.message,
       })
       throw parentUpdateError
@@ -306,7 +323,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     return NextResponse.json(
       {
         success: true,
-        data: mapVariantRow(insertedVariant as ProductVariantRow, canViewProductCost(user.role)),
+        data: mapVariantRow((await hydrateVariantRows([insertedVariant as unknown as ProductVariantRow], organization.id, costAccess.canReadCost))[0], costAccess.canReadCost),
       },
       { status: 201 }
     )
@@ -322,7 +339,14 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 // PUT /api/variants - Actualización masiva de variantes (staff only)
 export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { organization, user }) => {
   try {
-    const body = await request.json()
+    const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
+    const rawBody = await request.json().catch(() => null)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ success: false, error: 'El cuerpo debe ser un objeto JSON válido.' }, { status: 400 })
+    }
+    if(hasExplicitProductCost(rawBody) && !costAccess.canWriteCost) return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'},{status:403})
+    const body = rawBody
+
     const variants = Array.isArray(body?.variants) ? body.variants : null
 
     if (!variants) {
@@ -424,8 +448,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         patch.sale_price = Math.max(0, toSafeNumber(variantData.price, baseSalePrice))
       }
 
-      if (variantData.purchase_price !== undefined || variantData.cost_price !== undefined) {
-        patch.purchase_price = Math.max(0, toSafeNumber(variantData.purchase_price ?? variantData.cost_price, 0))
+      if (costAccess.canWriteCost && getVariantCostValue(variantData) !== undefined) {
+        patch.purchase_price = getVariantPurchaseCost(getVariantCostValue(variantData))
       }
       if (variantData.wholesale_price !== undefined) {
         patch.wholesale_price = Math.max(0, toSafeNumber(variantData.wholesale_price, 0))
@@ -447,7 +471,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         .update(patch)
         .eq('id', variantId)
         .eq('organization_id', organization.id)
-        .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+        .select(VARIANT_WITH_PRODUCT_COLUMNS)
         .maybeSingle()
 
       if (updateError) {
@@ -459,13 +483,13 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }
 
       if (updated) {
-        updatedVariants.push(updated as ProductVariantRow)
+        updatedVariants.push(updated as unknown as ProductVariantRow)
       }
     }
 
     return NextResponse.json({
       success: true,
-      data: updatedVariants.map((row) => mapVariantRow(row, canViewProductCost(user.role))),
+      data: (await hydrateVariantRows(updatedVariants, organization.id, costAccess.canReadCost)).map((row) => mapVariantRow(row, costAccess.canReadCost)),
       message: `${updatedVariants.length} variantes actualizadas`,
     })
   } catch (error) {

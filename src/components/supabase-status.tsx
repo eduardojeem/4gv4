@@ -47,7 +47,7 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
         // Contar productos
         const { count } = await supabase
           .from('products')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('is_active', true)
 
         setStatus({

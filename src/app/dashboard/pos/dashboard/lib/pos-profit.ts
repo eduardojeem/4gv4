@@ -24,9 +24,9 @@ export type ProductAggregate = {
 }
 
 export type SalesCostBreakdown = {
-  totalCost: number
+  totalCost: number | null
   products: ProductAggregate[]
-  /** Ítems cuyo producto no tiene costo cargado: el costo real es mayor. */
+  /** Ítems cuyo costo es desconocido; cero explícito sí es conocido. */
   itemsWithoutCost: number
 }
 
@@ -48,8 +48,8 @@ export function calculateSalesCost(items: SaleItemRow[] | null | undefined): Sal
     const rawCost = item?.product?.purchase_price
 
     // Un producto sin costo cargado no es costo cero: se cuenta aparte para
-    // poder avisar que el margen mostrado es optimista.
-    if (rawCost === null || rawCost === undefined || toNumber(rawCost) <= 0) {
+    // no calcular un margen sin respaldo.
+    if (rawCost === null || rawCost === undefined || !Number.isFinite(Number(rawCost)) || Number(rawCost) < 0) {
       itemsWithoutCost += 1
     }
 
@@ -64,7 +64,7 @@ export function calculateSalesCost(items: SaleItemRow[] | null | undefined): Sal
   }
 
   return {
-    totalCost,
+    totalCost: itemsWithoutCost > 0 ? null : totalCost,
     products: [...productMap.values()].sort((a, b) => b.sales - a.sales),
     itemsWithoutCost,
   }
@@ -78,8 +78,8 @@ export type ProfitInput = {
   totalSales: number
   /** Facturacion sin IVA (sales.subtotal_amount). */
   netSales: number
-  totalCost: number
-  repairDeliveredAmount: number
+  totalCost: number | null
+  repairDeliveredAmount: number | null
   /** true cuando no se pudo traer el costo: no se puede afirmar ganancia. */
   costUnavailable?: boolean
 }
@@ -87,14 +87,14 @@ export type ProfitInput = {
 export type ProfitFigures = {
   /** Facturacion usada como base en este modo. */
   revenue: number
-  salesProfit: number
-  totalProfit: number
-  profitMargin: number
+  salesProfit: number | null
+  totalProfit: number | null
+  profitMargin: number | null
 }
 
 export type ProfitResult = {
-  totalCost: number
-  repairProfit: number
+  totalCost: number | null
+  repairProfit: number | null
   /** IVA contenido en la facturacion del periodo. */
   taxTotal: number
   /** Con IVA: es el modo por defecto. */
@@ -104,12 +104,12 @@ export type ProfitResult = {
   costUnavailable: boolean
 }
 
-function figuresFor(revenue: number, totalCost: number, repairProfit: number): ProfitFigures {
+function figuresFor(revenue: number, totalCost: number, repairProfit: number | null): ProfitFigures {
   const salesProfit = revenue - totalCost
   return {
     revenue,
     salesProfit,
-    totalProfit: salesProfit + repairProfit,
+    totalProfit: repairProfit === null ? null : salesProfit + repairProfit,
     profitMargin: revenue > 0 ? (salesProfit / revenue) * 100 : 0,
   }
 }
@@ -136,19 +136,19 @@ export function calculateProfit(input: ProfitInput): ProfitResult {
   // Si no vino el neto se cae al bruto: mejor repetir la cifra que inventar
   // un neto restando un IVA que no conocemos.
   const netSales = toNumber(input.netSales) || totalSales
-  const repairProfit = toNumber(input.repairDeliveredAmount)
-  const costUnavailable = Boolean(input.costUnavailable)
+  const repairProfit = input.repairDeliveredAmount == null ? null : toNumber(input.repairDeliveredAmount)
+  const costUnavailable = Boolean(input.costUnavailable) || input.totalCost == null || !Number.isFinite(Number(input.totalCost))
   const totalCost = costUnavailable ? 0 : toNumber(input.totalCost)
   const taxTotal = Math.max(0, totalSales - netSales)
 
   if (costUnavailable) {
-    const empty: ProfitFigures = { revenue: 0, salesProfit: 0, totalProfit: 0, profitMargin: 0 }
+    const empty: ProfitFigures = { revenue: totalSales, salesProfit: null, totalProfit: null, profitMargin: null }
     return {
-      totalCost: 0,
-      repairProfit,
+      totalCost: null,
+      repairProfit: null,
       taxTotal,
       withTax: empty,
-      withoutTax: empty,
+      withoutTax: { ...empty, revenue: netSales },
       costUnavailable: true,
     }
   }

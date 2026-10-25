@@ -14,11 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useProductsSupabase } from "@/hooks/useProductsSupabase";
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext';
+import { findProductSku, normalizeSku } from '@/lib/products/sku';
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
 import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useProductCostAccess } from "@/hooks/use-can-view-cost";
+import { importCostPayload } from "@/lib/products/import-cost-payload";
 import type { Product, ProductAlert } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
 import {
@@ -88,6 +92,8 @@ import {
 const PRODUCTS_SECTION_SCOPE = {} as const;
 
 export default function ProductsPage() {
+  const { organization } = useActiveOrganization();
+  const organizationId = organization?.id;
   const router = useRouter();
   const { hasPermission } = usePermissions();
   const { selectedBranch } = useBranch();
@@ -108,7 +114,7 @@ export default function ProductsPage() {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
 
   // Permissions check
-  const canViewCost = hasPermission('cost_prices.read')
+  const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
   const canCreateProducts = hasPermission('products.create') || hasPermission('products.manage')
   void (hasPermission('products.update') || hasPermission('products.manage'));
   void (hasPermission('products.delete') || hasPermission('products.manage'));
@@ -544,7 +550,7 @@ export default function ProductsPage() {
   };
 
   const handleProductDuplicate = async (product: Product) => {
-    if (!canCreateProducts) {
+    if (!canCreateProducts || !organizationId) {
       toast.error("No tienes permisos para crear productos");
       return;
     }
@@ -664,23 +670,22 @@ export default function ProductsPage() {
     // Pre-cargar productos existentes desde la base de datos para TODOS los SKUs y códigos del archivo
     // Esto evita que productos de otras páginas o inactivos no se encuentren al buscar en memoria.
     const supabase = createClient();
-    const skusToSearch = Array.from(new Set(rows.map((r) => r.sku?.trim()).filter(Boolean))) as string[];
+    const skusToSearch = Array.from(new Set(rows.map((r) => r.sku ? normalizeSku(r.sku) : '').filter(Boolean)));
     const barcodesToSearch = Array.from(new Set(rows.map((r) => r.barcode?.trim()).filter(Boolean))) as string[];
 
     if (skusToSearch.length > 0) {
       try {
-        const { data: matchedBySku } = await supabase
-          .from('products')
-          .select('id, name, sku, barcode')
-          .in('sku', skusToSearch);
-        if (matchedBySku) {
-          for (const p of matchedBySku) {
-            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p);
-            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p);
+        // Bound concurrent reads; comparison uses the same expression as the DB index.
+        for (let start = 0; start < skusToSearch.length; start += 20) {
+          const matches = await Promise.all(skusToSearch.slice(start, start + 20).map(sku =>
+            findProductSku(supabase, organizationId, sku)));
+          for (const p of matches) {
+            if (p?.sku) existingBySku.set(normalizeSku(p.sku), { id: p.id });
           }
         }
       } catch (e) {
         console.error('Error pre-matching SKUs for import:', e);
+        throw new Error('No se pudo verificar el SKU de los productos. No se importó ninguna fila.');
       }
     }
 
@@ -689,6 +694,7 @@ export default function ProductsPage() {
         const { data: matchedByBarcode } = await supabase
           .from('products')
           .select('id, name, sku, barcode')
+          .eq('organization_id', organizationId)
           .in('barcode', barcodesToSearch);
         if (matchedByBarcode) {
           for (const p of matchedByBarcode) {
@@ -725,6 +731,8 @@ export default function ProductsPage() {
       options?.onProgress?.(i + 1, total);
 
       try {
+        // Validate before any mutation for this row; omitted costs preserve existing values.
+        const costPayload = importCostPayload(row.purchase_price, canUpdateCost);
         const skuKey = row.sku?.toLowerCase().trim() || '';
         const barcodeKey = row.barcode?.trim() || '';
 
@@ -744,7 +752,7 @@ export default function ProductsPage() {
 
         const updatePayload: Database['public']['Tables']['products']['Update'] = {
           sale_price: row.sale_price,
-          ...(row.purchase_price !== undefined ? { purchase_price: row.purchase_price } : {}),
+          ...costPayload,
           stock_quantity: row.stock_quantity,
           ...(row.description ? { description: row.description } : {}),
           ...(row.brand ? { brand: row.brand } : {}),
@@ -771,7 +779,7 @@ export default function ProductsPage() {
             brand: row.brand || null,
             category_id: categoryId,
             supplier_id: supplierId,
-            purchase_price: row.purchase_price || 0,
+            ...costPayload,
             sale_price: row.sale_price,
             stock_quantity: row.stock_quantity || 0,
             min_stock: row.min_stock || 0,

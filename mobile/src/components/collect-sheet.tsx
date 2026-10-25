@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/bottom-sheet';
-import { collectPayment, dateOnly, fetchCustomerDebts, newCollectionKey, type CollectResult, type Debt, type DebtSummary } from '@/lib/customers';
+import { collectPayment, dateOnly, fetchCustomerDebts, type CollectResult, type Debt, type DebtSummary } from '@/lib/customers';
+import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/private-cache-context';
+import { secureStorage } from '@/lib/secure-storage';
+import { getPendingMobileCollection, MobileCollectionAttemptError, retryMobileCollection, submitMobileCollection, type CollectionAttemptContext, type PendingMobileCollection } from '@/lib/credit-collection-attempt';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 
@@ -52,20 +55,51 @@ export function CollectSheet({
   const [voucher, setVoucher] = useState('');
   const [last4, setLast4] = useState('');
   const [excess, setExcess] = useState(false);
-  const [key] = useState(newCollectionKey);
+  const [attemptContext, setAttemptContext] = useState<CollectionAttemptContext | null>(null);
+  const [pendingAttempt, setPendingAttempt] = useState<PendingMobileCollection | null>(null);
+  const [pendingBlocked, setPendingBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CollectResult | null>(null);
 
   useEffect(() => {
+    let active = true;
     fetchCustomerDebts(customerId)
       .then((summary) => {
+        if (!active) return;
+        const cacheContext = getPrivateCacheContext();
+        if (!cacheContext.userId || !cacheContext.organizationId) throw new Error('Esperá a que se confirme tu usuario y organización antes de cobrar.');
+        const scopedContext: CollectionAttemptContext = {
+          userId: cacheContext.userId,
+          organizationId: cacheContext.organizationId,
+          branchId: summary.branchId ?? cacheContext.branchId,
+          customerId,
+        };
         setData(summary);
+        setAttemptContext(scopedContext);
+        setPendingBlocked(false);
         const target = focusDebtId ? summary.debts.filter((debt) => debt.id === focusDebtId) : summary.debts.filter((debt) => debt.collectable);
         setAmount(pretty(target.reduce((sum, debt) => sum + debt.pendingAmount, 0)));
+        return getPendingMobileCollection(secureStorage, scopedContext).then((pending) => { if (active) setPendingAttempt(pending); });
       })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'No se pudieron cargar las deudas.'));
+      .catch((err) => {
+        if (!active) return;
+        setData(null);
+        setPendingBlocked(err instanceof MobileCollectionAttemptError && err.uncertain);
+        setLoadError(err instanceof Error ? err.message : 'No se pudieron cargar las deudas.');
+      });
+    return () => { active = false; };
   }, [customerId, focusDebtId]);
+
+  useEffect(() => subscribePrivateCacheContext((next, previous) => {
+    if (next.userId === previous.userId && next.organizationId === previous.organizationId && next.branchId === previous.branchId) return;
+    setData(null);
+    setAttemptContext(null);
+    setPendingAttempt(null);
+    setPendingBlocked(false);
+    setError('Cambió el usuario, la organización o la sucursal. Abrí el cobro de nuevo para validar el contexto.');
+    onClose();
+  }), [onClose]);
 
   const collectable = (data?.debts ?? []).filter((debt) => debt.collectable && debt.pendingAmount > 0);
   const chosen = selected ? collectable.filter((debt) => selected.has(debt.id)) : collectable;
@@ -96,7 +130,13 @@ export function CollectSheet({
               : null;
 
   const save = async () => {
-    if (problem) return setError(problem);
+    if (!pendingAttempt && problem) return setError(problem);
+    if (pendingBlocked) return setError('Resolvé el intento pendiente desde la sucursal original antes de cobrar de nuevo.');
+    if (!attemptContext) return setError('Esperá a que se confirme tu usuario, organización y sucursal.');
+    const current = getPrivateCacheContext();
+    if (current.userId !== attemptContext.userId || current.organizationId !== attemptContext.organizationId || (current.branchId && current.branchId !== attemptContext.branchId)) {
+      return setError('Cambió el contexto del cobro. Cerrá esta ventana y volvé a abrirla para continuar.');
+    }
     setSaving(true);
     setError(null);
     try {
@@ -111,9 +151,7 @@ export function CollectSheet({
             })
             .filter((row) => row.amount > 0)
         : undefined;
-      const response = await collectPayment(
-        customerId,
-        {
+      const payload = {
           amount: value,
           method,
           allocations,
@@ -122,13 +160,23 @@ export function CollectSheet({
           lastFourDigits: last4,
           excessToStoreCredit: overflow > 0 && excess,
           branchId: data?.branchId,
-        },
-        key
-      );
+        };
+      const response = pendingAttempt
+        ? await retryMobileCollection(secureStorage, attemptContext, { storage: secureStorage, collect: collectPayment })
+        : await submitMobileCollection(attemptContext, payload, { storage: secureStorage, collect: collectPayment });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPendingAttempt(null);
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cobrar.');
+      if (attemptContext) {
+        try {
+          setPendingAttempt(await getPendingMobileCollection(secureStorage, attemptContext));
+          setPendingBlocked(false);
+        } catch (pendingError) {
+          setPendingBlocked(pendingError instanceof MobileCollectionAttemptError && pendingError.uncertain);
+        }
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSaving(false);
@@ -189,7 +237,19 @@ export function CollectSheet({
       subtitle={data ? `Deuda total ${formatGs(data.totalDebt)}${data.overdueDebt > 0 ? ` · vencido ${formatGs(data.overdueDebt)}` : ''}` : undefined}
       onClose={() => !saving && onClose()}
       footer={
-        data && collectable.length > 0 ? (
+        pendingBlocked ? (
+          <View style={styles.footerCol}>
+            <Text accessibilityRole="alert" style={[styles.small, styles.center, { color: palette.danger }]}>{error ?? 'Existe un intento pendiente en otro contexto; no se puede iniciar otro cobro.'}</Text>
+          </View>
+        ) : pendingAttempt && attemptContext ? (
+          <View style={styles.footerCol}>
+            <Text style={[styles.small, styles.center, { color: colors.muted }]}>Hay un cobro cuyo resultado no se confirmó. Recuperá el mismo intento antes de iniciar otro.</Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Pressable onPress={save} disabled={saving} style={[styles.solid, { backgroundColor: '#D97706', opacity: saving ? 0.55 : 1 }]}>
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.solidText}>Recuperar cobro pendiente</Text>}
+            </Pressable>
+          </View>
+        ) : data && collectable.length > 0 ? (
           <View style={styles.footerCol}>
             {problem ? <Text style={[styles.small, styles.center, { color: colors.muted }]}>{problem}</Text> : null}
             <Pressable onPress={save} disabled={saving} style={[styles.solid, { backgroundColor: '#16A34A', opacity: saving || problem ? 0.55 : 1 }]}>
@@ -200,14 +260,21 @@ export function CollectSheet({
       }>
       {!data && !loadError && <ActivityIndicator color={palette.primary} />}
       {loadError && <Text style={styles.error}>{loadError}</Text>}
-      {data && collectable.length === 0 && (
+      {(pendingAttempt || pendingBlocked) && (
+        <View style={styles.doneHead}>
+          <Ionicons name="time-outline" size={42} color="#D97706" />
+          <Text style={[styles.bold, { color: colors.text }]}>{pendingBlocked ? 'Cobro pendiente en otro contexto' : 'Cobro pendiente de confirmar'}</Text>
+          <Text style={[styles.small, { color: colors.muted }]}>{pendingBlocked ? 'Volvé a la sucursal original para recuperar el resultado. No se enviará un cobro nuevo desde esta sucursal.' : `Monto: ${formatGs(pendingAttempt!.input.amount)}. Se recuperará con la misma clave de seguridad.`}</Text>
+        </View>
+      )}
+      {data && !pendingAttempt && !pendingBlocked && collectable.length === 0 && (
         <View style={styles.doneHead}>
           <Ionicons name="happy-outline" size={44} color="#16A34A" />
           <Text style={[styles.bold, { color: colors.text }]}>No tiene deudas para cobrar.</Text>
         </View>
       )}
 
-      {collectable.length > 0 && (
+      {collectable.length > 0 && !pendingAttempt && !pendingBlocked && (
         <>
           <Text style={[styles.label, { color: colors.text }]}>Qué cobra ({chosen.length} de {collectable.length})</Text>
           {collectable.map((debt) => {

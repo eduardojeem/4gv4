@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronDown, ChevronRight, Crown, HelpCircle, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, User, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Crown, HelpCircle, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, User } from 'lucide-react'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
