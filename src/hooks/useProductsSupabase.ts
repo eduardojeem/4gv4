@@ -184,7 +184,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
     )
 
     return applyBranchInventoryToProducts(items, stockMap, branchScoped)
-  }, [selectedBranchId, supabase, organizationId])
+  }, [selectedBranchId, supabase])
 
   // Función para obtener estadísticas del dashboard
   const fetchDashboardStats = useCallback(async () => {
@@ -252,7 +252,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.error('Error fetching dashboard stats:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     }
-  }, [applySelectedBranchStock, supabase, enabled, organizationId])
+  }, [applySelectedBranchStock, supabase, enabled, organizationId, setDashboardStats])
 
   // Función para obtener productos con filtros y paginación
   const fetchProducts = useCallback(async (
@@ -330,7 +330,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, filters, sort, pagination, enabled, loadAllProducts, organizationId])
+  }, [selectedBranchId, filters, sort, pagination, enabled, loadAllProducts, organizationId, setProducts])
 
   // Función para obtener categorías
   const fetchCategories = useCallback(async () => {
@@ -364,7 +364,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.warn('Error fetching categories:', msg)
       setCategories([])
     }
-  }, [supabase, enabled, organizationId])
+  }, [supabase, enabled, organizationId, setCategories])
 
   // Función para obtener marcas
   const fetchBrands = useCallback(async () => {
@@ -387,7 +387,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.error('Error fetching brands:', err)
       setBrands([])
     }
-  }, [supabase, enabled, organizationId])
+  }, [supabase, enabled, organizationId, setBrands])
 
   // Función para obtener proveedores
   const fetchSuppliers = useCallback(async () => {
@@ -415,7 +415,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.warn('Error fetching suppliers:', msg)
       setSuppliers([])
     }
-  }, [supabase, enabled, organizationId])
+  }, [supabase, enabled, organizationId, setSuppliers])
 
   // Función para obtener alertas
   const fetchAlerts = useCallback(async () => {
@@ -525,7 +525,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.error('Error fetching alerts:', err)
       setAlerts([])
     }
-  }, [applySelectedBranchStock, supabase, enabled, organizationId])
+  }, [applySelectedBranchStock, supabase, enabled, organizationId, setAlerts])
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: Database['public']['Tables']['products']['Insert']) => {
@@ -588,7 +588,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         conflictProductId: payload?.conflictProductId,
       }
     }
-  }, [selectedBranchId, fetchDashboardStats, fetchProducts, organizationId])
+  }, [selectedBranchId, fetchDashboardStats, fetchProducts, setProducts])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (
@@ -680,7 +680,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: errorMessage
       }
     }
-  }, [selectedBranchId, fetchDashboardStats, organizationId, updateSaveAttempts])
+  }, [selectedBranchId, fetchDashboardStats, organizationId, updateSaveAttempts, setProducts])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string) => {
@@ -714,7 +714,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: err instanceof Error ? err.message : 'Error al eliminar el producto'
       }
     }
-  }, [selectedBranchId, fetchProducts, fetchDashboardStats, organizationId])
+  }, [selectedBranchId, fetchProducts, fetchDashboardStats])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
@@ -788,7 +788,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: errorMsg || 'Error desconocido' 
       }
     }
-  }, [selectedBranchId, products, supabase, fetchProducts, fetchDashboardStats, fetchAlerts, organizationId])
+  }, [selectedBranchId, products, supabase, fetchProducts, fetchDashboardStats, fetchAlerts])
 
   // Función para obtener movimientos de un producto
   const getProductMovements = useCallback(async (productId: string, limit = 50) => {
@@ -877,7 +877,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: errorMessage,
       }
     }
-  }, [fetchCategories, organizationId])
+  }, [fetchCategories])
 
   // Función para obtener productos más vendidos
   const getTopSellingProducts = useCallback(async (limit = 10) => {
@@ -1002,7 +1002,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         error: err instanceof Error ? err.message : 'Error desconocido' 
       }
     }
-  }, [fetchAlerts, organizationId])
+  }, [fetchAlerts])
 
   const exportInventoryCSV = useCallback(async (filters: ProductFilters = {}) => {
     try {
@@ -1421,7 +1421,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         fetchDashboardStats(),
         fetchAlerts()
       ])
-    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts, organizationId]),
+    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts]),
     refreshAll: useCallback(async () => {
       await Promise.all([
         fetchProducts(),
@@ -1431,6 +1431,6 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
         fetchDashboardStats(),
         fetchAlerts()
       ])
-    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts, organizationId])
+    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts])
   }
 }
