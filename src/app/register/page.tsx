@@ -30,6 +30,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
 import { slugifyTenantName } from '@/lib/saas/tenant'
+import { appReturnWithResult, safeAppReturnUrl } from '@/lib/mobile-app-return'
 import { useSlugAvailability } from '@/hooks/use-slug-availability'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { createClient } from '@/lib/supabase/client'
@@ -118,6 +119,8 @@ function RegisterForm() {
   const rawRedirect = searchParams.get('redirect') || ''
   const loginHref = rawRedirect ? `/login?redirect=${encodeURIComponent(rawRedirect)}` : '/login'
   const planParam = searchParams.get('plan')?.toLowerCase().trim() ?? ''
+  // Abierto desde la app: al terminar se vuelve a la app (solo a su propia dirección).
+  const appReturn = safeAppReturnUrl(searchParams.get('app_return'))
 
   // El nombre comercial se lee de la base y no se deduce del tier: son cosas
   // distintas (el tier `free` puede ser un plan pago llamado "Lite"), y mostrar
@@ -331,6 +334,11 @@ function RegisterForm() {
           : 'Empresa creada correctamente. Ya puedes iniciar sesion.'
       )
       setTimeout(() => {
+        if (appReturn) {
+          // La app cierra el navegador al ver su dirección y abre su propio ingreso.
+          window.location.assign(appReturnWithResult(appReturn, { requiresEmailConfirmation: Boolean(result.data?.requiresEmailConfirmation) }))
+          return
+        }
         const redirectTarget = encodeURIComponent('/admin/onboarding')
         const registeredCompany = encodeURIComponent(previewSlug)
         // Con confirmación pendiente el ingreso rechaza igual: la pantalla de

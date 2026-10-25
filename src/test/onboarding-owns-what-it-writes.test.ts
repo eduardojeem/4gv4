@@ -101,7 +101,11 @@ describe('los modulos elegidos a mano sobreviven a una revisita', () => {
 describe('la tienda publica se decide, y el paso dice la verdad', () => {
   it('el paso sale de la señal real', () => {
     expect(PAGINA).toContain("const storefrontPublic = businessProfile?.storefront_public === true")
-    expect(PAGINA).toContain('hasPublicStore: storefrontPublic,')
+    // El cálculo de los pasos se comparte con la app: la página le pasa la señal real.
+    expect(PAGINA).toMatch(/onboardingStepProgress\(\{[\s\S]*?\n {4}storefrontPublic,/)
+    const progreso = readFileSync(resolve(process.cwd(), 'src/lib/onboarding/progress.ts'), 'utf8')
+    expect(progreso).toContain('hasPublicStore: input.storefrontPublic === true,')
+    expect(progreso).not.toMatch(/hasPublicStore: Boolean\(.*companyInfo/)
     expect(PAGINA).not.toContain('hasPublicStore: Boolean(companyInfoSetting?.value)')
   })
 

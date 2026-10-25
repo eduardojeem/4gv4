@@ -154,3 +154,24 @@ export async function cleanupPartialProvisioning(
     }
   }
 }
+
+/**
+ * Quien ya empezó el registro con este email y todavía no lo confirmó: volver
+ * a registrarse no crea otro comercio, se le reenvía la confirmación.
+ */
+export const PENDING_REGISTRATION_CODE = 'REGISTRATION_PENDING_CONFIRMATION'
+export const PENDING_REGISTRATION_MESSAGE =
+  'Ya empezaste el registro con este email. Te reenviamos el correo de confirmación: confirmalo y después ingresá con tu email y contraseña.'
+
+/** Si el comercio que ocupa la dirección es de esta misma persona y todavía no confirmó su email. */
+export async function isOwnPendingRegistration(
+  admin: { auth: { admin: { getUserById: (id: string) => Promise<{ data: { user: { email?: string | null; email_confirmed_at?: string | null } | null } | null; error: unknown }> } } },
+  ownerId: string | null | undefined,
+  email: string,
+): Promise<boolean> {
+  if (!ownerId) return false
+  const { data, error } = await admin.auth.admin.getUserById(ownerId)
+  const owner = data?.user
+  if (error || !owner?.email) return false
+  return owner.email.trim().toLowerCase() === email.trim().toLowerCase() && !owner.email_confirmed_at
+}
