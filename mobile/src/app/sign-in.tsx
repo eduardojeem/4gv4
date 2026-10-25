@@ -3,9 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -18,15 +18,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
 
+import { getBiometricSupport, setBiometricUnlockEnabled, wasBiometricUnlockOffered } from '@/lib/biometric-lock';
 import { clearLegacyBiometricCredentials } from '@/lib/legacy-biometric';
 import { palette, usePalette } from '@/lib/palette';
+import { parseRegistrationReturn, registrationNotice } from '@/lib/registration-model';
 import { useSession } from '@/lib/session';
 
-const RESET_URL = 'https://www.mitiendapy.com/login';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const SECURE_KEYS = {
@@ -35,11 +37,13 @@ const SECURE_KEYS = {
 } as const;
 
 export default function SignInScreen() {
-  const { signIn } = useSession();
+  const { signIn, setBiometricEnabled } = useSession();
   const colors = usePalette();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const passwordRef = useRef<TextInput>(null);
+  // Al volver del registro en la web: cuenta creada y, si hace falta, confirmar el email.
+  const registered = registrationNotice(parseRegistrationReturn(useLocalSearchParams()));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,7 +122,24 @@ export default function SignInScreen() {
       } catch {
         // Almacenamiento no bloqueante
       }
+      void offerBiometricUnlock();
     }
+  };
+
+  // Después del primer login en este teléfono se ofrece Face ID / huella una vez.
+  // Lo que se protege es la sesión guardada; la contraseña no se guarda.
+  const offerBiometricUnlock = async () => {
+    if (await wasBiometricUnlockOffered()) return;
+    const support = await getBiometricSupport(Platform.OS);
+    if (!support.available) return;
+    Alert.alert(
+      `¿Entrar con ${support.label}?`,
+      `La próxima vez que abras la app vas a poder entrar con ${support.label}, sin escribir la contraseña. Lo podés desactivar desde el menú de tu perfil.`,
+      [
+        { text: 'Ahora no', style: 'cancel', onPress: () => void setBiometricUnlockEnabled(false).catch(() => undefined) },
+        { text: `Usar ${support.label}`, onPress: () => void setBiometricEnabled(true) },
+      ]
+    );
   };
 
   const clearEmail = async () => {
@@ -189,9 +210,16 @@ export default function SignInScreen() {
                 </Text>
               </View>
 
-              <Text style={[styles.brandSub, { color: colors.muted }]}>
-                Por seguridad, ya no guardamos tu contraseña para el acceso biométrico. Ingresá con tu email y contraseña.
-              </Text>
+              {registered ? (
+                <View accessibilityRole="alert" style={[styles.registeredCard, { borderColor: palette.success, backgroundColor: `${palette.success}14` }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={palette.success} />
+                  <Text style={[styles.registeredText, { color: colors.text }]}>{registered}</Text>
+                </View>
+              ) : (
+                <Text style={[styles.brandSub, { color: colors.muted }]}>
+                  Por seguridad, ya no guardamos tu contraseña para el acceso biométrico. Ingresá con tu email y contraseña.
+                </Text>
+              )}
 
               {/* Tarjeta de Formulario Principal */}
               <View
@@ -279,8 +307,9 @@ export default function SignInScreen() {
                   <View style={styles.passwordLabelRow}>
                     <Text style={[styles.inputLabel, { color: colors.text }]}>Contraseña</Text>
                     <Pressable
-                      onPress={() => Linking.openURL(RESET_URL)}
-                      accessibilityRole="link"
+                      onPress={() => router.push({ pathname: '/forgot-password', params: { email: email.trim() } } as never)}
+                      accessibilityLabel="Recuperar contraseña"
+                      accessibilityRole="button"
                       hitSlop={8}>
                       <Text style={[styles.forgotLink, { color: palette.primary }]}>¿Olvidaste?</Text>
                     </Pressable>
@@ -430,6 +459,8 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
+  registeredCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 14, padding: 12 },
+  registeredText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 20 },
   root: { flex: 1 },
   flex: { flex: 1 },
   ambientGlow: {

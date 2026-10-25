@@ -1,3 +1,4 @@
+import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, panelTransitionAction, setPrivateCacheOrganization, subscribePrivateCacheContext } from './private-cache-context';
 import type { Ionicons } from '@expo/vector-icons';
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from 'react';
 
@@ -81,9 +82,12 @@ export function PanelProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let active = true;
+    const scope = getPrivateCacheContext();
     apiFetch<PanelData>('/api/mobile/dashboard')
       .then((panel) => {
-        if (!active) return;
+        // Al abrir la app el usuario se resuelve durante este pedido: eso no lo invalida.
+        if (!active || (scope.userId !== null && !isPrivateCacheSnapshotCompatible(scope))) return;
+        setPrivateCacheOrganization(panel.organization.id, JSON.stringify([panel.organization.role, panel.organization.plan, panel.capabilities, panel.groups]));
         setData(panel);
         setError(null);
       })
@@ -98,6 +102,19 @@ export function PanelProvider({ children }: PropsWithChildren) {
     };
   }, [attempt]);
 
+  // Otro usuario u otro comercio: el menú de antes no sirve y se vuelve a pedir.
+  // Acceso revocado (401, membresía perdida): se vuelve a pedir para confirmarlo.
+  // Resolver el comercio o la sucursal, o un 403 de un permiso puntual, no tocan el panel.
+  useEffect(() => subscribePrivateCacheContext((next, previous) => {
+    const action = panelTransitionAction(next, previous);
+    if (action === 'keep') return;
+    if (action === 'reset') setData(null);
+    if (!next.userId) return;
+    setError(null);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  }), []);
+
   const reload = useCallback(() => {
     setLoading(true);
     setAttempt((n) => n + 1);
@@ -111,5 +128,5 @@ export function PanelProvider({ children }: PropsWithChildren) {
   return <PanelContext.Provider value={{ data, error, loading, reload, findItem, can: permission => data?.capabilities?.[permission] === true }}>{children}</PanelContext.Provider>;
 }
 
-const NATIVE_SECTIONS = new Set(['overview','products','categories','brands','customers','credits','orders','repairs','pos','cash-register','suppliers','inventory-count','after-sales','administration','technician']);
+const NATIVE_SECTIONS = new Set(['overview','agenda','products','categories','brands','customers','credits','orders','repairs','pos','cash-register','suppliers','inventory-count','after-sales','administration','technician']);
 export const hasNativePanelSection = (key: string) => NATIVE_SECTIONS.has(key);

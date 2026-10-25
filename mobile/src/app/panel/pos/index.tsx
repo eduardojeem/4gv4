@@ -1,3 +1,5 @@
+import { loadPosPrivateCatalog } from '@/lib/pos-private-catalog';
+import { getPrivateCacheContext, isPrivateCacheContextCurrent, setPrivateCacheBranch, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -92,6 +94,7 @@ export default function PosScreen() {
     fetchPosSession()
       .then((data) => {
         if (!active) return;
+        setPrivateCacheBranch(data.branch.id);
         setSession(data);
         setSessionError(null);
       })
@@ -112,14 +115,17 @@ export default function PosScreen() {
       .getItem(AUTO_PRINT_KEY)
       .then((value) => setAutoPrint(value === '1'))
       .catch(() => undefined);
-    frequentProducts().then((list) => {
+  }, []);
+
+  useEffect(() => loadPosPrivateCatalog(session?.branch.id, {
+    loadFrequent: frequentProducts,
+    loadCategories: fetchCategories,
+    onFrequent: list => {
       setFrequent(list);
       if (list.length === 0) setShelf('all');
-    });
-    fetchCategories()
-      .then((rows) => setCategories(rows.filter((row) => !row.parent_id && (row.products_count ?? 0) > 0).sort((a, b) => (b.products_count ?? 0) - (a.products_count ?? 0))))
-      .catch(() => setCategories([]));
-  }, []);
+    },
+    onCategories: rows => setCategories(rows.filter(row => !row.parent_id && (row.products_count ?? 0) > 0).sort((a, b) => (b.products_count ?? 0) - (a.products_count ?? 0))),
+  }), [session?.branch.id]);
 
   const categoryId = shelf !== 'frequent' && shelf !== 'all' ? shelf : null;
 
@@ -132,7 +138,11 @@ export default function PosScreen() {
     return () => {
       active = false;
     };
-  }, [search, categoryId]);
+  }, [search, categoryId, session?.branch.id]);
+
+  useEffect(() => subscribePrivateCacheContext(() => {
+    setFrequent([]); setCategories([]); setShelf('frequent'); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
+  }), []);
 
   // Los frecuentes con el stock y precio que acaba de traer el servidor, si están en la página.
   const fresh = new Map(products.map((product) => [product.id, product]));
@@ -210,6 +220,7 @@ export default function PosScreen() {
 
   const pay = async (payments: PaymentInput[], change: number, credit: CreditTerms | null) => {
     if (!session || !totals) return;
+    const privateScope = getPrivateCacheContext();
     setPaying(true);
     setPayError(null);
     try {
@@ -225,7 +236,7 @@ export default function PosScreen() {
         credit,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      void recordSold(cart).then(() => frequentProducts().then(setFrequent));
+      void recordSold(cart, privateScope).then(() => frequentProducts(privateScope).then(list => { if (isPrivateCacheContextCurrent(privateScope)) setFrequent(list); }));
       setDone({
         business: session.business?.name ? session.business : { name: panel?.organization.name ?? 'Mi Tienda', ruc: '', phone: '', address: '', email: '' },
         saleId: result.id,

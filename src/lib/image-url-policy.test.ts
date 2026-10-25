@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getImageSourceValidationMessage, isSupportedImageSource } from './image-url-policy'
-import { resolveProductImageUrl, shouldBypassImageOptimization } from './images'
+import { resolveProductImageUrl, shouldBypassImageOptimization, shouldUsePortraitProductCover } from './images'
 
 const vtexImage = 'https://pyunicentroprod.vtexassets.com/arquivos/ids/2894614-800-auto?v=1&width=800'
 const napaliImage = 'https://images.napali.app/global/element-products/all/default/xlarge/elykt00170_element,f_tec0_frt1.jpg'
+const localDevImage = 'http://192.168.0.5:55321/storage/v1/object/public/dev-product-images/dev-fixtures/products/celulares.png'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('image URL policy', () => {
   it('accepts the configured VTEX image CDN even without a file extension', () => {
@@ -16,6 +21,30 @@ describe('image URL policy', () => {
   it('accepts the Napali product-image CDN used by existing variants', () => {
     expect(isSupportedImageSource(napaliImage)).toBe(true)
     expect(resolveProductImageUrl(napaliImage)).toBe(napaliImage)
+  })
+
+  it('accepts only local Supabase fixture images in development', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    expect(isSupportedImageSource(localDevImage)).toBe(true)
+    expect(getImageSourceValidationMessage(localDevImage)).toBeNull()
+    expect(resolveProductImageUrl(localDevImage)).toBe(localDevImage)
+    expect(shouldBypassImageOptimization(localDevImage)).toBe(true)
+
+    expect(isSupportedImageSource(localDevImage.replace('dev-product-images', 'product-images'))).toBe(false)
+    expect(isSupportedImageSource(localDevImage.replace(':55321', ':3000'))).toBe(false)
+    expect(isSupportedImageSource('http://example.com/storage/v1/object/public/dev-product-images/dev-fixtures/products/celulares.png')).toBe(false)
+  })
+
+  it('rejects local Supabase fixture URLs outside development', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(isSupportedImageSource(localDevImage)).toBe(false)
+    expect(resolveProductImageUrl(localDevImage)).toBe('/placeholder-product.svg')
+  })
+
+  it('shows synthetic development product images without cropping', () => {
+    expect(shouldUsePortraitProductCover(localDevImage, true)).toBe(false)
+    expect(shouldUsePortraitProductCover('https://images.napali.app/item.jpg', true)).toBe(true)
+    expect(shouldUsePortraitProductCover(localDevImage, false)).toBe(false)
   })
 
   it('rejects an external host that Next/Image cannot render', () => {

@@ -150,7 +150,7 @@ export function SaasShell({ children }: PropsWithChildren) {
               <SaasButton label="Abrir mi panel" icon="speedometer-outline" onPress={() => navigate('/panel' as Href)} />
             </> : <>
               <SaasButton label="Ingresar" icon="log-in-outline" onPress={() => navigate('/sign-in')} />
-              <ProfileMenuItem icon="person-add-outline" title="Crear cuenta" description="Continuar con el registro en la web" onPress={() => { setMenuOpen(false); void openSaasLink('/register'); }} />
+              <ProfileMenuItem icon="person-add-outline" title="Crear cuenta" description="Registrá tu comercio desde la app" onPress={() => { setMenuOpen(false); void openSaasLink('/register'); }} />
             </>}
             <Text style={[styles.menuGroupLabel, { color: colors.muted }]}>EXPLORAR</Text>
             <ProfileMenuItem icon="pricetags-outline" title="Planes y funciones" description="Compará las opciones para tu comercio" onPress={() => { setMenuOpen(false); router.replace('/saas/planes' as Href); }} />

@@ -6,6 +6,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { choicesFromCheckout } from '@/lib/onboarding/checkout-choices'
+import { onboardingStepProgress } from '@/lib/onboarding/progress'
 
 type SettingsModules = {
   onboarding?: {
@@ -150,12 +151,19 @@ export default async function DashboardOnboardingPage() {
   // que decia «Listo» y su enlace llevaba a una tienda sin publicar.
   const storefrontPublic = businessProfile?.storefront_public === true
 
-  const hasCompanyInfo = Boolean(
-    (settings?.display_name || organization.name) &&
-    (adminSettings.companyPhone ?? branch?.phone ?? companyInfo.phone) &&
-    (adminSettings.companyAddress ?? branch?.address ?? companyInfo.address) &&
-    (adminSettings.city ?? branch?.city)
-  )
+  // El mismo cálculo que usa la app (/api/mobile/onboarding).
+  const stepProgress = onboardingStepProgress({
+    displayName: settings?.display_name,
+    organizationName: organization.name,
+    modules: settings?.modules,
+    branch,
+    companyInfo,
+    storefrontPublic,
+    productsCount: productsCount ?? 0,
+    membersCount: membersCount ?? 0,
+    agendaProfessionals: agendaProfessionals ?? 0,
+    hasAgendaSettings: Boolean(agendaSettingsRow),
+  })
 
   return (
     <OnboardingClient
@@ -175,13 +183,7 @@ export default async function DashboardOnboardingPage() {
       servicesEnabled={Boolean(planInfo?.effectiveModules.includes('services'))}
       hasBusinessData={(productsCount ?? 0) > 0 || (salesCount ?? 0) > 0}
       completedAt={modules.onboarding?.completed_at ?? null}
-      stepProgress={{
-        hasCompanyInfo,
-        hasProducts: (productsCount ?? 0) > 0,
-        hasPublicStore: storefrontPublic,
-        hasTeam: (membersCount ?? 0) > 1,
-        hasAgenda: (agendaProfessionals ?? 0) > 0 || Boolean(agendaSettingsRow),
-      }}
+      stepProgress={stepProgress}
       initialCompanyInfo={{
         displayName: settings?.display_name || organization.name,
         currency: settings?.currency || 'PYG',

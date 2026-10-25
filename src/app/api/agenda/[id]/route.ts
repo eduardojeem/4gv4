@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { siteUrl } from '@/lib/site-url'
 import { APPOINTMENT_COLUMNS, appointmentErrorMessage, loadAgendaConfig } from '@/lib/agenda/agenda-server'
+import { loadAgendaConfigForBooking } from '@/lib/agenda/booking-settings'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { bookingWriteError } from '@/lib/agenda/booking-writes'
 import { appointmentInputSchema, appointmentRow, assertAppointmentRefs, type AppointmentStatus } from '@/lib/agenda/agenda-api'
@@ -69,7 +70,7 @@ export const PATCH = withTenantAuth(guard, async (request, { organization, user 
   const transition = TRANSITIONS[parsed.data.action]
   if (!transition.from.includes(status)) return NextResponse.json({ error: 'El turno ya cambió de estado. Actualizá la agenda.' }, { status: 409 })
   if (parsed.data.action === 'update') {
-    const config = await loadAgendaConfig(supabase, organization.id)
+    const config = await loadAgendaConfigForBooking(supabase, organization.id, createAdminSupabase)
     if (config?.capabilities.professionalBooking) {
       const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
         p_org: organization.id, p_id: id, p_input: parsed.data.appointment, p_actor: user.id,

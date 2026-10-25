@@ -42,7 +42,8 @@ export type CountItem = {
   sku: string | null;
   barcode: string | null;
   category_name: string | null;
-  unit_cost: number;
+  /** No llega si el usuario no puede ver costos. */
+  unit_cost?: number | null;
   system_qty: number;
   counted_qty: number | null;
   system_qty_at_count: number | null;
@@ -120,6 +121,7 @@ export function summarizeCount(items: CountItem[]) {
   let unitsIn = 0;
   let unitsOut = 0;
   let valueDifference = 0;
+  const costsKnown = items.every(item => item.unit_cost != null && Number.isFinite(Number(item.unit_cost)))
   for (const item of items) {
     const diff = countDifference(item);
     if (diff === null) continue;
@@ -130,7 +132,7 @@ export function summarizeCount(items: CountItem[]) {
     else unitsOut += -diff;
     valueDifference += diff * Number(item.unit_cost || 0);
   }
-  return { total: items.length, counted, notCounted: items.length - counted, withDifference, unitsIn, unitsOut, valueDifference: Math.round(valueDifference), progress: items.length ? Math.round((counted / items.length) * 100) : 0 };
+  return { total: items.length, counted, notCounted: items.length - counted, withDifference, unitsIn, unitsOut, valueDifference: costsKnown ? Math.round(valueDifference) : null, progress: items.length ? Math.round((counted / items.length) * 100) : 0 };
 }
 
 const normalize = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();

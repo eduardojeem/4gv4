@@ -1,0 +1,79 @@
+{
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "steps": [
+    {
+      "image": "tutorial/web/01.png",
+      "caption": "Entrá a Reparaciones y tocá «Nueva reparación».",
+      "target": {
+        "x": 931.25,
+        "y": 126,
+        "width": 201.734375,
+        "height": 34
+      }
+    },
+    {
+      "image": "tutorial/web/02.png",
+      "caption": "Buscá al cliente por nombre o teléfono y elegilo.",
+      "target": {
+        "x": 199,
+        "y": 687,
+        "width": 390,
+        "height": 48
+      }
+    },
+    {
+      "image": "tutorial/web/03.png",
+      "caption": "Cargá la marca y el modelo del equipo.",
+      "target": {
+        "x": 895,
+        "y": 444,
+        "width": 326,
+        "height": 36
+      }
+    },
+    {
+      "image": "tutorial/web/04.png",
+      "caption": "Elegí el problema con un toque y sumá detalles.",
+      "target": {
+        "x": 219,
+        "y": 444.875,
+        "width": 120.421875,
+        "height": 22.5
+      }
+    },
+    {
+      "image": "tutorial/web/05.png",
+      "caption": "En «Costos y plazo», cargá la mano de obra.",
+      "target": {
+        "x": 211,
+        "y": 342.953125,
+        "width": 484,
+        "height": 48
+      }
+    },
+    {
+      "image": "tutorial/web/06.png",
+      "caption": "Revisá el resumen y confirmá.",
+      "target": {
+        "x": 976.03125,
+        "y": 714,
+        "width": 166.96875,
+        "height": 36
+      }
+    },
+    {
+      "image": "tutorial/web/07.png",
+      "caption": "¡Listo! Imprimí el ticket o envialo por WhatsApp.",
+      "target": {
+        "x": 724,
+        "y": 529.25,
+        "width": 225,
+        "height": 44
+      }
+    }
+  ],
+  "ticket": "REP-000004"
+}

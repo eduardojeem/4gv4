@@ -38,6 +38,7 @@ import {
   type MarketProduct,
   type MarketStore,
 } from '@/lib/marketplace';
+import { openRegistration, useRegisterLabel } from '@/lib/registration';
 import { palette, usePalette } from '@/lib/palette';
 import { ROLE_LABELS } from '@/lib/panel';
 import { useSession } from '@/lib/session';
@@ -92,6 +93,7 @@ const storeCityKey = (store: Pick<MarketStore, 'city' | 'cityKey'>) =>
     null);
 
 export default function MarketplaceScreen() {
+  const registerLabel = useRegisterLabel();
   const { session, signOut } = useSession();
   const colors = usePalette();
   const insets = useSafeAreaInsets();
@@ -347,6 +349,14 @@ export default function MarketplaceScreen() {
   }, [data, homeQuery]);
 
   // ── Filtrado inteligente y exhaustivo para PRODUCTOS ──
+  // Para «Más de esta tienda» en la pantalla del producto: todo lo cargado, sin filtros ni repetidos.
+  const relatedProducts = useMemo(() => {
+    if (!data) return [];
+    const productMap = new Map<string, MarketProduct>();
+    for (const p of [...data.offers, ...data.products]) productMap.set(p.id, p);
+    return Array.from(productMap.values());
+  }, [data]);
+
   const allCatalogProducts = useMemo(() => {
     if (!data) return [];
     // Combinar productos regulares y de ofertas sin duplicar por ID
@@ -995,10 +1005,10 @@ export default function MarketplaceScreen() {
                       <Pressable
                         onPress={async () => {
                           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          openWeb('/register');
+                          void openRegistration();
                         }}
                         style={styles.promoRegisterBtn}>
-                        <Text style={styles.promoRegisterBtnText}>Registrar gratis (20 días)</Text>
+                        <Text style={styles.promoRegisterBtnText}>{registerLabel}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -2060,10 +2070,10 @@ export default function MarketplaceScreen() {
                     <Pressable
                       onPress={async () => {
                         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        openWeb('/register');
+                        void openRegistration();
                       }}
                       style={styles.leadSecondaryBtn}>
-                      <Text style={styles.leadSecondaryBtnText}>Registrar gratis (20 días)</Text>
+                      <Text style={styles.leadSecondaryBtnText}>{registerLabel}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2193,7 +2203,8 @@ export default function MarketplaceScreen() {
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      openWeb('/politica-de-privacidad');
+                      // La política vive en /saas/privacidad: /politica-de-privacidad da 404.
+                      openWeb('/saas/privacidad');
                     }}
                     style={styles.settingRow}>
                     <View style={styles.settingRowLeft}>
@@ -2705,6 +2716,8 @@ export default function MarketplaceScreen() {
           isFavorite={selectedProduct ? favorites.has(selectedProduct.id) : false}
           onToggleFavorite={() => selectedProduct && toggleFavorite(selectedProduct.id)}
           store={selectedProduct ? (data?.stores.find((s) => s.slug === selectedProduct.store.slug) ?? null) : null}
+          related={relatedProducts}
+          onSelectProduct={setSelectedProduct}
           onAddToCart={addToCart}
           onSelectStore={(slug) => {
             setSelectedProduct(null);
@@ -2998,55 +3011,65 @@ function ProductCard({
       ? product.price - product.offerPrice
       : null;
 
+  const openProduct = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onPress) {
+      onPress();
+    } else {
+      openWeb(productPath(product));
+    }
+  };
+
   return (
-    <Pressable
-      onPress={async () => {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (onPress) {
-          onPress();
-        } else {
-          openWeb(productPath(product));
-        }
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={product.name}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.productCard,
         width ? { width } : styles.gridItem,
         {
           backgroundColor: colors.card,
           borderColor: colors.border,
-          opacity: pressed ? 0.9 : 1,
         },
       ]}>
       {/* ── Contenedor de Imagen y Badges Flotantes ── */}
       <View style={[styles.productImageWrap, { backgroundColor: colors.background }]}>
-        {product.image ? (
-          <Image
-            source={product.image}
-            style={styles.productImage}
-            contentFit="contain"
-            transition={200}
-          />
-        ) : (
-          <View style={styles.imageFallbackWrap}>
-            <Ionicons name="cube-outline" size={34} color={colors.muted} />
-          </View>
-        )}
+        <Pressable
+          onPress={openProduct}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver ${product.name}`}
+          style={({ pressed }) => [StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.9 : 1 }]}>
+          {product.image ? (
+            <Image
+              source={product.image}
+              style={styles.productImage}
+              contentFit="contain"
+              transition={200}
+            />
+          ) : (
+            <View style={styles.imageFallbackWrap}>
+              <Ionicons name="cube-outline" size={34} color={colors.muted} />
+            </View>
+          )}
 
-        {/* Badge Descuento (Top-Left) */}
-        {discount ? (
-          <View style={styles.discountBadge}>
-            <Ionicons name="flame" size={10} color="#FFFFFF" />
-            <Text style={styles.discountText}>-{discount}%</Text>
-          </View>
-        ) : null}
+          {/* Badge Descuento (Top-Left) */}
+          {discount ? (
+            <View style={styles.discountBadge}>
+              <Ionicons name="flame" size={10} color="#FFFFFF" />
+              <Text style={styles.discountText}>-{discount}%</Text>
+            </View>
+          ) : null}
 
-        {/* Botón Favorito (Top-Right) */}
+          {/* Overlay Agotado */}
+          {!product.inStock && (
+            <View style={styles.outOfStockOverlay}>
+              <Text style={styles.outOfStockOverlayText}>Agotado</Text>
+            </View>
+          )}
+        </Pressable>
+
+        {/* Botón Favorito como acción hermana, sin quedar anidado en el área de apertura */}
         {onToggleFavorite && (
           <Pressable
-            onPress={async (e) => {
-              e.stopPropagation?.();
+            onPress={async () => {
               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               onToggleFavorite();
             }}
@@ -3064,68 +3087,67 @@ function ProductCard({
             />
           </Pressable>
         )}
-
-        {/* Overlay Agotado */}
-        {!product.inStock && (
-          <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockOverlayText}>Agotado</Text>
-          </View>
-        )}
       </View>
 
       {/* ── Cuerpo del Card ── */}
       <View style={styles.productBody}>
-        {/* Fila Tienda & Marca */}
-        <View style={styles.storeBadgeRow}>
-          <View style={styles.storeBadgeWrap}>
-            <Ionicons name="storefront" size={11} color={accent} />
-            <Text numberOfLines={1} style={[styles.productStore, { color: accent }]}>
-              {product.store.name}
-            </Text>
-          </View>
-          {product.brand ? (
-            <View style={[styles.brandPill, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text numberOfLines={1} style={[styles.brandPillText, { color: colors.muted }]}>
-                {product.brand}
+        <Pressable
+          onPress={openProduct}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver ${product.name}`}
+          style={({ pressed }) => [{ gap: 5, opacity: pressed ? 0.9 : 1 }]}>
+          {/* Fila Tienda & Marca */}
+          <View style={styles.storeBadgeRow}>
+            <View style={styles.storeBadgeWrap}>
+              <Ionicons name="storefront" size={11} color={accent} />
+              <Text numberOfLines={1} style={[styles.productStore, { color: accent }]}>
+                {product.store.name}
               </Text>
             </View>
-          ) : null}
-        </View>
-
-        {/* Título de Producto */}
-        <Text numberOfLines={2} style={[styles.productName, { color: colors.text }]}>
-          {product.name}
-        </Text>
-
-        {/* Bloque de Precios en Guaraníes */}
-        <View style={styles.priceContainer}>
-          {product.price === null ? (
-            <View style={[styles.askPriceWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Ionicons name="chatbubble-ellipses-outline" size={11} color={colors.muted} />
-              <Text style={[styles.askPriceText, { color: colors.muted }]}>Consultar precio</Text>
-            </View>
-          ) : product.offerPrice ? (
-            <View style={styles.offerPriceBlock}>
-              <View style={styles.priceOldRow}>
-                <Text style={[styles.productOld, { color: colors.muted }]}>
-                  {formatGs(product.price)}
+            {product.brand ? (
+              <View style={[styles.brandPill, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text numberOfLines={1} style={[styles.brandPillText, { color: colors.muted }]}>
+                  {product.brand}
                 </Text>
-                {savings ? (
-                  <Text style={styles.savingsLabel}>
-                    Ahorro {formatGs(savings)}
-                  </Text>
-                ) : null}
               </View>
-              <Text style={[styles.productPrice, { color: '#DC2626' }]}>
-                {formatGs(product.offerPrice)}
+            ) : null}
+          </View>
+
+          {/* Título de Producto */}
+          <Text numberOfLines={2} style={[styles.productName, { color: colors.text }]}>
+            {product.name}
+          </Text>
+
+          {/* Bloque de Precios en Guaraníes */}
+          <View style={styles.priceContainer}>
+            {product.price === null ? (
+              <View style={[styles.askPriceWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={11} color={colors.muted} />
+                <Text style={[styles.askPriceText, { color: colors.muted }]}>Consultar precio</Text>
+              </View>
+            ) : product.offerPrice ? (
+              <View style={styles.offerPriceBlock}>
+                <View style={styles.priceOldRow}>
+                  <Text style={[styles.productOld, { color: colors.muted }]}>
+                    {formatGs(product.price)}
+                  </Text>
+                  {savings ? (
+                    <Text style={styles.savingsLabel}>
+                      Ahorro {formatGs(savings)}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.productPrice, { color: '#DC2626' }]}>
+                  {formatGs(product.offerPrice)}
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.productPrice, { color: colors.text }]}>
+                {formatGs(product.price)}
               </Text>
-            </View>
-          ) : (
-            <Text style={[styles.productPrice, { color: colors.text }]}>
-              {formatGs(product.price)}
-            </Text>
-          )}
-        </View>
+            )}
+          </View>
+        </Pressable>
 
         {/* Pie de Card con disponibilidad y acciones */}
         <View style={[styles.cardFooterBar, { borderTopColor: colors.border }]}>
@@ -3148,8 +3170,7 @@ function ProductCard({
           <View style={styles.cardFooterActions}>
             {onAddToCart && product.inStock && (
               <Pressable
-                onPress={async (e) => {
-                  e.stopPropagation?.();
+                onPress={async () => {
                   await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   onAddToCart();
                 }}
@@ -3160,14 +3181,18 @@ function ProductCard({
                 <Ionicons name="cart" size={13} color="#FFFFFF" />
               </Pressable>
             )}
-            <View style={[styles.viewProductPill, { backgroundColor: accent }]}>
+            <Pressable
+              onPress={openProduct}
+              accessibilityRole="button"
+              accessibilityLabel={`Ver ${product.name}`}
+              style={[styles.viewProductPill, { backgroundColor: accent }]}>
               <Text style={styles.viewProductText}>Ver</Text>
               <Ionicons name="arrow-forward" size={10} color="#FFFFFF" />
-            </View>
+            </Pressable>
           </View>
         </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 

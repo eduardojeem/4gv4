@@ -1,5 +1,7 @@
+import { getPrivateCacheContext, isPrivateCacheContextCurrent, subscribePrivateCacheContext, type PrivateCacheContext } from './private-cache-context';
 import { apiFetch, ApiError } from './api';
 import { supabase } from './supabase';
+import { getMobileRuntimeConfig } from './runtime-config';
 
 /**
  * Productos en la app: las mismas APIs que la sección de la web
@@ -97,7 +99,7 @@ export type ProductInput = {
   category_id?: string | null;
   brand?: string | null;
   brand_id?: string | null;
-  purchase_price: number;
+  purchase_price?: number;
   sale_price: number;
   wholesale_price?: number | null;
   offer_price?: number | null;
@@ -166,7 +168,7 @@ export async function lookupBarcode(code: string, excludeId?: string) {
 
 // ─── Fotos ─────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '');
+const SUPABASE_URL = getMobileRuntimeConfig().supabaseUrl;
 const BUCKET = 'product-images';
 
 /** URL pública de una imagen: la base guarda a veces la ruta y a veces la URL completa. */
@@ -242,12 +244,16 @@ export const VISIBILITY: Record<'public' | 'wholesale' | 'hidden', { label: stri
 
 // Caché simple para abrir el detalle al instante desde la lista.
 const cache = new Map<string, Product>();
-export const rememberProducts = (products: Product[]) => products.forEach((product) => cache.set(product.id, product));
-export const cachedProduct = (id: string) => cache.get(id);
+export const rememberProducts = (products: Product[], scope: PrivateCacheContext = getPrivateCacheContext()) => {
+  if (scope.key && scope.branchId && isPrivateCacheContextCurrent(scope)) products.forEach((product) => cache.set(product.id, product));
+};
+export const cachedProduct = (id: string, scope: PrivateCacheContext = getPrivateCacheContext()) => scope.key && scope.branchId && isPrivateCacheContextCurrent(scope) ? cache.get(id) : undefined;
+subscribePrivateCacheContext(() => cache.clear());
 const listeners = new Set<(product: Product | { id: string; deleted: true }) => void>();
-export function notifyProduct(change: Product | { id: string; deleted: true }) {
+export function notifyProduct(change: Product | { id: string; deleted: true }, scope: PrivateCacheContext = getPrivateCacheContext()) {
+  if (!scope.key || !isPrivateCacheContextCurrent(scope)) return;
   if ('deleted' in change) cache.delete(change.id);
-  else cache.set(change.id, change);
+  else if (scope.branchId) cache.set(change.id, change);
   listeners.forEach((listener) => listener(change));
 }
 export function onProductChanged(listener: (change: Product | { id: string; deleted: true }) => void) {

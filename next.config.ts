@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
+import dotenv from 'dotenv'
 import { REMOTE_IMAGE_HOSTS } from './image-hosts.ts'
+import { getDevLocalSupabaseOrigins, getExpoWebDevCorsHeaders } from './src/lib/dev-expo-cors'
 
 const identityConfig = <T,>(config: T) => config
 const loadModule = createRequire(import.meta.url)
@@ -173,6 +177,19 @@ const nextConfig: NextConfig = {
   // Headers para seguridad y optimización de caché
   async headers() {
     const isProd = process.env.NODE_ENV === 'production'
+    let mobileSupabaseUrl: string | undefined
+    if (!isProd) {
+      try {
+        mobileSupabaseUrl = dotenv.parse(readFileSync(resolve(process.cwd(), 'mobile/.env.local'))).EXPO_PUBLIC_SUPABASE_URL
+      } catch {
+        mobileSupabaseUrl = undefined
+      }
+    }
+    const devSupabaseOrigins = getDevLocalSupabaseOrigins({
+      nodeEnvironment: process.env.NODE_ENV,
+      appSupabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      mobileSupabaseUrl,
+    })
     // Cloudflare Web Analytics inyecta su beacon desde static.cloudflareinsights.com
     // y envía las mediciones a cloudflareinsights.com. Sin estos dos dominios la
     // CSP lo bloqueaba y Cloudflare no registraba ninguna visita.
@@ -181,6 +198,9 @@ const nextConfig: NextConfig = {
       : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
 
     return [
+      ...(!isProd
+        ? [{ source: '/api/:path*', headers: getExpoWebDevCorsHeaders('development') }]
+        : []),
       {
         // Security headers para todas las rutas.
         // CSP efectiva: las fuentes requeridas por Supabase y Turnstile están
@@ -199,9 +219,9 @@ const nextConfig: NextConfig = {
               "form-action 'self'",
               scriptSrc,
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
+              `img-src 'self' data: blob: https: ${devSupabaseOrigins.join(' ')}`,
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org",
+              ["connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org", ...devSupabaseOrigins].join(' '),
               // Google Maps: el mapa de la ubicación en la sección de contacto de cada tienda.
               // Pagopar: formulario de uPay para guardar la tarjeta del débito automático.
               `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com https://www.pagopar.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,

@@ -68,67 +68,30 @@ const PLAN_COLORS: Record<string, string> = {
 }
 
 const PLAN_BADGE: Record<string, string> = {
-  FREE: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
-  BASIC: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-300',
-  PRO: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-300',
-  ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
+  FREE: 'border-border bg-muted/50 text-muted-foreground',
+  BASIC: 'border-border bg-muted/50 text-foreground',
+  PRO: 'border-border bg-muted/50 text-foreground',
+  ENTERPRISE: 'border-border bg-muted/50 text-foreground',
 }
 
-function HeroMetric({
-  label, value, sub, icon: Icon, tone, href, trend,
-}: {
+function HeroMetric({ label, value, sub, icon: Icon, href }: {
   label: string
   value: string
   sub: string
   icon: React.ComponentType<{ className?: string }>
-  tone: 'indigo' | 'emerald' | 'amber' | 'violet'
   href: string
-  trend?: { value: string; up?: boolean }
 }) {
-  const tones = {
-    indigo:  'border-indigo-200/70 bg-card dark:border-indigo-900/60',
-    emerald: 'border-emerald-200/70 bg-card dark:border-emerald-900/60',
-    amber:   'border-amber-200/70 bg-card dark:border-amber-900/60',
-    violet:  'border-violet-200/70 bg-card dark:border-violet-900/60',
-  }
-  const iconTones = {
-    indigo:  'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
-    emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-    amber:   'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-    violet:  'bg-violet-500/15 text-violet-600 dark:text-violet-400',
-  }
   return (
-    <Link
-      href={href}
-      className={cn(
-        'group relative overflow-hidden rounded-lg border p-5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50',
-        tones[tone]
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <p className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50 truncate">{value}</p>
-            {trend && (
-              <span className={cn(
-                'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-                trend.up
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                  : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300'
-              )}>
-                {trend.up ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowRight className="h-2.5 w-2.5" />}
-                {trend.value}
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
-        </div>
-        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>
-          <Icon className="h-5 w-5" />
-        </div>
+    <Link href={href} className="group rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       </div>
-      <ArrowUpRight className="absolute right-3 top-3 h-3.5 w-3.5 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+      <p className="mt-3 break-words text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</p>
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <p className="text-xs leading-relaxed text-muted-foreground">{sub}</p>
+        <ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
+      </div>
     </Link>
   )
 }
@@ -156,10 +119,10 @@ export default async function SuperAdminPage() {
     'Crítico'
 
   return (
-    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
 
       {/* Header */}
-      <header className="order-0 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
             <LayoutDashboard className="h-3.5 w-3.5" />
@@ -176,7 +139,7 @@ export default async function SuperAdminPage() {
           <Button asChild variant="outline" size="sm" className="gap-2">
             <Link href="/superadmin/analytics">
               <Activity className="h-3.5 w-3.5" />
-              Analytics
+              Análisis
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="gap-2">
@@ -196,9 +159,9 @@ export default async function SuperAdminPage() {
 
       {/* Missing tables alert */}
       {missingTables.length > 0 && (
-        <div className="order-1 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+        <div className="flex flex-wrap items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
               {missingTables.length} fuente{missingTables.length !== 1 ? 's' : ''} de datos no disponible{missingTables.length !== 1 ? 's' : ''}
             </p>
@@ -212,14 +175,154 @@ export default async function SuperAdminPage() {
         </div>
       )}
 
+      {/* 2-column: Attention + Recent orgs */}
+      <section className="space-y-3" aria-labelledby="priority-heading">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">Prioridad de hoy</p>
+            <h2 id="priority-heading" className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-50">Qué necesita atención</h2>
+          </div>
+          <Button asChild variant="ghost" size="sm" className="gap-1.5">
+            <Link href="/superadmin/subscriptions">Gestionar suscripciones <ArrowRight className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+
+        {/* Attention items */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg border',
+                  overview.attentionItems.length > 0
+                    ? 'border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/20 dark:text-orange-400'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400'
+                )}>
+                  {overview.attentionItems.length > 0 ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                </div>
+                <div>
+                  <CardTitle className="text-base">Atención requerida</CardTitle>
+                  <p className="mt-0.5 text-xs text-slate-500">Pagos, cancelaciones y pruebas próximas</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="rounded-full text-xs">
+                {overview.attentionItems.length}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {overview.attentionItems.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {overview.attentionItems.map((item) => {
+                  const tone = reasonTone(item.reason)
+                  const ToneIcon = tone.icon
+                  return (
+                    <Link
+                      key={item.id}
+                      href="/superadmin/subscriptions"
+                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {getInitials(item.organization_name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.organization_name}</p>
+                          <Badge variant="outline" className={cn('rounded-full gap-1 text-xs', PLAN_BADGE[item.plan] ?? PLAN_BADGE.FREE)}>
+                            {item.plan}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                          <Badge variant="outline" className={cn('rounded-full gap-1 text-xs', tone.color)}>
+                            <ToneIcon className="h-2.5 w-2.5" />
+                            {item.reason}
+                          </Badge>
+                          <span className="text-slate-400">
+                            Vence: {formatDate(item.current_period_ends_at || item.trial_ends_at)}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+                    </Link>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="py-12 text-center">
+                <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
+                <p className="mt-3 font-semibold text-slate-900 dark:text-slate-100">Sin acciones urgentes</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Las renovaciones y estados de cobro están bajo control.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent organizations */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Empresas recientes</CardTitle>
+                  <p className="mt-0.5 text-xs text-slate-500">Últimas organizaciones creadas</p>
+                </div>
+              </div>
+              <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
+                <Link href="/superadmin/organizations">
+                  Ver todas
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {overview.recentOrganizations.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {overview.recentOrganizations.slice(0, 6).map((org) => (
+                  <Link
+                    key={org.id}
+                    href="/superadmin/organizations"
+                    className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {getInitials(org.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{org.name}</p>
+                        <Badge variant="outline" className={cn('rounded-full text-xs', PLAN_BADGE[org.plan ?? 'FREE'] ?? PLAN_BADGE.FREE)}>
+                          {org.plan ?? 'FREE'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-400">/{org.slug} · {formatDate(org.created_at)}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-sm text-slate-400">
+                <Building2 className="mx-auto h-8 w-8 text-slate-300" />
+                <p className="mt-2">Aún no hay empresas registradas</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+      </section>
+
       {/* Hero metrics */}
-      <section className="order-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores ejecutivos">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores ejecutivos">
         <HeroMetric
           label="MRR confirmado"
           value={formatMoney(overview.subscriptionHealth.estimatedMrr)}
           sub={`${overview.subscriptionHealth.active} activas · ${overview.subscriptionHealth.renewalsSoon} renovaciones próximas`}
           icon={TrendingUp}
-          tone="emerald"
           href="/superadmin/billing"
         />
         <HeroMetric
@@ -227,15 +330,13 @@ export default async function SuperAdminPage() {
           value={formatNumber(organizations?.value ?? 0)}
           sub={`${formatNumber(members?.value ?? 0)} miembros registrados`}
           icon={Building2}
-          tone="indigo"
           href="/superadmin/organizations"
         />
         <HeroMetric
           label="En prueba"
           value={formatNumber(overview.subscriptionHealth.trialing)}
-          sub="trials por convertir"
+          sub="pruebas por convertir"
           icon={Sparkles}
-          tone="violet"
           href="/superadmin/subscriptions"
         />
         <HeroMetric
@@ -243,13 +344,12 @@ export default async function SuperAdminPage() {
           value={`${overallHealth}%`}
           sub={healthLabel}
           icon={Gauge}
-          tone={overallHealth >= 60 ? 'emerald' : 'amber'}
           href="/superadmin/subscriptions"
         />
       </section>
 
       {/* Health bar */}
-      <Card className="order-4">
+      <Card className="">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
@@ -320,151 +420,10 @@ export default async function SuperAdminPage() {
         </CardContent>
       </Card>
 
-      {/* 2-column: Attention + Recent orgs */}
-      <section className="order-2 space-y-3" aria-labelledby="priority-heading">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">Prioridad de hoy</p>
-            <h2 id="priority-heading" className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-50">Qué necesita atención</h2>
-          </div>
-          <Button asChild variant="ghost" size="sm" className="gap-1.5">
-            <Link href="/superadmin/subscriptions">Gestionar suscripciones <ArrowRight className="h-3.5 w-3.5" /></Link>
-          </Button>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-
-        {/* Attention items */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg border',
-                  overview.attentionItems.length > 0
-                    ? 'border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/20 dark:text-orange-400'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400'
-                )}>
-                  {overview.attentionItems.length > 0 ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                </div>
-                <div>
-                  <CardTitle className="text-base">Atención requerida</CardTitle>
-                  <p className="mt-0.5 text-xs text-slate-500">Pagos, cancelaciones y trials próximos</p>
-                </div>
-              </div>
-              <Badge variant="outline" className="rounded-full text-xs">
-                {overview.attentionItems.length}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {overview.attentionItems.length > 0 ? (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {overview.attentionItems.map((item) => {
-                  const tone = reasonTone(item.reason)
-                  const ToneIcon = tone.icon
-                  return (
-                    <Link
-                      key={item.id}
-                      href="/superadmin/subscriptions"
-                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {getInitials(item.organization_name)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.organization_name}</p>
-                          <Badge variant="outline" className={cn('rounded-full gap-1 text-[10px]', PLAN_BADGE[item.plan] ?? PLAN_BADGE.FREE)}>
-                            {item.plan}
-                          </Badge>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-2 text-xs">
-                          <Badge variant="outline" className={cn('rounded-full gap-1 text-[10px]', tone.color)}>
-                            <ToneIcon className="h-2.5 w-2.5" />
-                            {item.reason}
-                          </Badge>
-                          <span className="text-slate-400">
-                            Vence: {formatDate(item.current_period_ends_at || item.trial_ends_at)}
-                          </span>
-                        </div>
-                      </div>
-                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
-                    </Link>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="py-12 text-center">
-                <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
-                <p className="mt-3 font-semibold text-slate-900 dark:text-slate-100">Sin acciones urgentes</p>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Las renovaciones y estados de cobro están bajo control.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent organizations */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">Empresas recientes</CardTitle>
-                  <p className="mt-0.5 text-xs text-slate-500">Últimos tenants creados</p>
-                </div>
-              </div>
-              <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
-                <Link href="/superadmin/organizations">
-                  Ver todas
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {overview.recentOrganizations.length > 0 ? (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {overview.recentOrganizations.slice(0, 6).map((org) => (
-                  <Link
-                    key={org.id}
-                    href="/superadmin/organizations"
-                    className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {getInitials(org.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{org.name}</p>
-                        <Badge variant="outline" className={cn('rounded-full text-[10px]', PLAN_BADGE[org.plan ?? 'FREE'] ?? PLAN_BADGE.FREE)}>
-                          {org.plan ?? 'FREE'}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-slate-400">/{org.slug} · {formatDate(org.created_at)}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-sm text-slate-400">
-                <Building2 className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-2">Aún no hay empresas registradas</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        </div>
-      </section>
-
       {/* Plans distribution + Platform stats */}
-      <section className="order-5 space-y-3" aria-labelledby="platform-context-heading">
+      <section className="space-y-3" aria-labelledby="platform-context-heading">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Contexto secundario</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Contexto de la plataforma</p>
           <h2 id="platform-context-heading" className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">Plataforma y distribución</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -474,7 +433,7 @@ export default async function SuperAdminPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-400">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                   <CreditCard className="h-4 w-4" />
                 </div>
                 <CardTitle className="text-base">Distribución por plan</CardTitle>
@@ -527,20 +486,20 @@ export default async function SuperAdminPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <Database className="h-4 w-4" />
               </div>
               <CardTitle className="text-base">Datos de la plataforma</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <DataStat label="Productos" value={products?.value ?? 0} icon={Store} ok={Boolean(products?.available)} />
               <DataStat label="Clientes" value={customers?.value ?? 0} icon={Users} ok={Boolean(customers?.available)} />
               <DataStat label="Ventas" value={sales?.value ?? 0} icon={Banknote} ok={Boolean(sales?.available)} />
               <DataStat label="Reparaciones" value={repairs?.value ?? 0} icon={Wrench} ok={Boolean(repairs?.available)} />
               <DataStat label="Miembros" value={members?.value ?? 0} icon={Users} ok={Boolean(members?.available)} />
-              <DataStat label="Tenants" value={organizations?.value ?? 0} icon={Building2} ok={Boolean(organizations?.available)} />
+              <DataStat label="Organizaciones" value={organizations?.value ?? 0} icon={Building2} ok={Boolean(organizations?.available)} />
             </div>
           </CardContent>
         </Card>
@@ -570,7 +529,7 @@ function DataStat({
         {ok ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <AlertTriangle className="h-3 w-3 text-amber-500" />}
       </div>
       <p className="mt-1.5 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{formatNumber(value)}</p>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
     </div>
   )
 }

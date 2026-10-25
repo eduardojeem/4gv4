@@ -55,6 +55,7 @@ export const fromBudgetLine = (line: BudgetLine): CostLine => ({
   discountAmount: line.lineType === 'included_material' ? 0 : digits(line.discountText),
   taxRate: line.taxRate ?? 10,
   lineType: line.lineType,
+  sourceProductId: line.sourceProductId ?? null,
 });
 
 const lineSubtotal = (line: BudgetLine) =>
@@ -132,14 +133,15 @@ export function BudgetLines({
       const selected = toBudgetLine({ ...lineFromInventory(item), stock: item.availableStock });
       // Un servicio que trae material suma su «Material incluido» (costo, sin precio), como la web.
       const included =
-        item.lineType === 'service' && Number(item.includedMaterialCost) > 0
+        item.lineType === 'service' && (item.includesMaterial || Number(item.includedMaterialCost) > 0)
           ? [
               toBudgetLine({
                 name: `Material incluido · ${item.name}`,
                 quantity: 1,
                 unitPrice: 0,
-                unitCost: Number(item.includedMaterialCost),
+                unitCost: Number(item.includedMaterialCost ?? 0),
                 productId: null,
+                sourceProductId: item.productId,
                 partNumber: item.sku || null,
                 supplier: 'Incluido en el servicio',
                 taxRate: item.taxRate ?? 10,

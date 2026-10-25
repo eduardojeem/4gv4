@@ -83,7 +83,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@/test': path.resolve(__dirname, './src/test')
+      '@/test': path.resolve(__dirname, './src/test'),
+      'expo-local-authentication': path.resolve(__dirname, './src/test/mocks/expo-local-authentication.ts'),
+      'expo-secure-store': path.resolve(__dirname, './src/test/mocks/expo-secure-store.ts'),
     }
   }
 })

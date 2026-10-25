@@ -13,6 +13,7 @@ import {
 } from '@/lib/health/site-probe'
 import { median, percentile } from '@/lib/health/statistics'
 import type { HealthCheckResult, HealthMetricGroup } from '@/lib/health/types'
+import { SHARED_RATE_LIMIT_HINT, sharedRateLimitState } from '@/lib/rate-limit-config'
 
 const PROBE_NOTE = 'Solo se analiza el HTML que entrega el servidor; el contenido que se agrega en el navegador no se ve.'
 const IMAGE_BUDGET_BYTES = 200 * 1024
@@ -281,17 +282,17 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         category: 'security',
         name: 'Rate limiting',
         description: 'Endpoints públicos que escriben deben tener límite de solicitudes compartido entre instancias (Upstash). El login y la recuperación de contraseña los limita Supabase Auth.',
-        method: `Variables UPSTASH_* configuradas; ${codeAuditMethod()}`,
+        method: `Variables UPSTASH_REDIS_REST_* o KV_REST_API_* configuradas; ${codeAuditMethod()}`,
       },
       async () => {
-        const upstash = isConfigured('UPSTASH_REDIS_REST_URL') && isConfigured('UPSTASH_REDIS_REST_TOKEN')
+        const upstash = sharedRateLimitState() === 'configured'
         const publicWrites = codeAudit.apiRoutes
           .flatMap(mutatingOperations)
           .filter((operation) => !operation.authGuard || /^\/api\/(public|auth)\//.test(operation.route))
         const unprotected = publicWrites.filter((r) => !r.rateLimited)
         const anonymousUnprotected = unprotected.filter((r) => !r.authGuard)
         const findings: string[] = []
-        if (!upstash) findings.push('UPSTASH_REDIS_REST_URL/TOKEN no configuradas: el limitador usa memoria por instancia y en Vercel no es efectivo.')
+        if (!upstash) findings.push(`${SHARED_RATE_LIMIT_HINT} no configuradas: el limitador usa memoria por instancia (en Vercel no es efectivo) y el login y la recuperación de la app responden 503.`)
         anonymousUnprotected.forEach((r) => findings.push(`${r.route} (${r.method}) acepta escrituras sin sesión y sin rate limit.`))
         unprotected.filter((r) => r.authGuard).forEach((r) => findings.push(`${r.route} (${r.method}): requiere sesión pero no tiene rate limit (prioridad baja).`))
         findings.push('Login, registro de usuario y recuperación de contraseña: límites de Supabase Auth (verificar en Dashboard → Auth → Rate Limits; no hay API configurada para leerlos).')

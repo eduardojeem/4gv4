@@ -3,32 +3,54 @@
  *
  * When UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set (production /
  * Vercel), uses @upstash/ratelimit backed by Redis so the limit is shared
- * across all serverless instances.
+ * across all serverless instances. KV_REST_API_URL + KV_REST_API_TOKEN (the
+ * names the Vercel Marketplace integration creates) work the same way.
  *
  * When those vars are absent (local dev, CI), falls back to a per-process
  * in-memory Map. The in-memory fallback is NOT shared across serverless
- * instances — do NOT rely on it for production rate limiting.
+ * instances — do NOT rely on it for production rate limiting. In production
+ * a missing Redis is logged once per instance.
  */
 
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
+
+import { SHARED_RATE_LIMIT_HINT, sharedRateLimitCredentials } from '@/lib/rate-limit-config'
 
 // ---------------------------------------------------------------------------
 // Upstash client — lazily created, shared across requests in the same process.
 // ---------------------------------------------------------------------------
 
 const _upstashRatelimiters = new Map<string, Ratelimit>()
+let _warnedMissingRedis = false
+
+/**
+ * Without Redis in production the limit stays in per-instance memory (useless
+ * on Vercel) and the mobile login / password reset answer 503. Logged once per
+ * instance so it doesn't go unnoticed.
+ */
+function warnMissingRedisOnce() {
+  if (_warnedMissingRedis || process.env.NODE_ENV !== 'production') return
+  _warnedMissingRedis = true
+  console.warn(
+    `[rate-limiter] Shared Redis missing: set ${SHARED_RATE_LIMIT_HINT}. ` +
+      'Without it rate limits are per-instance memory (not effective on Vercel) ' +
+      'and mobile login / password reset respond 503.',
+  )
+}
 
 function getUpstashRatelimiter(max: number, windowMs: number): Ratelimit | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
+  const credentials = sharedRateLimitCredentials()
+  if (!credentials) {
+    warnMissingRedisOnce()
+    return null
+  }
 
   const configKey = `${max}:${windowMs}`
   let ratelimiter = _upstashRatelimiters.get(configKey)
 
   if (!ratelimiter) {
-    const redis = new Redis({ url, token })
+    const redis = new Redis({ url: credentials.url, token: credentials.token })
     ratelimiter = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(max, `${windowMs}ms`),

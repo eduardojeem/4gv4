@@ -12,6 +12,9 @@ import {
   cleanupPartialProvisioning,
   getProvisioningFailures,
   isExistingConfirmedAuthUser,
+  isOwnPendingRegistration,
+  PENDING_REGISTRATION_CODE,
+  PENDING_REGISTRATION_MESSAGE,
 } from './provisioning'
 import { provisionStarterKit } from '@/lib/organization/starter-kit'
 import { defaultOperatingModelFor } from '@/lib/organization/business-profile'
@@ -140,9 +143,20 @@ export async function POST(request: Request) {
     // lo que se guarda tiene que ser el tier.
     const resolvedPlanTier = String(subscriptionPlan.tier).toUpperCase()
 
+    const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+    const pendingRegistration = () => NextResponse.json(
+      { success: false, error: PENDING_REGISTRATION_MESSAGE, code: PENDING_REGISTRATION_CODE },
+      { status: 409 }
+    )
+
     const { data: existingOrganization, error: slugError } = await admin
       .from('organizations')
-      .select('id')
+      .select('id, owner_id')
       .eq('slug', companySlug)
       .maybeSingle()
 
@@ -152,6 +166,18 @@ export async function POST(request: Request) {
         { success: false, error: 'No se pudo validar el nombre de la empresa.' },
         { status: 500 }
       )
+    }
+
+    // La direccion es de esta misma persona, que se registro y no confirmo:
+    // antes le decia «ya esta en uso» y nunca le volvia a llegar el correo.
+    if (existingOrganization && await isOwnPendingRegistration(admin, (existingOrganization as { owner_id?: string | null }).owner_id, input.email)) {
+      const { error: resendError } = await authClient.auth.resend({
+        type: 'signup',
+        email: input.email,
+        options: { captchaToken: input.captchaToken, emailRedirectTo: buildCompanyRegistrationRedirectUrl(request) },
+      })
+      if (resendError) logger.warn('Could not resend signup confirmation', { error: resendError.message, slug: companySlug })
+      return pendingRegistration()
     }
 
     if (existingOrganization) {
@@ -168,12 +194,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
     const { data: authData, error: authError } = await authClient.auth.signUp({
       email: input.email,
       password: input.password,
@@ -218,6 +238,20 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user.id
+
+    // Mismo email sin confirmar y con otro nombre de comercio: antes se creaba un
+    // segundo comercio para la misma persona. signUp ya le reenvio la confirmacion.
+    const { data: ownedOrganization, error: ownedError } = await admin
+      .from('organizations')
+      .select('id')
+      .eq('owner_id', userId)
+      .limit(1)
+      .maybeSingle()
+    if (ownedError) {
+      logger.error('Failed to check existing organizations for signup', { error: ownedError.message, userId })
+      return NextResponse.json({ success: false, error: 'No se pudo validar el registro. Intentá de nuevo.' }, { status: 500 })
+    }
+    if (ownedOrganization) return pendingRegistration()
 
     const { data: organization, error: organizationError } = await admin
       .from('organizations')

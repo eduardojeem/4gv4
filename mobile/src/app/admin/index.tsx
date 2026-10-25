@@ -149,6 +149,7 @@ export default function AdministrationScreen() {
         <Link icon="card-outline" label="Suscripción" hint="Plan, consumo de cuotas y facturación" onPress={() => router.push('/admin/subscriptions' as never)} colors={colors} />
         <Link icon="settings-outline" label="Configuración" hint="Parámetros de comercio e impuestos" onPress={() => router.push('/admin/settings' as never)} colors={colors} />
         <Link icon="star-outline" label="Reseñas" hint="Aprobar, ocultar y responder" onPress={() => router.push('/admin/reviews' as never)} colors={colors} />
+        <Link icon="globe-outline" label="Sitio web" hint="Apariencia, portada, banners y publicación" onPress={() => router.push('/admin/website' as never)} colors={colors} />
       </Card>
 
       <Card title="Herramientas web adicionales" colors={colors}>

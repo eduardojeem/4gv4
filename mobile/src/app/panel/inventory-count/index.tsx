@@ -137,7 +137,8 @@ export default function InventoryCountsScreen() {
 function CountRow({ count, progress, colors }: { count: InventoryCount; progress?: { total: number; counted: number }; colors: Colors }) {
   const status = COUNT_STATUS[count.status] ?? COUNT_STATUS.counting;
   const summary = count.summary ?? {};
-  const value = Number(summary.valueDifference ?? summary.value_difference ?? 0);
+  const rawValue = summary.valueDifference ?? summary.value_difference;
+  const value = rawValue == null ? null : Number(rawValue);
   return (
     <Pressable onPress={() => router.push(`/panel/inventory-count/${count.id}` as never)} style={({ pressed }) => [styles.row, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.85 : 1 }]}>
       <View style={[styles.number, { backgroundColor: `${status.color}1A` }]}>

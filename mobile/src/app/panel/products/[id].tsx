@@ -1,3 +1,4 @@
+import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, isPrivateIdentityTransition, isSameOrganizationIdentity, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { usePanel } from '@/lib/panel';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -52,17 +53,23 @@ export default function ProductDetail() {
   useEffect(() => {
     if (!id) return;
     let active = true;
+    const privateScope = getPrivateCacheContext();
     fetchProduct(id)
       .then((fresh) => {
-        if (!active) return;
+        if (!active || !isPrivateCacheSnapshotCompatible(privateScope)) return;
         setProduct(fresh);
-        notifyProduct(fresh);
+        notifyProduct(fresh, privateScope);
       })
       .catch((err) => active && setError(err instanceof Error ? err.message : 'No se pudo cargar el producto.'));
     return () => {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => subscribePrivateCacheContext((next, previous) => {
+    if (!isPrivateIdentityTransition(next, previous)) return;
+    setProduct(undefined); setError('El contexto cambió. Volvé a abrir el producto.');
+  }), []);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/panel/products' as never));
 
@@ -94,10 +101,12 @@ export default function ProductDetail() {
   const draft = stockDraft === null ? null : Number(stockDraft.replace(/\D/g, '')) || 0;
   const stockChanged = draft !== null && draft !== Number(product.stock_quantity);
 
+  const mutationScope = getPrivateCacheContext();
   const apply = (updated: Product, message: string) => {
+    if (!isSameOrganizationIdentity(mutationScope)) return;
     const merged = { ...product, ...updated };
     setProduct(merged);
-    notifyProduct(merged);
+    notifyProduct(merged, mutationScope);
     setNotice(message);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -137,7 +146,7 @@ export default function ProductDetail() {
         onPress: () =>
           run('delete', async () => {
             await deleteProduct(product.id);
-            notifyProduct({ id: product.id, deleted: true });
+            notifyProduct({ id: product.id, deleted: true }, mutationScope);
             back();
           }),
       },

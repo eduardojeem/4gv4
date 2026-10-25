@@ -1,0 +1,4 @@
+node_modules/
+out/
+# Clave de Azure Speech: nunca al repositorio.
+.env.local

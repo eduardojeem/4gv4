@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { roleHasPermission, type OrganizationRole } from '@/lib/saas/permissions'
 import { APPOINTMENT_COLUMNS, appointmentErrorMessage, loadAgendaConfig } from '@/lib/agenda/agenda-server'
+import { loadAgendaConfigForBooking } from '@/lib/agenda/booking-settings'
 import { appointmentInputSchema, appointmentRow, assertAppointmentRefs } from '@/lib/agenda/agenda-api'
 import { addDays, dayRangeUtc, todayIn } from '@/lib/agenda/time'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -66,7 +67,7 @@ export const POST = withTenantAuth(guard, async (request, { organization, user }
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos del turno' }, { status: 400 })
   const supabase = (await createClient()) as unknown as SupabaseClient
 
-  const config = await loadAgendaConfig(supabase, organization.id)
+  const config = await loadAgendaConfigForBooking(supabase, organization.id, createAdminSupabase)
   if (config?.capabilities.professionalBooking) {
     const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
       p_org: organization.id, p_id: null, p_input: parsed.data, p_actor: user.id,

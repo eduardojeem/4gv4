@@ -1,3 +1,4 @@
+import { getPrivateCacheContext, isPrivateCacheContextCurrent, subscribePrivateCacheContext, type PrivateCacheContext } from './private-cache-context';
 import type { Product } from './products';
 import { secureStorage } from './secure-storage';
 
@@ -10,14 +11,33 @@ import { secureStorage } from './secure-storage';
  * aparezca al instante; el stock real se actualiza con el listado del servidor.
  */
 
-const KEY = 'mt_pos_frequent';
+const LEGACY_KEY = 'mt_pos_frequent';
+const keyPart = (value: string) => Array.from(value).map(char => char.codePointAt(0)!.toString(16).padStart(6, '0')).join('');
+const storageKey = (scope: PrivateCacheContext) => scope.userId && scope.organizationId && scope.branchId ? `mt_pos_frequent.${[scope.userId, scope.organizationId, scope.branchId ?? 'server-default'].map(keyPart).join('.')}` : null;
+let storageQueue: Promise<unknown> = Promise.resolve();
+function serial<T>(work: () => Promise<T>): Promise<T> {
+  const result = storageQueue.then(work, work);
+  storageQueue = result.catch(() => undefined);
+  return result;
+}
+subscribePrivateCacheContext((_next, previous) => {
+  const key = storageKey(previous);
+  void serial(async () => {
+    await secureStorage.removeItem(LEGACY_KEY).catch(() => undefined);
+    if (key) await secureStorage.removeItem(key).catch(() => undefined);
+  });
+});
 const MAX = 24;
 
 type Entry = { count: number; last: number; product: Product };
 
-async function read(): Promise<Record<string, Entry>> {
+async function read(scope: PrivateCacheContext): Promise<Record<string, Entry>> {
   try {
-    const raw = await secureStorage.getItem(KEY);
+    await secureStorage.removeItem(LEGACY_KEY);
+    const key = storageKey(scope);
+    if (!key || !isPrivateCacheContextCurrent(scope)) return {};
+    const raw = await secureStorage.getItem(key);
+    if (!isPrivateCacheContextCurrent(scope)) return {};
     return raw ? (JSON.parse(raw) as Record<string, Entry>) : {};
   } catch {
     return {};
@@ -40,13 +60,18 @@ const slim = (product: Product): Product => ({
 });
 
 /** Ordenados por veces vendidos (y los más recientes primero ante empate). */
-export async function frequentProducts() {
-  const entries = Object.values(await read());
-  return entries.sort((a, b) => b.count - a.count || b.last - a.last).map((entry) => entry.product);
+export async function frequentProducts(scope = getPrivateCacheContext()) {
+  return serial(async () => {
+    const entries = Object.values(await read(scope));
+    return isPrivateCacheContextCurrent(scope) ? entries.sort((a, b) => b.count - a.count || b.last - a.last).map((entry) => entry.product) : [];
+  });
 }
 
-export async function recordSold(products: { product: Product; quantity: number }[]) {
-  const data = await read();
+export async function recordSold(products: { product: Product; quantity: number }[], scope = getPrivateCacheContext()) {
+  return serial(async () => {
+  const data = await read(scope);
+  const key = storageKey(scope);
+  if (!key || !isPrivateCacheContextCurrent(scope)) return;
   const now = Date.now();
   for (const { product, quantity } of products) {
     const current = data[product.id];
@@ -56,8 +81,9 @@ export async function recordSold(products: { product: Product; quantity: number 
     .sort(([, a], [, b]) => b.count - a.count || b.last - a.last)
     .slice(0, MAX);
   try {
-    await secureStorage.setItem(KEY, JSON.stringify(Object.fromEntries(kept)));
+    await secureStorage.setItem(key, JSON.stringify(Object.fromEntries(kept)));
   } catch {
     // Sin espacio o sin llavero: el POS funciona igual, solo no recuerda.
   }
+  });
 }

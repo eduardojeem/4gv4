@@ -5,7 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +25,8 @@ import { SelectField } from '@/components/select-sheet';
 import { createBrand, createCategory } from '@/lib/catalog';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
+import { productCostDraft, productCostPatch } from '@/lib/product-cost-input';
+import { getPrivateCacheContext, isPrivateCacheContextCurrent, isSameOrganizationIdentity, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import {
   cachedProduct,
   createProduct,
@@ -63,7 +65,7 @@ type Draft = {
   sku: string;
   barcode: string;
   description: string;
-  cost: string;
+  cost: string | null;
   price: string;
   wholesale: string;
   hasOffer: boolean;
@@ -84,7 +86,7 @@ const EMPTY: Draft = {
   sku: '',
   barcode: '',
   description: '',
-  cost: '',
+  cost: null,
   price: '',
   wholesale: '',
   hasOffer: false,
@@ -105,7 +107,7 @@ const fromProduct = (product: Product): Draft => ({
   sku: product.sku,
   barcode: product.barcode ?? '',
   description: product.description ?? '',
-  cost: pretty(Number(product.purchase_price) || 0),
+  cost: productCostDraft(product.purchase_price),
   price: pretty(product.sale_price),
   wholesale: pretty(Number(product.wholesale_price) || 0),
   hasOffer: Boolean(product.has_offer),
@@ -123,8 +125,15 @@ const fromProduct = (product: Product): Draft => ({
 export default function ProductForm() {
   const colors = usePalette();
   const { can } = usePanel();
+  const canReadCost = can('products.read_cost');
+  const canWriteCost = can('products.update_cost');
   const params = useLocalSearchParams<{ id?: string; barcode?: string; name?: string }>();
   const editingId = params.id || null;
+  const canEdit = can(editingId ? 'products.update' : 'products.create');
+  // scopeEpoch vuelve a pedir categorías y marcas; productEpoch, el producto (solo
+  // cuando cambia la identidad o todavía no había llegado: no pisa lo que se escribió).
+  const [scopeEpoch, setScopeEpoch] = useState(() => getPrivateCacheContext().epoch);
+  const [productEpoch, setProductEpoch] = useState(() => getPrivateCacheContext().epoch);
   const [original, setOriginal] = useState<Product | null>(() => (editingId ? cachedProduct(editingId) ?? null : null));
   const [draft, setDraft] = useState<Draft>(() =>
     original ? fromProduct(original) : { ...EMPTY, barcode: params.barcode ?? '', name: params.name ?? '' }
@@ -141,28 +150,73 @@ export default function ProductForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skuTouched, setSkuTouched] = useState(Boolean(editingId));
+  const [loadingProduct, setLoadingProduct] = useState(Boolean(editingId));
+  const [productLoadError, setProductLoadError] = useState<string | null>(null);
+
+  const originalRef = useRef(original);
+  useEffect(() => {
+    originalRef.current = original;
+  }, [original]);
+
+  useEffect(() => subscribePrivateCacheContext((next, previous) => {
+    setScopeEpoch(next.epoch);
+    // Misma persona y mismo comercio (se resolvió la sucursal, cambió un permiso
+    // puntual o llegó un 403 de otra acción): lo que se está cargando se conserva.
+    if (isSameOrganizationIdentity(previous, next)) {
+      if (editingId && !originalRef.current) setProductEpoch(next.epoch);
+      return;
+    }
+    // Otro usuario, otro comercio o acceso revocado: nada de esta cuenta puede quedar en pantalla.
+    setOriginal(null);
+    setDraft({ ...EMPTY });
+    setPhotos([]);
+    setCategories([]);
+    setBrands([]);
+    setLookup(null);
+    setScanning(false);
+    setProductEpoch(next.epoch);
+    setLoadingProduct(Boolean(editingId));
+    setSaving(false);
+    setProductLoadError(null);
+  }), [editingId]);
 
   useEffect(() => {
-    fetchCategories().then(setCategories).catch(() => setCategories([]));
-    fetchBrands().then(setBrands).catch(() => setBrands([]));
-  }, []);
+    if (!canEdit) return;
+    let active = true;
+    const context = getPrivateCacheContext();
+    const current = () => active && isPrivateCacheContextCurrent(context);
+    fetchCategories().then((rows) => { if (current()) setCategories(rows); }).catch(() => { if (current()) setCategories([]); });
+    fetchBrands().then((rows) => { if (current()) setBrands(rows); }).catch(() => { if (current()) setBrands([]); });
+    return () => { active = false; };
+  }, [canEdit, scopeEpoch]);
 
   // Al editar se trae el producto completo (con costo si el usuario puede verlo).
   useEffect(() => {
-    if (!editingId) return;
+    if (!editingId || !canEdit) return;
     let active = true;
+    const context = getPrivateCacheContext();
     fetchProduct(editingId)
       .then((product) => {
-        if (!active) return;
+        if (!active || !isPrivateCacheContextCurrent(context)) return;
+        setProductLoadError(null);
         setOriginal(product);
         setDraft(fromProduct(product));
         setPhotos(productImages(product).map((uri) => ({ uri, uploaded: uri })));
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        if (!active || !isPrivateCacheContextCurrent(context)) return;
+        setOriginal(null);
+        setDraft({ ...EMPTY });
+        setPhotos([]);
+        setProductLoadError(err instanceof Error ? err.message : 'No se pudo cargar el producto.');
+      })
+      .finally(() => {
+        if (active && isPrivateCacheContextCurrent(context)) setLoadingProduct(false);
+      });
     return () => {
       active = false;
     };
-  }, [editingId]);
+  }, [editingId, canEdit, productEpoch]);
 
   // Código de barras: avisa si ya existe y ofrece los datos del catálogo global.
   useEffect(() => {
@@ -188,10 +242,10 @@ export default function ProductForm() {
     setDraft((current) => ({ ...current, name, sku: skuTouched ? current.sku : name.trim().length >= 3 ? suggestSku(name) : '' }));
 
   const service = draft.kind === 'service';
-  const cost = digits(draft.cost);
+  const cost = draft.cost === null ? null : digits(draft.cost);
   const price = digits(draft.price);
   const offer = digits(draft.offer);
-  const marginPct = cost > 0 && price > 0 ? Math.round(((price - cost) / price) * 100) : null;
+  const marginPct = canReadCost && cost !== null && cost > 0 && price > 0 ? Math.round(((price - cost) / price) * 100) : null;
 
   const problems = {
     name: !draft.name.trim() ? 'Escribí el nombre.' : null,
@@ -248,7 +302,8 @@ export default function ProductForm() {
   };
 
   const save = async () => {
-    if (!can(editingId ? 'products.update' : 'products.create')) return;
+    if (saving || loadingProduct || productLoadError || (editingId && original?.id !== editingId) || !can(editingId ? 'products.update' : 'products.create')) return;
+    const context = getPrivateCacheContext();
     setTouched(true);
     if (firstProblem) {
       setError(firstProblem);
@@ -267,7 +322,7 @@ export default function ProductForm() {
       category_id: draft.categoryId,
       brand: draft.brand.trim() || null,
       brand_id: draft.brandId,
-      purchase_price: cost,
+      ...productCostPatch(draft.cost, original?.purchase_price, canWriteCost),
       sale_price: price,
       wholesale_price: digits(draft.wholesale) || null,
       has_offer: draft.hasOffer,
@@ -289,17 +344,20 @@ export default function ProductForm() {
       } else {
         saved = await createProduct({ ...input, stock_quantity: service ? 0 : digits(draft.stock) });
       }
-      const merged = { ...(original ?? {}), ...saved } as Product;
-      rememberProducts([merged]);
-      notifyProduct(merged);
+      // El producto es del comercio, no de la sucursal: el guardado vale mientras sea la misma identidad.
+      if (!isSameOrganizationIdentity(context)) return;
+      const merged = saved;
+      rememberProducts([merged], context);
+      notifyProduct(merged, context);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (editingId) router.back();
       else router.replace(`/panel/products/${saved.id}` as never);
     } catch (err) {
+      if (!isSameOrganizationIdentity(context)) return;
       setError(err instanceof Error ? err.message : 'No se pudo guardar.');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setSaving(false);
+      if (isSameOrganizationIdentity(context)) setSaving(false);
     }
   };
 
@@ -315,6 +373,12 @@ export default function ProductForm() {
     }));
 
   if (!can(editingId ? 'products.update' : 'products.create')) return <PanelAccessState />;
+  const waitingForProduct = Boolean(editingId && original?.id !== editingId);
+  if (loadingProduct || productLoadError || waitingForProduct) return (
+    <View style={[styles.flex, { padding: 24, justifyContent: 'center', alignItems: 'center' }]}>
+      {loadingProduct || (!productLoadError && waitingForProduct) ? <ActivityIndicator accessibilityLabel="Cargando producto" color={palette.primary} /> : <Text accessibilityRole="alert" style={{ color: colors.text }}>{productLoadError}</Text>}
+    </View>
+  );
 
   return (
     <View style={styles.flex}>
@@ -461,13 +525,19 @@ export default function ProductForm() {
           <Section title="Precios" icon="cash-outline" colors={colors}>
             <View style={styles.pair}>
               <View style={styles.flex}>
-                <Money label="Costo" value={draft.cost} onChange={(value) => set('cost', value)} colors={colors} />
+                {canWriteCost ? (
+                  <Money label="Costo" value={draft.cost ?? ''} onChange={(value) => set('cost', value)} colors={colors} />
+                ) : (
+                  <Text style={[styles.small, { color: colors.muted }]}>
+                    Costo: {canReadCost && cost !== null ? formatGs(cost) : 'No disponible con tus permisos'}
+                  </Text>
+                )}
               </View>
               <View style={styles.flex}>
                 <Money label="Precio de venta" value={draft.price} onChange={(value) => set('price', value)} colors={colors} error={show('price')} />
               </View>
             </View>
-            {cost > 0 && (
+            {canReadCost && cost !== null && cost > 0 && (
               <View style={styles.marginRow}>
                 <Text style={[styles.small, { color: colors.muted }]}>Precio con margen:</Text>
                 {[30, 50, 100].map((pct) => (
@@ -481,7 +551,7 @@ export default function ProductForm() {
               <View style={[styles.marginBox, { backgroundColor: marginPct < 15 ? '#DC26261A' : marginPct < 30 ? '#D977061A' : '#16A34A1A' }]}>
                 <Ionicons name={marginPct < 0 ? 'trending-down' : 'trending-up'} size={16} color={marginPct < 15 ? palette.danger : marginPct < 30 ? '#D97706' : palette.success} />
                 <Text style={[styles.marginText, { color: marginPct < 15 ? palette.danger : marginPct < 30 ? '#D97706' : palette.success }]}>
-                  Margen {marginPct}% · ganás {formatGs(Math.max(0, price - cost))} por unidad
+                  Margen {marginPct}% · ganás {formatGs(Math.max(0, price - (cost ?? 0)))} por unidad
                 </Text>
               </View>
             )}

@@ -38,7 +38,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   {
     label: 'Canal digital',
     items: [
-      { key: 'website', label: 'Sitio web', hint: 'Tu tienda online', icon: 'globe-outline', web: '/admin/website' },
+      { key: 'website', label: 'Sitio web', hint: 'Tu tienda online', icon: 'globe-outline', route: '/admin/website' },
       { key: 'reviews', label: 'Reseñas', hint: 'Moderar y responder', icon: 'star-outline', route: '/admin/reviews' },
     ],
   },

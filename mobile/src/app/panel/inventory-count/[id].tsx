@@ -131,9 +131,10 @@ export default function InventoryCountScreen() {
 
   const finish = (action: 'apply' | 'cancel') => {
     const summary = summarizeCount(items);
+    const costs = summary.valueDifference !== null;
     const text =
       action === 'apply'
-        ? `Se ajusta el stock de ${summary.withDifference} productos con diferencia (+${summary.unitsIn} / −${summary.unitsOut} unidades, ${formatGs(summary.valueDifference)}).${summary.notCounted ? ` ${summary.notCounted} quedaron sin contar.` : ''}`
+        ? `Se ajusta el stock de ${summary.withDifference} productos con diferencia (+${summary.unitsIn} / −${summary.unitsOut} unidades${costs ? `, ${summary.valueDifference === null ? '—' : formatGs(summary.valueDifference)}` : ''}).${summary.notCounted ? ` ${summary.notCounted} quedaron sin contar.` : ''}`
         : 'La toma se anula y no se cambia ningún stock.';
     Alert.alert(action === 'apply' ? 'Aplicar la toma' : 'Anular la toma', text, [
       { text: 'Volver', style: 'cancel' },
@@ -228,7 +229,7 @@ export default function InventoryCountScreen() {
                 <Stat label="Diferencias" value={String(summary.withDifference)} colors={colors} />
                 <Stat label="Sobran" value={`+${summary.unitsIn}`} tone={palette.success} colors={colors} />
                 <Stat label="Faltan" value={`−${summary.unitsOut}`} tone={palette.danger} colors={colors} />
-                <Stat label="Valor" value={formatGs(summary.valueDifference)} tone={summary.valueDifference < 0 ? palette.danger : undefined} colors={colors} />
+                {summary.valueDifference !== null && <Stat label="Valor" value={summary.valueDifference === null ? '—' : formatGs(summary.valueDifference)} tone={summary.valueDifference < 0 ? palette.danger : undefined} colors={colors} />}
               </View>
             </View>
 
@@ -318,6 +319,8 @@ export default function InventoryCountScreen() {
     </View>
   );
 }
+
+/** Sin permiso de costos el servidor no manda el costo: el valor de la diferencia no se puede calcular. */
 
 function ItemRow({ item, editable, colors, onChange, onMatch }: { item: CountItem; editable: boolean; colors: Colors; onChange: (value: number | null) => void; onMatch: () => void }) {
   const diff = countDifference(item);

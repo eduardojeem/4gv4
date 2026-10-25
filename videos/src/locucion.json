@@ -1,0 +1,16 @@
+{
+  "voice": "es-PY-TaniaNeural",
+  "rate": "+5%",
+  "lines": {
+    "intro": "Mi Tienda Py: tu comercio, desde el celular.",
+    "marketplace": "Productos de comercios de todo Paraguay, en un solo lugar.",
+    "ofertas": "Mostrá tus ofertas con precios en guaraníes.",
+    "producto": "Fichas con fotos, precio y consulta directa por WhatsApp.",
+    "empresas": "Tu comercio, visible en el directorio de empresas.",
+    "tienda": "Y con tu propia tienda web para compartir.",
+    "sistema": "Ventas, productos, clientes y turnos, todo conectado.",
+    "stock": "Vendé, cobrá y tené tu stock siempre al día.",
+    "planes": "Empezá gratis y crecé cuando lo necesites.",
+    "cierre": "Creá tu comercio hoy en mitiendapy punto com."
+  }
+}
