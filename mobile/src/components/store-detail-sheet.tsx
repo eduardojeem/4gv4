@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { openWeb, storePath, type MarketStore } from '@/lib/marketplace';
+import { openWeb, SITE_URL, storePath, type MarketStore } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 
 interface StoreDetailSheetProps {
@@ -37,7 +37,7 @@ export function StoreDetailSheet({
   const handleShare = async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const url = `https://www.mitiendapy.com${storePath(store)}`;
+      const url = `${SITE_URL}${storePath(store)}`;
       await Share.share({
         title: store.name,
         message: `Mirá la tienda oficial de ${store.name} en Mi tiendaPY: ${url}`,

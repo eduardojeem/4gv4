@@ -8,6 +8,15 @@ import { expect, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { server } from './mocks/server'
 
+// Los tests mobile nunca deben heredar endpoints o claves del entorno de la
+// máquina que los ejecuta. Expo requiere estas variables al cargar algunos
+// módulos; fijamos valores sintéticos y loopback antes de importar cada suite.
+process.env.EXPO_PUBLIC_RUNTIME_ENV = 'development'
+process.env.EXPO_PUBLIC_API_URL = 'http://127.0.0.1:3000'
+process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:55321'
+process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'vitest-publishable-placeholder'
+process.env.EXPO_PUBLIC_SITE_URL = 'http://127.0.0.1:3000'
+
 // `server-only` lanza fuera de un componente de servidor, y en jsdom todo lo es.
 // Desde que el catálogo (effective-catalog.ts) lo importa, cualquier test que
 // cargara lib/public/marketplace sin mockearlo se caía antes de correr. Es lo

@@ -1,3 +1,4 @@
+import { subscribePrivateCacheContext } from './private-cache-context';
 import type { CreditTerms } from './pos-credit';
 import { apiFetch, ApiError } from './api';
 import type { Product } from './products';
@@ -294,6 +295,7 @@ export async function collectOrderPayment(id: string, input: { amount: number; m
 }
 
 const orderCache = new Map<string, Order>();
+subscribePrivateCacheContext(() => orderCache.clear());
 export const rememberOrders = (orders: Order[]) => orders.forEach((order) => orderCache.set(order.id, order));
 export const cachedOrder = (id: string) => orderCache.get(id);
 const orderListeners = new Set<(order: Order) => void>();

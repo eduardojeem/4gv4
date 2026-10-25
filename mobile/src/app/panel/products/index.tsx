@@ -1,3 +1,4 @@
+import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, isPrivateIdentityTransition, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { PanelAccessState } from '@/components/panel-access-state';
 import { useListRequestScope } from '@/lib/use-list-request-scope';
 import { Ionicons } from '@expo/vector-icons';
@@ -100,10 +101,11 @@ export default function ProductsScreen() {
     let active = true;
     if (!panelData || !findItem('products')) return () => { active = false; };
     queueMicrotask(() => { if (active) { setLoading(true); setLoadingMore(false); } });
+    const privateScope = getPrivateCacheContext();
     fetchProducts(params(1))
       .then((result) => {
-        if (!active) return;
-        rememberProducts(result.products);
+        if (!active || !isPrivateCacheSnapshotCompatible(privateScope)) return;
+        rememberProducts(result.products, privateScope);
         setProducts(result.products);
         setTotal(result.total);
         setTruncated(Boolean(result.truncated));
@@ -120,6 +122,13 @@ export default function ProductsScreen() {
       active = false;
     };
   }, [params, attempt, panelData, findItem]);
+
+  // Solo otro usuario, otro comercio, otra sucursal o un acceso revocado vacían la lista;
+  // terminar de resolver el comercio al abrir la app no.
+  useEffect(() => subscribePrivateCacheContext((next, previous) => {
+    if (!isPrivateIdentityTransition(next, previous)) return;
+    setProducts([]); setTotal(0); setError('El contexto cambió. Actualizá el catálogo.');
+  }), []);
 
   // Lo que se edita o borra en el detalle se refleja al volver.
   useEffect(
@@ -146,13 +155,15 @@ export default function ProductsScreen() {
 
   const loadMore = () => {
     if (loadingMore || loading || products.length >= total) return;
-    const isCurrent = requestScope.capture();
+    const isCurrentRequest = requestScope.capture();
+    const privateScope = getPrivateCacheContext();
+    const isCurrent = () => isCurrentRequest() && isPrivateCacheSnapshotCompatible(privateScope);
     setLoadingMore(true);
     fetchProducts(params(page + 1))
       .then((result) => {
         if (!isCurrent()) return;
         setError(null);
-        rememberProducts(result.products);
+        rememberProducts(result.products, privateScope);
         setProducts((list) => [...list, ...result.products.filter((item) => !list.some((existing) => existing.id === item.id))]);
         setPage(page + 1);
       })

@@ -28,7 +28,7 @@ export default function SaasPlans() {
     {catalog?.plans.map((plan) => <PlanCard key={plan.id} plan={plan} disabled={loading || Boolean(error)} />)}
     {catalog?.branding.secondaryCtaHref && <SaasButton label={catalog.branding.secondaryCtaLabel || 'Consultar opciones'} secondary icon="open-outline"
       onPress={() => void openSaasLink(catalog.branding.secondaryCtaHref)} />}
-    <Text style={[saasStyles.note, { color: colors.muted }]}>El registro se abre en la web. Al terminar, volvé a la aplicación e ingresá con tu cuenta. Las funciones disponibles también dependen de los permisos asignados a cada usuario.</Text>
+    <Text style={[saasStyles.note, { color: colors.muted }]}>Creás tu comercio desde la aplicación; solo la verificación de seguridad se abre un momento en el navegador. Las funciones disponibles también dependen de los permisos asignados a cada usuario.</Text>
   </SaasPage>;
 }
 

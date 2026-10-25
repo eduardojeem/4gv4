@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { FirstStepsCard } from '@/components/first-steps-card';
 import { apiFetch } from '@/lib/api';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
@@ -107,6 +108,8 @@ export default function PanelOverview() {
         <Text style={[styles.hello, { color: colors.muted }]}>{greeting()}{firstName ? `, ${firstName}` : ''}</Text>
         <Text style={[styles.title, { color: colors.text }]}>Resumen del negocio</Text>
       </View>
+
+      <FirstStepsCard />
 
       {!summary && !error && (
         <View style={styles.loading}>

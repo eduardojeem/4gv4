@@ -1,3 +1,4 @@
+import { subscribePrivateCacheContext } from './private-cache-context';
 import type { Ionicons } from '@expo/vector-icons';
 
 import { ApiError, apiFetch } from './api';
@@ -145,6 +146,7 @@ export async function changeRepairStatus(id: string, stage: RepairStatus, note?:
  * al instante sin volver a pedirlo.
  */
 const cache = new Map<string, Repair>();
+subscribePrivateCacheContext(() => cache.clear());
 export const rememberRepairs = (repairs: Repair[]) => repairs.forEach((repair) => cache.set(repair.id, repair));
 export const cachedRepair = (id: string) => cache.get(id);
 const listeners = new Set<(repair: Repair) => void>();
@@ -552,6 +554,8 @@ export type CostLine = {
   discountAmount?: number;
   taxRate?: 0 | 5 | 10;
   lineType: 'charged_part' | 'service' | 'included_material';
+  /** Material incluido: el servicio del que sale. El servidor toma su costo de ahí. */
+  sourceProductId?: string | null;
 };
 
 /**
@@ -581,6 +585,7 @@ export async function saveRepairCosts(
         discountAmount: part.discountAmount ?? 0,
         ...(part.taxRate != null ? { taxRate: part.taxRate } : {}),
         lineType: part.lineType,
+        ...(part.sourceProductId ? { sourceProductId: part.sourceProductId } : {}),
       })),
       idempotencyKey,
     }),
@@ -641,13 +646,16 @@ export type InventoryItem = {
   sku: string;
   name: string;
   availableStock: number | null;
-  unitCost: number;
+  /** null si el usuario no puede ver costos: el servidor lo resuelve al guardar. */
+  unitCost: number | null;
   unitPrice: number;
   retailPrice?: number;
   wholesalePriceApplied: boolean;
   wholesalePriceFallback?: boolean;
   /** Costo del material que trae un servicio: se agrega como «Material incluido». */
-  includedMaterialCost?: number;
+  includedMaterialCost?: number | null;
+  /** El servicio trae material, aunque el monto no se muestre. */
+  includesMaterial?: boolean;
   taxRate?: 0 | 5 | 10;
   lineType: 'service' | 'charged_part';
 };

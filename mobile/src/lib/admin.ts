@@ -342,46 +342,6 @@ export async function fetchSubscription() {
   }
 }
 
-// ─── Configuración ─────────────────────────────────────────────────────────
-
-export type SystemSettings = {
-  companyName?: string;
-  legalName?: string;
-  ruc?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  city?: string;
-  currency?: string;
-  currencySymbol?: string;
-  taxRate?: number;
-  taxName?: string;
-  autoPrintInvoice?: boolean;
-  allowNegativeStock?: boolean;
-  inventoryAlerts?: boolean;
-  lowStockThreshold?: number;
-};
-
-export async function fetchSettings() {
-  try {
-    const res = await apiFetch<{ success: boolean; settings: SystemSettings }>('/api/settings/shared');
-    return res.settings;
-  } catch (error) {
-    return fail(error, 'No se pudo cargar la configuración.');
-  }
-}
-
-export async function updateSettings(settings: Partial<SystemSettings>) {
-  try {
-    await apiFetch('/api/admin/system/settings', {
-      method: 'PUT',
-      body: JSON.stringify({ ...settings, scope: 'organization' }),
-    });
-  } catch (error) {
-    fail(error, 'No se pudo guardar la configuración.');
-  }
-}
-
 // ─── Analítica ─────────────────────────────────────────────────────────────
 
 export type WebsiteAnalytics = {
@@ -409,7 +369,6 @@ export async function fetchWebsiteAnalytics(days = 30) {
 // ─── Secciones restantes en la web ──────────────────────────────────────────
 
 export const WEB_SECTIONS: { label: string; hint: string; path: string; icon: string }[] = [
-  { label: 'Sitio web', hint: 'Personalización de tu tienda online', path: '/admin/website', icon: 'globe-outline' },
   { label: 'Seguridad', hint: 'Logs y auditoría de accesos', path: '/admin/security', icon: 'shield-checkmark-outline' },
   { label: 'Datos del negocio', hint: 'Rubro, contacto y visibilidad', path: '/admin/onboarding', icon: 'storefront-outline' },
   { label: 'Guía del sistema', hint: 'Manual operativo paso a paso', path: '/admin/guia', icon: 'help-circle-outline' },

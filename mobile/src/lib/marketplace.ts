@@ -1,9 +1,10 @@
 import * as WebBrowser from 'expo-web-browser';
 
 import { apiFetch } from './api';
+import { getMobileRuntimeConfig } from './runtime-config';
 
 /** Sitio público: los detalles todavía se abren en la web, dentro de la app. */
-export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL ?? 'https://www.mitiendapy.com').replace(/\/$/, '');
+export const SITE_URL = getMobileRuntimeConfig().siteUrl;
 
 export type MarketProduct = {
   id: string;

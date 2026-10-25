@@ -202,7 +202,7 @@ function ProfileMenu({ visible, onClose }: { visible: boolean; onClose: () => vo
   const colors = usePalette();
   const insets = useSafeAreaInsets();
   const { data } = usePanel();
-  const { signOut } = useSession();
+  const { signOut, biometric, setBiometricEnabled } = useSession();
   const user = data?.user;
   const org = data?.organization;
 
@@ -226,12 +226,29 @@ function ProfileMenu({ visible, onClose }: { visible: boolean; onClose: () => vo
     ]);
   };
 
+  const toggleBiometric = async () => {
+    onClose();
+    const next = !biometric.enabled;
+    const ok = await setBiometricEnabled(next);
+    if (!ok) {
+      Alert.alert(`No se pudo activar ${biometric.label}`, `Revisá que ${biometric.label} esté configurado en el teléfono y probá de nuevo.`);
+    }
+  };
+
   // Mismas opciones que el menú del avatar en la web, con los mismos permisos.
   const options: { key: string; icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; onPress: () => void; show: boolean }[] = [
     { key: 'profile', icon: 'person-circle-outline', title: 'Mi perfil', subtitle: 'Ver información personal', onPress: () => web('/dashboard/profile'), show: true },
-    { key: 'settings', icon: 'settings-outline', title: 'Configuración', subtitle: 'Ajustes del sistema', onPress: () => web('/admin/settings'), show: Boolean(user?.isAdmin) },
+    { key: 'settings', icon: 'settings-outline', title: 'Configuración', subtitle: 'Empresa, moneda e impuestos', onPress: () => { onClose(); router.push('/admin/settings'); }, show: Boolean(user?.isAdmin) },
     { key: 'admin', icon: 'shield-checkmark-outline', title: 'Panel admin', subtitle: 'Administración del sistema', onPress: () => web('/admin'), show: Boolean(user?.isAdmin) },
     { key: 'superadmin', icon: 'planet-outline', title: 'Super Admin', subtitle: 'Panel global SaaS', onPress: () => web('/superadmin'), show: Boolean(user?.isSuperAdmin) },
+    {
+      key: 'biometric',
+      icon: 'finger-print-outline',
+      title: `Entrar con ${biometric.label}`,
+      subtitle: biometric.enabled ? 'Activado · tocá para desactivar' : 'Desactivado · tocá para activar',
+      onPress: () => void toggleBiometric(),
+      show: biometric.available,
+    },
     {
       key: 'marketplace',
       icon: 'storefront-outline',

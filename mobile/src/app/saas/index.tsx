@@ -28,7 +28,7 @@ export default function SaasHome() {
 
     <Text accessibilityRole="header" style={[saasStyles.sectionTitle, { color: colors.text }]}>Antes de empezar</Text>
     <View>
-      <SaasFaq question="¿Cómo creo mi cuenta?" answer="Elegí un plan y continuá con el registro en la web. Después podés ingresar en esta aplicación con tu cuenta. El registro web y el inicio de sesión móvil son pasos separados." />
+      <SaasFaq question="¿Cómo creo mi cuenta?" answer="Elegí un plan y creá tu comercio desde esta aplicación. Solo la verificación de seguridad se abre un momento en el navegador. Si te pide confirmar el email, hacelo antes de ingresar." />
       <SaasFaq question="¿Todos los planes incluyen lo mismo?" answer="No. La sección Planes muestra los límites y las funciones habilitadas para cada opción. Los días de prueba se anuncian sólo cuando están configurados para ese plan." />
       <SaasFaq question="¿Puedo usar impresora o lector de códigos?" answer="La compatibilidad depende del dispositivo, del navegador y del periférico. Probá tu equipo y el formato de ticket antes de usarlo en el comercio." />
     </View>

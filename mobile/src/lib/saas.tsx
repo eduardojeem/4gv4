@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 
 import { apiFetch } from './api';
 import { SITE_URL } from './marketplace';
+import { openRegistration } from './registration';
 import { resolveSaasHref } from './saas-navigation';
 
 export type SaasPlan = {
@@ -82,6 +83,11 @@ export function useSaas() {
 }
 
 export async function openSaasLink(href: string) {
+  // El registro vuelve solo a la app al terminar.
+  if (/^\/register(?:[?#]|$)/.test(href)) {
+    await openRegistration(href);
+    return;
+  }
   const url = resolveSaasHref(href, SITE_URL);
   if (!url) {
     Alert.alert('Enlace no disponible', 'No se pudo abrir este enlace. Probá de nuevo más tarde.');
