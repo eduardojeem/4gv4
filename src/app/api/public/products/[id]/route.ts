@@ -8,6 +8,7 @@ import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 
 type ProductRow = {
   id: string
@@ -28,6 +29,7 @@ type ProductRow = {
   barcode: string | null
   has_variants: boolean
   variant_attribute_config: PublicProduct['variant_attribute_config']
+  hide_price?: boolean | null
   category: { id: string; name: string }[] | { id: string; name: string } | null
 }
 
@@ -63,9 +65,11 @@ export async function GET(
       organizationId: organization.id,
     })
 
-    const selectFields = isWholesale
+    // «Publicado sin precio»: sin esta columna el detalle mostraba el precio escondido.
+    const campoPrecioOculto = (await productsHaveHidePriceColumn(supabase)) ? ', hide_price' : ''
+    const selectFields = (isWholesale
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)') + campoPrecioOculto
 
     type DynamicProductQuery = {
       eq: (col: string, val: unknown) => DynamicProductQuery
@@ -153,6 +157,9 @@ export async function GET(
     const publicStock = effectiveHasVariants && publicVariantRows.length > 0
       ? publicVariantRows.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
       : finalProduct.stock_quantity
+    // Igual que en el catálogo: al mayorista registrado no se le esconde. Oculto, el
+    // precio ni siquiera viaja (antes iba en la respuesta y solo se tapaba en pantalla).
+    const hidePrice = finalProduct.hide_price === true && !isWholesale
     const configuredAttributes = Array.isArray(finalProduct.variant_attribute_config)
       ? finalProduct.variant_attribute_config
       : []
@@ -163,15 +170,16 @@ export async function GET(
       description: finalProduct.description,
       brand: finalProduct.brand,
       category: category ? { id: category.id, name: category.name } : undefined,
-      sale_price: finalProduct.sale_price,
+      sale_price: hidePrice ? 0 : finalProduct.sale_price,
       wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
+      hide_price: hidePrice,
       stock_quantity: publicStock,
       in_stock: publicStock > 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
-      has_offer: priced.has_offer,
-      offer_price: priced.offer_price,
-      promotion_name: priced.promotion_name,
+      has_offer: hidePrice ? false : priced.has_offer,
+      offer_price: hidePrice ? null : priced.offer_price,
+      promotion_name: hidePrice ? null : priced.promotion_name,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,
@@ -183,7 +191,7 @@ export async function GET(
       variants: publicVariantRows.map((variant) => ({
         id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
         attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,
-        sale_price: Number(variant.sale_price ?? 0),
+        sale_price: hidePrice ? 0 : Number(variant.sale_price ?? 0),
         wholesale_price: isWholesale ? Number(variant.wholesale_price ?? 0) : null,
         stock_quantity: Number(variant.stock_quantity ?? 0), is_active: Boolean(variant.is_active),
       })),
