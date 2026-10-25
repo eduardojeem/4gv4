@@ -1,0 +1,74 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "image": "tutorial/app/01.png",
+      "caption": "En Reparaciones, tocá «Nueva».",
+      "target": {
+        "x": 277.9375,
+        "y": 78,
+        "width": 96.0625,
+        "height": 43
+      }
+    },
+    {
+      "image": "tutorial/app/02.png",
+      "caption": "Buscá al cliente y tocalo para elegirlo.",
+      "target": {
+        "x": 31,
+        "y": 265,
+        "width": 328,
+        "height": 93
+      }
+    },
+    {
+      "image": "tutorial/app/03.png",
+      "caption": "Elegí la marca y escribí el modelo.",
+      "target": {
+        "x": 44,
+        "y": 388,
+        "width": 302,
+        "height": 44
+      }
+    },
+    {
+      "image": "tutorial/app/04.png",
+      "caption": "Marcá el problema y contá qué le pasa.",
+      "target": {
+        "x": 31,
+        "y": 393,
+        "width": 162.265625,
+        "height": 35
+      }
+    },
+    {
+      "image": "tutorial/app/05.png",
+      "caption": "Si ya sabés el precio, cargá la mano de obra.",
+      "target": {
+        "x": 71.328125,
+        "y": 388,
+        "width": 274.671875,
+        "height": 44
+      }
+    },
+    {
+      "image": "tutorial/app/06.png",
+      "caption": "Tocá «Crear orden de reparación».",
+      "target": {
+        "x": 12,
+        "y": 716,
+        "width": 366,
+        "height": 54
+      }
+    },
+    {
+      "image": "tutorial/app/07.png",
+      "caption": "¡Listo! La orden queda creada con su número.",
+      "target": null
+    }
+  ],
+  "ticket": "REP-000007"
+}
