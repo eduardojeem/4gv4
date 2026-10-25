@@ -307,28 +307,6 @@ function CreditsDashboardContent() {
     return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
   }
 
-  const exportInstallmentsCsv = () => {
-    type CsvRow = { Cuota: number; Vence: string; Monto: number; Estado: string; Credito: string; Cliente: string }
-    const rows: CsvRow[] = filteredInstallments.map(i => ({
-      Cuota: i.installment_number,
-      Vence: formatDateOnlyDisplay(i.due_date),
-      Monto: i.amount,
-      // Use the shared helper — consistent with all other places in the module
-      Estado: isInstallmentLate(i) ? 'late' : i.status,
-      Credito: String(i.credit_id),
-      Cliente: creditById[i.credit_id]?.customer_name || ''
-    }))
-    const header: Array<keyof CsvRow> = ['Cuota', 'Vence', 'Monto', 'Estado', 'Credito', 'Cliente']
-    const csv = [header.join(','), ...rows.map(r => header.map(h => csvEscape(r[h])).join(','))].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'cuotas.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const exportPaymentsCsv = () => {
     type PaymentCsvRow = { Cliente: string; Credito: string; Cuota: number | ''; Fecha: string; Monto: number }
     const rows: PaymentCsvRow[] = payments.map(p => {

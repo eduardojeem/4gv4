@@ -257,7 +257,7 @@ export function CreateOrderModal({
         } finally {
             setLoading(false)
         }
-    }, [supabase, supplierId, organizationId])
+    }, [supabase, supplierId, organizationId, setProducts])
 
     useEffect(() => {
         if (!isOpen || !supplierId) return
@@ -277,7 +277,7 @@ export function CreateOrderModal({
                 costHidden: initialProduct.costHidden,
             }]
             : [])
-    }, [isOpen, supplierId, initialProduct, fetchProducts, organizationId])
+    }, [isOpen, supplierId, initialProduct, fetchProducts, organizationId, setItems])
 
     const filteredProducts = useMemo(() => {
         const term = search.trim().toLowerCase()
@@ -286,13 +286,13 @@ export function CreateOrderModal({
             product.name.toLowerCase().includes(term)
             || product.suppliersku.toLowerCase().includes(term)
         )
-    }, [products, search, organizationId])
+    }, [products, search])
 
     const quantityByProduct = useMemo(() => {
         const map = new Map<string, number>()
         for (const item of items) map.set(item.productId, item.quantity)
         return map
-    }, [items, organizationId])
+    }, [items])
 
     /** Productos propios por debajo (o al filo) del minimo configurado. */
     const lowStockProducts = useMemo(() => products.filter((product) =>

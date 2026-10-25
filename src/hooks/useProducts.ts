@@ -49,7 +49,7 @@ export function useProducts() {
     )
 
     return applyBranchInventoryToProducts(items, stockMap, branchScoped)
-  }, [selectedBranchId, supabase, organizationId])
+  }, [selectedBranchId, supabase])
 
   // Función para cargar productos con filtros y paginación
   const loadProducts = useCallback(async (
@@ -185,7 +185,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [applySelectedBranchStock, selectedBranchId, supabase, organizationId])
+  }, [applySelectedBranchStock, selectedBranchId, supabase, organizationId, setProducts])
 
   // Función para obtener un producto por ID
   const getProduct = useCallback(async (id: string): Promise<Product | null> => {
@@ -259,7 +259,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase, organizationId])
+  }, [selectedBranchId, organizationId, setProducts])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (id: string, productData: Partial<ProductFormData>): Promise<Product | null> => {
@@ -296,7 +296,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase, organizationId])
+  }, [selectedBranchId, organizationId, setProducts])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string): Promise<boolean> => {
@@ -326,7 +326,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, organizationId])
+  }, [selectedBranchId, organizationId, setProducts])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
@@ -378,7 +378,7 @@ export function useProducts() {
       setError(errorMessage)
       return false
     }
-  }, [selectedBranchId, supabase, organizationId])
+  }, [selectedBranchId, supabase, organizationId, setProducts])
 
   // Función para cargar categorías
   const loadCategories = useCallback(async (): Promise<Category[]> => {
@@ -401,7 +401,7 @@ export function useProducts() {
       setError(errorMessage)
       return []
     }
-  }, [supabase, organizationId])
+  }, [supabase, organizationId, setCategories])
 
   // Función para cargar proveedores
   const loadSuppliers = useCallback(async (): Promise<Supplier[]> => {
@@ -424,7 +424,7 @@ export function useProducts() {
       setError(errorMessage)
       return []
     }
-  }, [supabase, organizationId])
+  }, [supabase, organizationId, setSuppliers])
 
   // Función para obtener estadísticas del dashboard
   const getDashboardStats = useCallback(async (): Promise<ProductDashboardStats> => {

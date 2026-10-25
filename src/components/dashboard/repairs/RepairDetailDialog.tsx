@@ -1,5 +1,6 @@
 import { AppImage } from '@/components/ui/app-image'
 import React, { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -171,6 +172,7 @@ export function RepairDetailDialog({
   onTechnicianChange,
   onWarrantyChange,
 }: RepairDetailDialogProps) {
+  const router = useRouter()
   const [isMaximized, setIsMaximized] = useState(false)
   const { isAdmin } = useAuth()
   const { planName, repairPhotoLimit: photoLimit, repairPhotoUpgradePlan } = useSubscriptionStatus()
@@ -2598,7 +2600,7 @@ export function RepairDetailDialog({
               className="min-h-11 gap-2 sm:min-h-9"
               onClick={() => {
                 if (repair.customer?.id) {
-                  window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                  router.push(`/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`)
                 }
                 onClose()
               }}

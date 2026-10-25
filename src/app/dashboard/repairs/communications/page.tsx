@@ -4,7 +4,6 @@ import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  ArrowLeft,
   Building2,
   ChevronRight,
   ExternalLink,
@@ -30,7 +29,6 @@ import { useRepairCommunications } from "@/hooks/use-repair-communications"
 import { CommunicationChannel } from "@/types/repairs"
 import { DEFAULT_TEMPLATES } from "@/data/communication-templates"
 import { repairStatusLabel } from "@/lib/i18n/labels"
-import { cn } from "@/lib/utils"
 
 export default function RepairsCommunicationsPage() {
   const router = useRouter()

@@ -619,7 +619,7 @@ const InventoryReports: React.FC = () => {
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedBranchId, supabase, selectedDateRange, organizationId])
+  }, [selectedBranchId, supabase, selectedDateRange, organizationId, setReportData])
 
   // Datos filtrados por los selectores de Categoría / Proveedor.
   // El recorte (top-N) se aplica DESPUÉS del filtro para que elegir una categoría

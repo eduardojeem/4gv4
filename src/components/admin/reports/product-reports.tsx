@@ -323,7 +323,7 @@ export default function ProductReports() {
       }
     }
     fetchData()
-  }, [supabase, dateRange, organization?.id, selectedBranchId])
+  }, [supabase, dateRange, organization?.id, selectedBranchId, setCategoryData, setProducts, setSalesTrendData, setTopProductsData])
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {

@@ -514,7 +514,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
     } catch {
       return null
     }
-  }, [organizationId])
+  }, [])
 
   const [state, setState] = useOrganizationScopedState<HookState>(scopeKey, {
     snapshot: EMPTY_SNAPSHOT,
@@ -535,7 +535,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
     if (!lastFetchRef.current) return false
     if (lastFetchRef.current.key !== filterKey) return false
     return Date.now() - lastFetchRef.current.timestamp < ANALYTICS_CACHE_TTL_MS
-  }, [filterKey, organizationId])
+  }, [filterKey])
 
   const fetchAnalytics = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
     if (!supabase || !organizationId) {
@@ -1393,7 +1393,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         error: 'No se pudo construir el dashboard analytics con los datos actuales.',
       }))
     }
-  }, [filters, supabase, isCacheFresh, filterKey, organizationId])
+  }, [filters, supabase, isCacheFresh, filterKey, organizationId, setState])
 
   useEffect(() => {
     fetchAnalytics('initial')
