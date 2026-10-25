@@ -103,11 +103,11 @@ type NavItem = NavChild & {
 }
 
 const sectionMeta: Record<NavSection, { label: string; color: string }> = {
-  overview: { label: 'Vision general', color: 'text-sky-400' },
-  tenants: { label: 'Tenants', color: 'text-blue-400' },
-  billing: { label: 'Facturacion', color: 'text-emerald-400' },
-  content: { label: 'Contenido web', color: 'text-violet-400' },
-  system: { label: 'Sistema', color: 'text-orange-400' },
+  overview: { label: 'Visión general', color: 'text-primary' },
+  tenants: { label: 'Comercios y equipo', color: 'text-primary' },
+  billing: { label: 'Cobros y planes', color: 'text-primary' },
+  content: { label: 'Sitio y catálogos', color: 'text-primary' },
+  system: { label: 'Administración', color: 'text-primary' },
 }
 
 const sectionOrder: NavSection[] = ['overview', 'tenants', 'billing', 'content', 'system']
@@ -130,7 +130,7 @@ const navItems: NavItem[] = [
     title: 'Organizaciones',
     href: '/superadmin/organizations',
     icon: Building2,
-    description: 'Clientes y tenants del sistema',
+    description: 'Directorio de comercios, accesos y configuración',
     section: 'tenants',
     // Una sola sección: el directorio abre la ficha de cada organización y el
     // alta («Nueva organización»). «Configuración tenants» repetía, solo para
@@ -155,6 +155,7 @@ const navItems: NavItem[] = [
     section: 'billing',
     children: [
       { title: 'Resumen', href: '/superadmin/billing', icon: Banknote },
+      { title: 'Pagos por transferencia', href: '/superadmin/billing/transfers', icon: Banknote, description: 'Revisá comprobantes y administrá la cuenta receptora' },
       { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard },
       { title: 'Pagos', href: '/superadmin/invoices', icon: FileText },
       { title: 'Planes', href: '/superadmin/plans', icon: Sparkles },
@@ -203,7 +204,6 @@ const navItems: NavItem[] = [
     title: 'Monitoreo',
     href: '/superadmin/monitoring',
     icon: Activity,
-    badge: 'Live',
     description: 'Salud, rendimiento y conexiones',
     section: 'system',
     children: [
@@ -294,7 +294,7 @@ function ChildLink({
   onNavigate: (href: string) => void
 }) {
   const ChildIcon = child.icon
-  const active = isItemActive(pathname, child)
+  const active = getActiveItem(pathname)?.href === child.href
 
   return (
     <Link
@@ -302,9 +302,9 @@ function ChildLink({
       onClick={() => onNavigate(child.href)}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group flex h-9 items-center gap-2 rounded-md pl-8 pr-2 text-[13px] transition-colors',
+        'group flex min-h-10 items-center gap-2 rounded-lg py-2 pl-4 pr-3 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         active
-          ? 'bg-accent font-semibold text-foreground ring-1 ring-inset ring-border'
+          ? 'bg-primary/10 font-semibold text-primary'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       )}
     >
@@ -339,7 +339,7 @@ function CollapsedNavMenu({
             <button
               type="button"
               aria-label={item.title}
-              aria-current={isItemActive(pathname, item) ? 'page' : undefined}
+              aria-current={getActiveItem(pathname)?.href === item.href ? 'page' : undefined}
               className={cn(
                 'relative flex h-9 w-full items-center justify-center rounded-lg transition-all duration-150',
                 isActive ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -409,7 +409,7 @@ function NavItemRow({
 }) {
   const Icon = item.icon
   const hasChildren = Boolean(item.children?.length)
-  const isCurrent = isItemActive(pathname, item)
+  const isCurrent = getActiveItem(pathname)?.href === item.href
 
   if (collapsed) {
     if (hasChildren) {
@@ -466,9 +466,9 @@ function NavItemRow({
           onClick={() => onToggleExpanded(item.title)}
           aria-expanded={isExpanded}
           className={cn(
-            'group flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm font-medium transition-colors',
+            'group flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             isActive
-              ? 'bg-accent text-foreground ring-1 ring-inset ring-border'
+              ? 'bg-primary/5 text-foreground'
               : isExpanded
                 ? 'bg-accent/60 text-foreground'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -497,7 +497,7 @@ function NavItemRow({
           )} />
         </button>
 
-        <div className={cn(
+        <div hidden={!isExpanded} className={cn(
           'grid transition-[grid-template-rows,opacity] duration-200',
           isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         )}>
@@ -524,9 +524,9 @@ function NavItemRow({
       onClick={() => onNavigate(item.href)}
       aria-current={isCurrent ? 'page' : undefined}
       className={cn(
-        'group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors',
+        'group relative flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isActive
-          ? 'bg-accent text-foreground ring-1 ring-inset ring-border'
+          ? 'bg-primary/10 font-semibold text-primary'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       )}
     >
@@ -573,11 +573,12 @@ function SidebarContent({
   onCloseMobile,
 }: SidebarContentProps) {
   const collapsed = mode === 'desktop' && isCollapsed
-  const sidebarLogo = branding.logoDarkUrl || branding.logoUrl || DEFAULT_SUPERADMIN_BRANDING.logoDarkUrl
+  const sidebarLogo = branding.logoUrl || DEFAULT_SUPERADMIN_BRANDING.logoUrl
+  const sidebarDarkLogo = branding.logoDarkUrl || sidebarLogo
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
-      <div className={cn('flex h-20 shrink-0 items-center border-b border-border', collapsed ? 'justify-center px-3' : 'justify-between px-5')}>
+      <div className={cn('flex min-h-20 shrink-0 items-center border-b border-border/60', collapsed ? 'justify-center px-3' : 'justify-between px-5')}>
         <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
           <div className="flex h-8 shrink-0 items-center">
             <Image
@@ -586,13 +587,14 @@ function SidebarContent({
               width={132}
               height={32}
               priority
-              className={cn('w-auto object-contain', collapsed ? 'h-9 max-w-9' : 'h-9 max-w-[132px]')}
+              className={cn('h-9 w-auto object-contain dark:hidden', collapsed ? 'max-w-9' : 'max-w-[104px]')}
             />
+            <Image src={sidebarDarkLogo} alt={branding.platformName} width={104} height={32} priority className={cn('hidden h-9 w-auto object-contain dark:block', collapsed ? 'max-w-9' : 'max-w-[104px]')} />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold leading-tight text-foreground">{branding.platformName}</p>
-              <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-400">
+              <p className="truncate text-sm font-semibold leading-tight text-foreground">Superadmin</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 Centro de control
               </p>
             </div>
@@ -632,12 +634,10 @@ function SidebarContent({
                     onClick={() => onToggleSection(section)}
                     aria-expanded={!sectionCollapsed}
                     className={cn(
-                      'mb-1 mt-2 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent',
-                      sectionHasActive && 'bg-muted'
+                      'mb-1 mt-4 flex min-h-8 w-full items-center gap-2 rounded-md px-3 text-left transition-colors hover:bg-accent',
                     )}
                   >
-                    <div className={cn('h-1.5 w-1.5 rounded-full', color.replace('text-', 'bg-'))} />
-                    <span className={cn('min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.18em]', color)}>
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                       {label}
                     </span>
                     <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', sectionCollapsed && '-rotate-90')} />
@@ -646,7 +646,7 @@ function SidebarContent({
                   <div className="mx-2 my-3 h-px bg-accent" />
                 )}
 
-                <div className={cn('grid transition-[grid-template-rows,opacity] duration-200', sectionCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}>
+                <div hidden={sectionCollapsed} className={cn('grid transition-[grid-template-rows,opacity] duration-200', sectionCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}>
                   <div className="min-h-0 space-y-0.5 overflow-hidden">
                     {items.map((item) => {
                       const isActive = isItemActive(pathname, item) || Boolean(item.children?.some(child => isItemActive(pathname, child)))
@@ -677,23 +677,22 @@ function SidebarContent({
       {!collapsed && (
         <aside
           aria-label="Asistente del centro de control"
-          className="mx-3 mb-3 flex shrink-0 items-center gap-3 overflow-hidden rounded-xl border border-cyan-400/20 bg-cyan-400/[0.07] p-3"
+          className="mx-3 mb-3 flex shrink-0 items-center gap-3 overflow-hidden rounded-xl border border-border/70 bg-background/60 p-3"
         >
           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted ring-1 ring-border">
-            <span className="absolute inset-2 rounded-full bg-cyan-400/20 blur-md" aria-hidden="true" />
             <Image
               src="/branding/mascot/mi-tienda-assistant-2d.png"
               alt={`Robot asistente de ${branding.platformName}`}
               width={72}
               height={66}
               sizes="56px"
-              className="relative h-auto w-16 object-contain motion-safe:animate-[pulse_4s_ease-in-out_infinite]"
+              className="relative h-auto w-14 object-contain"
             />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-cyan-100">Todo bajo control</p>
+            <p className="text-xs font-semibold text-foreground">Encontrá lo que necesitás</p>
             <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              Navega, revisa y administra la plataforma desde un solo lugar.
+              Buscá una sección con Ctrl K o desde la barra superior.
             </p>
           </div>
         </aside>
@@ -816,7 +815,7 @@ export function SuperAdminShell({
   }, [collapsedSections])
 
   const effectiveExpandedItems = useMemo(() => {
-    if (expandedPathname === pathname && expandedItems.size) return expandedItems
+    if (expandedPathname === pathname) return expandedItems
 
     const activeParent = navItems.find(item => (
       Boolean(item.children?.length)
@@ -836,10 +835,8 @@ export function SuperAdminShell({
 
   const handleToggleExpanded = useCallback((title: string) => {
     setExpandedPathname(pathname)
-    setExpandedItems((current) => {
-      return current.has(title) ? new Set() : new Set([title])
-    })
-  }, [pathname])
+    setExpandedItems(effectiveExpandedItems.has(title) ? new Set() : new Set([title]))
+  }, [pathname, effectiveExpandedItems])
 
   const handleToggleSection = useCallback((section: NavSection) => {
     setCollapsedSections((current) => {
@@ -919,12 +916,12 @@ export function SuperAdminShell({
           </TooltipContent>
         </Tooltip>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-muted/50 dark:bg-sidebar">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
           <header
             aria-label="Barra de control del superadmin"
-            className="relative z-20 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-3 backdrop-blur sm:min-h-20 sm:gap-4 sm:px-5 dark:border-border dark:bg-background/95"
+            className="relative z-20 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 sm:min-h-20 sm:gap-4 sm:px-6"
           >
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" aria-label="Abrir menú">
@@ -958,12 +955,12 @@ export function SuperAdminShell({
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="hidden h-10 w-72 items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 text-left text-xs text-muted-foreground transition-colors hover:border-ring hover:bg-accent lg:flex dark:border-border dark:bg-muted dark:text-muted-foreground dark:hover:border-ring dark:hover:bg-accent"
+                className="hidden h-10 w-10 items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/30 px-3 text-left text-xs text-muted-foreground transition-colors hover:border-ring hover:bg-accent lg:flex xl:w-56 xl:justify-start"
                 aria-label="Buscar en el centro de control"
               >
                 <Search className="h-3.5 w-3.5" />
-                <span className="flex-1">Buscar secciones...</span>
-                <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-border dark:bg-background">
+                <span className="hidden flex-1 xl:inline">Buscar secciones…</span>
+                <kbd className="hidden rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground xl:inline">
                   Ctrl K
                 </kbd>
               </button>
@@ -978,6 +975,9 @@ export function SuperAdminShell({
                 <Search className="h-4 w-4" />
               </Button>
 
+              <Button asChild variant="outline" className="h-10 shrink-0 gap-2 rounded-xl px-2.5 sm:px-3">
+                <Link href="/marketplace" aria-label="Ir al Marketplace"><Store className="h-4 w-4" /><span className="hidden xl:inline">Marketplace</span></Link>
+              </Button>
               <div className="hidden sm:block">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1147,7 +1147,7 @@ export function SuperAdminShell({
           <main
             id="superadmin-content"
             aria-label={`Contenido de ${activeItem?.title ?? 'Super Admin'}`}
-            className="relative flex-1 overflow-x-hidden overflow-y-auto bg-muted/50 outline-none dark:bg-sidebar"
+            className="relative flex-1 overflow-x-hidden overflow-y-auto bg-muted/30 outline-none"
             tabIndex={-1}
           >
             <div className="min-w-0 px-3 py-4 sm:px-6 sm:py-6 xl:px-8 xl:py-7">

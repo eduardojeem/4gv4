@@ -47,8 +47,11 @@ describe('subscription bank transfer administration',()=>{
  it('validates enabled bank details and sends only editable settings with fixed currency',async()=>{
   render(<SubscriptionTransfers />)
   await screen.findByRole('button',{name:'Ver detalle TR-123'})
+  fireEvent.mouseDown(screen.getByRole('tab',{name:/Cuenta bancaria/}),{button:0,ctrlKey:false})
+  expect(screen.getByRole('tab',{name:/Cuenta bancaria/})).toHaveTextContent('Deshabilitada')
   fireEvent.click(screen.getByLabelText('Habilitar transferencias bancarias'))
   fireEvent.click(screen.getByRole('button',{name:'Guardar datos bancarios'}))
+  expect(screen.getByRole('tab',{name:/Cuenta bancaria/})).toHaveTextContent('Deshabilitada')
   expect(calls.filter(c=>c.init?.method==='PUT')).toHaveLength(0)
   fireEvent.change(screen.getByLabelText('Banco'),{target:{value:'Banco Uno'}})
   fireEvent.change(screen.getByLabelText('Titular de la cuenta'),{target:{value:'Plataforma'}})
@@ -57,6 +60,7 @@ describe('subscription bank transfer administration',()=>{
   await waitFor(()=>expect(calls.filter(c=>c.init?.method==='PUT')).toHaveLength(1))
   const body=JSON.parse(String(calls.find(c=>c.init?.method==='PUT')?.init?.body))
   expect(body.currency).toBe('PYG');expect(body).not.toHaveProperty('updatedAt')
+  await waitFor(()=>expect(screen.getByRole('tab',{name:/Cuenta bancaria/})).toHaveTextContent('Habilitada'))
  })
 })
 
@@ -72,6 +76,7 @@ it('shows a request error with retry instead of a fake empty list',async()=>{
 it('does not allow overwriting unknown bank settings after a failed initial read',async()=>{
  vi.stubGlobal('fetch',vi.fn((url:string)=>url.includes('subscription-transfer-settings')?response({error:'Configuración no disponible'},503):response({requests:[],hasMore:false})))
  render(<SubscriptionTransfers />)
+ fireEvent.mouseDown(screen.getByRole('tab',{name:/Cuenta bancaria/}),{button:0,ctrlKey:false})
  expect(await screen.findByText('Configuración no disponible')).toBeInTheDocument()
  expect(screen.queryByRole('button',{name:'Guardar datos bancarios'})).not.toBeInTheDocument()
  expect(screen.getByRole('button',{name:'Volver a cargar datos bancarios'})).toBeEnabled()
@@ -128,4 +133,26 @@ it('allows rejecting an abandoned request awaiting receipt without exposing appr
  expect(await screen.findByText('Solicitud rechazada.')).toBeInTheDocument()
  expect(JSON.parse(String(calls.find(c=>c.url.endsWith('/review'))?.init?.body))).toEqual({decision:'reject',reason:'Solicitud abandonada'})
  expect(screen.queryByRole('button',{name:'Rechazar solicitud'})).not.toBeInTheDocument()
+})
+
+
+it('separates bank configuration from requests without losing review state or fetching again',async()=>{
+ render(<SubscriptionTransfers />)
+ fireEvent.click(await screen.findByRole('button',{name:'Ver detalle TR-123'}))
+ expect(screen.queryByLabelText('Habilitar transferencias bancarias')).not.toBeInTheDocument()
+ fireEvent.change(screen.getByLabelText('Referencia bancaria verificada'),{target:{value:'BANK-DRAFT'}})
+ fireEvent.click(screen.getByLabelText(/Verifiqué la acreditación/))
+ const count=calls.length
+ fireEvent.mouseDown(screen.getByRole('tab',{name:/Cuenta bancaria/}),{button:0,ctrlKey:false})
+ expect(screen.getByLabelText('Habilitar transferencias bancarias')).toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'Aprobar y activar período'})).not.toBeInTheDocument()
+ fireEvent.mouseDown(screen.getByRole('tab',{name:'Solicitudes'}),{button:0,ctrlKey:false})
+ expect(screen.getByLabelText('Referencia bancaria verificada')).toHaveValue('BANK-DRAFT')
+ expect(screen.getByLabelText(/Verifiqué la acreditación/)).toBeChecked()
+ expect(screen.getByRole('button',{name:'Aprobar y activar período'})).toBeEnabled()
+ expect(calls).toHaveLength(count)
+ expect(calls.some(c=>c.url.endsWith('/receipt'))).toBe(false)
+ fireEvent.click(screen.getByRole('button',{name:'Cerrar detalle'}))
+ expect(screen.queryByRole('region',{name:'Detalle TR-123'})).not.toBeInTheDocument()
+ expect(screen.getByRole('button',{name:'Ver detalle TR-123'})).toBeInTheDocument()
 })

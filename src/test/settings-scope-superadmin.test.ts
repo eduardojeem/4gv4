@@ -8,7 +8,10 @@ const estado = vi.hoisted(() => ({
   contexto: null as { id: string } | null,
   miembro: null as { organization_id?: string; role?: string } | null,
   escrituras: [] as Array<{ tabla: string; tipo: string; payload: unknown }>,
+  orgSettings: null as Record<string, unknown> | null,
 }))
+
+const ORG_SETTINGS = { display_name: 'HCA Celular', currency: 'PYG', timezone: 'America/Asuncion', modules: {} }
 
 const GLOBAL = {
   id: 'system',
@@ -36,7 +39,7 @@ function tabla(nombre: string) {
   const lectura = () => {
     if (nombre === 'system_settings') return { data: GLOBAL, error: null }
     if (nombre === 'organization_settings') {
-      return { data: { display_name: 'HCA Celular', currency: 'PYG', timezone: 'America/Asuncion', modules: {} }, error: null }
+      return { data: estado.orgSettings, error: null }
     }
     if (nombre === 'organizations') return { data: { name: 'HCA Celular', logo_url: null }, error: null }
     if (nombre === 'organization_members') return { data: estado.miembro, error: null }
@@ -97,6 +100,7 @@ beforeEach(() => {
   estado.contexto = null
   estado.miembro = null
   estado.escrituras = []
+  estado.orgSettings = { ...ORG_SETTINGS }
 })
 
 /**
@@ -161,6 +165,49 @@ describe('guardar: el alcance decide dónde se escribe', () => {
     expect(res.status).toBe(200)
     expect(escrituraEn('system_settings')).toHaveLength(1)
     expect(escrituraEn('organization_settings')).toHaveLength(0)
+  })
+})
+
+/**
+ * La web y la app guardan solo lo que cambió. Al armar lo que se escribe, el
+ * servidor partía de la fila GLOBAL: guardar el RUC de un comercio le ponía el
+ * nombre, la moneda, la zona horaria y la política de reparaciones de la
+ * plataforma. Lo propio del comercio tiene que ganar, como al cargar.
+ */
+describe('guardar un campo no pisa lo demás del comercio con la fila global', () => {
+  beforeEach(() => {
+    estado.usuario = { id: 'u-2', role: 'admin', email: 'admin@hca.com' }
+    estado.contexto = { id: 'org-1' }
+    estado.orgSettings = {
+      display_name: 'HCA Celular', currency: 'USD', timezone: 'America/Sao_Paulo', modules: {},
+      repair_max_discount_percent: 35, repair_labor_tax_rate: 5,
+    }
+  })
+
+  it('guardar solo el RUC conserva nombre, moneda, zona y reparaciones del comercio', async () => {
+    const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
+    expect(res.status).toBe(200)
+    const [escritura] = escrituraEn('organization_settings')
+    expect(escritura.payload).toMatchObject({
+      display_name: 'HCA Celular',
+      currency: 'USD',
+      timezone: 'America/Sao_Paulo',
+      repair_max_discount_percent: 35,
+      repair_labor_tax_rate: 5,
+    })
+    expect((escritura.payload as { modules: { admin_settings: unknown } }).modules.admin_settings).toEqual({ companyRuc: '80012345-6' })
+  })
+
+  it('lo que sí se cambia se escribe', async () => {
+    const res = await guardar({ settings: { companyName: 'HCA Celulares', timeZone: 'America/Asuncion' }, scope: 'organization' })
+    expect(res.status).toBe(200)
+    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ display_name: 'HCA Celulares', timezone: 'America/Asuncion', currency: 'USD' })
+  })
+
+  it('la respuesta devuelve los datos del comercio, no los de la plataforma', async () => {
+    const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
+    const body = await res.json()
+    expect(body.data).toMatchObject({ company_name: 'HCA Celular', currency: 'USD', time_zone: 'America/Sao_Paulo', company_ruc: '80012345-6' })
   })
 })
 

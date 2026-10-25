@@ -67,7 +67,7 @@ async function handleTenantUpdate(
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
-        .select('modules, currency, repair_max_discount_percent, repair_labor_tax_rate')
+        .select('display_name, timezone, modules, currency, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
@@ -83,10 +83,15 @@ async function handleTenantUpdate(
 
   const existingModules = normalizeOrganizationModules(orgSettings?.modules)
   const existingTenantSettings = getTenantAdminSettings(existingModules)
+  // Lo propio del comercio gana sobre la fila global, en el mismo orden que al
+  // cargar (/api/settings/shared). Antes, al guardar un solo campo, el nombre,
+  // la zona horaria y la política de reparaciones salían de la plataforma.
   const currentEffectiveSettings = {
     ...toFrontendSettings(globalRow as Record<string, unknown>),
     ...existingTenantSettings,
+    ...(orgSettings?.display_name ? { companyName: orgSettings.display_name } : {}),
     ...(orgSettings?.currency ? { currency: orgSettings.currency } : {}),
+    ...(orgSettings?.timezone ? { timeZone: orgSettings.timezone } : {}),
     repairMaxDiscountPercent: Number(orgSettings?.repair_max_discount_percent ?? 20),
     repairLaborTaxRate: (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10,
   }
@@ -109,8 +114,8 @@ async function handleTenantUpdate(
     ...withoutPlatformSettings(settings),
   }
   const effectiveSettings = {
-    ...toFrontendSettings(globalRow as Record<string, unknown>),
-    ...tenantSettings,
+    ...currentEffectiveSettings,
+    ...withoutPlatformSettings(settings),
   }
 
   const organizationUpdate = {

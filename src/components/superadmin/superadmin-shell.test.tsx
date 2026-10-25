@@ -32,6 +32,28 @@ describe('SuperAdminShell', () => {
     navigationState.pathname = '/superadmin/organizations'
   })
 
+  it('lets the user close the current group and reopen it', async () => {
+    navigationState.pathname = '/superadmin/billing'
+    const user = userEvent.setup()
+    render(<SuperAdminShell userEmail="admin@example.com"><p>Contenido</p></SuperAdminShell>)
+    const group = screen.getByRole('button', { name: 'Facturacion' })
+    expect(group).toHaveAttribute('aria-expanded', 'true')
+    await user.click(group)
+    expect(group).toHaveAttribute('aria-expanded', 'false')
+    await user.click(group)
+    expect(group).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('identifies transfer review as its own destination without selecting the billing overview too', () => {
+    navigationState.pathname = '/superadmin/billing/transfers'
+    render(<SuperAdminShell userEmail="admin@example.com"><p>Contenido</p></SuperAdminShell>)
+    expect(screen.getByRole('main')).toHaveAccessibleName('Contenido de Pagos por transferencia')
+    const currentLinks = screen.getAllByRole('link').filter(link => link.getAttribute('aria-current') === 'page')
+    expect(currentLinks).toHaveLength(1)
+    expect(currentLinks[0]).toHaveAttribute('href', '/superadmin/billing/transfers')
+    expect(screen.getByRole('link', { name: 'Ir al Marketplace' })).toHaveAttribute('href', '/marketplace')
+  })
+
   it('organizes the global controls around a clearly labelled workspace', () => {
     render(
       <SuperAdminShell userEmail="admin@example.com">
