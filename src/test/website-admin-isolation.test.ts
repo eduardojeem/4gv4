@@ -1,3 +1,5 @@
+// @vitest-environment node
+// FormData y File nativos de Node: los de jsdom no viajan en un Request de Node 24.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'

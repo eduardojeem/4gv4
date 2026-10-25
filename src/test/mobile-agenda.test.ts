@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const auth = vi.hoisted(() => ({ getSession: vi.fn(), signOut: vi.fn() }))
 vi.mock('../../mobile/src/lib/supabase', () => ({ supabase: { auth: { getSession: auth.getSession, signOut: auth.signOut } } }))
 vi.mock('../../mobile/src/lib/marketplace', () => ({ SITE_URL: 'https://tienda.test', formatGs: (value: number) => `Gs. ${value}` }))
-vi.mock('../../mobile/node_modules/react-native', () => ({ Platform: { OS: 'android' } }))
-vi.mock('../../mobile/node_modules/expo-file-system', () => ({ File: class {} }))
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }))
+vi.mock('expo-file-system', () => ({ File: class {} }))
 
 import { ApiError } from '../../mobile/src/lib/api'
 import { setPrivateCacheOrganization, setPrivateCacheUser } from '../../mobile/src/lib/private-cache-context'

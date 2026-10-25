@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const auth = vi.hoisted(() => ({ getSession: vi.fn(), signOut: vi.fn() }))
 vi.mock('../../mobile/src/lib/supabase', () => ({ supabase: { auth: { getSession: auth.getSession, signOut: auth.signOut } } }))
 vi.mock('../../mobile/src/lib/marketplace', () => ({ SITE_URL: 'https://tienda.test' }))
-vi.mock('../../mobile/node_modules/react-native', () => ({ Platform: { OS: 'android' } }))
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }))
 // La app lee la imagen elegida con expo-file-system (fetch no abre rutas file:// codificadas).
-vi.mock('../../mobile/node_modules/expo-file-system', () => ({
+vi.mock('expo-file-system', () => ({
   File: class {
     constructor(public uri: string) {}
     size = 3
