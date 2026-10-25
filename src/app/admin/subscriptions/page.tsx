@@ -9,6 +9,7 @@ import {
   CreditCard,
   Gauge,
   Info,
+  RefreshCw,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -36,6 +37,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
 import { isStripeConfigured } from '@/lib/payments/stripe'
+import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
 
@@ -258,6 +260,14 @@ export default async function AdminSubscriptionsPage() {
               planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
               stripeEnabled={isStripeConfigured()}
             />
+            {canChangePlan && isPagoparRecurringEnabled() && (
+              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
+                <Link href="/admin/subscriptions/autopay">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  Débito automático
+                </Link>
+              </Button>
+            )}
             {canChangePlan && (
               <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/change-plan">
