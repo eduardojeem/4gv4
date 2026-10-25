@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   AlertCircle,
@@ -963,17 +963,20 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
     }
   }
 
+  const saveRef = useRef(save)
+  saveRef.current = save
+
   // Ctrl + S o Cmd + S guarda.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
-        if (editable && !saving) void save()
+        if (editable && !saving) void saveRef.current()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editable, saving, customer, lines, priceMode, validUntil, notes, save])
+  }, [editable, saving])
 
   const changeStatus = async (action: string, success: string) => {
     if (currentScope.current !== scope) return
