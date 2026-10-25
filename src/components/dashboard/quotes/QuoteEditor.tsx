@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   AlertCircle,
@@ -964,7 +964,9 @@ export function QuoteEditor({ quoteId }: { quoteId?: string }) {
   }
 
   const saveRef = useRef(save)
-  saveRef.current = save
+  useLayoutEffect(() => {
+    saveRef.current = save
+  })
 
   // Ctrl + S o Cmd + S guarda.
   useEffect(() => {

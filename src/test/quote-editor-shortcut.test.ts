@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 
 function useSaveShortcut({
   save,
@@ -12,7 +12,10 @@ function useSaveShortcut({
   saving: boolean
 }) {
   const saveRef = useRef(save)
-  saveRef.current = save
+
+  useLayoutEffect(() => {
+    saveRef.current = save
+  })
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -30,8 +33,10 @@ describe('QuoteEditor Ctrl+S shortcut listener', () => {
   it('triggers latest save callback on Ctrl+S and prevents default browser behavior', () => {
     const initialSave = vi.fn()
     const latestSave = vi.fn()
+    const addEventListener = vi.spyOn(window, 'addEventListener')
+    const removeEventListener = vi.spyOn(window, 'removeEventListener')
 
-    const { rerender } = renderHook(
+    const { rerender, unmount } = renderHook(
       ({ save, editable, saving }) => useSaveShortcut({ save, editable, saving }),
       { initialProps: { save: initialSave, editable: true, saving: false } }
     )
@@ -49,6 +54,12 @@ describe('QuoteEditor Ctrl+S shortcut listener', () => {
     expect(prevented).toBe(true)
     expect(initialSave).not.toHaveBeenCalled()
     expect(latestSave).toHaveBeenCalledTimes(1)
+    expect(addEventListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1)
+
+    unmount()
+    expect(removeEventListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1)
+    addEventListener.mockRestore()
+    removeEventListener.mockRestore()
   })
 
   it('triggers on Cmd+S (macOS metaKey)', () => {
