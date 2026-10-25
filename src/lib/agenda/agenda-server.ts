@@ -183,6 +183,8 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
       atomicReady = !version.error && Number(version.data) >= 3
   }
   return {
+    /** Si el comercio ya tiene su fila de configuración (sin guardar nunca, no hay). */
+    settingsSaved: Boolean(settings.data),
     settingsRevision: Number((stored as Partial<AgendaSettings> & { booking_revision?: number }).booking_revision ?? 0),
     capabilities: { professionalBooking: atomicReady },
     professionalRates: (rates.error ? [] : rates.data ?? []) as AgendaProfessionalRate[],
