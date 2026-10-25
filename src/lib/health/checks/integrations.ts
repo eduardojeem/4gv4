@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { codeAudit, codeAuditMethod } from '@/lib/health/code-audit'
 import { HEALTH_MIGRATION, isMissingObjectError } from '@/lib/health/catalog'
 import { errorMessage, isConfigured, runCheck } from '@/lib/health/core'
+import { sharedRateLimitAlternative, sharedRateLimitState } from '@/lib/rate-limit-config'
 import type { SiteProbe } from '@/lib/health/site-probe'
 import type {
   HealthCheckResult,
@@ -15,7 +16,7 @@ type ServiceConfiguration = Partial<Record<string, ServiceConfigurationState>>
 
 const SERVICE_DEFINITIONS = [
   { id: 'supabase', name: 'Supabase', checkId: 'supabase.database', source: 'NEXT_PUBLIC_SUPABASE_URL + consulta de base de datos', runtimeVerified: true },
-  { id: 'upstash', name: 'Upstash', checkId: 'security.rate_limiting', source: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN', runtimeVerified: false },
+  { id: 'upstash', name: 'Upstash', checkId: 'security.rate_limiting', source: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (o KV_REST_API_URL + KV_REST_API_TOKEN de la integración de Vercel)', runtimeVerified: false },
   { id: 'telegram', name: 'Telegram', checkId: 'integrations.telegram', source: 'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID', runtimeVerified: false },
   { id: 'turnstile', name: 'Cloudflare Turnstile', checkId: 'security.turnstile', source: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY', runtimeVerified: false },
   { id: 'cloudflare', name: 'Cloudflare', checkId: 'cloudflare.edge', source: 'Headers públicos y API opcional Zone:Read', runtimeVerified: true },
@@ -30,7 +31,8 @@ function pairConfiguration(first: string, second: string): ServiceConfigurationS
 function runtimeServiceConfiguration(): ServiceConfiguration {
   return {
     supabase: pairConfiguration('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'),
-    upstash: pairConfiguration('UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'),
+    // Acepta también los nombres que crea la integración de Upstash en Vercel.
+    upstash: sharedRateLimitState(),
     telegram: pairConfiguration('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'),
     turnstile: pairConfiguration('NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY'),
     cloudflare: pairConfiguration('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ZONE_ID'),
@@ -344,15 +346,22 @@ export async function runIntegrationChecks(
       async () => {
         const required = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'NEXT_PUBLIC_SITE_URL', 'PUBLIC_SESSION_SECRET', 'REPAIR_QR_SECRET', 'CRON_SECRET']
         const recommended = ['NEXT_PUBLIC_BASE_URL', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'RESEND_API_KEY', 'EMAIL_FROM', 'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY']
+        // Upstash cuenta también con su equivalente de la integración de Vercel (KV_REST_API_*).
+        const alternativeOf = (k: string) => {
+          const alternative = sharedRateLimitAlternative(k)
+          return !isConfigured(k) && alternative && isConfigured(alternative) ? alternative : null
+        }
+        const configured = (k: string) => isConfigured(k) || alternativeOf(k) !== null
+        const label = (k: string) => (alternativeOf(k) ? `configurada como ${alternativeOf(k)}` : 'configurada')
         const missingRequired = required.filter((k) => !isConfigured(k))
-        const missingRecommended = recommended.filter((k) => !isConfigured(k))
+        const missingRecommended = recommended.filter((k) => !configured(k))
         return {
           status: missingRequired.length ? 'error' : missingRecommended.length ? 'warning' : 'healthy',
           severity: missingRequired.length ? 'high' : 'medium',
           summary: `${required.length - missingRequired.length}/${required.length} requeridas · ${recommended.length - missingRecommended.length}/${recommended.length} recomendadas`,
           findings: [
             ...required.map((k) => `${isConfigured(k) ? '✓' : '✕'} ${k} ${isConfigured(k) ? 'configurada' : 'faltante'}`),
-            ...recommended.map((k) => `${isConfigured(k) ? '✓' : '⚠'} ${k} ${isConfigured(k) ? 'configurada' : 'faltante'}`),
+            ...recommended.map((k) => `${configured(k) ? '✓' : '⚠'} ${k} ${configured(k) ? label(k) : 'faltante'}`),
           ],
         }
       },
