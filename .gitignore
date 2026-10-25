@@ -193,3 +193,10 @@ public/worker-*.js
 # Salida de scripts/optimize-shared-chunks.js
 /chunk-analysis.json
 /tsc_output.txt
+
+# Builds temporales de verificación de releases
+/.tmp-*/
+
+# Auditorías de seguridad con riesgos pendientes: el repo es público, quedan solo en local
+/docs/security/s1-*
+/docs/audits/mobile-p1-security-integrity-*.md

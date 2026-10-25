@@ -1,6 +1,14 @@
 import { getPublicUrl } from './supabase-storage'
 import { isSupportedImageSource } from './image-url-policy'
 
+const LOCAL_DEV_PRODUCT_IMAGE_PREFIX = '/storage/v1/object/public/dev-product-images/dev-fixtures/products/'
+
+export function shouldUsePortraitProductCover(source: string, portraitMedia: boolean): boolean {
+  return portraitMedia
+    && source !== '/placeholder-product.svg'
+    && !source.includes(LOCAL_DEV_PRODUCT_IMAGE_PREFIX)
+}
+
 /**
  * Qué imágenes NO pasan por el optimizador de Vercel (`/_next/image`).
  *

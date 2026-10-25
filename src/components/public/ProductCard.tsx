@@ -12,7 +12,7 @@ import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
-import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization, shouldUsePortraitProductCover } from '@/lib/images'
 import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
@@ -148,7 +148,7 @@ export function ProductCard(props: ProductCardProps) {
   // Moda y deportivo: foto vertical a sangre, como en una tienda de ropa. El
   // placeholder se sigue mostrando entero para no recortarlo.
   const portraitMedia = usesPortraitMedia(storefrontStyle)
-  const coverImage = portraitMedia && imageSrc !== '/placeholder-product.svg'
+  const coverImage = shouldUsePortraitProductCover(imageSrc, portraitMedia)
 
   // ── Cuotas / financiación (informativo) ───────────────────────────────────
   const installmentsVisible =
