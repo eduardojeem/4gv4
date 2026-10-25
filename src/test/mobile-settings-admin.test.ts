@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const auth = vi.hoisted(() => ({ getSession: vi.fn(), signOut: vi.fn() }))
 vi.mock('../../mobile/src/lib/supabase', () => ({ supabase: { auth: { getSession: auth.getSession, signOut: auth.signOut } } }))
 vi.mock('../../mobile/src/lib/marketplace', () => ({ SITE_URL: 'https://tienda.test' }))
-vi.mock('../../mobile/node_modules/react-native', () => ({ Platform: { OS: 'android' } }))
-vi.mock('../../mobile/node_modules/expo-file-system', () => ({ File: class {} }))
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }))
+vi.mock('expo-file-system', () => ({ File: class {} }))
 
 import { ApiError } from '../../mobile/src/lib/api'
 import { setPrivateCacheOrganization, setPrivateCacheUser } from '../../mobile/src/lib/private-cache-context'
@@ -244,7 +244,11 @@ describe('pantallas: sin service_role, sin organization_id y sin abrir la web pa
   it('el menú de perfil abre la Configuración de la app, no la web', () => {
     const menu = read('components/panel-menus.tsx')
     expect(menu).not.toMatch(/web\('\/admin\/settings'\)/)
-    expect(menu).toMatch(/router\.push\('\/admin\/settings'\)/)
+    // Las opciones del menú viven en lib/profile-menu.ts: Configuración es una ruta de la app.
+    const options = read('lib/profile-menu.ts')
+    expect(options).toMatch(/key: 'settings'[^}]*route: '\/admin\/settings'/)
+    expect(options).not.toMatch(/web: '\/admin\/settings'/)
+    expect(menu).toMatch(/router\.push\(entry\.route/)
   })
 
   it('ya no existen los interruptores que no correspondían a nada en el servidor', () => {

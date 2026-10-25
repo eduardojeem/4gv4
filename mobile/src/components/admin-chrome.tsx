@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ADMIN_NAV, ADMIN_TABS, adminItem, type AdminNavItem } from '@/lib/admin-nav';
+import { useAfterDismiss } from '@/lib/after-dismiss';
 import { openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { usePanel } from '@/lib/panel';
@@ -18,7 +19,7 @@ export const useAdminMenu = () => useContext(MenuContext);
 
 const go = (item: AdminNavItem) => {
   if (item.route) router.navigate(item.route as never);
-  else if (item.web) void openWeb(item.web);
+  else if (item.web) void openWeb(item.web).catch(() => undefined);
 };
 
 const isActive = (pathname: string, item: AdminNavItem) => Boolean(item.route) && (item.route === '/admin' ? pathname === '/admin' : pathname.startsWith(item.route!));
@@ -100,13 +101,17 @@ function AdminDrawer({ visible, onClose }: { visible: boolean; onClose: () => vo
   const { data } = usePanel();
   const org = data?.organization;
 
+  const { schedule, onDismiss } = useAfterDismiss();
+
+  // La web se abre recién cuando el menú terminó de cerrarse (ver useAfterDismiss).
   const pick = (item: AdminNavItem) => {
+    if (item.web) schedule(() => go(item));
     onClose();
-    go(item);
+    if (!item.web) go(item);
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss}>
       <View style={styles.drawerWrap}>
         <SafeAreaView edges={['top', 'bottom']} style={[styles.drawer, { backgroundColor: colors.card }]}>
           <View style={styles.drawerHead}>
