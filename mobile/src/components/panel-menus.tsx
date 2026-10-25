@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
@@ -10,6 +11,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useWindowDimensions,
@@ -17,9 +19,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAfterDismiss } from '@/lib/after-dismiss';
 import { openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { hasNativePanelSection, iconFor, panelRoute, ROLE_LABELS, usePanel, type PanelItem } from '@/lib/panel';
+import { profileMenuSections, type ProfileMenuEntry } from '@/lib/profile-menu';
 import { useSession } from '@/lib/session';
 
 /**
@@ -47,6 +51,9 @@ export function PanelMenusProvider({ children }: PropsWithChildren) {
     </MenusContext.Provider>
   );
 }
+
+/** «Administración» abre su área aparte; volver atrás regresa al panel. */
+const sectionRoute = (key: string) => (key === 'administration' ? '/admin' : panelRoute(key));
 
 const initialOf = (value?: string | null) => (value || '?').trim().charAt(0).toUpperCase();
 
@@ -163,7 +170,7 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
                 return (
                   <Pressable
                     key={item.key}
-                    onPress={() => go(panelRoute(item.key))}
+                    onPress={() => go(sectionRoute(item.key))}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                     style={({ pressed }) => [
@@ -198,121 +205,211 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
 
 // ─── Menú de perfil ────────────────────────────────────────────────────────
 
+const WEB_HINT = 'se abre en el navegador';
+
 function ProfileMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const colors = usePalette();
   const insets = useSafeAreaInsets();
-  const { data } = usePanel();
+  const { width, height } = useWindowDimensions();
+  const { data, findItem } = usePanel();
   const { signOut, biometric, setBiometricEnabled } = useSession();
+  const { schedule, onDismiss } = useAfterDismiss();
+  const [progress] = useState(() => new Animated.Value(0));
+  const [savingBiometric, setSavingBiometric] = useState(false);
   const user = data?.user;
   const org = data?.organization;
+  const cardWidth = Math.min(340, width - 24);
+  const top = insets.top + 58;
 
-  const web = (path: string) => {
-    onClose();
-    void openWeb(path);
+  // Aparece desde el avatar: se agranda un poco y baja apenas.
+  useEffect(() => {
+    if (!visible) return;
+    progress.setValue(0);
+    Animated.timing(progress, { toValue: 1, duration: 170, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [visible, progress]);
+
+  // Cierra y, recién cuando el menú ya no está, hace lo que se tocó.
+  const close = (after?: () => void) => {
+    if (after) schedule(after);
+    Animated.timing(progress, { toValue: 0, duration: 120, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => onClose());
   };
 
-  const confirmSignOut = () => {
-    onClose();
-    Alert.alert('Cerrar sesión', '¿Querés salir de tu cuenta en este teléfono?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar sesión',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/');
+  const open = (entry: ProfileMenuEntry) =>
+    close(() => {
+      if (entry.web) void openWeb(entry.web).catch(() => undefined);
+      else if (entry.route === '/') router.replace('/');
+      else if (entry.route) router.push(entry.route as never);
+    });
+
+  const confirmSignOut = () =>
+    close(() =>
+      Alert.alert('Cerrar sesión', '¿Querés salir de tu cuenta en este teléfono?', [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/');
+          },
         },
-      },
-    ]);
-  };
+      ])
+    );
 
-  const toggleBiometric = async () => {
-    onClose();
-    const next = !biometric.enabled;
+  // El interruptor queda en el menú: no hace falta cerrarlo para ver el cambio.
+  const toggleBiometric = async (next: boolean) => {
+    if (savingBiometric) return;
+    setSavingBiometric(true);
     const ok = await setBiometricEnabled(next);
+    setSavingBiometric(false);
     if (!ok) {
-      Alert.alert(`No se pudo activar ${biometric.label}`, `Revisá que ${biometric.label} esté configurado en el teléfono y probá de nuevo.`);
+      Alert.alert(`No se pudo ${next ? 'activar' : 'desactivar'} ${biometric.label}`, `Revisá que ${biometric.label} esté configurado en el teléfono y probá de nuevo.`);
     }
   };
 
-  // Mismas opciones que el menú del avatar en la web, con los mismos permisos.
-  const options: { key: string; icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; onPress: () => void; show: boolean }[] = [
-    { key: 'profile', icon: 'person-circle-outline', title: 'Mi perfil', subtitle: 'Ver información personal', onPress: () => web('/dashboard/profile'), show: true },
-    { key: 'settings', icon: 'settings-outline', title: 'Configuración', subtitle: 'Empresa, moneda e impuestos', onPress: () => { onClose(); router.push('/admin/settings'); }, show: Boolean(user?.isAdmin) },
-    { key: 'admin', icon: 'shield-checkmark-outline', title: 'Panel admin', subtitle: 'Administración del sistema', onPress: () => web('/admin'), show: Boolean(user?.isAdmin) },
-    { key: 'superadmin', icon: 'planet-outline', title: 'Super Admin', subtitle: 'Panel global SaaS', onPress: () => web('/superadmin'), show: Boolean(user?.isSuperAdmin) },
-    {
-      key: 'biometric',
-      icon: 'finger-print-outline',
-      title: `Entrar con ${biometric.label}`,
-      subtitle: biometric.enabled ? 'Activado · tocá para desactivar' : 'Desactivado · tocá para activar',
-      onPress: () => void toggleBiometric(),
-      show: biometric.available,
-    },
-    {
-      key: 'marketplace',
-      icon: 'storefront-outline',
-      title: 'Ver el marketplace',
-      subtitle: 'Volver a la vitrina pública',
-      onPress: () => {
-        onClose();
-        router.replace('/');
-      },
-      show: true,
-    },
-  ];
+  const sections = profileMenuSections({
+    isAdmin: Boolean(user?.isAdmin),
+    isSuperAdmin: Boolean(user?.isSuperAdmin),
+    hasAdministration: Boolean(findItem('administration')),
+  });
+  const version = Constants.expoConfig?.version;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={[StyleSheet.absoluteFill, styles.backdropLight]} onPress={onClose} accessibilityLabel="Cerrar menú de perfil" />
-      <View style={[styles.profileCard, { top: insets.top + 58, backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.profileHead}>
-          <View style={[styles.avatarLg, { backgroundColor: palette.primary }]}>
-            {user?.avatarUrl ? (
-              <Image source={user.avatarUrl} style={styles.fill} contentFit="cover" />
-            ) : (
-              <Text style={styles.avatarLgText}>{initialOf(user?.name || user?.email)}</Text>
-            )}
-          </View>
-          <View style={styles.flex}>
-            <Text numberOfLines={1} style={[styles.profileName, { color: colors.text }]}>{user?.name || 'Mi cuenta'}</Text>
-            <Text numberOfLines={1} style={[styles.small, { color: colors.muted }]}>{user?.email}</Text>
-            {org && (
-              <View style={[styles.roleBadge, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
-                <Text style={[styles.roleText, { color: palette.primary }]}>
-                  {ROLE_LABELS[org.role] ?? org.role} · {org.name}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-        {options.filter((option) => option.show).map((option) => (
-          <Pressable
-            key={option.key}
-            onPress={option.onPress}
-            style={({ pressed }) => [styles.option, pressed && { backgroundColor: colors.background }]}>
-            <Ionicons name={option.icon} size={20} color={colors.text} />
-            <View style={styles.flex}>
-              <Text style={[styles.optionTitle, { color: colors.text }]}>{option.title}</Text>
-              <Text style={[styles.small, { color: colors.muted }]}>{option.subtitle}</Text>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => close()} onDismiss={onDismiss} statusBarTranslucent>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdropLight, { opacity: progress }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => close()} accessibilityLabel="Cerrar menú de perfil" />
+      </Animated.View>
+      <Animated.View
+        accessibilityViewIsModal
+        style={[
+          styles.profileCard,
+          {
+            top,
+            width: cardWidth,
+            maxHeight: height - top - insets.bottom - 16,
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            opacity: progress,
+            transform: [
+              { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) },
+              { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+            ],
+          },
+        ]}>
+        <ScrollView bounces={false} contentContainerStyle={styles.profileBody}>
+          {/* Quién usa la app y en qué comercio */}
+          <View style={[styles.profileHead, { backgroundColor: colors.background }]}>
+            <View style={[styles.avatarLg, { backgroundColor: palette.primary }]}>
+              {user?.avatarUrl ? (
+                <Image source={user.avatarUrl} style={styles.fill} contentFit="cover" />
+              ) : (
+                <Text style={styles.avatarLgText}>{initialOf(user?.name || user?.email)}</Text>
+              )}
             </View>
-          </Pressable>
-        ))}
-
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-        <Pressable onPress={confirmSignOut} style={({ pressed }) => [styles.option, pressed && { backgroundColor: 'rgba(220,38,38,0.08)' }]}>
-          <Ionicons name="log-out-outline" size={20} color={palette.danger} />
-          <View style={styles.flex}>
-            <Text style={[styles.optionTitle, { color: palette.danger }]}>Cerrar sesión</Text>
-            <Text style={[styles.small, { color: 'rgba(220,38,38,0.7)' }]}>Salir de la app en este teléfono</Text>
+            <View style={styles.flex}>
+              <Text numberOfLines={1} style={[styles.profileName, { color: colors.text }]}>{user?.name || 'Mi cuenta'}</Text>
+              {user?.email ? <Text numberOfLines={1} style={[styles.small, { color: colors.muted }]}>{user.email}</Text> : null}
+              {org && (
+                <View style={styles.badges}>
+                  <View style={[styles.roleBadge, { backgroundColor: 'rgba(37,99,235,0.12)' }]}>
+                    <Text style={[styles.roleText, { color: palette.primary }]}>{ROLE_LABELS[org.role] ?? org.role}</Text>
+                  </View>
+                  <Text numberOfLines={1} style={[styles.orgLine, { color: colors.muted }]}>{org.name} · Plan {org.plan}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </Pressable>
-      </View>
+
+          {sections.map((section) => (
+            <View key={section.key} style={styles.profileSection}>
+              <Text style={[styles.groupLabel, { color: colors.muted }]}>{section.label}</Text>
+              {section.entries.map((entry) => (
+                <MenuRow
+                  key={entry.key}
+                  icon={entry.icon}
+                  title={entry.title}
+                  subtitle={entry.web ? `${entry.subtitle} · ${WEB_HINT}` : entry.subtitle}
+                  trailing={entry.web ? 'open-outline' : 'chevron-forward'}
+                  onPress={() => open(entry)}
+                  colors={colors}
+                />
+              ))}
+              {section.key === 'account' && biometric.available ? (
+                <View
+                  style={styles.option}
+                  accessible
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: biometric.enabled, busy: savingBiometric }}
+                  accessibilityLabel={`Entrar con ${biometric.label}`}>
+                  <View style={[styles.optionIcon, { backgroundColor: colors.background }]}>
+                    <Ionicons name="finger-print-outline" size={19} color={colors.text} />
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>Entrar con {biometric.label}</Text>
+                    <Text style={[styles.small, { color: colors.muted }]}>{biometric.enabled ? 'Activado en este teléfono' : 'Sin escribir la contraseña'}</Text>
+                  </View>
+                  <Switch
+                    value={biometric.enabled}
+                    disabled={savingBiometric}
+                    onValueChange={(next) => void toggleBiometric(next)}
+                    trackColor={{ true: palette.primary, false: colors.border }}
+                  />
+                </View>
+              ) : null}
+            </View>
+          ))}
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <MenuRow
+            icon="log-out-outline"
+            title="Cerrar sesión"
+            subtitle="Salir de la app en este teléfono"
+            tone={palette.danger}
+            onPress={confirmSignOut}
+            colors={colors}
+          />
+
+          {version ? <Text style={[styles.version, { color: colors.muted }]}>MiTiendaPy · versión {version}</Text> : null}
+        </ScrollView>
+      </Animated.View>
     </Modal>
+  );
+}
+
+function MenuRow({
+  icon,
+  title,
+  subtitle,
+  trailing,
+  tone,
+  onPress,
+  colors,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  trailing?: keyof typeof Ionicons.glyphMap;
+  tone?: string;
+  onPress: () => void;
+  colors: ReturnType<typeof usePalette>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      style={({ pressed }) => [styles.option, pressed && { backgroundColor: tone ? 'rgba(220,38,38,0.08)' : colors.background }]}>
+      <View style={[styles.optionIcon, { backgroundColor: tone ? 'rgba(220,38,38,0.1)' : colors.background }]}>
+        <Ionicons name={icon} size={19} color={tone ?? colors.text} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={[styles.optionTitle, { color: tone ?? colors.text }]}>{title}</Text>
+        <Text numberOfLines={1} style={[styles.small, { color: tone ? 'rgba(220,38,38,0.75)' : colors.muted }]}>{subtitle}</Text>
+      </View>
+      {trailing ? <Ionicons name={trailing} size={16} color={colors.muted} /> : null}
+    </Pressable>
   );
 }
 
@@ -356,24 +453,28 @@ const styles = StyleSheet.create({
   profileCard: {
     position: 'absolute',
     right: 12,
-    width: 300,
-    maxWidth: '92%',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
   },
-  profileHead: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  avatarLg: { width: 52, height: 52, borderRadius: 26, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  profileBody: { padding: 8, paddingBottom: 10 },
+  profileHead: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, marginBottom: 4 },
+  avatarLg: { width: 54, height: 54, borderRadius: 27, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   avatarLgText: { color: '#fff', fontSize: 22, fontWeight: '800' },
   profileName: { fontSize: 16, fontWeight: '800' },
-  roleBadge: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
-  roleText: { fontSize: 11, fontWeight: '700' },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: 4 },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  optionTitle: { fontSize: 15, fontWeight: '600' },
+  badges: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  roleBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  roleText: { fontSize: 11, fontWeight: '800' },
+  orgLine: { flex: 1, fontSize: 11, fontWeight: '600' },
+  profileSection: { marginTop: 10 },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: 8, marginHorizontal: 8 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 14, minHeight: 52 },
+  optionIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  optionTitle: { fontSize: 15, fontWeight: '700' },
+  version: { fontSize: 11, textAlign: 'center', marginTop: 8 },
 });
