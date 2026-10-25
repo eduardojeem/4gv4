@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 const MIGRATIONS = join(process.cwd(), 'supabase/migrations')
 const files = readdirSync(MIGRATIONS).filter((file) => /^\d{14}_.+\.sql$/.test(file))
 const nameOf = (file: string) => file.slice(15, -4)
+// En Windows, git puede dejar CRLF en un archivo y LF en otro: se compara el contenido.
+const read = (path: string) => readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
 
 describe('historial de migraciones', () => {
   it('ninguna migración aparece dos veces con números distintos', () => {
@@ -33,11 +35,11 @@ describe('historial de migraciones', () => {
 
   it('las migraciones de costos S1 son idénticas a los scripts revisados de la etapa', () => {
     const stage = join(process.cwd(), 'supabase/pending-migrations/s1-product-cost')
-    expect(readFileSync(join(MIGRATIONS, '20261021230952_s1_cost_read_functions.sql'), 'utf8')).toBe(
-      readFileSync(join(stage, '02_cost_read_functions.sql'), 'utf8'),
+    expect(read(join(MIGRATIONS, '20261021230952_s1_cost_read_functions.sql'))).toBe(
+      read(join(stage, '02_cost_read_functions.sql')),
     )
-    expect(readFileSync(join(MIGRATIONS, '20261022011708_s1_cost_column_privileges.sql'), 'utf8')).toBe(
-      readFileSync(join(stage, '03_cost_column_privileges.sql'), 'utf8'),
+    expect(read(join(MIGRATIONS, '20261022011708_s1_cost_column_privileges.sql'))).toBe(
+      read(join(stage, '03_cost_column_privileges.sql')),
     )
   })
 })

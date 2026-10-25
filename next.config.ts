@@ -221,7 +221,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               `img-src 'self' data: blob: https: ${devSupabaseOrigins.join(' ')}`,
               "font-src 'self' data:",
-              `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org ${isProd ? '' : devSupabaseOrigins.join(' ')}`,
+              ["connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org", ...devSupabaseOrigins].join(' '),
               // Google Maps: el mapa de la ubicación en la sección de contacto de cada tienda.
               // Pagopar: formulario de uPay para guardar la tarjeta del débito automático.
               `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com https://www.pagopar.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
