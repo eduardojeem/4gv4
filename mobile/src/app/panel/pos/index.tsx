@@ -29,7 +29,7 @@ import {
   type PriceMode,
 } from '@/lib/pos';
 import { fetchCategories, fetchProducts, productImages, type Category, type Product } from '@/lib/products';
-import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, sameShelf, type PosShelf } from '@/lib/pos-catalog';
+import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, isSellable, sameShelf, type PosShelf } from '@/lib/pos-catalog';
 import { fetchPosCatalog } from '@/lib/pos-catalog-api';
 import { frequentProducts, recordSold } from '@/lib/pos-frequent';
 import { CashSheet, SalesSheet } from '@/components/pos-cash';
@@ -152,7 +152,8 @@ export default function PosScreen() {
   // Los frecuentes con el stock y precio que acaba de traer el servidor, si están en la página.
   const fresh = new Map(products.map((product) => [product.id, product]));
   // Al cambiar de estante no queda a la vista la lista anterior: se ve «cargando».
-  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product) : loadingProducts ? [] : products;
+  // Los más vendidos se guardan en el teléfono: uno desactivado después no se muestra.
+  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product).filter(isSellable) : loadingProducts ? [] : products;
 
   const flash = useCallback((text: string) => {
     setToast(text);
@@ -186,7 +187,8 @@ export default function PosScreen() {
     try {
       const page = await fetchProducts({ query: code, page: 1 });
       const found = page.products.find((product) => product.barcode === code || product.sku === code);
-      if (found) add(found);
+      if (found && !isSellable(found)) flash(`«${found.name}» está desactivado.`);
+      else if (found) add(found);
       else flash(`No hay producto con el código ${code}.`);
     } catch {
       flash('No se pudo buscar el código.');
@@ -553,8 +555,16 @@ function Quick({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap;
 
 function Shelf({ label, icon, selected, onPress, colors }: { label: string; icon?: keyof typeof Ionicons.glyphMap; selected: boolean; onPress: () => void; colors: Colors }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected }} style={[styles.shelf, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? palette.primary : colors.card }]}>
-      {icon ? <Ionicons name={icon} size={14} color={selected ? '#fff' : colors.muted} /> : null}
+    // Sin elegir también tiene que leerse bien: borde marcado y ícono del color del texto.
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [
+        styles.shelf,
+        { borderColor: selected ? palette.primary : colors.muted, backgroundColor: selected ? palette.primary : colors.card, opacity: pressed ? 0.75 : 1 },
+      ]}>
+      {icon ? <Ionicons name={icon} size={15} color={selected ? '#fff' : colors.text} /> : null}
       <Text numberOfLines={1} style={[styles.shelfText, { color: selected ? '#fff' : colors.text }]}>{label}</Text>
     </Pressable>
   );
@@ -725,10 +735,10 @@ const styles = StyleSheet.create({
   segmentItem: { borderRadius: 9, paddingHorizontal: 10, justifyContent: 'center' },
   modeText: { fontSize: 12, fontWeight: '800' },
   searchRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 },
-  shelvesWrap: { flexGrow: 0 },
+  shelvesWrap: { flexGrow: 0, minHeight: 52 },
   shelves: { gap: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  shelf: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, maxWidth: 180 },
-  shelfText: { fontSize: 13, fontWeight: '700' },
+  shelf: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, height: 38, maxWidth: 190 },
+  shelfText: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 46 },
   searchInput: { flex: 1, fontSize: 15, height: '100%' },
   scanBtn: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
-import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, posCatalogQuery, sameShelf } from '../../mobile/src/lib/pos-catalog'
+import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, isSellable, posCatalogQuery, sameShelf } from '../../mobile/src/lib/pos-catalog'
 
 /**
  * El catálogo del POS móvil: abre en productos, tiene un estante de servicios
@@ -36,6 +36,23 @@ describe('catálogo del POS móvil', () => {
       expect(params.get('catalog_kind')).toBeNull()
       expect(params.get('category_id')).toBeNull()
     }
+  })
+
+  it('pide al servidor solo productos activos, en cualquier estante o búsqueda', () => {
+    for (const [shelf, search] of [['products', ''], ['services', ''], [{ categoryId: 'c' }, ''], ['products', 'funda']] as const) {
+      expect(posCatalogQuery(shelf, search).get('is_active')).toBe('true')
+    }
+  })
+
+  it('un producto desactivado no se puede vender', () => {
+    expect(isSellable({ is_active: false })).toBe(false)
+    expect(isSellable({ is_active: true })).toBe(true)
+  })
+
+  it('los más vendidos y el lector de códigos dejan afuera los desactivados', () => {
+    const screen = readFileSync(join(__dirname, '../../mobile/src/app/panel/pos/index.tsx'), 'utf8')
+    expect(screen).toMatch(/frequent\.map\([^)]*\)[^\n]*\.filter\(isSellable\)/)
+    expect(screen).toMatch(/found && !isSellable\(found\)/)
   })
 
   it('compara estantes de categoría por su id', () => {

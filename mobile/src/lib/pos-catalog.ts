@@ -33,7 +33,8 @@ export const sameShelf = (a: PosShelf, b: PosShelf) =>
  */
 export function posCatalogQuery(shelf: PosShelf, search: string) {
   const query = search.trim();
-  const params = new URLSearchParams({ page: '1', per_page: '30' });
+  // Solo activos: el servidor devuelve también los inactivos si no se le pide.
+  const params = new URLSearchParams({ page: '1', per_page: '30', is_active: 'true' });
   if (query) {
     params.set('query', query);
     params.set('sort', 'name');
@@ -53,6 +54,9 @@ export function posCatalogQuery(shelf: PosShelf, search: string) {
   params.set('direction', 'desc');
   return params;
 }
+
+/** Lo que se puede vender: un producto desactivado no aparece ni se agrega. */
+export const isSellable = (product: Pick<Product, 'is_active'>) => product.is_active !== false;
 
 /** El texto cuando el estante está vacío. */
 export function emptyShelfMessage(shelf: PosShelf, search: string) {
