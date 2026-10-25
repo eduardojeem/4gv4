@@ -52,6 +52,9 @@ describe('product variants API contract', () => {
 
   it('updates modal products through the variant-aware collection endpoint', () => {
     expect(productsHookSource).toContain("fetch('/api/products', {")
-    expect(productsHookSource).toContain('body: JSON.stringify({ ...productData, id })')
+    expect(productsHookSource).toContain('const requestBody = { ...productData, id }')
+    expect(productsHookSource).toContain('body: JSON.stringify(requestBody)')
+    expect(productsHookSource).toContain("'Idempotency-Key': idempotencyKey")
+    expect(productsHookSource).toContain('...branchHeaders(selectedBranchId)')
   })
 })
