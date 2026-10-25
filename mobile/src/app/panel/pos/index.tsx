@@ -28,7 +28,9 @@ import {
   type PosSession,
   type PriceMode,
 } from '@/lib/pos';
-import { fetchCategories, fetchProducts, isService, productImages, type Category, type Product } from '@/lib/products';
+import { fetchCategories, fetchProducts, productImages, type Category, type Product } from '@/lib/products';
+import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, sameShelf, type PosShelf } from '@/lib/pos-catalog';
+import { fetchPosCatalog } from '@/lib/pos-catalog-api';
 import { frequentProducts, recordSold } from '@/lib/pos-frequent';
 import { CashSheet, SalesSheet } from '@/components/pos-cash';
 import { PosCustomerSheet } from '@/components/pos-customer';
@@ -63,10 +65,11 @@ export default function PosScreen() {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  // Qué pedido trajo la lista que se ve: mientras no coincide con el actual, está cargando.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  // Qué estante se ve: los más vendidos desde este teléfono, todo, o una categoría.
-  const [shelf, setShelf] = useState<'frequent' | 'all' | string>('frequent');
+  // Qué estante se ve: productos (por defecto), servicios, los más vendidos desde este teléfono o una categoría.
+  const [shelf, setShelf] = useState<PosShelf>(DEFAULT_POS_SHELF);
   const [frequent, setFrequent] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cashOpen, setCashOpen] = useState(false);
@@ -120,33 +123,36 @@ export default function PosScreen() {
   useEffect(() => loadPosPrivateCatalog(session?.branch.id, {
     loadFrequent: frequentProducts,
     loadCategories: fetchCategories,
-    onFrequent: list => {
-      setFrequent(list);
-      if (list.length === 0) setShelf('all');
-    },
+    onFrequent: setFrequent,
     onCategories: rows => setCategories(rows.filter(row => !row.parent_id && (row.products_count ?? 0) > 0).sort((a, b) => (b.products_count ?? 0) - (a.products_count ?? 0))),
   }), [session?.branch.id]);
 
-  const categoryId = shelf !== 'frequent' && shelf !== 'all' ? shelf : null;
+  // Un texto estable por estante: el objeto de categoría cambia en cada render.
+  const shelfKey = typeof shelf === 'string' ? shelf : `category:${shelf.categoryId}`;
+  const requestKey = `${shelfKey}|${search}|${session?.branch.id ?? ''}`;
+  const loadingProducts = loadedKey !== requestKey;
 
   useEffect(() => {
     let active = true;
-    fetchProducts({ query: search, categoryId, page: 1, sort: search ? 'name' : 'stock', direction: 'desc' })
-      .then((page) => active && setProducts(page.products.filter((product) => product.is_active)))
+    fetchPosCatalog(shelf, search)
+      .then((list) => active && setProducts(list))
       .catch(() => active && setProducts([]))
-      .finally(() => active && setLoadingProducts(false));
+      .finally(() => active && setLoadedKey(requestKey));
     return () => {
       active = false;
     };
-  }, [search, categoryId, session?.branch.id]);
+    // requestKey resume shelf, búsqueda y sucursal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey]);
 
   useEffect(() => subscribePrivateCacheContext(() => {
-    setFrequent([]); setCategories([]); setShelf('frequent'); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
+    setFrequent([]); setCategories([]); setShelf(DEFAULT_POS_SHELF); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
   }), []);
 
   // Los frecuentes con el stock y precio que acaba de traer el servidor, si están en la página.
   const fresh = new Map(products.map((product) => [product.id, product]));
-  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product) : products;
+  // Al cambiar de estante no queda a la vista la lista anterior: se ve «cargando».
+  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product) : loadingProducts ? [] : products;
 
   const flash = useCallback((text: string) => {
     setToast(text);
@@ -157,7 +163,7 @@ export default function PosScreen() {
 
   const add = (product: Product, amount = 1) => {
     const inCart = quantityOf(product.id);
-    if (!isService(product) && inCart + amount > Number(product.stock_quantity)) {
+    if (!isPosService(product) && inCart + amount > Number(product.stock_quantity)) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       flash(Number(product.stock_quantity) <= 0 ? `«${product.name}» no tiene stock.` : `Solo hay ${product.stock_quantity} de «${product.name}».`);
       return;
@@ -389,12 +395,19 @@ export default function PosScreen() {
       {/* Estantes */}
       {!search && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves} style={styles.shelvesWrap}>
+          <Shelf label="Productos" icon="cube-outline" selected={shelf === 'products'} onPress={() => setShelf('products')} colors={colors} />
+          <Shelf label="Servicios" icon="construct-outline" selected={shelf === 'services'} onPress={() => setShelf('services')} colors={colors} />
           {frequent.length > 0 && (
             <Shelf label="Más vendidos" icon="flame-outline" selected={shelf === 'frequent'} onPress={() => setShelf('frequent')} colors={colors} />
           )}
-          <Shelf label="Todos" icon="apps-outline" selected={shelf === 'all'} onPress={() => setShelf('all')} colors={colors} />
           {categories.map((category) => (
-            <Shelf key={category.id} label={category.name} selected={shelf === category.id} onPress={() => setShelf(category.id)} colors={colors} />
+            <Shelf
+              key={category.id}
+              label={category.name}
+              selected={sameShelf(shelf, { categoryId: category.id })}
+              onPress={() => setShelf({ categoryId: category.id })}
+              colors={colors}
+            />
           ))}
         </ScrollView>
       )}
@@ -411,7 +424,7 @@ export default function PosScreen() {
           loadingProducts ? (
             <ActivityIndicator style={styles.loading} color={palette.primary} />
           ) : (
-            <Text style={[styles.muted, styles.loading, { color: colors.muted }]}>{search ? `Nada coincide con «${search}».` : 'No hay productos activos.'}</Text>
+            <Text style={[styles.muted, styles.loading, { color: colors.muted }]}>{emptyShelfMessage(shelf, search)}</Text>
           )
         }
         renderItem={({ item }) => <ProductTile product={item} mode={priceMode} inCart={quantityOf(item.id)} colors={colors} onPress={() => add(item)} />}
@@ -468,7 +481,7 @@ export default function PosScreen() {
             mode={priceMode}
             colors={colors}
             onQuantity={(quantity) => {
-              if (!isService(line.product) && quantity > Number(line.product.stock_quantity)) return flash(`Solo hay ${line.product.stock_quantity}.`);
+              if (!isPosService(line.product) && quantity > Number(line.product.stock_quantity)) return flash(`Solo hay ${line.product.stock_quantity}.`);
               setQuantity(line.product.id, quantity);
             }}
             onDiscount={(discount) => setCart((list) => list.map((item) => (item.product.id === line.product.id ? { ...item, discount } : item)))}
@@ -549,7 +562,7 @@ function Shelf({ label, icon, selected, onPress, colors }: { label: string; icon
 
 function ProductTile({ product, mode, inCart, colors, onPress }: { product: Product; mode: PriceMode; inCart: number; colors: Colors; onPress: () => void }) {
   const image = productImages(product)[0];
-  const service = isService(product);
+  const service = isPosService(product);
   const stock = Number(product.stock_quantity) || 0;
   const out = !service && stock <= 0;
   return (
