@@ -1605,6 +1605,7 @@ export interface Database {
           branding: Json
           modules: Json
           repair_receipt_settings: Json | null
+          require_admin_mfa: boolean
           created_at: string
           updated_at: string
         }
@@ -1616,6 +1617,7 @@ export interface Database {
           branding: Json
           modules: Json
           repair_receipt_settings?: Json | null
+          require_admin_mfa?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -1627,6 +1629,7 @@ export interface Database {
           branding?: Json
           modules?: Json
           repair_receipt_settings?: Json | null
+          require_admin_mfa?: boolean
           created_at?: string
           updated_at?: string
         }

@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { Activity, Loader2, Info, ShieldCheck } from 'lucide-react'
 import { SecurityPanel } from '@/components/admin/system/security-panel'
 import { PlanGate } from '@/components/admin/PlanGate'
+import { AdminMfaPolicyCard } from '@/components/admin/security/admin-mfa-policy-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -86,6 +87,9 @@ export default function SecurityPage() {
           </CardContent>
         </details>
       </Card>
+
+      {/* ── 2FA obligatoria para administradores (no depende del plan) ── */}
+      <AdminMfaPolicyCard />
 
       {/* ── Panel Principal ── */}
       <PlanGate

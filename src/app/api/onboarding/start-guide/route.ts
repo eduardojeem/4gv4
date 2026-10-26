@@ -10,7 +10,7 @@ function failure(error: unknown) {
 }
 export async function GET(request: NextRequest) {
   const auth = await resolveRequestAuthUser()
-  if ('reason' in auth) return NextResponse.json({ error: 'Sesión no disponible.' }, { status: auth.reason === 'unauthenticated' ? 401 : 403 })
+  if ('reason' in auth) return NextResponse.json({ error: 'Sesión no disponible.' }, { status: auth.reason !== 'inactive' ? 401 : 403 })
   const branch = z.string().uuid().optional().safeParse(request.headers.get('x-branch-id') || undefined)
   if (!branch.success) return NextResponse.json({ error: 'Sucursal inválida.' }, { status: 400 })
   try {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 }
 export async function PATCH(request: NextRequest) {
   const auth = await resolveRequestAuthUser()
-  if ('reason' in auth) return NextResponse.json({ error: 'Sesión no disponible.' }, { status: auth.reason === 'unauthenticated' ? 401 : 403 })
+  if ('reason' in auth) return NextResponse.json({ error: 'Sesión no disponible.' }, { status: auth.reason !== 'inactive' ? 401 : 403 })
   const input = preferencesSchema.safeParse(await request.json().catch(() => null))
   if (!input.success) return NextResponse.json({ error: 'Preferencias inválidas.' }, { status: 400 })
   try {

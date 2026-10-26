@@ -1,5 +1,6 @@
 import { getPrivateCacheContext, invalidatePrivateCacheContext, isPrivateCacheSnapshotCompatible, setPrivateCacheUser } from './private-cache-context';
 import { supabase } from './supabase';
+import { MFA_REQUIRED_CODE } from './mfa-model';
 import { rewriteLocalStorageUrls } from './dev-storage-urls';
 import { getMobileRuntimeConfig } from './runtime-config';
 
@@ -95,7 +96,9 @@ export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boo
       const current = (await supabase.auth.getSession()).data.session;
       if (current?.access_token === token && isPrivateCacheSnapshotCompatible(requestScope)) {
         invalidatePrivateCacheContext(requestScope);
-        if (response.status === 401 && token) await supabase.auth.signOut({ scope: 'local' });
+        // Falta el código de 2FA: la sesión es válida, no se cierra.
+        const mfaRequired = (body as { code?: unknown } | null)?.code === MFA_REQUIRED_CODE;
+        if (response.status === 401 && token && !mfaRequired) await supabase.auth.signOut({ scope: 'local' });
       }
     }
     const message = (body && (body.error || body.message)) || `Error ${response.status}`;

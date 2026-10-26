@@ -28,6 +28,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { buildMfaPath } from '@/lib/auth/mfa'
+import { loadMfaState } from '@/lib/auth/mfa-client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { isValidEmail } from '@/lib/auth/password-validation'
 import { describeAuthError } from '@/lib/auth/auth-error-messages'
@@ -201,6 +203,12 @@ export default function TenantCustomerLoginClient({ features = ALL_STORE_CUSTOME
 
       if (loginError) {
         setError(describeAuthError(loginError.message, 'login'))
+        return
+      }
+
+      // Con 2FA activa falta el código: se pide y se vuelve a esta misma página.
+      if ((await loadMfaState(supabase).catch(() => null))?.pending) {
+        window.location.assign(buildMfaPath(`${window.location.pathname}${window.location.search}`))
         return
       }
 

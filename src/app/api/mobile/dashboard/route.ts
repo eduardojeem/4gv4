@@ -1,6 +1,7 @@
 import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
 import { roleHasPermission } from '@/lib/saas/permissions'
 import { NextResponse } from 'next/server'
+import { MFA_REQUIRED_CODE } from '@/lib/auth/mfa'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
@@ -24,7 +25,7 @@ export async function GET() {
     if (auth.authenticated === false) {
       return auth.reason === 'inactive'
         ? NextResponse.json({ error: 'Tu usuario está desactivado.' }, { status: 403 })
-        : NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+        : NextResponse.json({ error: 'No autenticado', ...(auth.reason === 'mfa_required' ? { code: MFA_REQUIRED_CODE } : {}) }, { status: 401 })
     }
 
     const organization = await getCurrentOrganizationContext(auth.user.id)

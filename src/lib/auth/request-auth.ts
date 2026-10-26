@@ -1,6 +1,7 @@
-import { createClient as createServerSupabase } from '@/lib/supabase/server'
+import { createClient as createServerSupabase, getRequestBearerToken } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizeRole, type AppRole } from '@/lib/auth/role-utils'
+import { MFA_REQUIRED_AUTH_ERROR, readTokenAal, type AssuranceLevel } from '@/lib/auth/mfa'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended' | null
 
@@ -20,11 +21,13 @@ export interface RequestAuthUser {
   role: AppRole
   roleIsActive: boolean
   profileStatus: ProfileStatus
+  /** Nivel de verificación de la sesión: `aal2` ya pasó el código de la app autenticadora. */
+  aal: AssuranceLevel | null
 }
 
 export type RequestAuthResolution =
   | { authenticated: true; user: RequestAuthUser }
-  | { authenticated: false; reason: 'unauthenticated' | 'inactive' }
+  | { authenticated: false; reason: 'unauthenticated' | 'inactive' | 'mfa_required' }
 
 function normalizeProfileStatus(value: unknown): ProfileStatus {
   if (value === 'active' || value === 'inactive' || value === 'suspended') {
@@ -67,12 +70,32 @@ async function loadProfileRow(
   throw new Error('No se pudo verificar el estado del perfil del usuario')
 }
 
+async function readSessionAal(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>
+): Promise<AssuranceLevel | null> {
+  try {
+    const bearer = await getRequestBearerToken()
+    if (bearer) return readTokenAal(bearer)
+    const { data } = await supabase.auth.getSession()
+    return readTokenAal(data.session?.access_token)
+  } catch {
+    return null
+  }
+}
+
 export async function resolveRequestAuthUser(): Promise<RequestAuthResolution> {
   const supabase = await createServerSupabase()
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser()
+
+  if (error?.code === MFA_REQUIRED_AUTH_ERROR) {
+    return {
+      authenticated: false,
+      reason: 'mfa_required',
+    }
+  }
 
   if (error || !user) {
     return {
@@ -106,6 +129,7 @@ export async function resolveRequestAuthUser(): Promise<RequestAuthResolution> {
       role,
       roleIsActive,
       profileStatus,
+      aal: await readSessionAal(supabase),
     },
   }
 }
