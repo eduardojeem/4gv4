@@ -29,6 +29,8 @@ describe('historial de migraciones', () => {
       '20261023121250_allow_cancelled_credit_installments.sql',
       '20261023121531_products_atomic_create_cost_null_and_sku.sql',
       '20261025130103_variant_branch_stock_target_atomic.sql',
+      '20261025174643_variant_low_stock_indicator.sql',
+      '20261025212829_add_organization_regional_identity.sql',
     ]) {
       expect(files).toContain(file)
     }

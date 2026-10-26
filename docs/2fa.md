@@ -37,7 +37,7 @@ En **/admin/settings** (Configuración, fuera de las pestañas; no depende del p
 diferencia de /admin/security) el dueño o un administrador (`settings.manage`) puede activar
 «Exigir verificación en dos pasos a los administradores». Se guarda en
 `organization_settings.require_admin_mfa` (migración
-`20261025160000_organization_require_admin_mfa.sql`).
+`20261026130000_organization_require_admin_mfa.sql`).
 
 - Sólo se puede cambiar con una sesión `aal2`: lo verifican la API
   (`/api/admin/security/mfa-policy`) y un trigger en la base.
