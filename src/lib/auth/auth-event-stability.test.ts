@@ -7,6 +7,11 @@ describe('shouldReuseAuthenticatedUser', () => {
     expect(shouldReuseAuthenticatedUser('TOKEN_REFRESHED', 'user-1', 'user-1', false)).toBe(true)
   })
 
+  it('pasar el código de 2FA no vuelve a armar al usuario (sólo cambia el token)', () => {
+    expect(shouldReuseAuthenticatedUser('MFA_CHALLENGE_VERIFIED', 'user-1', 'user-1', false)).toBe(true)
+    expect(shouldReuseAuthenticatedUser('MFA_CHALLENGE_VERIFIED', 'user-2', 'user-1', false)).toBe(false)
+  })
+
   it('carga el perfil cuando cambia el usuario o se actualizan sus datos', () => {
     expect(shouldReuseAuthenticatedUser('SIGNED_IN', 'user-2', 'user-1', true)).toBe(false)
     expect(shouldReuseAuthenticatedUser('SIGNED_IN', 'user-1', null, true)).toBe(false)

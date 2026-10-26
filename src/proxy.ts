@@ -17,6 +17,15 @@ import {
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 import { deriveAccessFromSnapshot, type MiddlewareAccessSnapshot } from '@/lib/auth/middleware-access'
 import { getCachedSlugAlias, setCachedSlugAlias } from '@/lib/saas/slug-alias-cache'
+import {
+  buildMfaPath,
+  isAdminMfaRole,
+  isMfaPending,
+  needsAdminMfaEnrollment,
+  readTokenAal,
+  type AssuranceLevel,
+} from '@/lib/auth/mfa'
+import { organizationRequiresAdminMfa, type AdminMfaPolicyClient } from '@/lib/auth/admin-mfa-policy'
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
 const PROXY_PROFILE_TIMEOUT_MS = 3000
@@ -278,6 +287,21 @@ export async function proxy(request: NextRequest) {
     // Si falla la conexion, asumimos sin usuario
   }
 
+  // 2FA: con un factor verificado, la sesion tiene que haber pasado el codigo
+  // (`aal2`). `getUser` ya valido el token de la cookie; aca solo se lee su nivel.
+  let sessionAal: AssuranceLevel | null = null
+  if (user) {
+    const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+    sessionAal = readTokenAal(sessionData.session?.access_token)
+  }
+
+  if (user && isMfaPending(user, sessionAal)) {
+    const target = isAuthRoute
+      ? sanitizeLocalRedirect(request.nextUrl.searchParams.get('redirect'), '/dashboard')
+      : `${pathname}${request.nextUrl.search}`
+    return redirectWithCookies(request, supabaseResponse, buildMfaPath(target))
+  }
+
   // Obtener rol del usuario - solo si esta autenticado y lo necesitamos
   let normalizedRole: string | undefined
   let roleIsActive = true
@@ -448,6 +472,28 @@ export async function proxy(request: NextRequest) {
     if (!isAdmin) {
       // No es admin → redirigir al dashboard (tiene acceso como vendedor/técnico)
       return redirectWithCookies(request, supabaseResponse, '/dashboard')
+    }
+  }
+
+  // La organizacion activa exige 2FA a sus administradores y esta sesion no la
+  // tiene: primero se activa. Solo se consulta para administradores sin `aal2`.
+  if (
+    (isProtectedRoute || isAdminRoute) &&
+    sessionAal !== 'aal2' &&
+    activeOrganizationIdForAccess &&
+    isAdminMfaRole(organizationRoleFromSnapshot)
+  ) {
+    const requireAdminMfa = await withTimeout(
+      organizationRequiresAdminMfa(supabase as unknown as AdminMfaPolicyClient, activeOrganizationIdForAccess),
+      PROXY_PROFILE_TIMEOUT_MS,
+      false
+    )
+    if (needsAdminMfaEnrollment({ organizationRole: organizationRoleFromSnapshot, requireAdminMfa, aal: sessionAal })) {
+      return redirectWithCookies(
+        request,
+        supabaseResponse,
+        buildMfaPath(`${pathname}${request.nextUrl.search}`, { setup: true })
+      )
     }
   }
 

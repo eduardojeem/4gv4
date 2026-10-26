@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { ChangePasswordDialog } from './change-password-dialog'
 import { PasskeysSection } from './passkeys-section'
+import { TwoFactorSection } from './two-factor-section'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -123,7 +124,6 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       if (error) throw error
 
       if (data) {
-        setTwoFactorEnabled(Boolean(data.two_factor_enabled))
         setEmailNotifications(Boolean(data.email_notifications ?? true))
         setLoginAlerts(Boolean(data.login_alerts ?? true))
       }
@@ -611,27 +611,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
           <Separator />
 
           {/* Bloque 2FA */}
-          <div className="flex flex-col gap-4 rounded-xl border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between bg-card">
-            <div className="flex items-start gap-3.5">
-              <div className="rounded-lg bg-purple-500/10 p-2.5 mt-0.5 text-purple-600">
-                <Smartphone className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-sm text-foreground">Autenticación en dos pasos (2FA)</p>
-                  <Badge variant="secondary" className="text-[10px]">
-                    Próximamente
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Esta opción añadirá un segundo factor mediante TOTP o código seguro al iniciar sesión.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center sm:shrink-0">
-              <Switch disabled checked={twoFactorEnabled} />
-            </div>
-          </div>
+          <TwoFactorSection onStatusChange={setTwoFactorEnabled} />
         </CardContent>
       </Card>
 

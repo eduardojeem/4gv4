@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import type { AppRole } from '@/lib/auth/role-utils'
+import { MFA_REQUIRED_CODE } from '@/lib/auth/mfa'
 
 export type AuthResult =
   | { authenticated: true; user: { id: string; email?: string }; role: AppRole }
@@ -21,21 +22,15 @@ export async function requireAuth(): Promise<AuthResult> {
   const result = await resolveRequestAuthUser()
 
   if ('reason' in result) {
-    const status = result.reason === 'unauthenticated' ? 401 : 403
-    const error =
-      result.reason === 'unauthenticated'
-        ? 'No autenticado'
-        : 'Cuenta inactiva o suspendida'
+    const { status, error, code } = {
+      unauthenticated: { status: 401, error: 'No autenticado', code: 'AUTH_REQUIRED' },
+      mfa_required: { status: 401, error: 'Falta la verificación en dos pasos', code: MFA_REQUIRED_CODE },
+      inactive: { status: 403, error: 'Cuenta inactiva o suspendida', code: 'ACCOUNT_INACTIVE' },
+    }[result.reason]
 
     return {
       authenticated: false,
-      response: NextResponse.json(
-        {
-          error,
-          code: result.reason === 'unauthenticated' ? 'AUTH_REQUIRED' : 'ACCOUNT_INACTIVE',
-        },
-        { status }
-      ),
+      response: NextResponse.json({ error, code }, { status }),
     }
   }
 
