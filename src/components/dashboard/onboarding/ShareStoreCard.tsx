@@ -6,10 +6,59 @@ import { Copy, Download, MessageCircle, Printer, QrCode, Share2 } from 'lucide-r
 import { Button } from '@/components/ui/button'
 
 /**
- * Compartir la tienda recién publicada: el enlace, por WhatsApp, y un QR para
- * imprimir y pegar en el mostrador. Antes la tienda quedaba publicada y no
- * había dónde copiar el enlace.
+ * Compartir la tienda recién publicada: el enlace, por WhatsApp, el menú de
+ * compartir del teléfono y un QR para descargar o imprimir y pegar en el
+ * mostrador. Se usa en el onboarding y en Sitio web.
  */
+
+/** Nombre de archivo seguro para el QR: «qr-mi-tienda.png». */
+export function qrFileName(storeName: string): string {
+  const slug = storeName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return `qr-${slug || 'tienda'}.png`
+}
+
+/**
+ * Menú de compartir del sistema (Android, iOS, Windows). Si el navegador acepta
+ * archivos se manda también el QR como imagen; si no tiene menú, se copia el enlace.
+ * Devuelve cómo terminó para avisarle a la persona.
+ */
+export async function shareStore(input: {
+  url: string
+  storeName: string
+  qrDataUrl: string | null
+}): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
+  const text = `¡Mirá el catálogo de ${input.storeName}!`
+  const nav = typeof navigator !== 'undefined' ? navigator : null
+  if (nav?.share) {
+    const data: ShareData = { title: input.storeName, text, url: input.url }
+    if (input.qrDataUrl && nav.canShare) {
+      try {
+        const blob = await (await fetch(input.qrDataUrl)).blob()
+        const file = new File([blob], qrFileName(input.storeName), { type: 'image/png' })
+        if (nav.canShare({ files: [file] })) data.files = [file]
+      } catch {
+        // Sin el archivo igual se comparte el enlace.
+      }
+    }
+    try {
+      await nav.share(data)
+      return 'shared'
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
+    }
+  }
+  try {
+    await nav?.clipboard.writeText(`${text} ${input.url}`)
+    return 'copied'
+  } catch {
+    return 'failed'
+  }
+}
 export function ShareStoreCard({ url, storeName, published, onPublish }: {
   url: string
   storeName: string
@@ -47,6 +96,12 @@ export function ShareStoreCard({ url, storeName, published, onPublish }: {
     }
   }
 
+  const share = async () => {
+    const result = await shareStore({ url, storeName, qrDataUrl: qr })
+    if (result === 'copied') toast.success('Tu navegador no tiene menú para compartir: copiamos el enlace')
+    else if (result === 'failed') toast.error('No se pudo compartir el enlace')
+  }
+
   const whatsapp = `https://wa.me/?text=${encodeURIComponent(`¡Mirá el catálogo de ${storeName}! ${url}`)}`
 
   const print = () => {
@@ -69,9 +124,14 @@ export function ShareStoreCard({ url, storeName, published, onPublish }: {
           <Copy className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <Button type="button" size="sm" className="h-8 w-full gap-1.5 bg-[#25D366] text-xs text-white hover:bg-[#1ebe5a]" asChild>
-        <a href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-3.5 w-3.5" /> Mandar por WhatsApp</a>
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" size="sm" className="h-8 gap-1.5 bg-[#25D366] text-xs text-white hover:bg-[#1ebe5a]" asChild>
+          <a href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</a>
+        </Button>
+        <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => void share()}>
+          <Share2 className="h-3.5 w-3.5" /> Compartir
+        </Button>
+      </div>
       <div className="flex items-center gap-3">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border bg-white p-1">
           {qr
@@ -82,7 +142,7 @@ export function ShareStoreCard({ url, storeName, published, onPublish }: {
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-[11px] text-muted-foreground">Imprimilo y pegalo en el mostrador o en la vidriera.</p>
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={!qr} asChild={Boolean(qr)}>
-            {qr ? <a href={qr} download={`qr-${storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`}><Download className="h-3.5 w-3.5" /> Descargar QR</a> : <span>Generando…</span>}
+            {qr ? <a href={qr} download={qrFileName(storeName)}><Download className="h-3.5 w-3.5" /> Descargar QR</a> : <span>Generando…</span>}
           </Button>
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={!qr} onClick={print}>
             <Printer className="h-3.5 w-3.5" /> Imprimir cartel
