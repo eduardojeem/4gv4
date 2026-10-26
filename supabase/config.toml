@@ -14,6 +14,13 @@ rp_display_name = "MiTiendaPY"
 rp_id = "localhost"
 rp_origins = ["http://localhost:3000"]
 
+# Verificación en dos pasos con app autenticadora (TOTP). En el proyecto
+# hosteado viene habilitada por defecto (Authentication → Multi-Factor).
+# Ver docs/2fa.md.
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 # Local development only. Avoid the unused log collector and its Docker TCP
 # dependency; production observability is configured on the hosted project.
 [analytics]

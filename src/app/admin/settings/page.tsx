@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { BusinessProfileCard, type BusinessProfileActions } from '@/components/admin/settings/BusinessProfileCard'
+import { AdminMfaPolicyCard } from '@/components/admin/security/admin-mfa-policy-card'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
 import {
@@ -903,6 +904,9 @@ export default function AdminSettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 2FA obligatoria para administradores: fuera de las pestañas y sin depender del plan */}
+      <AdminMfaPolicyCard />
 
       {/* Hub de Accesos Directos a Otras Secciones de Administración */}
       <div className="space-y-3 pt-4">

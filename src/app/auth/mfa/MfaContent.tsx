@@ -50,9 +50,11 @@ export default function MfaContent() {
     }
     // Igual que el login: deja elegida la organización activa antes de entrar al panel.
     await fetch('/api/organizations', { method: 'GET', cache: 'no-store' }).catch(() => undefined)
-    router.replace(redirectTo)
-    router.refresh()
-  }, [redirectTo, router])
+    // Navegación completa: `router.replace` + `router.refresh` dejaba al refresh
+    // pisar la navegación y la página se quedaba acá. Así el servidor además
+    // recibe la cookie con la sesión aal2 recién emitida.
+    window.location.replace(redirectTo)
+  }, [redirectTo])
 
   useEffect(() => {
     let active = true
@@ -113,8 +115,7 @@ export default function MfaContent() {
   const signOut = async () => {
     setSigningOut(true)
     await createClient().auth.signOut().catch(() => undefined)
-    router.replace('/login')
-    router.refresh()
+    window.location.replace('/login')
   }
 
   return (

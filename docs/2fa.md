@@ -33,7 +33,8 @@ La regla vive en `src/lib/auth/mfa.ts` (y su copia en `mobile/src/lib/mfa-model.
 
 ## Exigir 2FA a los administradores
 
-En **/admin/security** el dueño o un administrador (`settings.manage`) puede activar
+En **/admin/settings** (Configuración, fuera de las pestañas; no depende del plan, a
+diferencia de /admin/security) el dueño o un administrador (`settings.manage`) puede activar
 «Exigir verificación en dos pasos a los administradores». Se guarda en
 `organization_settings.require_admin_mfa` (migración
 `20261025160000_organization_require_admin_mfa.sql`).
@@ -56,3 +57,8 @@ En **/admin/security** el dueño o un administrador (`settings.manage`) puede ac
   (Authentication → Users → el usuario → MFA) o con `auth.admin.mfa.deleteFactor`.
 - En el proyecto hosteado, TOTP viene habilitado por defecto
   (Authentication → Multi-Factor). Verificarlo antes de anunciarlo.
+- En el stack local, `supabase/config.toml` habilita `[auth.mfa.totp]`. Un stack que ya
+  existía (por ejemplo el aislado de `scripts/mobile-dev-supabase.mjs`, que copia la
+  config una sola vez a `%LOCALAPPDATA%\MiTiendaPy\mobile-dev-supabase`) necesita esa
+  sección agregada a mano y reiniciarse; si no, el perfil avisa «no está habilitada en el
+  sistema todavía».
