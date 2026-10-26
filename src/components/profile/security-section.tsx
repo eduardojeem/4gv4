@@ -16,7 +16,6 @@ import {
   Smartphone,
   Monitor,
   Clock,
-  MapPin,
   AlertTriangle,
   CheckCircle2,
   LogOut,
@@ -40,51 +39,11 @@ import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } from '@/lib/session-id'
-
-interface SessionRecord {
-  id: string
-  session_id: string
-  user_agent: string
-  ip_address: string
-  device_type: string
-  browser: string
-  os: string
-  created_at: string
-  last_activity: string
-  is_active: boolean
-  is_current?: boolean
-  country?: string
-  city?: string
-}
+import { readTokenSessionId, toSessionRecords, type AuthSessionRow, type SessionRecord } from '@/lib/auth/session-list'
 
 interface SecuritySectionProps {
   userId: string | null
   role: string | null
-}
-
-function parseUserAgent(ua: string): { browser: string; os: string; deviceType: string } {
-  let browser = 'Chrome'
-  if (ua.includes('Edg/')) browser = 'Microsoft Edge'
-  else if (ua.includes('OPR/') || ua.includes('Opera/')) browser = 'Opera'
-  else if (ua.includes('Firefox/')) browser = 'Firefox'
-  else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari'
-  else if (ua.includes('Brave')) browser = 'Brave'
-  else if (ua.includes('Chrome/')) browser = 'Chrome'
-
-  let os = 'Windows'
-  if (ua.includes('Windows NT 10.0')) os = 'Windows 10/11'
-  else if (ua.includes('Windows')) os = 'Windows'
-  else if (ua.includes('Mac OS') || ua.includes('Macintosh')) os = 'macOS'
-  else if (ua.includes('Android')) os = 'Android'
-  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS'
-  else if (ua.includes('Linux')) os = 'Linux'
-
-  let deviceType = 'desktop'
-  if (/Mobile|Android|iPhone|iPod/i.test(ua)) deviceType = 'mobile'
-  else if (/iPad|Tablet/i.test(ua)) deviceType = 'tablet'
-
-  return { browser, os, deviceType }
 }
 
 export function SecuritySection({ userId, role }: SecuritySectionProps) {
@@ -113,128 +72,20 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     return user?.id ?? userId
   }, [supabase, userId])
 
+  // Sesiones reales de Supabase Auth: la base sólo devuelve las del usuario logueado.
   const loadSessions = useCallback(async () => {
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
     try {
       setLoadingSessions(true)
       setSessionsError(null)
 
-      logger.session('Loading sessions for user', { userId: effectiveUserId })
+      const [{ data: sessionData }, { data, error }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.rpc('list_my_auth_sessions'),
+      ])
+      if (error) throw error
 
-      let rows: Array<Record<string, unknown>> = []
-      let loadError: unknown = null
-
-      const authSessionResult = await supabase.auth.getSession()
-      const currentToken = authSessionResult.data.session?.access_token
-      const currentSessionId = await getSessionIdFromAccessToken(currentToken)
-
-      // 1. Intentar consulta RPC optimizada get_user_active_sessions
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_active_sessions', {
-          p_user_id: effectiveUserId,
-        })
-
-        if (!rpcError && Array.isArray(rpcData)) {
-          rows = rpcData
-        } else if (rpcError) {
-          loadError = rpcError
-          console.warn('RPC get_user_active_sessions no disponible o con error, intentando consulta directa:', rpcError.message || rpcError)
-        }
-      } catch (err) {
-        loadError = err
-        console.warn('Excepción al ejecutar get_user_active_sessions RPC:', err)
-      }
-
-      // 2. Si el RPC falló o no devolvió filas, consultar la tabla user_sessions directamente
-      if (rows.length === 0) {
-        try {
-          const { data: tableData, error: tableError } = await supabase
-            .from('user_sessions')
-            .select('*')
-            .eq('user_id', effectiveUserId)
-            .eq('is_active', true)
-            .order('last_activity', { ascending: false })
-
-          if (!tableError && Array.isArray(tableData)) {
-            rows = tableData
-            loadError = null
-          } else if (tableError) {
-            loadError = tableError
-          }
-        } catch (tableErr) {
-          loadError = tableErr
-        }
-      }
-
-      if (loadError && rows.length === 0) {
-        setSessionsError('No se pudieron cargar las sesiones activas en este momento')
-        setSessions([])
-        return
-      }
-
-      let mapped: SessionRecord[] = rows.map((row) => ({
-        id: String(row.id || ''),
-        session_id: String(row.session_id || ''),
-        user_agent: String(row.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : '')),
-        ip_address: String(row.ip_address || 'IP no disponible'),
-        device_type: String(row.device_type || 'desktop'),
-        browser: String(row.browser || 'Navegador desconocido'),
-        os: String(row.os || 'Sistema desconocido'),
-        created_at: String(row.created_at || ''),
-        last_activity: String(row.last_activity || ''),
-        is_active: Boolean(row.is_active),
-        country: row.country ? String(row.country) : undefined,
-        city: row.city ? String(row.city) : undefined,
-        is_current: Boolean(currentSessionId && row.session_id === currentSessionId),
-      }))
-
-      // Asegurar que si la sesión actual no está explícitamente en la base de datos, se detecta y muestra
-      const hasCurrent = mapped.some((s) => s.is_current)
-      if (!hasCurrent && typeof navigator !== 'undefined') {
-        const clientInfo = parseUserAgent(navigator.userAgent)
-        const currentSyntheticSession: SessionRecord = {
-          id: currentSessionId ? `curr-${currentSessionId.slice(0, 12)}` : 'current-device',
-          session_id: currentSessionId || 'local-current-session',
-          user_agent: navigator.userAgent,
-          ip_address: 'Este equipo (conexión actual)',
-          device_type: clientInfo.deviceType,
-          browser: clientInfo.browser,
-          os: clientInfo.os,
-          created_at: new Date().toISOString(),
-          last_activity: new Date().toISOString(),
-          is_active: true,
-          is_current: true,
-          city: 'Sesión local',
-          country: 'Activa ahora',
-        }
-
-        // Registrar en segundo plano en user_sessions si aún no ha sido registrada
-        if (effectiveUserId && currentSessionId && !isSessionRegistered(currentSessionId)) {
-          void Promise.resolve(
-            supabase
-              .from('user_sessions')
-              .upsert({
-                user_id: effectiveUserId,
-                session_id: currentSessionId,
-                user_agent: navigator.userAgent,
-                device_type: clientInfo.deviceType,
-                browser: clientInfo.browser,
-                os: clientInfo.os,
-                ip_address: 'Conexión activa',
-                is_active: true,
-                last_activity: new Date().toISOString(),
-              }, { onConflict: 'session_id' })
-          )
-            .then(() => markSessionRegistered(currentSessionId))
-            .catch((err: unknown) => console.warn('No se pudo persistir la sesión actual:', err))
-        }
-
-        mapped = [currentSyntheticSession, ...mapped.filter((s) => s.session_id !== currentSessionId)]
-      }
-
-      setSessions(mapped)
+      const currentSessionId = readTokenSessionId(sessionData.session?.access_token)
+      setSessions(toSessionRecords((data ?? []) as AuthSessionRow[], currentSessionId))
       setLastSyncAt(new Date())
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -243,7 +94,20 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     } finally {
       setLoadingSessions(false)
     }
-  }, [getEffectiveUserId, supabase])
+  }, [supabase])
+
+  /** Corta sesiones de otros equipos. Devuelve cuántas cortó; las que fallan quedan en la lista. */
+  const revokeSessions = useCallback(async (targets: SessionRecord[]) => {
+    const results = await Promise.all(
+      targets.map(async (session) => {
+        const { data, error } = await supabase.rpc('revoke_my_auth_session', { p_session_id: session.session_id })
+        return !error && data === true ? session.session_id : null
+      })
+    )
+    const revoked = new Set(results.filter((id): id is string => Boolean(id)))
+    setSessions((prev) => prev.filter((s) => !revoked.has(s.session_id)))
+    return revoked.size
+  }, [supabase])
 
   const loadSecuritySettings = useCallback(async () => {
     const effectiveUserId = await getEffectiveUserId()
@@ -350,39 +214,14 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       return
     }
 
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
     try {
       setRevokingSessionId(session.id)
-
-      // Intentar RPC close_user_session
-      try {
-        await supabase.rpc('close_user_session', {
-          p_session_id: session.session_id,
-          p_user_id: effectiveUserId,
-        })
-      } catch (rpcErr) {
-        console.warn('RPC close_user_session no disponible:', rpcErr)
-      }
-
-      // Actualizar tabla directamente
-      try {
-        await supabase
-          .from('user_sessions')
-          .update({ is_active: false, last_activity: new Date().toISOString() })
-          .eq('user_id', effectiveUserId)
-          .or(`id.eq.${session.id},session_id.eq.${session.session_id}`)
-      } catch {
-        // Fallback ignorado si la tabla no está disponible
-      }
-
-      // Actualización optimista de estado local
-      setSessions((prev) => prev.filter((s) => s.id !== session.id))
-      toast.success(`Sesión en ${session.browser} cerrada correctamente`)
+      if ((await revokeSessions([session])) === 0) throw new Error('No se pudo cortar la sesión')
+      toast.success(`Sesión en ${session.browser} cerrada. Ese equipo tiene que volver a iniciar sesión.`)
     } catch (error) {
       logger.error('Error closing session', { error })
-      toast.error('Error al revocar la sesión remota')
+      toast.error('No se pudo cerrar la sesión remota')
+      await loadSessions()
     } finally {
       setRevokingSessionId(null)
     }
@@ -402,32 +241,15 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       return
     }
 
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
     try {
       setClosingBrowser(browserName)
-
-      for (const s of remoteSessions) {
-        try {
-          await supabase.rpc('close_user_session', {
-            p_session_id: s.session_id,
-            p_user_id: effectiveUserId,
-          })
-        } catch {}
+      const revoked = await revokeSessions(remoteSessions)
+      if (revoked < remoteSessions.length) {
+        toast.warning(`Se cerraron ${revoked} de ${remoteSessions.length} sesiones de ${browserName}`)
+        await loadSessions()
+      } else {
+        toast.success(`Se cerraron las sesiones remotas de ${browserName}`)
       }
-
-      try {
-        await supabase
-          .from('user_sessions')
-          .update({ is_active: false, last_activity: new Date().toISOString() })
-          .eq('user_id', effectiveUserId)
-          .eq('browser', browserName)
-          .neq('is_current', true)
-      } catch {}
-
-      setSessions((prev) => prev.filter((s) => s.is_current || (s.browser || 'Desconocido') !== browserName))
-      toast.success(`Se revocaron las sesiones remotas de ${browserName}`)
     } catch (error) {
       logger.error('Error closing browser sessions', { error })
       toast.error(`Error al cerrar sesiones en ${browserName}`)
@@ -450,31 +272,15 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       return
     }
 
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
     try {
       setClosingOthers(true)
-
-      for (const s of otherBrowserSessions) {
-        try {
-          await supabase.rpc('close_user_session', {
-            p_session_id: s.session_id,
-            p_user_id: effectiveUserId,
-          })
-        } catch {}
+      const revoked = await revokeSessions(otherBrowserSessions)
+      if (revoked < otherBrowserSessions.length) {
+        toast.warning(`Se cerraron ${revoked} de ${otherBrowserSessions.length} sesiones en otros navegadores`)
+        await loadSessions()
+      } else {
+        toast.success('Se cerraron las sesiones en otros navegadores')
       }
-
-      try {
-        await supabase
-          .from('user_sessions')
-          .update({ is_active: false, last_activity: new Date().toISOString() })
-          .eq('user_id', effectiveUserId)
-          .neq('browser', currentBrowser || '')
-      } catch {}
-
-      setSessions((prev) => prev.filter((s) => s.is_current || s.browser === currentBrowser))
-      toast.success('Se cerraron las sesiones en otros navegadores')
     } catch (error) {
       logger.error('Error closing other browsers', { error })
       toast.error('Error al cerrar sesiones en otros navegadores')
@@ -487,45 +293,13 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const handleLogoutAllSessions = async () => {
     if (!window.confirm('¿Deseas cerrar todas las otras sesiones activas y mantener solo este dispositivo?')) return
 
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
     try {
       setClosingOthers(true)
-
-      // Revocar mediante Supabase Auth
-      try {
-        await supabase.auth.signOut({ scope: 'others' })
-      } catch (authErr) {
-        console.warn('Error en supabase.auth.signOut others:', authErr)
-      }
-
-      // Sincronizar en base de datos mediante RPC
-      const authSessionResult = await supabase.auth.getSession()
-      const currentSessionId = await getSessionIdFromAccessToken(authSessionResult.data.session?.access_token)
-
-      if (currentSessionId) {
-        try {
-          await supabase.rpc('close_all_user_sessions_except_current', {
-            p_user_id: effectiveUserId,
-            p_current_session_id: currentSessionId,
-          })
-        } catch (rpcErr) {
-          console.warn('Error en RPC close_all_user_sessions_except_current:', rpcErr)
-        }
-
-        try {
-          await supabase
-            .from('user_sessions')
-            .update({ is_active: false, last_activity: new Date().toISOString() })
-            .eq('user_id', effectiveUserId)
-            .neq('session_id', currentSessionId)
-        } catch {}
-      }
-
-      // Actualizar estado local inmediatamente
+      // Supabase Auth corta todas las sesiones del usuario menos la de este equipo.
+      const { error } = await supabase.auth.signOut({ scope: 'others' })
+      if (error) throw error
       setSessions((prev) => prev.filter((s) => s.is_current))
-      toast.success('Las otras sesiones fueron revocadas. Este dispositivo sigue conectado.')
+      toast.success('Las otras sesiones fueron cerradas. Este dispositivo sigue conectado.')
       await loadSessions()
     } catch (error) {
       logger.error('Error closing all other sessions', { error })
@@ -539,19 +313,8 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const handleLogoutEverywhere = async () => {
     if (!window.confirm('¿Estás seguro de que deseas cerrar todas las sesiones, incluida esta? Tendrás que volver a iniciar sesión.')) return
 
-    const effectiveUserId = await getEffectiveUserId()
-
     try {
       setClosingEverywhere(true)
-
-      if (effectiveUserId) {
-        try {
-          await supabase
-            .from('user_sessions')
-            .update({ is_active: false, last_activity: new Date().toISOString() })
-            .eq('user_id', effectiveUserId)
-        } catch {}
-      }
 
       await supabase.auth.signOut({ scope: 'global' })
       toast.success('Todas las sesiones fueron cerradas. Redirigiendo al login...')
@@ -1183,14 +946,6 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                               <div className="flex items-center gap-1.5">
                                 <Globe className="h-3 w-3 text-muted-foreground/70" />
                                 <span>IP: {session.ip_address}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <MapPin className="h-3 w-3 text-muted-foreground/70" />
-                                <span>
-                                  {session.country && session.city
-                                    ? `${session.city}, ${session.country}`
-                                    : session.country || session.city || 'Ubicación local'}
-                                </span>
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <Clock className="h-3 w-3 text-muted-foreground/70" />
