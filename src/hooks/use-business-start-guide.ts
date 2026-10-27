@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useBranch } from '@/contexts/branch-context'
 import type { StartGuidePreferences, StartGuideResult } from '@/lib/onboarding/start-guide'
+import type { deriveOnboardingChecklist } from '@/lib/onboarding/shared-setup'
 
 export interface BusinessStartGuidePayload {
   organizationId: string
@@ -10,6 +11,7 @@ export interface BusinessStartGuidePayload {
   preferences: StartGuidePreferences
   guide: StartGuideResult
   limitations: string[]
+  setupChecklist: ReturnType<typeof deriveOnboardingChecklist>
 }
 export function useBusinessStartGuide() {
   const context = useOptionalActiveOrganization()

@@ -55,6 +55,7 @@ import {
   getCurrencyDefinition,
 } from '@/lib/currency'
 import { cn } from '@/lib/utils'
+import { REGIONAL_DEFAULT_COUNTRIES, normalizeCountryCode } from '@/lib/regional/contract'
 
 type FieldErrors = Partial<Record<
   'companyName' | 'companyEmail' | 'companyPhone' | 'companyRuc' | 'companyAddress' | 'city' | 'taxRate',
@@ -591,6 +592,16 @@ export default function AdminSettingsPage() {
             </CardHeader>
 
             <CardContent className="space-y-6 p-5 sm:p-6">
+              {settings.needsCountryConfirmation ? <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                <Label htmlFor="setting-country" className="text-sm font-semibold">Confirmá el país de tu negocio</Label>
+                <p className="mt-1 text-xs">Esta confirmación regional es opcional. No convierte precios ni modifica operaciones existentes.</p>
+                <Select value={settings.countryCode ?? ''} onValueChange={(value) => updateSetting('countryCode', normalizeCountryCode(value))}>
+                  <SelectTrigger id="setting-country" className="mt-3 h-10 bg-background"><SelectValue placeholder="Seleccioná un país" /></SelectTrigger>
+                  <SelectContent>
+                    {REGIONAL_DEFAULT_COUNTRIES.map((country) => <SelectItem key={country} value={country}>{country === 'PY' ? 'Paraguay' : country === 'BR' ? 'Brasil' : country === 'AR' ? 'Argentina' : 'Estados Unidos'}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div> : null}
               {/* Bloque Moneda e Idioma */}
               <div className="grid gap-5 lg:grid-cols-2">
                 {/* Moneda Base */}

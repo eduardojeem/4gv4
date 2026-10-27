@@ -4,13 +4,26 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
+import {
+  mergeCanonicalOnboardingData,
+  getFirstIncompleteStep,
+  filterOnboardingPreferences,
+  mergeOnboardingProgress,
+  normalizeOnboardingState,
+  validateBranchStep,
+  validateBusinessStep,
+} from '@/lib/onboarding/shared-setup'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 type SettingsModules = {
   onboarding?: {
     status?: string
     completed_at?: string | null
+    shared?: unknown
   }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value))
 
 export async function GET() {
   const supabase = await createClient()
@@ -32,15 +45,15 @@ export async function GET() {
     })
   }
 
-  const [{ data: settings, error: settingsError }, { data: branch, error: branchError }, { data: companyInfoSetting, error: companyInfoError }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, { data: branch, error: branchError }, { data: companyInfoSetting, error: companyInfoError }, { data: businessProfile, error: businessProfileError }, planInfo] = await Promise.all([
     admin
       .from('organization_settings')
-      .select('display_name, currency, timezone, modules')
+      .select('display_name, currency, timezone, country_code, locale, modules')
       .eq('organization_id', organization.id)
       .maybeSingle(),
     admin
       .from('branches')
-      .select('address, city, phone')
+      .select('id, name, address, city, phone')
       .eq('organization_id', organization.id)
       .eq('is_default', true)
       .maybeSingle(),
@@ -50,11 +63,13 @@ export async function GET() {
       .eq('organization_id', organization.id)
       .eq('key', 'company_info')
       .maybeSingle(),
+    admin.from('organizations').select('business_vertical').eq('id', organization.id).maybeSingle(),
+    getOrganizationPlanInfo(organization.id).catch(() => null),
   ])
 
-  if (settingsError || branchError || companyInfoError) {
+  if (settingsError || branchError || companyInfoError || businessProfileError) {
     logger.error('Failed to load onboarding status settings', {
-      error: settingsError?.message ?? branchError?.message ?? companyInfoError?.message,
+      error: settingsError?.message ?? branchError?.message ?? companyInfoError?.message ?? businessProfileError?.message,
       organizationId: organization.id,
     })
     return NextResponse.json({ error: 'No se pudo cargar la configuracion.' }, { status: 500 })
@@ -75,7 +90,24 @@ export async function GET() {
   // de vuelta. Los heurísticos de datos solo sirven para auto-saltar/mostrar el
   // onboarding en organizaciones que nunca lo completaron (evita el loop por el
   // que cada navegación reabría el onboarding y re-ejecutaba sus efectos).
-  const needsOnboarding = !isCompleted && (!hasCompanyBasics || !hasContactBasics)
+  const shared = modules.onboarding?.shared
+  const setupState = isRecord(shared)
+    ? mergeCanonicalOnboardingData(normalizeOnboardingState(shared), {
+        plan: planInfo?.plan ?? organization.plan ?? null,
+        businessName: organization.name,
+        countryCode: typeof settings?.country_code === 'string' ? settings.country_code : null,
+        currency: typeof settings?.currency === 'string' ? settings.currency : null,
+        timezone: typeof settings?.timezone === 'string' ? settings.timezone : null,
+        locale: typeof settings?.locale === 'string' ? settings.locale : null,
+        businessCategory: typeof businessProfile?.business_vertical === 'string' ? businessProfile.business_vertical : null,
+        branch: branch ?? null,
+      })
+    : null
+  const needsOnboarding = !isCompleted && (
+    Boolean(setupState && !setupState.completed)
+    || !hasCompanyBasics
+    || !hasContactBasics
+  )
 
   return NextResponse.json({
     needsOnboarding,
@@ -83,5 +115,142 @@ export async function GET() {
     hasCompanyBasics,
     hasContactBasics,
     organization,
+    setupState,
+    setupStep: setupState ? getFirstIncompleteStep(setupState) : null,
+    entitledModules: planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : [],
+    needsCountryConfirmation: settings?.country_code == null,
   })
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminSupabase()
+  const organization = await getCurrentOrganizationContext(user.id)
+  if (!organization) return NextResponse.json({ error: 'No active organization' }, { status: 403 })
+
+  const [{ data: profile, error: profileError }, { data: settings, error: settingsError }] = await Promise.all([
+    admin.from('profiles').select('role, status').eq('id', user.id).maybeSingle(),
+    admin.from('organization_settings').select('modules').eq('organization_id', organization.id).maybeSingle(),
+  ])
+  if (profileError || settingsError) return NextResponse.json({ error: 'No se pudo cargar el onboarding.' }, { status: 500 })
+  const active = profile?.status !== 'inactive' && profile?.status !== 'suspended'
+  if (!active || (profile?.role !== 'super_admin' && !['owner', 'admin'].includes(organization.role))) {
+    return NextResponse.json({ error: 'Solo el dueño o administrador puede configurar el negocio.' }, { status: 403 })
+  }
+
+  const body = await request.json().catch(() => null)
+  if (!isRecord(body) || ![2, 3, 4].includes(Number(body.step)) || !isRecord(body.data)) {
+    return NextResponse.json({ error: 'Paso de onboarding inválido.' }, { status: 400 })
+  }
+  const step = Number(body.step) as 2 | 3 | 4
+  const currentModules = isRecord(settings?.modules) ? settings.modules : {}
+  const onboarding = isRecord(currentModules.onboarding) ? currentModules.onboarding : {}
+  if (!isRecord(onboarding.shared)) return NextResponse.json({ error: 'El onboarding inicial no está habilitado para esta organización.' }, { status: 409 })
+  if (onboarding.status === 'completed') return NextResponse.json({ error: 'La configuración inicial ya fue completada.' }, { status: 409 })
+  const state = normalizeOnboardingState(onboarding.shared)
+  const data = body.data
+
+  if (step === 2) {
+    const candidate = { ...state.data, ...data }
+    const result = validateBusinessStep({
+      businessName: typeof candidate.businessName === 'string' ? candidate.businessName : null,
+      countryCode: typeof candidate.countryCode === 'string' ? candidate.countryCode : null,
+      businessCategory: typeof candidate.businessCategory === 'string' ? candidate.businessCategory : null,
+      currency: typeof candidate.currency === 'string' ? candidate.currency : null,
+      timezone: typeof candidate.timezone === 'string' ? candidate.timezone : null,
+      locale: typeof candidate.locale === 'string' ? candidate.locale : null,
+      regionalConfirmed: candidate.regionalConfirmed === true,
+    })
+    if (!result.valid) return NextResponse.json({ error: 'Completá los datos obligatorios del negocio.', fields: result.fields }, { status: 400 })
+    const selectedCategory = candidate.businessCategory as typeof state.data.businessCategory
+    const categoryChanged = state.data.businessCategory !== selectedCategory
+    state.data = {
+      ...state.data,
+      businessName: String(candidate.businessName).trim(),
+      countryCode: String(candidate.countryCode).trim().toUpperCase(),
+      businessCategory: selectedCategory,
+      currency: String(candidate.currency).trim().toUpperCase(),
+      timezone: String(candidate.timezone).trim(),
+      locale: String(candidate.locale).trim(),
+      regionalConfirmed: candidate.regionalConfirmed === true,
+      ...(categoryChanged ? { selectedModules: null } : {}),
+    }
+    if (categoryChanged) state.completedSteps = state.completedSteps.filter((completedStep) => completedStep !== 'modules' && completedStep !== 'ready')
+  } else if (step === 3) {
+    const candidate = { ...state.data.primaryBranch, ...data }
+    const result = validateBranchStep({ name: typeof candidate.name === 'string' ? candidate.name : '', city: typeof candidate.city === 'string' ? candidate.city : '' })
+    if (!result.valid) return NextResponse.json({ error: 'Completá el nombre de la sucursal y la ciudad.', fields: result.fields }, { status: 400 })
+    const branchPayload = {
+      name: String(candidate.name).trim(),
+      city: String(candidate.city).trim(),
+      address: typeof candidate.address === 'string' ? candidate.address.trim() : '',
+      phone: typeof candidate.phone === 'string' ? candidate.phone.trim() : '',
+      is_default: true,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }
+    const branchQuery = admin.from('branches').update(branchPayload).eq('organization_id', organization.id).eq('is_default', true)
+    const { data: updatedBranch, error: branchError } = await branchQuery.select('id').maybeSingle()
+    if (branchError) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
+    let branchId = updatedBranch?.id
+    if (!branchId) {
+      const { data: existingBranch, error: existingBranchError } = await admin.from('branches').select('id').eq('organization_id', organization.id).eq('slug', 'principal').maybeSingle()
+      if (existingBranchError) return NextResponse.json({ error: 'No se pudo buscar la sucursal principal.' }, { status: 500 })
+      if (existingBranch?.id) {
+        const { error } = await admin.from('branches').update(branchPayload).eq('id', existingBranch.id).eq('organization_id', organization.id)
+        if (error) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
+        branchId = existingBranch.id
+      } else {
+        const { data: created, error } = await admin.from('branches').insert({
+          organization_id: organization.id, code: 'principal', slug: 'principal', ...branchPayload,
+        }).select('id').single()
+        if (!error && created) {
+          branchId = created.id
+        } else if (error?.code === '23505') {
+          // Dos reintentos simultáneos pueden competir al provisionar una
+          // sucursal legacy ausente. Recuperar la fila ganadora evita duplicar
+          // o convertir un conflicto idempotente en un error visible.
+          const { data: concurrentBranch, error: concurrentLookupError } = await admin.from('branches').select('id').eq('organization_id', organization.id).eq('slug', 'principal').maybeSingle()
+          if (concurrentLookupError || !concurrentBranch) return NextResponse.json({ error: 'No se pudo resolver la sucursal principal.' }, { status: 500 })
+          const { error: concurrentUpdateError } = await admin.from('branches').update(branchPayload).eq('id', concurrentBranch.id).eq('organization_id', organization.id)
+          if (concurrentUpdateError) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
+          branchId = concurrentBranch.id
+        } else {
+          return NextResponse.json({ error: 'No se pudo crear la sucursal principal.' }, { status: 500 })
+        }
+      }
+    }
+    state.data.primaryBranch = {
+      id: branchId,
+      name: branchPayload.name,
+      city: branchPayload.city,
+      address: branchPayload.address,
+      phone: branchPayload.phone,
+      hours: typeof candidate.hours === 'string' ? candidate.hours.trim() : '',
+    }
+  } else {
+    if (!Array.isArray(data.selectedModules) || data.selectedModules.some((module) => typeof module !== 'string')) {
+      return NextResponse.json({ error: 'Seleccioná los módulos que querés usar.' }, { status: 400 })
+    }
+    const planInfo = await getOrganizationPlanInfo(organization.id)
+    const entitled = [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)]
+    const selected = filterOnboardingPreferences(data.selectedModules as string[], entitled)
+    if (selected.length !== new Set(data.selectedModules as string[]).size) {
+      return NextResponse.json({ error: 'El plan actual no incluye uno o más módulos seleccionados.', code: 'MODULE_NOT_ENTITLED' }, { status: 403 })
+    }
+    state.data.selectedModules = selected
+  }
+
+  const completed = new Set(state.completedSteps)
+  completed.add(step === 2 ? 'business' : step === 3 ? 'branch' : 'modules')
+  state.completedSteps = [...completed]
+  state.currentStep = step === 2 ? 3 : step === 3 ? 4 : 5
+  const mergedModules = mergeOnboardingProgress(currentModules, state, state.currentStep)
+  const { error: saveError } = await admin.from('organization_settings').update({ modules: mergedModules, updated_at: new Date().toISOString() }).eq('organization_id', organization.id)
+  if (saveError) return NextResponse.json({ error: 'No se pudo guardar el progreso del onboarding.' }, { status: 500 })
+
+  return NextResponse.json({ success: true, setupState: state, nextStep: getFirstIncompleteStep(state) })
 }

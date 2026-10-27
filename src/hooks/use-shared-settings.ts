@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
 import { setRegionalFormatConfig } from '@/lib/currency'
 import { normalizeSupabaseError } from '@/utils/supabase-error'
+import { needsCountryConfirmation } from '@/lib/regional/settings'
+import { normalizeCountryCode, normalizeLocaleCode, type CountryCode, type LocaleCode } from '@/lib/regional/contract'
 
 // Interface matching the database table 'system_settings'
 export interface SystemSettingsRow {
@@ -15,6 +17,9 @@ export interface SystemSettingsRow {
   company_address: string | null
   city: string | null
   currency: string
+  country_code?: string | null
+  locale?: string | null
+  needs_country_confirmation?: boolean
   tax_rate: number
   low_stock_threshold: number
   session_timeout: number
@@ -53,6 +58,9 @@ export interface SharedSettings {
   companyAddress: string
   city: string
   currency: string
+  countryCode: CountryCode | null
+  locale: LocaleCode | null
+  needsCountryConfirmation: boolean
   taxRate: number
   repairMaxDiscountPercent: number
   repairLaborTaxRate: 0 | 5 | 10
@@ -110,6 +118,9 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   companyAddress: '',
   city: 'Asunción',
   currency: 'PYG',
+  countryCode: null,
+  locale: null,
+  needsCountryConfirmation: true,
   taxRate: 10,
   repairMaxDiscountPercent: 20,
   repairLaborTaxRate: 10,
@@ -139,6 +150,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
 // ============================================================================
 
 function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
+  const countryCode = normalizeCountryCode(data.country_code)
+  const locale = normalizeLocaleCode(data.locale)
   return {
     companyName: data.company_name || DEFAULT_SHARED_SETTINGS.companyName,
     companyLogo: (data as { company_logo?: string | null }).company_logo ?? DEFAULT_SHARED_SETTINGS.companyLogo,
@@ -148,6 +161,9 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     companyAddress: data.company_address ?? DEFAULT_SHARED_SETTINGS.companyAddress,
     city: data.city ?? DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
+    countryCode,
+    locale,
+    needsCountryConfirmation: needsCountryConfirmation(countryCode),
     taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
     repairMaxDiscountPercent: Number((data as { repair_max_discount_percent?: number }).repair_max_discount_percent ?? DEFAULT_SHARED_SETTINGS.repairMaxDiscountPercent),
     repairLaborTaxRate: ((data as { repair_labor_tax_rate?: 0 | 5 | 10 }).repair_labor_tax_rate ?? DEFAULT_SHARED_SETTINGS.repairLaborTaxRate),

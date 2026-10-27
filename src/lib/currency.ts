@@ -1,42 +1,25 @@
-export const SUPPORTED_CURRENCY_CODES = [
-  'PYG',
-  'USD',
-  'BRL',
-  'ARS',
-  'UYU',
-  'CLP',
-  'BOB',
-  'PEN',
-  'COP',
-  'MXN',
-  'EUR',
-] as const
+import {
+  REGIONAL_CURRENCIES,
+  REGIONAL_CURRENCY_CODES,
+  formatCurrencyAmount,
+  getCurrencyFractionDigits as getRegionalCurrencyFractionDigits,
+  getRegionalCurrencySymbol,
+  normalizeCurrencyCode,
+  normalizeLocaleCode,
+  type CurrencyCode,
+  type LocaleCode,
+} from './regional/contract'
 
-export type SupportedCurrencyCode = typeof SUPPORTED_CURRENCY_CODES[number]
+export const SUPPORTED_CURRENCY_CODES = REGIONAL_CURRENCY_CODES
+
+export type SupportedCurrencyCode = CurrencyCode
 
 export const SUPPORTED_LANGUAGE_CODES = ['es', 'en', 'pt'] as const
 export type SupportedLanguageCode = typeof SUPPORTED_LANGUAGE_CODES[number]
 
-export interface CurrencyDefinition {
-  code: SupportedCurrencyCode
-  name: string
-  region: string
-  fractionDigits: 0 | 2
-}
+export type CurrencyDefinition = (typeof REGIONAL_CURRENCIES)[number]
 
-export const SUPPORTED_CURRENCIES: readonly CurrencyDefinition[] = [
-  { code: 'PYG', name: 'Guaraní paraguayo', region: 'Paraguay', fractionDigits: 0 },
-  { code: 'USD', name: 'Dólar estadounidense', region: 'Internacional', fractionDigits: 2 },
-  { code: 'BRL', name: 'Real brasileño', region: 'Brasil', fractionDigits: 2 },
-  { code: 'ARS', name: 'Peso argentino', region: 'Argentina', fractionDigits: 2 },
-  { code: 'UYU', name: 'Peso uruguayo', region: 'Uruguay', fractionDigits: 2 },
-  { code: 'CLP', name: 'Peso chileno', region: 'Chile', fractionDigits: 0 },
-  { code: 'BOB', name: 'Boliviano', region: 'Bolivia', fractionDigits: 2 },
-  { code: 'PEN', name: 'Sol peruano', region: 'Perú', fractionDigits: 2 },
-  { code: 'COP', name: 'Peso colombiano', region: 'Colombia', fractionDigits: 2 },
-  { code: 'MXN', name: 'Peso mexicano', region: 'México', fractionDigits: 2 },
-  { code: 'EUR', name: 'Euro', region: 'Unión Europea', fractionDigits: 2 },
-] as const
+export const SUPPORTED_CURRENCIES: readonly CurrencyDefinition[] = REGIONAL_CURRENCIES
 
 export const SUPPORTED_LANGUAGES = [
   { code: 'es', name: 'Español', locale: 'es-PY' },
@@ -52,7 +35,7 @@ let runtimeCurrency: SupportedCurrencyCode | null = null
 let runtimeLanguage: SupportedLanguageCode | null = null
 
 export function isSupportedCurrency(value: string): value is SupportedCurrencyCode {
-  return (SUPPORTED_CURRENCY_CODES as readonly string[]).includes(value)
+  return normalizeCurrencyCode(value) !== null
 }
 
 export function isSupportedLanguage(value: string): value is SupportedLanguageCode {
@@ -64,7 +47,7 @@ export function getCurrencyDefinition(code: string): CurrencyDefinition {
 }
 
 export function getCurrencyFractionDigits(code: string): number {
-  return getCurrencyDefinition(code).fractionDigits
+  return getRegionalCurrencyFractionDigits(code)
 }
 
 export function getLocaleForLanguage(language: string): string {
@@ -107,22 +90,11 @@ export type CurrencyFormatOptions = Omit<Intl.NumberFormatOptions, 'currency'> &
 
 export const formatCurrency = (amount: number, options: CurrencyFormatOptions = {}): string => {
   const defaults = getLocaleConfig()
-  const currency = options.currency && isSupportedCurrency(options.currency)
-    ? options.currency
-    : defaults.currency
+  const currency = normalizeCurrencyCode(options.currency) ?? defaults.currency
   const locale = options.locale || (options.language ? getLocaleForLanguage(options.language) : defaults.locale)
-  const fractionDigits = getCurrencyFractionDigits(currency)
-  const intlOptions: CurrencyFormatOptions = { ...options }
-  delete intlOptions.language
-  delete intlOptions.locale
+  const { currency: _currency, language: _language, locale: _locale, ...intlOptions } = options
 
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-    ...intlOptions,
-  }).format(amount)
+  return formatCurrencyAmount(amount, currency, normalizeLocaleCode(locale) ?? 'es-PY' as LocaleCode, intlOptions)
 }
 
 export const formatCurrencyCompact = (
@@ -158,15 +130,9 @@ export const parseCurrency = (value: string): number => {
 
 export const getCurrencySymbol = (currencyCode?: string, language?: string): string => {
   const defaults = getLocaleConfig()
-  const currency = currencyCode && isSupportedCurrency(currencyCode) ? currencyCode : defaults.currency
+  const currency = currencyCode ? normalizeCurrencyCode(currencyCode) ?? defaults.currency : defaults.currency
   const locale = language ? getLocaleForLanguage(language) : defaults.locale
-  const parts = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol',
-  }).formatToParts(0)
-
-  return parts.find((part) => part.type === 'currency')?.value || currency
+  return getRegionalCurrencySymbol(currency, normalizeLocaleCode(locale) ?? 'es-PY')
 }
 
 export const isValidCurrency = (value: string | number): boolean => {

@@ -7,11 +7,14 @@ import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { choicesFromCheckout } from '@/lib/onboarding/checkout-choices'
 import { onboardingStepProgress } from '@/lib/onboarding/progress'
+import { SharedOnboardingWizard } from '@/components/dashboard/onboarding/SharedOnboardingWizard'
+import { mergeCanonicalOnboardingData, normalizeOnboardingState } from '@/lib/onboarding/shared-setup'
 
 type SettingsModules = {
   onboarding?: {
     status?: string
     completed_at?: string | null
+    shared?: unknown
   }
 }
 
@@ -57,7 +60,7 @@ export default async function DashboardOnboardingPage() {
       .maybeSingle(),
     admin
       .from('organization_settings')
-      .select('display_name, currency, timezone, modules')
+      .select('display_name, currency, timezone, country_code, locale, modules')
       .eq('organization_id', organization.id)
       .maybeSingle(),
     admin
@@ -125,6 +128,19 @@ export default async function DashboardOnboardingPage() {
   ])
 
   const modules = (settings?.modules ?? {}) as SettingsModules
+  if (modules.onboarding?.shared && modules.onboarding.status !== 'completed') {
+    const state = mergeCanonicalOnboardingData(normalizeOnboardingState(modules.onboarding.shared), {
+      plan: planInfo?.plan ?? organization.plan ?? null,
+      businessName: organization.name,
+      countryCode: settings?.country_code ?? null,
+      currency: settings?.currency ?? null,
+      timezone: settings?.timezone ?? null,
+      locale: settings?.locale ?? null,
+      businessCategory: businessProfile?.business_vertical ?? null,
+      branch: branch ?? null,
+    })
+    return <SharedOnboardingWizard initialState={state} planName={planInfo?.name ?? organization.plan ?? 'Free'} entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : []} />
+  }
   const adminSettings = getTenantAdminSettings(settings?.modules)
   const companyInfo = (companyInfoSetting?.value ?? {}) as {
     phone?: string

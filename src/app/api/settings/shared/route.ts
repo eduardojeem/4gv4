@@ -8,6 +8,7 @@ import {
   type SystemSettingsPartial,
 } from '@/lib/validations/system-settings'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
+import { needsCountryConfirmation } from '@/lib/regional/settings'
 
 // Columnas de `system_settings` que son política de plataforma (super_admin) y
 // no deben viajar a los tenants en el endpoint compartido.
@@ -74,7 +75,7 @@ export async function GET() {
   ] = await Promise.all([
       admin
         .from('organization_settings')
-        .select('display_name, currency, timezone, modules, repair_max_discount_percent, repair_labor_tax_rate')
+        .select('display_name, currency, timezone, country_code, locale, modules, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       admin
@@ -124,6 +125,9 @@ export async function GET() {
     ...globalRow,
     ...mapSettingsToDB(effectiveSettings),
     company_logo: organization?.logo_url ?? null,
+    country_code: orgSettings?.country_code ?? null,
+    locale: orgSettings?.locale ?? null,
+    needs_country_confirmation: needsCountryConfirmation(orgSettings?.country_code),
   }
   for (const col of PLATFORM_ONLY_DB_COLUMNS) {
     delete responseRow[col]

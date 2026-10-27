@@ -9,7 +9,7 @@ import { buildOnboardingSteps, doneCount, hiddenKey, nextStep, shouldShowFirstSt
 import { palette, usePalette } from '@/lib/palette';
 import { usePanel } from '@/lib/panel';
 
-type Loaded = { organizationId: string; steps: OnboardingStep[]; hidden: boolean };
+type Loaded = { organizationId: string; steps: OnboardingStep[]; hidden: boolean; checklist: ReturnType<typeof toOnboardingProgress>['setupChecklist'] };
 
 /**
  * «Primeros pasos» para el dueño o administrador de un comercio nuevo: los
@@ -31,7 +31,10 @@ export function FirstStepsCard() {
       (async () => {
         const hidden = await SecureStore.getItemAsync(hiddenKey(organizationId)).then((value) => value === '1').catch(() => false);
         const res = await apiFetch<{ data?: Record<string, unknown> }>('/api/mobile/onboarding');
-        if (alive) setLoaded({ organizationId, steps: buildOnboardingSteps(toOnboardingProgress(res.data)), hidden });
+        if (alive) {
+          const progress = toOnboardingProgress(res.data);
+          setLoaded({ organizationId, steps: buildOnboardingSteps(progress), hidden, checklist: progress.setupChecklist });
+        }
       })().catch(() => {
         // Sin los primeros pasos el panel sigue igual: no es un error para mostrar.
       });
@@ -43,7 +46,10 @@ export function FirstStepsCard() {
 
   // Lo cargado es de un comercio: si se cambió de comercio, no se muestra.
   const current = loaded && loaded.organizationId === organizationId ? loaded : null;
-  if (!canConfigure || !current || !shouldShowFirstSteps(current.steps, current.hidden)) return null;
+  if (!canConfigure || !current) return null;
+  const showFirstSteps = shouldShowFirstSteps(current.steps, current.hidden);
+  const checklist = current.checklist;
+  if (!showFirstSteps && !checklist?.needsCountryConfirmation && !checklist?.items.some((item) => !item.done)) return null;
 
   const done = doneCount(current.steps);
   const total = current.steps.length;
@@ -55,7 +61,8 @@ export function FirstStepsCard() {
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityLabel={`Primeros pasos: ${done} de ${total} listos`}>
+    <View style={styles.container}>
+    {showFirstSteps ? <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityLabel={`Primeros pasos: ${done} de ${total} listos`}>
       <View style={styles.head}>
         <View style={styles.flex}>
           <Text style={[styles.title, { color: colors.text }]}>Primeros pasos</Text>
@@ -82,12 +89,29 @@ export function FirstStepsCard() {
           {!step.done ? <Ionicons name="chevron-forward" size={18} color={colors.muted} /> : null}
         </Pressable>
       ))}
+    </View> : null}
+    {checklist ? <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityLabel={`Configuración opcional: ${checklist.percent}% completada`}>
+      <View style={styles.head}><View style={styles.flex}><Text style={[styles.title, { color: colors.text }]}>Configuración opcional</Text><Text style={[styles.muted, { color: colors.muted }]}>{checklist.percent}% completado · podés seguir usando el sistema mientras configurás.</Text></View></View>
+      {checklist.needsCountryConfirmation ? <Pressable accessibilityRole="button" onPress={() => router.push('/admin/settings/regional' as never)} style={[styles.step, { borderColor: colors.border }]}><Ionicons name="globe-outline" size={18} color={palette.primary} /><Text style={[styles.stepTitle, { color: colors.text }]}>Confirmá el país de tu negocio</Text><Ionicons name="chevron-forward" size={18} color={colors.muted} /></Pressable> : null}
+      {checklist.items.filter((item) => !item.done && item.key !== 'country').map((item) => {
+        const route = item.key === 'company' || item.key === 'logo' || item.key === 'billing' ? '/admin/settings/company'
+          : item.key === 'branch' ? '/admin/branches'
+          : item.key === 'product' ? '/panel/products/form'
+          : item.key === 'team' ? '/admin/users'
+          : item.key === 'payments' ? '/admin/website/home'
+          : item.key === 'storefront' ? '/admin/website/domain'
+          : item.key === 'marketplace' ? '/admin/website/catalog'
+          : '/admin/website';
+        return <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={`${item.label}, pendiente`} onPress={() => router.push(route as never)} style={[styles.step, { borderColor: colors.border }]}><Ionicons name="ellipse-outline" size={18} color={colors.muted} /><Text style={[styles.stepTitle, styles.flex, { color: colors.text }]}>{item.label}</Text><Ionicons name="chevron-forward" size={18} color={colors.muted} /></Pressable>;
+      })}
+    </View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  container: { gap: 12 },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   title: { fontSize: 16, fontWeight: '800' },

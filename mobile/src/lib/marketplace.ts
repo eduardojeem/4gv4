@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 
 import { apiFetch } from './api';
+import { formatCurrencyAmount } from '../../../src/lib/regional/contract';
 import { getMobileRuntimeConfig } from './runtime-config';
 
 /** Sitio público: los detalles todavía se abren en la web, dentro de la app. */
@@ -51,5 +52,5 @@ export const storePath = (store: { slug: string }) => `/${store.slug}/inicio`;
 
 /** Guaraníes sin decimales y con punto de miles, como la web. */
 export function formatGs(value: number) {
-  return `Gs. ${Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+  return formatCurrencyAmount(Math.round(value), 'PYG', 'es-PY').replace(/\u00a0/g, ' ');
 }

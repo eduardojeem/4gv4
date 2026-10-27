@@ -5,6 +5,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { normalizeOpeningHours } from '@/lib/agenda/slots'
 import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
+import { loadOrganizationSetupChecklist } from './setup-checklist-server'
 import { evaluateStartGuide, type EvidenceState, type StartGuideEvidence, type StartGuidePreferences } from './start-guide'
 
 export const startGuidePreferencesSchema = z.object({ version: z.literal(1), teamMode: z.enum(['solo', 'team']).nullable(), postponed: z.boolean() }).strict()
@@ -23,9 +24,10 @@ export async function loadStartGuide(userId: string, branchId?: string) {
   const organization = await administrator(userId)
   const admin = createAdminSupabase()
   const limitations: string[] = []
-  const [plan, settings] = await Promise.all([
+  const [plan, settings, setupChecklist] = await Promise.all([
     getOrganizationPlanInfo(organization.id, { strict: true }),
     admin.from('organization_settings').select('display_name, currency, timezone, modules').eq('organization_id', organization.id).maybeSingle(),
+    loadOrganizationSetupChecklist(admin, organization.id),
   ])
   if (settings.error) throw new StartGuideError(500)
   let branchQuery = admin.from('branches').select('id').eq('organization_id', organization.id).eq('is_active', true)
@@ -83,7 +85,7 @@ export async function loadStartGuide(userId: string, branchId?: string) {
     activeBranch: Boolean(branch.data?.length), sellableProduct, activeService, serviceAvailability, teamConfigured,
     firstSale, firstReservation, firstService, firstRepair, firstCollection: null,
   }
-  return { organizationId: organization.id, branchId: branchId ?? null, guide: evaluateStartGuide(evidence, preferences), preferences, limitations }
+  return { organizationId: organization.id, branchId: branchId ?? null, guide: evaluateStartGuide(evidence, preferences), preferences, limitations, setupChecklist }
 }
 
 export async function saveStartGuidePreferences(userId: string, preferences: z.infer<typeof startGuidePreferencesSchema>, expectedOrganizationId?: string) {

@@ -11,7 +11,7 @@ const estado = vi.hoisted(() => ({
   orgSettings: null as Record<string, unknown> | null,
 }))
 
-const ORG_SETTINGS = { display_name: 'HCA Celular', currency: 'PYG', timezone: 'America/Asuncion', modules: {} }
+const ORG_SETTINGS = { display_name: 'HCA Celular', currency: 'PYG', timezone: 'America/Asuncion', country_code: null as string | null, locale: null as string | null, modules: {} }
 
 const GLOBAL = {
   id: 'system',
@@ -117,6 +117,28 @@ describe('cargar: un superadmin dentro de su organización ve su organización',
     expect(body.data.company_name).toBe('HCA Celular')
   })
 
+  it('expone identidad regional y marca legado sin país confirmado', async () => {
+    estado.contexto = { id: 'org-1' }
+    estado.miembro = { organization_id: 'org-1', role: 'owner' }
+    estado.orgSettings = { ...ORG_SETTINGS, country_code: null, locale: null }
+    const body = await (await GET()).json()
+    expect(body.data).toMatchObject({
+      country_code: null,
+      locale: null,
+      currency: 'PYG',
+      time_zone: 'America/Asuncion',
+      needs_country_confirmation: true,
+    })
+  })
+
+  it('lee país e idioma regionales guardados sin inferirlos desde moneda o zona', async () => {
+    estado.contexto = { id: 'org-1' }
+    estado.miembro = { organization_id: 'org-1', role: 'owner' }
+    estado.orgSettings = { ...ORG_SETTINGS, currency: 'BRL', timezone: 'America/Sao_Paulo', country_code: 'BR', locale: 'pt-BR' }
+    const body = await (await GET()).json()
+    expect(body.data).toMatchObject({ country_code: 'BR', locale: 'pt-BR', currency: 'BRL', time_zone: 'America/Sao_Paulo', needs_country_confirmation: false })
+  })
+
   it('sin organización, recibe la global marcada como tal', async () => {
     const body = await (await GET()).json()
     expect(body.scope).toBe('platform')
@@ -202,6 +224,39 @@ describe('guardar un campo no pisa lo demás del comercio con la fila global', (
     const res = await guardar({ settings: { companyName: 'HCA Celulares', timeZone: 'America/Asuncion' }, scope: 'organization' })
     expect(res.status).toBe(200)
     expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ display_name: 'HCA Celulares', timezone: 'America/Asuncion', currency: 'USD' })
+  })
+
+  it('normaliza país y locale en el límite de escritura organizacional', async () => {
+    const res = await guardar({ settings: { countryCode: ' py ', locale: 'es-py' }, scope: 'organization' })
+    expect(res.status).toBe(200)
+    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ country_code: 'PY', locale: 'es-PY' })
+  })
+
+  it('rechaza país malformado antes de escribir', async () => {
+    const res = await guardar({ settings: { countryCode: 'P1' }, scope: 'organization' })
+    expect(res.status).toBe(400)
+    expect(estado.escrituras).toHaveLength(0)
+  })
+
+  it('rechaza locale inválido antes de escribir', async () => {
+    const res = await guardar({ settings: { locale: 'not a locale' }, scope: 'organization' })
+    expect(res.status).toBe(400)
+    expect(estado.escrituras).toHaveLength(0)
+  })
+
+  it('preserva country_code y locale existentes al guardar otros ajustes', async () => {
+    estado.orgSettings = { ...ORG_SETTINGS, country_code: 'BR', locale: 'pt-BR' }
+    const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
+    expect(res.status).toBe(200)
+    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ country_code: 'BR', locale: 'pt-BR' })
+  })
+
+  it('no permite guardar identidad regional en los ajustes globales de plataforma', async () => {
+    estado.usuario = { id: 'u-1', role: 'super_admin', email: 'sa@plataforma.com' }
+    estado.contexto = null
+    const res = await guardar({ settings: { countryCode: 'PY' } })
+    expect(res.status).toBe(400)
+    expect(estado.escrituras).toHaveLength(0)
   })
 
   it('la respuesta devuelve los datos del comercio, no los de la plataforma', async () => {
