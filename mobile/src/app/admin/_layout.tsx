@@ -29,7 +29,7 @@ function AdminArea() {
 
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <AdminHeader />
+      {allowed && <AdminHeader />}
       <View style={styles.flex}>
         {loading && !data ? (
           <View style={styles.center}>
