@@ -8,9 +8,17 @@ import { apiFetch } from '@/lib/api';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { hasNativePanelSection, iconFor, panelRoute, usePanel } from '@/lib/panel';
+import { fetchProducts } from '@/lib/products';
+import { fetchQuotes } from '@/lib/quotes';
+import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 
 /** Lo que devuelve /api/dashboard/summary: el mismo resumen del dashboard web. */
 type Summary = {
+  organizationId: string;
+  branchId: string | null;
+  timeZone: string;
+  today: string;
+  generatedAt: string;
   salesToday: { count: number; amount: number; trend: number[] };
   activeOrders: number;
   customersNew: { count: number };
@@ -20,11 +28,15 @@ type Summary = {
 };
 
 const ACTIVITY_ICONS = { sale: 'cart-outline', repair: 'construct-outline', customer: 'person-add-outline' } as const;
-const WEEKDAYS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
-
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? 'Buen día' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+}
+
+function trendDayLabel(today: string, index: number, timeZone: string) {
+  const [year, month, day] = today.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day - 6 + index, 12));
+  return new Intl.DateTimeFormat('es-PY', { weekday: 'narrow', timeZone }).format(date).replace('.', '').toLocaleUpperCase('es-PY');
 }
 
 function timeAgo(iso: string) {
@@ -38,23 +50,34 @@ function timeAgo(iso: string) {
 export default function PanelOverview() {
   const colors = usePalette();
   const { data: panel, error: panelError, reload: reloadPanel, findItem } = usePanel();
-  const [lastSuccess, setLastSuccess] = useState<Date | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [scopedError, setScopedError] = useState<{ scope: string; message: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [workshopMetrics, setWorkshopMetrics] = useState<{ scope: string; quotes: number | null; inventory: number | null; error: string | null }>({ scope: '', quotes: null, inventory: null, error: null });
+  const [branchId, setBranchId] = useState(() => getPrivateCacheContext().branchId);
+  const organizationId = panel?.organization.id ?? null;
+  const scopeKey = JSON.stringify([panel?.user.email ?? null, organizationId, branchId]);
+  const has = useCallback((key: string) => Boolean(findItem(key)), [findItem]);
+  const error = scopedError?.scope === scopeKey ? scopedError.message : null;
+
+  useEffect(() => subscribePrivateCacheContext((next) => setBranchId(next.branchId)), []);
 
   useEffect(() => {
+    if (!organizationId) {
+      return undefined;
+    }
+
     let active = true;
     apiFetch<Summary>('/api/dashboard/summary')
       .then((next) => {
         if (!active) return;
+        if (next.organizationId !== organizationId || next.branchId !== branchId) return;
         setSummary(next);
-        setLastSuccess(new Date());
-        setError(null);
+        setScopedError(null);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar el resumen.');
+        if (active) setScopedError({ scope: scopeKey, message: err instanceof Error ? err.message : 'No se pudo cargar el resumen.' });
       })
       .finally(() => {
         if (active) setRefreshing(false);
@@ -62,7 +85,36 @@ export default function PanelOverview() {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, organizationId, branchId, scopeKey]);
+
+  useEffect(() => {
+    if (!organizationId || (!has('quotes') && !has('repair-inventory'))) return undefined;
+    let active = true;
+    const privateScope = getPrivateCacheContext();
+    const quotesRequest = has('quotes')
+      ? fetchQuotes({ page: 1, status: 'open' })
+      : Promise.resolve(null);
+    const inventoryRequest = has('repair-inventory')
+      ? fetchProducts({ page: 1, stock: 'low_stock', catalogKind: 'physical' })
+      : Promise.resolve(null);
+
+    Promise.all([quotesRequest, inventoryRequest])
+      .then(([quotes, inventory]) => {
+        if (!active || !isPrivateCacheSnapshotCompatible(privateScope)) return;
+        setWorkshopMetrics({
+          scope: scopeKey,
+          quotes: quotes?.available ? quotes.pagination.total : null,
+          inventory: inventory?.total ?? null,
+          error: null,
+        });
+      })
+      .catch((err) => {
+        if (!active || !isPrivateCacheSnapshotCompatible(privateScope)) return;
+        setWorkshopMetrics({ scope: scopeKey, quotes: null, inventory: null, error: err instanceof Error ? err.message : 'No se pudieron cargar los indicadores del taller.' });
+      });
+
+    return () => { active = false; };
+  }, [attempt, organizationId, branchId, scopeKey, has]);
 
   const refresh = useCallback(() => {
     setRefreshing(true);
@@ -70,20 +122,22 @@ export default function PanelOverview() {
     setAttempt((n) => n + 1);
   }, [reloadPanel]);
 
-  const has = (key: string) => Boolean(findItem(key));
   const firstName = (panel?.user.name ?? '').split(' ')[0];
-  const quick = (panel?.groups.flatMap((group) => group.items) ?? []).filter((item) => item.key !== 'overview').slice(0, 8);
-  const trend = summary?.salesToday.trend ?? [];
+  const quick = (panel?.groups.flatMap((group) => group.items) ?? []).filter((item) => !['overview', 'quotes', 'repair-inventory'].includes(item.key)).slice(0, 8);
+  const visibleSummary = summary?.organizationId === organizationId && summary.branchId === branchId ? summary : null;
+  const visibleWorkshopMetrics = workshopMetrics.scope === scopeKey ? workshopMetrics : null;
+  const showWorkshopSection = has('quotes') || has('repair-inventory');
+  const workshopMetricsLoading = showWorkshopSection && Boolean(organizationId) && !visibleWorkshopMetrics;
+  const trend = visibleSummary?.salesToday.trend ?? [];
   const maxTrend = Math.max(1, ...trend);
-  const today = new Date().getDay();
 
-  const kpis = summary
+  const kpis = visibleSummary
     ? [
-        { key: 'sales', show: true, icon: 'cash-outline' as const, label: 'Ventas de hoy', value: formatGs(summary.salesToday.amount), help: `${summary.salesToday.count} ${summary.salesToday.count === 1 ? 'venta' : 'ventas'}`, route: has('pos') ? panelRoute('pos') : null, tone: '#16A34A' },
-        { key: 'orders', show: has('orders'), icon: 'clipboard-outline' as const, label: 'Pedidos activos', value: String(summary.activeOrders), help: 'Por preparar o entregar', route: panelRoute('orders'), tone: '#2563EB' },
-        { key: 'repairs', show: has('repairs'), icon: 'construct-outline' as const, label: 'Reparaciones', value: String(summary.repairs.active), help: `${summary.repairs.ready.count} listas para entregar`, route: panelRoute('repairs'), tone: '#7C3AED' },
-        { key: 'stock', show: has('products'), icon: 'alert-circle-outline' as const, label: 'Stock bajo', value: String(summary.catalog.lowStock), help: `de ${summary.catalog.total} en catálogo`, route: panelRoute('products'), tone: summary.catalog.lowStock > 0 ? '#DC2626' : '#64748B' },
-        { key: 'customers', show: has('customers'), icon: 'people-outline' as const, label: 'Clientes nuevos', value: String(summary.customersNew.count), help: 'Últimos 7 días', route: panelRoute('customers'), tone: '#0891B2' },
+        { key: 'sales', show: has('pos'), icon: 'cash-outline' as const, label: 'Ventas de hoy', value: formatGs(visibleSummary.salesToday.amount), help: `${visibleSummary.salesToday.count} ${visibleSummary.salesToday.count === 1 ? 'venta' : 'ventas'}`, route: has('pos') ? panelRoute('pos') : null, tone: '#16A34A' },
+        { key: 'orders', show: has('orders'), icon: 'clipboard-outline' as const, label: 'Pedidos activos', value: String(visibleSummary.activeOrders), help: 'Por preparar o entregar', route: panelRoute('orders'), tone: '#2563EB' },
+        { key: 'repairs', show: has('repairs'), icon: 'construct-outline' as const, label: 'Reparaciones', value: String(visibleSummary.repairs.active), help: `${visibleSummary.repairs.ready.count} listas para entregar`, route: panelRoute('repairs'), tone: '#7C3AED' },
+        { key: 'stock', show: has('products'), icon: 'alert-circle-outline' as const, label: 'Stock bajo', value: String(visibleSummary.catalog.lowStock), help: `de ${visibleSummary.catalog.total} en catálogo`, route: panelRoute('products'), tone: visibleSummary.catalog.lowStock > 0 ? '#DC2626' : '#64748B' },
+        { key: 'customers', show: has('customers'), icon: 'people-outline' as const, label: 'Clientes nuevos', value: String(visibleSummary.customersNew.count), help: 'Últimos 7 días', route: panelRoute('customers'), tone: '#0891B2' },
       ].filter((kpi) => kpi.show)
     : [];
 
@@ -111,35 +165,35 @@ export default function PanelOverview() {
 
       <FirstStepsCard />
 
-      {!summary && !error && (
+      {!visibleSummary && !error && (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.primary} />
         </View>
       )}
       {error && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={{ color: palette.danger, fontWeight: '600' }}>{error}{summary ? ' Se muestran los últimos datos disponibles.' : ''}</Text>
+          <Text style={{ color: palette.danger, fontWeight: '600' }}>{error}{visibleSummary ? ' Se muestran los últimos datos disponibles.' : ''}</Text>
           <Pressable onPress={refresh} style={[styles.outlineBtn, { borderColor: colors.border }]}>
             <Text style={{ color: colors.text, fontWeight: '700' }}>Reintentar</Text>
           </Pressable>
         </View>
       )}
 
-      {summary && (
+      {visibleSummary && (
         <>
           {/* Ventas de la semana */}
           <View style={[styles.hero, { backgroundColor: palette.primary }]}>
             <Text style={styles.heroLabel}>Ventas de hoy</Text>
-            <Text style={styles.heroValue}>{formatGs(summary.salesToday.amount)}</Text>
+            <Text style={styles.heroValue}>{formatGs(visibleSummary.salesToday.amount)}</Text>
             <Text style={styles.heroHelp}>
-              {summary.salesToday.count} {summary.salesToday.count === 1 ? 'venta cobrada' : 'ventas cobradas'}
+              {visibleSummary.salesToday.count} {visibleSummary.salesToday.count === 1 ? 'venta cobrada' : 'ventas cobradas'}
             </Text>
             {trend.length === 7 && (
               <View style={styles.bars} accessibilityLabel="Ventas de los últimos 7 días">
                 {trend.map((value, index) => (
                   <View key={index} style={styles.barCol}>
                     <View style={[styles.bar, { height: 6 + (value / maxTrend) * 44, opacity: index === 6 ? 1 : 0.55 }]} />
-                    <Text style={styles.barDay}>{WEEKDAYS[(today - 6 + index + 7) % 7]}</Text>
+                    <Text style={styles.barDay}>{trendDayLabel(visibleSummary.today, index, visibleSummary.timeZone)}</Text>
                   </View>
                 ))}
               </View>
@@ -166,7 +220,41 @@ export default function PanelOverview() {
         </>
       )}
 
-      {lastSuccess && <Text style={{color:colors.muted}}>Última actualización: {lastSuccess.toLocaleTimeString('es-PY')}</Text>}
+      {visibleSummary && <Text style={{color:colors.muted}}>Última actualización: {new Date(visibleSummary.generatedAt).toLocaleTimeString('es-PY')}</Text>}
+      {showWorkshopSection && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Taller</Text>
+          <View style={styles.workshopGrid}>
+            {has('quotes') && (
+              <Pressable
+                onPress={() => router.navigate(panelRoute('quotes') as never)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.workshopCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.82 : 1 }]}>
+                <View style={[styles.workshopIcon, { backgroundColor: '#2563EB18' }]}>
+                  <Ionicons name="document-text-outline" size={19} color="#2563EB" />
+                </View>
+                <Text style={[styles.workshopValue, { color: colors.text }]}>{workshopMetricsLoading ? '…' : visibleWorkshopMetrics?.quotes ?? '—'}</Text>
+                <Text style={[styles.workshopLabel, { color: colors.text }]}>Presupuestos en curso</Text>
+                <Text style={[styles.kpiHelp, { color: colors.muted }]}>Borradores y enviados</Text>
+              </Pressable>
+            )}
+            {has('repair-inventory') && (
+              <Pressable
+                onPress={() => router.navigate(panelRoute('repair-inventory') as never)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.workshopCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.82 : 1 }]}>
+                <View style={[styles.workshopIcon, { backgroundColor: '#D9770618' }]}>
+                  <Ionicons name="file-tray-stacked-outline" size={19} color="#D97706" />
+                </View>
+                <Text style={[styles.workshopValue, { color: colors.text }]}>{workshopMetricsLoading ? '…' : visibleWorkshopMetrics?.inventory ?? '—'}</Text>
+                <Text style={[styles.workshopLabel, { color: colors.text }]}>Repuestos con alerta</Text>
+                <Text style={[styles.kpiHelp, { color: colors.muted }]}>Bajo mínimo o sin stock</Text>
+              </Pressable>
+            )}
+          </View>
+          {visibleWorkshopMetrics?.error ? <Text accessibilityRole="alert" style={{ color: palette.danger, fontSize: 12 }}>{visibleWorkshopMetrics.error}</Text> : null}
+        </View>
+      )}
       {/* Accesos rápidos: las secciones que el usuario ve en la web */}
       {quick.length > 0 && (
         <View style={styles.section}>
@@ -188,14 +276,14 @@ export default function PanelOverview() {
       )}
 
       {/* Actividad reciente */}
-      {summary && (
+      {visibleSummary && (
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Actividad reciente</Text>
           <View style={[styles.card, styles.noPad, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {summary.recentActivity.length === 0 ? (
+            {visibleSummary.recentActivity.length === 0 ? (
               <Text style={[styles.empty, { color: colors.muted }]}>Sin movimientos en las últimas 72 horas.</Text>
             ) : (
-              summary.recentActivity.map((item, index) => (
+              visibleSummary.recentActivity.map((item, index) => (
                 <View key={item.id} style={[styles.activity, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border }]}>
                   <View style={[styles.activityIcon, { backgroundColor: colors.background }]}>
                     <Ionicons name={ACTIVITY_ICONS[item.type]} size={16} color={colors.text} />
@@ -243,6 +331,11 @@ const styles = StyleSheet.create({
   kpiHelp: { fontSize: 12 },
   section: { gap: 10 },
   sectionTitle: { fontSize: 17, fontWeight: '800' },
+  workshopGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  workshopCard: { width: '47.5%', flexGrow: 1, borderWidth: 1, borderRadius: 16, padding: 14, gap: 2 },
+  workshopIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  workshopValue: { fontSize: 24, fontWeight: '800' },
+  workshopLabel: { fontSize: 13, fontWeight: '700' },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 },
   quick: { width: '25%', alignItems: 'center', gap: 6 },
   quickIcon: { width: 54, height: 54, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
