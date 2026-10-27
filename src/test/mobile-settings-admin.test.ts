@@ -44,6 +44,7 @@ describe('lectura: la fila del servidor se lleva a los nombres que acepta el gua
     expect(saved).toEqual({
       companyName: 'Mi Tienda', companyRuc: '80000000-1', companyEmail: 'hola@tienda.test', companyPhone: '0981123456',
       companyAddress: 'Calle 1', city: 'Asunción', currency: 'PYG', taxRate: 10, timeZone: 'America/Asuncion', language: 'es',
+      countryCode: null, locale: null, needsCountryConfirmation: true,
     })
   })
 
@@ -51,6 +52,21 @@ describe('lectura: la fila del servidor se lleva a los nombres que acepta el gua
     const empty = fromSharedRow({ currency: 'XXX', language: 'fr', tax_rate: 'abc' })
     expect(empty).toMatchObject({ companyName: '', currency: 'PYG', language: 'es', taxRate: 10, timeZone: 'America/Asuncion' })
     expect(fromSharedRow(null).companyRuc).toBe('')
+    expect(fromSharedRow({ country_code: null, locale: null, currency: 'BRL', time_zone: 'America/Sao_Paulo' })).toMatchObject({
+      countryCode: null,
+      locale: null,
+      needsCountryConfirmation: true,
+      currency: 'BRL',
+      timeZone: 'America/Sao_Paulo',
+    })
+  })
+
+  it('mapea identidad regional confirmada sin inferirla de la moneda o zona', () => {
+    expect(fromSharedRow({ country_code: 'BR', locale: 'pt-BR', currency: 'BRL', time_zone: 'America/Sao_Paulo' })).toMatchObject({
+      countryCode: 'BR',
+      locale: 'pt-BR',
+      needsCountryConfirmation: false,
+    })
   })
 
   it('no trae campos de la plataforma ni de seguridad', () => {
@@ -124,7 +140,7 @@ describe('números como se escriben en Paraguay', () => {
 
 describe('tipos de cambio', () => {
   it('muestra el tipo de cambio en la moneda local', () => {
-    expect(describeRate({ currency: 'USD', rate: 7300 }, 'PYG')).toBe('1 USD = Gs. 7.300')
+    expect(describeRate({ currency: 'USD', rate: 7300 }, 'PYG')).toBe('1 USD = ₲ 7.300')
   })
 
   it('no ofrece la moneda local ni las ya cargadas', () => {

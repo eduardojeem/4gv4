@@ -1602,6 +1602,8 @@ export interface Database {
           display_name: string | null
           currency: string
           timezone: string
+          country_code: string | null
+          locale: string | null
           branding: Json
           modules: Json
           repair_receipt_settings: Json | null
@@ -1614,6 +1616,8 @@ export interface Database {
           display_name?: string | null
           currency: string
           timezone: string
+          country_code?: string | null
+          locale?: string | null
           branding: Json
           modules: Json
           repair_receipt_settings?: Json | null
@@ -1626,6 +1630,8 @@ export interface Database {
           display_name?: string | null
           currency?: string
           timezone?: string
+          country_code?: string | null
+          locale?: string | null
           branding?: Json
           modules?: Json
           repair_receipt_settings?: Json | null

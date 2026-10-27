@@ -86,6 +86,7 @@ export interface CheckoutModalProps {
   // Cart & Calculations
   cart: CartItem[]
   onUpdateQuantity?: (id: string, quantity: number) => void
+  onRemoveItem?: (id: string) => void
   cartCalculations: {
     subtotal: number
     subtotalAfterAllDiscounts: number
@@ -138,6 +139,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   supabaseStatusToLabel,
   cart,
   onUpdateQuantity,
+  onRemoveItem,
   cartCalculations,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
@@ -255,11 +257,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             : 'Sin seleccionar'
 
   const confirmPendingSale = React.useCallback(() => {
-    if (paymentStatus === 'processing' || confirmationSubmittedRef.current || !pendingConfirmation) return
+    if (cart.length === 0 || paymentStatus === 'processing' || confirmationSubmittedRef.current || !pendingConfirmation) return
     confirmationSubmittedRef.current = true
     if (pendingConfirmation === 'mixed') processMixedPayment()
     else processSale()
-  }, [paymentStatus, pendingConfirmation, processMixedPayment, processSale])
+  }, [cart.length, paymentStatus, pendingConfirmation, processMixedPayment, processSale])
 
   // Mientras se procesa el cobro no se puede cambiar que reparaciones van en la
   // venta: antes el clic seguia funcionando aunque el teclado estaba bloqueado.
@@ -274,9 +276,10 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }
 
   const openSaleConfirmation = React.useCallback((kind: 'sale' | 'mixed') => {
+    if (cart.length === 0 || paymentStatus === 'processing') return
     confirmationSubmittedRef.current = false
     setPendingConfirmation(kind)
-  }, [])
+  }, [cart.length, paymentStatus])
 
   return (
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => {
@@ -348,8 +351,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 max-sm:pb-44 sm:px-6">
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
-          <div className="space-y-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-950 p-5 md:p-6">
+          <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+          <div className="min-w-0 space-y-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-950 p-5 md:p-6">
             <div className="flex items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
                 <UserRound className="h-4 w-4" aria-hidden="true" />
@@ -650,7 +653,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             </details>
           </div>
 
-          <div className="rounded-xl border bg-card/70 p-4 md:sticky md:top-0 md:p-5">
+          <div className="min-w-0 rounded-xl border bg-card/70 p-4 md:p-5">
             <div className="mb-4 flex items-center gap-3 border-b pb-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
                 <ReceiptText className="h-4 w-4" aria-hidden="true" />
@@ -662,6 +665,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             </div>
             <SaleSummary
               onUpdateQuantity={onUpdateQuantity}
+              onRemoveItem={onRemoveItem}
               cart={cart}
               cartCalculations={cartCalculations}
               isWholesale={isWholesale}
@@ -675,10 +679,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <>
                   {paymentMethod === 'credit' ? (
                     <Button
-                      className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
+                      className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                       onClick={() => openSaleConfirmation('sale')}
                       disabled={
                         !isRegisterOpen ||
+                        cart.length === 0 ||
                         paymentStatus === 'processing' ||
                         !activeCustomer ||
                         !canUseCredit || !!initialPaymentError
@@ -703,10 +708,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                     </Button>
                   ) : (
                     <Button
-                      className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
+                      className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                       onClick={() => openSaleConfirmation('sale')}
                       disabled={
                         !isRegisterOpen ||
+                        cart.length === 0 ||
                         paymentStatus === 'processing' ||
                         !paymentMethod ||
                         (paymentMethod === 'cash' && cashReceived < amountDue) ||
@@ -727,9 +733,9 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 </>
               ) : (
                 <Button
-                  className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
+                  className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                   onClick={() => openSaleConfirmation('mixed')}
-                  disabled={!isRegisterOpen || paymentStatus === 'processing' || !mixedPaymentValidation.valid || !!initialPaymentError}
+                  disabled={!isRegisterOpen || cart.length === 0 || paymentStatus === 'processing' || !mixedPaymentValidation.valid || !!initialPaymentError}
                 >
                   {paymentStatus === 'processing' ? (
                     <span className="flex items-center justify-center gap-2">

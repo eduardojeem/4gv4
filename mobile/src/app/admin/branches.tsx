@@ -17,11 +17,14 @@ import {
 import { createBranch, fetchBranches, updateBranch, type BranchItem } from '@/lib/admin';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
+import { usePanel } from '@/lib/panel';
 
 type Filter = 'all' | 'active' | 'inactive';
 
 export default function BranchesAdminScreen() {
   const colors = usePalette();
+  const { data: panel } = usePanel();
+  const organizationId = panel?.organization.id;
   const [branches, setBranches] = useState<BranchItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,7 +47,7 @@ export default function BranchesAdminScreen() {
 
   useEffect(() => {
     let active = true;
-    fetchBranches()
+    fetchBranches(organizationId)
       .then((data) => {
         if (!active) return;
         setBranches(data);
@@ -55,7 +58,7 @@ export default function BranchesAdminScreen() {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, organizationId]);
 
   const reload = useCallback(() => {
     setRefreshing(true);
@@ -108,6 +111,7 @@ export default function BranchesAdminScreen() {
         });
       } else {
         await createBranch({
+          organization_id: organizationId,
           name: formName.trim(),
           code: formCode.trim() || undefined,
           address: formAddress.trim() || undefined,

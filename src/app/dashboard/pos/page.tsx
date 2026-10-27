@@ -738,7 +738,8 @@ function POSPageContent() {
   const cartCalculations = useMemo(() => ({
     subtotal: unifiedCalculations.subtotalNonWholesale,
     subtotalAfterAllDiscounts: unifiedCalculations.subtotalApplied,
-    generalDiscount: generalDiscount,
+    // Importe, no porcentaje: el resumen lo muestra como «Descuento (10%): -Gs. …».
+    generalDiscount: unifiedCalculations.generalDiscountAmount,
     wholesaleDiscount: unifiedCalculations.wholesaleDiscountAmount,
     wholesaleDiscountRate: WHOLESALE_DISCOUNT_RATE,
     tax: unifiedCalculations.tax,
@@ -754,7 +755,7 @@ function POSPageContent() {
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
     totalItemCount: unifiedCalculations.totalItemCount
-  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid, roundToTwo])
+  }), [unifiedCalculations, cashReceived, getTotalPaid, roundToTwo])
 
   // Aplicación automática de descuento VIP después de cálculos del carrito
   useEffect(() => {
@@ -2616,6 +2617,7 @@ function POSPageContent() {
       {/* Modal de checkout */}
       <CheckoutModal
         onUpdateQuantity={updateQuantity}
+        onRemoveItem={handleRemoveItem}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
         customerRepairs={selectedRepairs}

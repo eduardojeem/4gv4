@@ -111,8 +111,8 @@ describe('el guardado del onboarding', () => {
 
   it('no deja la organización sin módulos cuando el plan no habilita los sugeridos', () => {
     // Una lista vacía significa «ninguno», no «todos».
-    expect(ruta).toContain('const applySuggestedModules = !alreadyCompleted && suggestedModules.length > 0')
-    expect(ruta).toContain('const enabledModules = applySuggestedModules ? suggestedModules : null')
+    expect(ruta).toContain('const applySuggestedModules = !alreadyCompleted && (suggestedModules.length > 0 || (selectedFromOnboarding?.length ?? 0) > 0)')
+    expect(ruta).toContain('const enabledModules = applySuggestedModules ? (selectedFromOnboarding?.length ? selectedFromOnboarding : suggestedModules) : null')
   })
 
   it('la regla de módulos efectivos sigue siendo la que obliga a este cuidado', async () => {

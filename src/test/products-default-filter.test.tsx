@@ -201,6 +201,37 @@ describe('cálculo de stock y preservación de estado al alternar visibilidad', 
     expect(getStockStatus(productoConVariantes)).toBe('in_stock')
   })
 
+  it('producto con stock agregado alto muestra alertas de variantes según mínimo individual', async () => {
+    const { getStockStatus, isLowStock, isOutOfStock } = await import('@/lib/products-dashboard-utils')
+    const productoConVariantes = producto({
+      stock_quantity: 20,
+      min_stock: 1,
+      variants: [
+        { id: 'v1', stock_quantity: 0, min_stock: 3, is_active: true } as unknown,
+        { id: 'v2', stock_quantity: 2, min_stock: 3, is_active: true } as unknown,
+        { id: 'v3', stock_quantity: 10, min_stock: 3, is_active: true } as unknown,
+        { id: 'v4', stock_quantity: 8, min_stock: 3, is_active: true } as unknown,
+      ],
+    })
+
+    expect(isOutOfStock(productoConVariantes)).toBe(false)
+    expect(isLowStock(productoConVariantes)).toBe(true)
+    expect(getStockStatus(productoConVariantes)).toBe('low_stock')
+  })
+
+  it('ignora variantes inactivas para el estado y conserva el umbral cero', async () => {
+    const { isLowStock, isOutOfStock } = await import('@/lib/products-dashboard-utils')
+    const product = producto({
+      stock_quantity: 99,
+      variants: [
+        { id: 'inactive', stock_quantity: 0, min_stock: 5, is_active: false } as unknown,
+        { id: 'active', stock_quantity: 1, min_stock: 0, is_active: true } as unknown,
+      ],
+    })
+    expect(isLowStock(product)).toBe(false)
+    expect(isOutOfStock(product)).toBe(false)
+  })
+
   it('el hook useProductsSupabase preserva stock y variantes al actualizar visibilidad', () => {
     const hook = leer('src/hooks/useProductsSupabase.ts')
     expect(hook).toContain('isStockTouched')

@@ -7,6 +7,8 @@ export type PosProductRow = {
   barcode?: string | null
   sale_price: number
   wholesale_price?: number | null
+  offer_price?: number | string | null
+  has_offer?: boolean | null
   stock_quantity: number
   category_id: string | null
   categories?: { name: string } | Array<{ name: string }> | null
@@ -60,6 +62,9 @@ export function mapProductForPOS(row: PosProductRow): Product {
     barcode: row.barcode || null,
     sale_price: Number(row.sale_price),
     wholesale_price: row.wholesale_price == null ? null : Number(row.wholesale_price),
+    // Sin estos dos el POS cobraba el precio de lista aunque la tienda mostrara la oferta.
+    offer_price: row.offer_price == null ? undefined : Number(row.offer_price),
+    has_offer: row.has_offer === true,
     stock_quantity: stockQuantity,
     category_id: row.category_id,
     category: category

@@ -3,6 +3,8 @@ import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { logger } from '@/lib/logger'
+import { resolveActiveAdminOrganizationId } from '@/lib/admin/active-organization'
+import { findAdminOverviewReadIssue } from '@/lib/mobile/admin-overview-completeness'
 
 /** Medianoche de hoy y día 1 del mes en Paraguay (UTC−3), como instantes ISO. */
 function businessBoundaries(now = new Date()) {
@@ -20,13 +22,24 @@ const SESSION_STATUS: Record<string, 'open' | 'suspended' | 'blocked'> = {
   bloqueada: 'blocked',
 }
 
+const READ_LIMITS = {
+  sales: 20_000,
+  sessions: 50,
+  registers: 5_000,
+  branches: 5_000,
+  products: 5_000,
+  members: 5_000,
+  movements: 20_000,
+} as const
+
 /**
  * Resumen de Administración para la app móvil (lo que /admin calcula en el
  * navegador): ventas del día y del mes, cajas abiertas de todas las
  * sucursales con su estado, stock bajo, equipo y pendientes de atención.
  */
-export const GET = withAdminAuth(async (_request, { organizationId }) => {
-  if (!organizationId) {
+export const GET = withAdminAuth(async (_request, context) => {
+  const scopedOrganizationId = await resolveActiveAdminOrganizationId(context)
+  if (!scopedOrganizationId) {
     return NextResponse.json({ success: false, error: 'Elegí una organización para ver su administración.' }, { status: 400 })
   }
   try {
@@ -34,23 +47,38 @@ export const GET = withAdminAuth(async (_request, { organizationId }) => {
     const { today, month } = businessBoundaries()
 
     const [sales, sessions, registers, branches, products, members, reviews, cases] = await Promise.all([
-      admin.from('sales').select('total_amount, status, created_at').eq('organization_id', organizationId).gte('created_at', month).limit(20000),
+      admin.from('sales').select('total_amount, status, created_at', { count: 'exact' }).eq('organization_id', scopedOrganizationId).gte('created_at', month).limit(READ_LIMITS.sales),
       admin
         .from('cash_closures')
-        .select('id, register_id, branch_id, opening_balance, created_at, last_activity_at, status, opened_by')
-        .eq('organization_id', organizationId)
+        .select('id, register_id, branch_id, opening_balance, created_at, last_activity_at, status, opened_by', { count: 'exact' })
+        .eq('organization_id', scopedOrganizationId)
         .is('date', null)
         .order('created_at', { ascending: false })
-        .limit(50),
-      admin.from('cash_registers').select('id, name').eq('organization_id', organizationId),
-      admin.from('branches').select('id, name').eq('organization_id', organizationId),
-      admin.from('products').select('id, name, stock_quantity, min_stock').eq('organization_id', organizationId).eq('is_active', true).limit(5000),
-      admin.from('organization_members').select('user_id, role, status').eq('organization_id', organizationId),
-      admin.from('organization_reviews').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).eq('moderation_status', 'pending'),
-      admin.from('after_sales_cases').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId).in('status', ['open', 'abierto', 'pending']),
+        .limit(READ_LIMITS.sessions),
+      admin.from('cash_registers').select('id, name', { count: 'exact' }).eq('organization_id', scopedOrganizationId).limit(READ_LIMITS.registers),
+      admin.from('branches').select('id, name', { count: 'exact' }).eq('organization_id', scopedOrganizationId).limit(READ_LIMITS.branches),
+      admin.from('products').select('id, name, stock_quantity, min_stock', { count: 'exact' }).eq('organization_id', scopedOrganizationId).eq('is_active', true).limit(READ_LIMITS.products),
+      admin.from('organization_members').select('user_id, role, status', { count: 'exact' }).eq('organization_id', scopedOrganizationId).limit(READ_LIMITS.members),
+      admin.from('organization_reviews').select('id', { count: 'exact', head: true }).eq('organization_id', scopedOrganizationId).eq('moderation_status', 'pending'),
+      admin.from('after_sales_cases').select('id', { count: 'exact', head: true }).eq('organization_id', scopedOrganizationId).in('status', ['open', 'abierto', 'pending']),
     ])
-    if (sales.error) throw sales.error
-    if (sessions.error) throw sessions.error
+    const issue = findAdminOverviewReadIssue([
+      { query: 'sales', error: sales.error, count: sales.count, returnedRows: sales.data?.length ?? 0, limit: READ_LIMITS.sales },
+      { query: 'cash_closures', error: sessions.error, count: sessions.count, returnedRows: sessions.data?.length ?? 0, limit: READ_LIMITS.sessions },
+      { query: 'cash_registers', error: registers.error, count: registers.count, returnedRows: registers.data?.length ?? 0, limit: READ_LIMITS.registers },
+      { query: 'branches', error: branches.error, count: branches.count, returnedRows: branches.data?.length ?? 0, limit: READ_LIMITS.branches },
+      { query: 'products', error: products.error, count: products.count, returnedRows: products.data?.length ?? 0, limit: READ_LIMITS.products },
+      { query: 'organization_members', error: members.error, count: members.count, returnedRows: members.data?.length ?? 0, limit: READ_LIMITS.members },
+      { query: 'organization_reviews', error: reviews.error, count: reviews.count },
+      { query: 'after_sales_cases', error: cases.error, count: cases.count },
+    ])
+    if (issue) {
+      logger.error('[mobile-admin-overview] Resumen incompleto', { query: issue.query, reason: issue.reason })
+      return NextResponse.json(
+        { success: false, error: 'No se pudo completar el resumen. Actualizá para reintentar.', code: 'ADMIN_OVERVIEW_INCOMPLETE' },
+        { status: issue.reason === 'row_limit_exceeded' || issue.reason === 'result_truncated' ? 503 : 500 },
+      )
+    }
 
     const done = (sales.data ?? []).filter((sale) => isCompletedSaleStatus(sale.status))
     const sum = (rows: typeof done) => rows.reduce((total, sale) => total + (Number(sale.total_amount) || 0), 0)
@@ -63,14 +91,24 @@ export const GET = withAdminAuth(async (_request, { organizationId }) => {
     const sessionIds = (sessions.data ?? []).map((row) => String(row.id))
     const salesBySession = new Map<string, { total: number; count: number }>()
     if (sessionIds.length) {
-      const { data: movements } = await admin
+      const movementsResult = await admin
         .from('cash_movements')
-        .select('session_id, type, amount')
-        .eq('organization_id', organizationId)
+        .select('session_id, type, amount', { count: 'exact' })
+        .eq('organization_id', scopedOrganizationId)
         .in('session_id', sessionIds)
         .in('type', ['sale', 'venta'])
-        .limit(20000)
-      for (const row of movements ?? []) {
+        .limit(READ_LIMITS.movements)
+      const movementIssue = findAdminOverviewReadIssue([
+        { query: 'cash_movements', error: movementsResult.error, count: movementsResult.count, returnedRows: movementsResult.data?.length ?? 0, limit: READ_LIMITS.movements },
+      ])
+      if (movementIssue) {
+        logger.error('[mobile-admin-overview] Resumen incompleto', { query: movementIssue.query, reason: movementIssue.reason })
+        return NextResponse.json(
+          { success: false, error: 'No se pudo completar el resumen. Actualizá para reintentar.', code: 'ADMIN_OVERVIEW_INCOMPLETE' },
+          { status: movementIssue.reason === 'row_limit_exceeded' || movementIssue.reason === 'result_truncated' ? 503 : 500 },
+        )
+      }
+      for (const row of movementsResult.data ?? []) {
         const entry = salesBySession.get(String(row.session_id)) ?? { total: 0, count: 0 }
         entry.total += Number(row.amount) || 0
         entry.count += 1

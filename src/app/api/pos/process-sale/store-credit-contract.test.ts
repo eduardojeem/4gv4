@@ -80,7 +80,10 @@ describe('atomic POS store-credit contract', () => {
     expect(modal).toContain('Resumen final')
     expect(modal).toContain('Opciones adicionales')
     expect(modal).toContain('data-testid="pos-checkout-footer"')
-    expect(methods).toContain('grid-cols-2 sm:grid-cols-4')
+    // Dos columnas fijas: en la columna angosta del checkout de escritorio,
+    // cuatro cortaban los nombres de los medios de pago.
+    expect(methods).toContain('grid min-w-0 grid-cols-2 gap-2')
+    expect(methods).not.toContain('sm:grid-cols-4')
   })
 
   it('keeps customer selection compact after choosing a customer', () => {

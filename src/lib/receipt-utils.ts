@@ -69,6 +69,14 @@ export interface ReceiptPaymentSummary {
   change: number | null
   financedPrincipal: number
   financedTotal: number
+  /** Saldo a favor aplicado: paga parte de la venta pero no es dinero que entró hoy. */
+  storeCreditApplied: number
+  /**
+   * Total de la operación con la financiación: lo pagado al contado (incluido el
+   * saldo a favor) más el total financiado. La primera cuota cobrada al emitir
+   * ya está dentro del financiado: sumarla otra vez inflaba el total.
+   */
+  totalWithFinancing: number
   installments: NonNullable<ReceiptData['creditInfo']>['installments']
   firstDueDate: string | null
   collectedToday: number
@@ -85,9 +93,13 @@ export function buildReceiptPaymentSummary(receiptData: ReceiptData): ReceiptPay
     .reduce((total, payment) => total + payment.amount, 0)
     + (firstPayment?.method === 'cash' ? firstPayment.amount : 0)
   const nonCashPaid = immediatePayments
-    .filter(payment => payment.method !== 'cash')
+    .filter(payment => payment.method !== 'cash' && payment.method !== 'store_credit')
     .reduce((total, payment) => total + payment.amount, 0)
     + (firstPayment && firstPayment.method !== 'cash' ? firstPayment.amount : 0)
+  const storeCreditApplied = immediatePayments
+    .filter(payment => payment.method === 'store_credit')
+    .reduce((total, payment) => total + payment.amount, 0)
+  const paidUpfront = immediatePayments.reduce((total, payment) => total + payment.amount, 0)
   const collectedToday = cashPaid + nonCashPaid
   const financedBalance = creditInfo
     ? creditInfo.remainingBalance ?? Math.max(0, creditInfo.financedTotal - (firstPayment?.amount || 0))
@@ -99,6 +111,8 @@ export function buildReceiptPaymentSummary(receiptData: ReceiptData): ReceiptPay
     change: !creditInfo && (receiptData.change ?? 0) > 0 ? receiptData.change! : null,
     financedPrincipal: creditInfo?.baseTotal ?? 0,
     financedTotal: creditInfo?.financedTotal ?? 0,
+    storeCreditApplied,
+    totalWithFinancing: paidUpfront + (creditInfo?.financedTotal ?? 0),
     installments: creditInfo?.installments,
     firstDueDate: creditInfo?.firstDueDate ?? null,
     collectedToday,
@@ -109,6 +123,14 @@ export function buildReceiptPaymentSummary(receiptData: ReceiptData): ReceiptPay
         ? 'COBRO PARCIAL + CRÉDITO'
         : 'CRÉDITO REGISTRADO',
   }
+}
+
+/** Vuelto entregado al cobrar la primera cuota en efectivo. */
+export function firstPaymentChange(firstPayment: NonNullable<NonNullable<ReceiptData['creditInfo']>['firstPayment']>): number {
+  if (firstPayment.method !== 'cash') return 0
+  const change = Number(firstPayment.change)
+  if (Number.isFinite(change)) return Math.max(0, change)
+  return Math.max(0, Number(firstPayment.cashReceived ?? firstPayment.amount) - firstPayment.amount)
 }
 
 // Generar número de ticket único
@@ -523,9 +545,6 @@ export const generatePrintHTML = (
 
   const creditInfo = receiptData.creditInfo
   const summary = buildReceiptPaymentSummary(receiptData)
-  const settledNow = receiptData.payments
-    .filter(payment => payment.method !== 'credit')
-    .reduce((total, payment) => total + payment.amount, 0)
   const collectedToday = summary.collectedToday
   const financedBalance = summary.financedBalance
   const paymentState = summary.paymentState
@@ -1014,7 +1033,7 @@ export const generatePrintHTML = (
             ` : ''}
             <div class="total-row final pc-total${creditInfo ? ' financed' : ''}">
                <span>${creditInfo ? 'TOTAL CON FINANCIACIÓN:' : 'TOTAL:'}</span>
-               <span>${formatCurrency(creditInfo ? settledNow + creditInfo.financedTotal : totalAmount)}</span>
+               <span>${formatCurrency(creditInfo ? summary.totalWithFinancing : totalAmount)}</span>
             </div>
           `
         })()}
@@ -1039,6 +1058,16 @@ export const generatePrintHTML = (
           <div class="payment-item change">
             <span>Cambio:</span>
             <span>${formatCurrency(receiptData.change)}</span>
+          </div>
+        ` : ''}
+        ${creditInfo?.firstPayment ? `
+          <div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 6px;">
+            <div class="payment-item"><strong>Primera cuota PAGADA:</strong><strong>${formatCurrency(creditInfo.firstPayment.amount)}</strong></div>
+            <div class="payment-item"><span>Medio:</span><span>${creditInfo.firstPayment.method === 'cash' ? 'Efectivo' : 'Transferencia'}</span></div>
+            ${creditInfo.firstPayment.method === 'transfer' ? `<div style="font-size: 9px;">${creditInfo.firstPayment.bank ? `Banco/cuenta: ${creditInfo.firstPayment.bank}. ` : ''}Referencia: ${creditInfo.firstPayment.reference ?? ''}</div>` : ''}
+            ${creditInfo.firstPayment.method === 'cash' ? `<div class="payment-item"><span>Recibido:</span><span>${formatCurrency(creditInfo.firstPayment.cashReceived ?? creditInfo.firstPayment.amount)}</span></div>` : ''}
+            ${creditInfo.firstPayment.method === 'cash' && firstPaymentChange(creditInfo.firstPayment) > 0 ? `<div class="payment-item change"><span>Vuelto de la cuota:</span><span>${formatCurrency(firstPaymentChange(creditInfo.firstPayment))}</span></div>` : ''}
+            <div style="font-size: 9px;">Este cobro cancela la cuota 1; no es un cargo adicional.</div>
           </div>
         ` : ''}
         ${creditInfo ? `
@@ -1187,7 +1216,7 @@ export function buildReceiptShareText(receiptData: ReceiptData, company: ShareCo
       ? [`Subtotal: ${formatCurrency(receiptData.subtotal)}`, `Descuento: -${formatCurrency(receiptData.totalDiscount)}`]
       : []),
     creditInfo
-      ? `*Total con financiación: ${formatCurrency(summary.collectedToday + creditInfo.financedTotal)}*`
+      ? `*Total con financiación: ${formatCurrency(summary.totalWithFinancing)}*`
       : `*Total: ${formatCurrency(receiptData.total)}*`,
   ]
 

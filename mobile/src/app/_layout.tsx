@@ -1,9 +1,10 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { BiometricLockScreen } from '@/components/biometric-lock-screen';
+import { apiFetch } from '@/lib/api';
 import { SessionProvider, useSession } from '@/lib/session';
 
 SplashScreen.preventAutoHideAsync();
@@ -21,12 +22,24 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { session, isLoading, locked } = useSession();
+  const sessionUserId = session?.user.id ?? null;
 
   // La pantalla de carga queda hasta saber si hay sesión guardada: así el
   // marketplace ya sabe si mostrar «Ingresar» o «Mi panel».
   useEffect(() => {
     if (!isLoading) SplashScreen.hide();
   }, [isLoading]);
+
+  useEffect(() => {
+    if (!sessionUserId) return;
+    let active = true;
+    apiFetch<{ setupState?: { completed?: boolean } | null }>('/api/onboarding/status')
+      .then((status) => {
+        if (active && status.setupState && !status.setupState.completed) router.replace('/onboarding' as never);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [sessionUserId]);
 
   if (isLoading) return null;
 
@@ -41,6 +54,7 @@ function RootNavigator() {
         <Stack.Screen name="offers" />
         <Stack.Screen name="saas" />
         <Stack.Protected guard={!!session}>
+          <Stack.Screen name="onboarding" />
           <Stack.Screen name="panel" />
           <Stack.Screen name="admin" />
         </Stack.Protected>

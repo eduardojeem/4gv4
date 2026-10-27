@@ -21,6 +21,7 @@ export type Product = {
   offer_price?: number | null;
   has_offer?: boolean | null;
   stock_quantity: number;
+  branch_stock_quantity?: number | null;
   min_stock?: number | null;
   max_stock?: number | null;
   images?: string[] | null;
@@ -36,6 +37,15 @@ export type Product = {
   warranty_months?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  has_variants?: boolean | null;
+  variants?: { id: string; name?: string | null; variant_name?: string | null; stock_quantity?: number | null; min_stock?: number | null; is_active?: boolean | null; stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'; current_stock?: number; minimum_stock?: number }[];
+  variant_stock_summary?: {
+    variant_count: number;
+    out_of_stock_variant_count: number;
+    low_stock_variant_count: number;
+    affected_variant_count: number;
+    total_stock: number;
+  } | null;
 };
 
 export type Category = { id: string; name: string; parent_id?: string | null; products_count?: number };
@@ -51,6 +61,7 @@ export type ProductQuery = {
   offers?: boolean;
   inactive?: boolean;
   services?: boolean;
+  catalogKind?: 'physical' | 'service';
   sort?: ProductSort;
   direction?: 'asc' | 'desc';
   page?: number;
@@ -67,6 +78,7 @@ export async function fetchProducts(params: ProductQuery) {
   if (params.stock && params.stock !== 'all') search.set('stock_status', params.stock);
   if (params.inactive) search.set('is_active', 'false');
   if (params.services) search.set('catalog_kind', 'service');
+  else if (params.catalogKind) search.set('catalog_kind', params.catalogKind);
   if (params.offers) search.set('offers', 'true');
   search.set('sort', params.sort ?? 'name');
   search.set('direction', params.direction ?? (params.sort === 'created_at' ? 'desc' : 'asc'));
@@ -206,8 +218,21 @@ export const hasActiveOffer = (product: Pick<Product, 'has_offer' | 'offer_price
 
 export type StockState = { label: string; color: string; tone: 'ok' | 'low' | 'out' | 'service' };
 
-export function stockState(product: Pick<Product, 'stock_quantity' | 'min_stock' | 'unit_measure'>): StockState {
+export function stockState(product: Pick<Product, 'stock_quantity' | 'min_stock' | 'unit_measure' | 'variant_stock_summary'>): StockState {
   if (isService(product)) return { label: 'Servicio', color: '#0891B2', tone: 'service' };
+  const variants = product.variant_stock_summary;
+  if (variants && variants.variant_count === 0) return { label: 'Sin variantes activas', color: '#64748B', tone: 'ok' };
+  if (variants && variants.variant_count > 0) {
+    if (variants.total_stock <= 0) return { label: `${variants.out_of_stock_variant_count} agotada${variants.out_of_stock_variant_count === 1 ? '' : 's'}`, color: '#DC2626', tone: 'out' };
+    if (variants.affected_variant_count > 0) {
+      const parts = [
+        variants.out_of_stock_variant_count > 0 ? `${variants.out_of_stock_variant_count} agotada${variants.out_of_stock_variant_count === 1 ? '' : 's'}` : '',
+        variants.low_stock_variant_count > 0 ? `${variants.low_stock_variant_count} baja${variants.low_stock_variant_count === 1 ? '' : 's'}` : '',
+      ].filter(Boolean);
+      return { label: parts.join(' · '), color: '#D97706', tone: 'low' };
+    }
+    return { label: `Variantes: ${variants.total_stock}`, color: '#16A34A', tone: 'ok' };
+  }
   const stock = Number(product.stock_quantity) || 0;
   if (stock <= 0) return { label: 'Sin stock', color: '#DC2626', tone: 'out' };
   if (stock <= Number(product.min_stock || 0)) return { label: `Bajo: ${stock}`, color: '#D97706', tone: 'low' };

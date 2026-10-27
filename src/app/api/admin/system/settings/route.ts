@@ -14,6 +14,7 @@ import {
   normalizeOrganizationModules,
 } from '@/lib/organization/admin-settings'
 import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
+import { normalizeRegionalSettingsPatch, type RegionalSettingsPatch } from '@/lib/regional/settings'
 
 const RATE_LIMIT = 20
 const RATE_LIMIT_WINDOW = 60 * 1000
@@ -40,18 +41,23 @@ function toFrontendSettings(row: Record<string, unknown>): SystemSettingsPartial
 
 function toResponseRow(
   globalRow: Record<string, unknown>,
-  effectiveSettings: SystemSettingsPartial
+  effectiveSettings: SystemSettingsPartial,
+  regionalSettings: { countryCode: string | null; locale: string | null }
 ) {
   return {
     ...globalRow,
     ...mapSettingsToDB(effectiveSettings),
+    country_code: regionalSettings.countryCode,
+    locale: regionalSettings.locale,
+    needs_country_confirmation: regionalSettings.countryCode === null,
   }
 }
 
 async function handleTenantUpdate(
   context: AdminAuthContext,
   settings: SystemSettingsPartial,
-  confirmCurrencyChange: boolean
+  confirmCurrencyChange: boolean,
+  regionalPatch: RegionalSettingsPatch
 ) {
   const organizationId = context.organizationId
   if (!organizationId) {
@@ -67,7 +73,7 @@ async function handleTenantUpdate(
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
-        .select('display_name, timezone, modules, currency, repair_max_discount_percent, repair_labor_tax_rate')
+        .select('display_name, timezone, modules, currency, country_code, locale, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
@@ -123,6 +129,8 @@ async function handleTenantUpdate(
     display_name: effectiveSettings.companyName,
     currency: effectiveSettings.currency,
     timezone: effectiveSettings.timeZone,
+    country_code: regionalPatch.countryCode !== undefined ? regionalPatch.countryCode : orgSettings?.country_code ?? null,
+    locale: regionalPatch.locale !== undefined ? regionalPatch.locale : orgSettings?.locale ?? null,
     modules: mergeTenantAdminSettings(existingModules, tenantSettings),
     repair_max_discount_percent: effectiveSettings.repairMaxDiscountPercent,
     repair_labor_tax_rate: effectiveSettings.repairLaborTaxRate,
@@ -172,13 +180,16 @@ async function handleTenantUpdate(
     resource_id: organizationId,
     organization_id: organizationId,
     severity: 'medium',
-    new_values: withoutPlatformSettings(settings),
+    new_values: { ...withoutPlatformSettings(settings), ...regionalPatch },
   })
   if (auditError) console.error('Failed to audit organization settings update', { auditError, organizationId })
 
   return NextResponse.json({
     success: true,
-    data: toResponseRow(globalRow as Record<string, unknown>, effectiveSettings),
+    data: toResponseRow(globalRow as Record<string, unknown>, effectiveSettings, {
+      countryCode: organizationUpdate.country_code,
+      locale: organizationUpdate.locale,
+    }),
   })
 }
 
@@ -197,7 +208,28 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     }
 
     const body = await request.json()
-    const validation = SystemSettingsPartialSchema.safeParse(body?.settings)
+    const rawSettings = body?.settings
+    const regionalInput: Record<string, unknown> = {}
+    if (rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)) {
+      if (Object.prototype.hasOwnProperty.call(rawSettings, 'countryCode')) regionalInput.countryCode = rawSettings.countryCode
+      if (Object.prototype.hasOwnProperty.call(rawSettings, 'locale')) regionalInput.locale = rawSettings.locale
+    }
+    const regionalValidation = normalizeRegionalSettingsPatch(regionalInput)
+    if (regionalValidation.success === false) {
+      return NextResponse.json(
+        { success: false, error: regionalValidation.field === 'countryCode' ? 'País inválido' : 'Idioma regional inválido' },
+        { status: 400 }
+      )
+    }
+
+    const settingsInput = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
+      ? { ...rawSettings }
+      : rawSettings
+    if (settingsInput && typeof settingsInput === 'object' && !Array.isArray(settingsInput)) {
+      delete settingsInput.countryCode
+      delete settingsInput.locale
+    }
+    const validation = SystemSettingsPartialSchema.safeParse(settingsInput)
     if (!validation.success) {
       return NextResponse.json(
         { success: false, error: validation.error.issues[0]?.message || 'Configuración inválida' },
@@ -206,7 +238,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     }
 
     if (context.user.role !== 'super_admin') {
-      return handleTenantUpdate(context, validation.data, body?.confirmCurrencyChange === true)
+      return handleTenantUpdate(context, validation.data, body?.confirmCurrencyChange === true, regionalValidation.data)
     }
 
     // Un superadmin guardando la configuracion de SU organizacion. Sin este
@@ -231,7 +263,15 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       return handleTenantUpdate(
         { ...context, organizationId },
         validation.data,
-        body?.confirmCurrencyChange === true
+        body?.confirmCurrencyChange === true,
+        regionalValidation.data
+      )
+    }
+
+    if (Object.keys(regionalValidation.data).length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'La identidad regional solo puede guardarse en una organización' },
+        { status: 400 }
       )
     }
 

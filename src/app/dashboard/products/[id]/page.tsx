@@ -364,7 +364,7 @@ export default function ProductDetailPage() {
       try {
         const supabase = createClient()
         const { data: inventory, error } = await supabase.from('branch_variant_inventory')
-          .select('variant_id, branch_id, stock_quantity')
+          .select('variant_id, branch_id, stock_quantity, min_stock')
           .eq('organization_id', targetOrganizationId).eq('product_id', product.id)
         if (error) throw error
         const ids = Array.from(new Set((inventory || []).map(row => row.branch_id)))
@@ -376,7 +376,7 @@ export default function ProductDetailPage() {
           branches?.forEach(branch => names.set(branch.id, branch.name))
         }
         if (!cancelled && currentScope.current === scope) {
-          setBranchStock((inventory || []).map(row => ({ variantId: row.variant_id, branchId: row.branch_id, branchName: names.get(row.branch_id) || 'Sucursal sin nombre visible', quantity: row.stock_quantity })))
+          setBranchStock((inventory || []).map(row => ({ variantId: row.variant_id, branchId: row.branch_id, branchName: names.get(row.branch_id) || 'Sucursal sin nombre visible', quantity: row.stock_quantity, minStock: row.min_stock })))
           setBranchStockScope(`${targetOrganizationId}:${product.id}`)
           setBranchStockState('ready')
         }
@@ -395,12 +395,13 @@ export default function ProductDetailPage() {
 
   const variantStats = useMemo(() => {
     const count = normalizedVariants.length
-    const totalStock = normalizedVariants.reduce((sum, v) => sum + v.stockQuantity, 0)
-    const outOfStockCount = normalizedVariants.filter(v => v.stockQuantity <= 0).length
-    const lowStockCount = normalizedVariants.filter(v => v.stockQuantity > 0 && v.stockQuantity <= (v.minStock ?? 0)).length
-    const inStockCount = normalizedVariants.filter(v => v.stockQuantity > (v.minStock ?? 0)).length
-    const activeCount = normalizedVariants.filter(v => v.isActive).length
-    const totalValuation = normalizedVariants.reduce((sum, v) => sum + (v.stockQuantity * v.salePrice), 0)
+    const activeVariants = normalizedVariants.filter(v => v.isActive)
+    const totalStock = activeVariants.reduce((sum, v) => sum + v.stockQuantity, 0)
+    const outOfStockCount = activeVariants.filter(v => v.stockQuantity <= 0).length
+    const lowStockCount = activeVariants.filter(v => v.stockQuantity > 0 && v.stockQuantity <= (v.minStock ?? 0)).length
+    const inStockCount = activeVariants.filter(v => v.stockQuantity > (v.minStock ?? 0)).length
+    const activeCount = activeVariants.length
+    const totalValuation = activeVariants.reduce((sum, v) => sum + (v.stockQuantity * v.salePrice), 0)
 
     const prices = normalizedVariants.map(v => v.salePrice).filter(p => p > 0)
     const minPrice = prices.length ? Math.min(...prices) : (product?.sale_price ?? 0)
@@ -422,6 +423,7 @@ export default function ProductDetailPage() {
       outOfStockCount,
       lowStockCount,
       inStockCount,
+      affectedCount: outOfStockCount + lowStockCount,
       activeCount,
       totalValuation,
       minPrice,
@@ -436,12 +438,20 @@ export default function ProductDetailPage() {
 
 
   const calculatedStockStatus = useMemo(() => {
+    if (hasVariants && normalizedVariants.length > 0 && variantStats.activeCount === 0) return 'in_stock'
     const stock = hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : (product?.stock_quantity ?? 0)
-    const minStock = product?.min_stock ?? 0
     if (stock <= 0) return 'out_of_stock'
-    if (stock <= Math.max(minStock, 0)) return 'low_stock'
+    if (hasVariants && normalizedVariants.length > 0) return variantStats.affectedCount > 0 ? 'low_stock' : 'in_stock'
+    if (stock <= Math.max(product?.min_stock ?? 0, 0)) return 'low_stock'
     return 'in_stock'
-  }, [hasVariants, normalizedVariants.length, variantStats.totalStock, product?.stock_quantity, product?.min_stock])
+  }, [hasVariants, normalizedVariants.length, variantStats.activeCount, variantStats.totalStock, variantStats.affectedCount, product?.stock_quantity, product?.min_stock])
+
+  const variantAlertText = variantStats.affectedCount > 0
+    ? [
+        variantStats.outOfStockCount > 0 ? `${variantStats.outOfStockCount} agotada${variantStats.outOfStockCount === 1 ? '' : 's'}` : '',
+        variantStats.lowStockCount > 0 ? `${variantStats.lowStockCount} con stock bajo` : '',
+      ].filter(Boolean).join(' · ')
+    : '100% en stock'
 
   const stockProgressValue = useMemo(() => {
     const stock = hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : (product?.stock_quantity ?? 0)
@@ -1045,7 +1055,7 @@ export default function ProductDetailPage() {
                     {hasVariants && normalizedVariants.length > 0 ? (
                       <>
                         <span>{normalizedVariants.length} variantes</span>
-                        <span>{variantStats.outOfStockCount > 0 ? `${variantStats.outOfStockCount} agotadas` : '100% en stock'}</span>
+                        <span>{variantAlertText}</span>
                       </>
                     ) : (
                       <>

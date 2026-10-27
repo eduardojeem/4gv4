@@ -28,6 +28,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
+import { priceCartLine } from '../lib/cart-pricing';
 import { cn } from '@/lib/utils';
 import type { CheckoutEligibility } from '../lib/checkout-eligibility';
 import type { ReceiptDocumentKind } from '@/lib/receipt-utils';
@@ -52,6 +53,7 @@ interface CartItem {
   discount?: number;
   variant?: string;
   wholesalePrice?: number;
+  offerPrice?: number;
   isService?: boolean;
   sku?: string;
   image?: string;
@@ -100,17 +102,14 @@ const CartItemRow = memo<{
   onRemoveItem: (id: string) => void;
   onApplyDiscount?: (id: string, discount: number) => void;
 }>(({ item, isWholesale, onUpdateQuantity, onRemoveItem, onApplyDiscount }) => {
-  const WHOLESALE_DISCOUNT_RATE = 10;
   const isService = item.isService === true;
 
-  const unitPrice = (isWholesale && !isService)
-    ? (item.wholesalePrice ?? (item.price * (1 - WHOLESALE_DISCOUNT_RATE / 100)))
-    : item.price;
-
-  const itemTotal = unitPrice * item.quantity;
+  // La misma cuenta que el cobro: la oferta o el descuento manual, el mayor.
+  const line = priceCartLine(item, { isWholesale });
+  const unitPrice = line.unitPrice;
   const itemDiscountRate = item.discount || 0;
-  const itemDiscountValue = itemTotal * (itemDiscountRate / 100);
-  const finalTotal = itemTotal - itemDiscountValue;
+  const finalTotal = line.net;
+  const offerApplied = line.discountSource === 'offer';
 
   const [localQty, setLocalQty] = useState(item.quantity.toString());
   const imageSrc = typeof item.image === 'string' && item.image.trim().length > 0
@@ -164,6 +163,11 @@ const CartItemRow = memo<{
                     SERVICIO
                   </Badge>
                 )}
+                {offerApplied && (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                    OFERTA
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -175,6 +179,11 @@ const CartItemRow = memo<{
               <div className="text-[10px] text-muted-foreground tabular-nums">
                 {item.quantity} × {formatCurrency(unitPrice)}
               </div>
+              {line.discountAmount > 0 && (
+                <div className="text-[10px] text-emerald-600 tabular-nums">
+                  {offerApplied ? 'Oferta' : 'Descuento'}: -{formatCurrency(line.discountAmount)}
+                </div>
+              )}
             </div>
           </div>
 

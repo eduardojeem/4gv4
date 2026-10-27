@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { resolveActiveAdminOrganizationId } from '@/lib/admin/active-organization'
 
 const updateSchema = z.object({
   moderation_status: z.enum(['pending', 'published', 'rejected', 'hidden', 'reported']).optional(),
@@ -24,7 +25,7 @@ async function patchHandler(
 ) {
   try {
     const { id } = await context.params
-    const orgId = context.organizationId
+    const orgId = await resolveActiveAdminOrganizationId(context)
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 403 })
     }

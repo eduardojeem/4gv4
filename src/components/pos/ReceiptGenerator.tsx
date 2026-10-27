@@ -10,7 +10,7 @@ import { config } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
-import { buildReceiptPaymentSummary, type ReceiptDocumentKind } from '@/lib/receipt-utils'
+import { buildReceiptPaymentSummary, firstPaymentChange, type ReceiptDocumentKind } from '@/lib/receipt-utils'
 
 interface CartItem {
   id: string
@@ -127,10 +127,9 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
   const creditInfo = receiptData.creditInfo
   const summary = buildReceiptPaymentSummary(receiptData)
-  const settledNow = summary.cashPaid + summary.nonCashPaid
   const collectedToday = summary.collectedToday
   const financedBalance = summary.financedBalance
-  const totalWithFinancing = settledNow + summary.financedTotal
+  const totalWithFinancing = summary.totalWithFinancing
   const paymentState = summary.paymentState
   const customerPhone = receiptData.customer?.phone?.trim()
   const hasActions = Boolean(onPrint || onDownload || onShare)
@@ -281,6 +280,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
               <p>Medio: {creditInfo.firstPayment.method === 'cash' ? 'Efectivo' : 'Transferencia'}</p>
               {creditInfo.firstPayment.method === 'transfer' && <p>{creditInfo.firstPayment.bank ? `Banco/cuenta: ${creditInfo.firstPayment.bank}. ` : ''}Referencia: {creditInfo.firstPayment.reference}</p>}
               {creditInfo.firstPayment.method === 'cash' && <p>Recibido: {formatCurrency(creditInfo.firstPayment.cashReceived ?? creditInfo.firstPayment.amount)}</p>}
+              {firstPaymentChange(creditInfo.firstPayment) > 0 && <p className="font-semibold">Vuelto de la cuota: {formatCurrency(firstPaymentChange(creditInfo.firstPayment))}</p>}
               <p>Saldo del crédito al emitir: {formatCurrency(financedBalance)}</p>
               <p>Este cobro cancela la cuota 1; no es un cargo adicional.</p>
             </div> : <p className="mt-2 text-xs">Cuotas pendientes de cobro. El vencimiento no acredita su pago.</p>}

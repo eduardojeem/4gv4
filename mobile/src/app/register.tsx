@@ -117,7 +117,7 @@ export default function RegisterScreen() {
       // Sin confirmación de email pendiente, entra directo a su panel.
       setBusy('signin');
       const message = await signIn(form.email.trim(), form.password);
-      router.replace((message ? { pathname: '/sign-in', params: { registered: '1' } } : '/panel') as never);
+      router.replace((message ? { pathname: '/sign-in', params: { registered: '1' } } : '/onboarding') as never);
     } catch (cause) {
       const fields = registerFieldErrors(cause);
       if (Object.keys(fields).length) setServerErrors(fields as Partial<Record<RegisterField, string>>);

@@ -18,6 +18,7 @@ import {
   settingsIssues,
   type OrgSettings,
 } from '@/lib/settings-model';
+import { normalizeCountryCode } from '../../../../../src/lib/regional/contract';
 
 export default function RegionalSettingsScreen() {
   return <SettingsGate title="Moneda e impuestos">{(settings) => <RegionalEditor saved={settings} />}</SettingsGate>;
@@ -73,6 +74,10 @@ function RegionalEditor({ saved }: { saved: OrgSettings }) {
   return (
     <WebsiteScreen title="Moneda e impuestos" subtitle="Cómo se cobra y se registra" footer={<SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />}>
       <SettingsOfflineNotice />
+
+      {saved.needsCountryConfirmation ? <Section title="País del negocio" icon="globe-outline" hint="Es una confirmación opcional para organizaciones creadas antes de guardar la región. No cambia precios ni datos existentes.">
+        <ChipGroup options={[{ value: 'PY', label: 'Paraguay' }, { value: 'BR', label: 'Brasil' }, { value: 'AR', label: 'Argentina' }, { value: 'US', label: 'Estados Unidos' }]} value={draft.countryCode ?? ''} onChange={(value) => set({ countryCode: normalizeCountryCode(value) })} />
+      </Section> : null}
 
       <Section title="Moneda del comercio" icon="cash-outline" hint="En la que se cargan los precios y se cobran las ventas.">
         <ChipGroup options={CURRENCIES.map((item) => ({ value: item.code, label: item.code, hint: item.name }))} value={draft.currency} onChange={(currency) => {

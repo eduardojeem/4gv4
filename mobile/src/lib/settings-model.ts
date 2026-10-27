@@ -3,6 +3,16 @@
  * en la web (system_settings + organization_settings del comercio activo).
  * Lógica pura, sin React Native, para poder probarla.
  */
+import {
+  REGIONAL_CURRENCIES,
+  getRegionalCurrencySymbol,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+  normalizeLocaleCode,
+  type CountryCode,
+  type LocaleCode,
+} from '../../../src/lib/regional/contract';
+import { needsCountryConfirmation } from '../../../src/lib/regional/settings';
 
 // ─── Configuración del comercio ────────────────────────────────────────────
 
@@ -17,23 +27,18 @@ export type OrgSettings = {
   taxRate: number;
   timeZone: string;
   language: string;
+  countryCode: CountryCode | null;
+  locale: LocaleCode | null;
+  needsCountryConfirmation: boolean;
 };
 
-export type OrgSettingsField = keyof OrgSettings;
+export type OrgSettingsField = Exclude<keyof OrgSettings, 'needsCountryConfirmation'>;
 
-export const CURRENCIES: readonly { code: string; name: string; symbol: string }[] = [
-  { code: 'PYG', name: 'Guaraní paraguayo', symbol: 'Gs.' },
-  { code: 'USD', name: 'Dólar estadounidense', symbol: 'US$' },
-  { code: 'BRL', name: 'Real brasileño', symbol: 'R$' },
-  { code: 'ARS', name: 'Peso argentino', symbol: 'AR$' },
-  { code: 'UYU', name: 'Peso uruguayo', symbol: 'UY$' },
-  { code: 'CLP', name: 'Peso chileno', symbol: 'CL$' },
-  { code: 'BOB', name: 'Boliviano', symbol: 'Bs.' },
-  { code: 'PEN', name: 'Sol peruano', symbol: 'S/' },
-  { code: 'COP', name: 'Peso colombiano', symbol: 'CO$' },
-  { code: 'MXN', name: 'Peso mexicano', symbol: 'MX$' },
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-];
+export const CURRENCIES: readonly { code: string; name: string; symbol: string }[] = REGIONAL_CURRENCIES.map((currency) => ({
+  code: currency.code,
+  name: currency.name,
+  symbol: getRegionalCurrencySymbol(currency.code, 'es-PY'),
+}));
 
 /** «Idioma» en la web: hoy cambia el formato de números y fechas, no los textos. */
 export const LANGUAGES: readonly { code: string; name: string; locale: string }[] = [
@@ -69,6 +74,7 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '');
 export function fromSharedRow(row: Record<string, unknown> | null | undefined): OrgSettings {
   const data = row ?? {};
   const tax = typeof data.tax_rate === 'string' ? Number.parseFloat(data.tax_rate) : Number(data.tax_rate);
+  const countryCode = normalizeCountryCode(data.country_code);
   return {
     companyName: text(data.company_name),
     companyRuc: text(data.company_ruc),
@@ -80,6 +86,9 @@ export function fromSharedRow(row: Record<string, unknown> | null | undefined): 
     taxRate: Number.isFinite(tax) ? tax : 10,
     timeZone: typeof data.time_zone === 'string' && data.time_zone ? data.time_zone : 'America/Asuncion',
     language: isKnown(LANGUAGES, data.language) ? data.language : 'es',
+    countryCode,
+    locale: normalizeLocaleCode(data.locale),
+    needsCountryConfirmation: needsCountryConfirmation(countryCode),
   };
 }
 
@@ -91,10 +100,12 @@ const TEXT_FIELDS: readonly OrgSettingsField[] = ['companyName', 'companyRuc', '
  */
 export function changedSettings(saved: OrgSettings, draft: OrgSettings): Partial<OrgSettings> {
   const changes: Partial<OrgSettings> = {};
-  for (const key of Object.keys(draft) as OrgSettingsField[]) {
-    const next = TEXT_FIELDS.includes(key) ? String(draft[key]).trim() : draft[key];
-    const previous = TEXT_FIELDS.includes(key) ? String(saved[key]).trim() : saved[key];
-    if (next !== previous) (changes as Record<string, unknown>)[key] = next;
+  for (const key of Object.keys(draft) as (keyof OrgSettings)[]) {
+    if (key === 'needsCountryConfirmation') continue;
+    const field = key as OrgSettingsField;
+    const next = TEXT_FIELDS.includes(field) ? String(draft[field]).trim() : draft[field];
+    const previous = TEXT_FIELDS.includes(field) ? String(saved[field]).trim() : saved[field];
+    if (next !== previous) (changes as Record<string, unknown>)[field] = next;
   }
   return changes;
 }
@@ -120,7 +131,10 @@ export function settingsIssues(draft: OrgSettings): Partial<Record<OrgSettingsFi
 }
 
 export const currencyName = (code: string) => CURRENCIES.find((item) => item.code === code)?.name ?? code;
-export const currencySymbol = (code: string) => CURRENCIES.find((item) => item.code === code)?.symbol ?? code;
+export const currencySymbol = (code: string) => {
+  const normalized = normalizeCurrencyCode(code);
+  return normalized ? getRegionalCurrencySymbol(normalized, 'es-PY') : code;
+};
 export const timeZoneName = (code: string) => TIME_ZONES.find((item) => item.code === code)?.name ?? code;
 export const languageName = (code: string) => LANGUAGES.find((item) => item.code === code)?.name ?? code;
 

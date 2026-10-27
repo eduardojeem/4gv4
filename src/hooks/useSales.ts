@@ -162,10 +162,12 @@ export function useSales() {
                 .from('sales')
                 .select(`
           *,
+          customer:customers!customer_id (name, phone, email),
           sale_items (
             *,
-            products (name)
+            products (name, sku)
           ),
+          sale_payments (id, payment_index, payment_method, amount, reference, card_last4, created_at),
           payments (*)
                 `)
                 .eq('id', saleId)

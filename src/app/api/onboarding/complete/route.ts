@@ -15,7 +15,7 @@ import {
   normalizeOrganizationModules,
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
-import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
+import { BusinessProfileInputSchema, defaultOperatingModelFor, getSuggestedModules } from '@/lib/organization/business-profile'
 import { ServiceBusinessDetailsSchema, serviceBusinessDetailsPatch } from '@/lib/organization/service-specialties'
 import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { applyCheckoutChoices, checkoutChoicesError } from '@/lib/onboarding/checkout-choices'
@@ -24,6 +24,7 @@ import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import { buildStarterCheckout, buildStarterTrustBar, provisionStarterKit } from '@/lib/organization/starter-kit'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
+import { getFirstIncompleteStep, normalizeOnboardingState, visibleEntitledModules } from '@/lib/onboarding/shared-setup'
 
 type OnboardingMetadata = Record<string, unknown> & {
   onboarding?: Record<string, unknown>
@@ -35,9 +36,9 @@ const onboardingSchema = z.object({
   timezone: z.string().trim().refine(isValidTimeZone, 'Zona horaria invalida').default('America/Asuncion'),
   language: SupportedLanguageSchema.default('es'),
   confirmCurrencyChange: z.boolean().default(false),
-  phone: z.string().trim().min(6, 'Telefono requerido').max(50),
+  phone: z.string().trim().max(50).optional().or(z.literal('')).default(''),
   email: z.string().trim().email('Correo invalido').max(254).optional().or(z.literal('')),
-  address: z.string().trim().min(4, 'Direccion requerida').max(250),
+  address: z.string().trim().max(250).optional().or(z.literal('')).default(''),
   city: z.string().trim().min(2, 'Ciudad requerida').max(120),
   weekdays: z.string().trim().max(120).optional().or(z.literal('')),
   saturday: z.string().trim().max(120).optional().or(z.literal('')),
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const input = validation.data
+  let input = validation.data
   const organizationId = organizationContext!.id
   const checkoutError = input.checkout ? checkoutChoicesError(input.checkout) : null
   if (checkoutError) return NextResponse.json({ error: checkoutError, code: 'CHECKOUT_INVALID' }, { status: 400 })
@@ -150,6 +151,34 @@ export async function POST(request: Request) {
 
   const currentModules = normalizeOrganizationModules(settings?.modules) as OnboardingMetadata
   const currentAdminSettings = getTenantAdminSettings(currentModules)
+  const requestBody = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
+  const sharedState = requestBody.sharedSetup === true && currentModules.onboarding?.shared
+    ? normalizeOnboardingState(currentModules.onboarding.shared)
+    : null
+  if (requestBody.sharedSetup === true && (!sharedState || getFirstIncompleteStep(sharedState) !== 5)) {
+    return NextResponse.json({ error: 'Terminá y guardá los pasos obligatorios antes de finalizar.', code: 'ONBOARDING_INCOMPLETE' }, { status: 409 })
+  }
+  if (sharedState) {
+    const category = sharedState.data.businessCategory
+    const branch = sharedState.data.primaryBranch
+    const canonical = onboardingSchema.safeParse({
+      ...input,
+      displayName: sharedState.data.businessName,
+      currency: sharedState.data.currency,
+      timezone: sharedState.data.timezone,
+      language: sharedState.data.locale?.split('-')[0] ?? input.language,
+      phone: branch.phone,
+      address: branch.address,
+      city: branch.city,
+      weekdays: branch.hours,
+      businessVertical: category ?? input.businessVertical,
+      operatingModel: category ? defaultOperatingModelFor(category) : input.operatingModel,
+    })
+    if (!canonical.success) {
+      return NextResponse.json({ error: 'El progreso compartido tiene datos inválidos.', code: 'ONBOARDING_STATE_INVALID' }, { status: 400 })
+    }
+    input = canonical.data
+  }
   const currentCurrency = settings?.currency || currentAdminSettings.currency || 'PYG'
   // Sin productos ni ventas no hay importes que el cambio de moneda afecte:
   // una empresa nueva elige su moneda sin confirmar nada.
@@ -206,6 +235,7 @@ export async function POST(request: Request) {
       completed_by: alreadyCompleted ? previousOnboarding.completed_by ?? user.id : user.id,
       last_updated_at: now,
       last_updated_by: user.id,
+      ...(sharedState ? { shared: { ...sharedState, completed: true, completedAt: now, currentStep: 5, completedSteps: [...new Set([...sharedState.completedSteps, 'ready'])] } } : {}),
     },
   }
 
@@ -322,6 +352,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No se pudo finalizar el onboarding. No se guardó nada.' }, { status: 500 })
   }
 
+  if (sharedState?.data.countryCode && sharedState.data.locale) {
+    const { error: regionalError } = await admin.from('organization_settings').update({
+      country_code: sharedState.data.countryCode,
+      locale: sharedState.data.locale,
+      updated_at: now,
+    }).eq('organization_id', organizationId)
+    if (regionalError) {
+      logger.error('Onboarding saved but regional identity was not persisted', { error: regionalError.message, organizationId })
+      return NextResponse.json({ error: 'La configuración se guardó, pero falta guardar el país e idioma. Volvé a intentar finalizar.', code: 'REGIONAL_SETTINGS_SAVE_FAILED' }, { status: 500 })
+    }
+  }
+
   // El contenido del sitio se SIEMBRA, no se reaplica. El array se llamaba
   // `initialWebsiteRows` —la intencion era «solo la primera vez»— pero el
   // upsert corria en cada guardado y reemplazaba el encabezado y los pasos de
@@ -433,11 +475,15 @@ export async function POST(request: Request) {
   // Una lista vacia significa «ningun modulo», no «todos»: si el plan no
   // habilita ninguno de los sugeridos, se deja sin tocar y la organizacion
   // conserva los de su plan.
-  const applySuggestedModules = !alreadyCompleted && suggestedModules.length > 0
+  const selectedModulePreferences = sharedState?.data.selectedModules
+  const selectedFromOnboarding = selectedModulePreferences
+    ? visibleEntitledModules(selectedModulePreferences, [...entitled])
+    : null
+  const applySuggestedModules = !alreadyCompleted && (suggestedModules.length > 0 || (selectedFromOnboarding?.length ?? 0) > 0)
   if (applySuggestedModules) {
-    organizationUpdate.enabled_modules = suggestedModules
+    organizationUpdate.enabled_modules = selectedFromOnboarding ?? suggestedModules
   }
-  const enabledModules = applySuggestedModules ? suggestedModules : null
+  const enabledModules = applySuggestedModules ? (selectedFromOnboarding?.length ? selectedFromOnboarding : suggestedModules) : null
   const { error: profileUpdateError } = await admin
     .from('organizations')
     .update(organizationUpdate)

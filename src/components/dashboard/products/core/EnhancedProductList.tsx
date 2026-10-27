@@ -58,6 +58,22 @@ interface EnhancedProductListProps {
 }
 
 const getStockStatus = (product: Product) => {
+  const variants = product.variant_stock_summary
+  if (variants && variants.variant_count > 0) {
+    const out = variants.out_of_stock_variant_count
+    const low = variants.low_stock_variant_count
+    if (variants.total_stock <= 0) {
+      return { status: 'out_of_stock', label: `${out} variante${out === 1 ? '' : 's'} agotada${out === 1 ? '' : 's'}`, color: 'text-red-600', bgColor: 'bg-red-50' }
+    }
+    if (variants.affected_variant_count > 0) {
+      const parts = [
+        out > 0 ? `${out} agotada${out === 1 ? '' : 's'}` : '',
+        low > 0 ? `${low} con stock bajo` : '',
+      ].filter(Boolean)
+      return { status: 'low_stock', label: parts.join(' · '), color: 'text-yellow-600', bgColor: 'bg-yellow-50' }
+    }
+    return { status: 'in_stock', label: 'Variantes disponibles', color: 'text-green-600', bgColor: 'bg-green-50' }
+  }
   if (product.stock_quantity === 0) {
     return { status: 'out_of_stock', label: 'Agotado', color: 'text-red-600', bgColor: 'bg-red-50' }
   }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import { isServiceFocused } from '@/lib/onboarding/onboarding-view'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { loadOrganizationSetupChecklist } from './setup-checklist-server'
 
 /**
  * Los pasos del onboarding («Primeros pasos»): los mismos en /admin/onboarding
@@ -56,12 +57,13 @@ export type OnboardingProgress = {
   /** Barbería o servicios: el paso de productos se llama «Servicios y precios». */
   serviceFocused: boolean
   slug: string | null
+  setupChecklist: Awaited<ReturnType<typeof loadOrganizationSetupChecklist>>
 }
 
 /** Lo que necesita la app para mostrar los primeros pasos del comercio. */
 export async function loadOnboardingProgress(admin: SupabaseClient, organizationId: string): Promise<OnboardingProgress> {
   const count = (result: { count: number | null }) => result.count ?? 0
-  const [settings, organization, branch, companyInfo, products, members, professionals, agendaSettings, planInfo] = await Promise.all([
+  const [settings, organization, branch, companyInfo, products, members, professionals, agendaSettings, planInfo, setupChecklist] = await Promise.all([
     admin.from('organization_settings').select('display_name, modules').eq('organization_id', organizationId).maybeSingle(),
     admin.from('organizations').select('name, slug, business_vertical, operating_model, storefront_public').eq('id', organizationId).maybeSingle(),
     admin.from('branches').select('phone, address, city').eq('organization_id', organizationId).eq('is_default', true).maybeSingle(),
@@ -71,6 +73,7 @@ export async function loadOnboardingProgress(admin: SupabaseClient, organization
     admin.from('agenda_professionals').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
     admin.from('agenda_settings').select('organization_id').eq('organization_id', organizationId).maybeSingle(),
     getOrganizationPlanInfo(organizationId).catch(() => null),
+    loadOrganizationSetupChecklist(admin, organizationId),
   ])
   const failed = [settings, organization, branch, companyInfo, products, members].find((result) => result.error)
   if (failed?.error) throw new Error(failed.error.message)
@@ -98,5 +101,6 @@ export async function loadOnboardingProgress(admin: SupabaseClient, organization
     servicesEnabled: Boolean(planInfo?.effectiveModules.includes('services')),
     serviceFocused: isServiceFocused(org?.business_vertical ?? null, org?.operating_model || companyValue.businessType || 'retail'),
     slug: org?.slug ?? null,
+    setupChecklist,
   }
 }

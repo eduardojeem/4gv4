@@ -11,6 +11,11 @@ export type OnboardingProgress = {
   servicesEnabled: boolean;
   serviceFocused: boolean;
   slug: string | null;
+  setupChecklist: {
+    percent: number;
+    needsCountryConfirmation: boolean;
+    items: { key: string; label: string; done: boolean; href: string }[];
+  } | null;
 };
 
 export type OnboardingStep = {
@@ -78,6 +83,7 @@ export const hiddenKey = (organizationId: string) => `first-steps-hidden.${organ
 export function toOnboardingProgress(raw: Record<string, unknown> | null | undefined): OnboardingProgress {
   const data = (raw ?? {}) as Partial<OnboardingProgress>;
   const steps = (data.steps ?? {}) as Partial<Record<OnboardingStepKey, boolean>>;
+  const checklist = data.setupChecklist;
   return {
     steps: {
       hasCompanyInfo: steps.hasCompanyInfo === true,
@@ -90,5 +96,14 @@ export function toOnboardingProgress(raw: Record<string, unknown> | null | undef
     servicesEnabled: data.servicesEnabled === true,
     serviceFocused: data.serviceFocused === true,
     slug: typeof data.slug === 'string' ? data.slug : null,
+    setupChecklist: checklist && typeof checklist === 'object' && Array.isArray(checklist.items)
+      ? {
+          percent: Number.isFinite(checklist.percent) ? Math.min(100, Math.max(0, checklist.percent)) : 0,
+          needsCountryConfirmation: checklist.needsCountryConfirmation === true,
+          items: checklist.items.filter((item): item is { key: string; label: string; done: boolean; href: string } =>
+            Boolean(item && typeof item.key === 'string' && typeof item.label === 'string' && typeof item.done === 'boolean' && typeof item.href === 'string'),
+          ),
+        }
+      : null,
   };
 }

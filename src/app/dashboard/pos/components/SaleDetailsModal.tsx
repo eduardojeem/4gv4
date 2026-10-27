@@ -10,7 +10,8 @@ import { formatCurrency } from '@/lib/currency'
 import { useSales } from '@/hooks/useSales'
 import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { createReceiptData, printReceipt, CompanyInfo } from '@/lib/receipt-utils'
+import { printReceipt, CompanyInfo } from '@/lib/receipt-utils'
+import { buildReprintReceiptData, type StoredSale } from '@/lib/after-sales/sale-receipt'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { config } from '@/lib/config'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
@@ -26,6 +27,8 @@ export interface SaleDetailItem {
   price?: number
   unit_price?: number
   discount?: number
+  /** Columna real de sale_items: el descuento de la línea en moneda. */
+  discount_amount?: number | null
   subtotal?: number
   total?: number
   is_service?: boolean
@@ -33,16 +36,26 @@ export interface SaleDetailItem {
 
 export interface SaleDetailPayment {
   id: string
-  method: string
+  method?: string
+  payment_method?: string
+  payment_index?: number
   amount: number
   reference?: string
   card_last4?: string
   created_at?: string
 }
 
+type SaleDetailCustomer = { name?: string | null; phone?: string | null; email?: string | null }
+
 export interface SaleDetailRecord {
   id: string
+  /** Código guardado por el POS (sales.code). */
+  code?: string | null
   sale_number?: string
+  customer?: SaleDetailCustomer | SaleDetailCustomer[] | null
+  subtotal_amount?: number | null
+  created_by?: string | null
+  sale_payments?: SaleDetailPayment[] | null
   created_at: string
   customer_id?: string | null
   customer_name?: string | null
@@ -71,6 +84,58 @@ function toReceiptPaymentMethod(method?: string): 'cash' | 'card' | 'transfer' |
   return 'cash'
 }
 
+function saleItems(sale: SaleDetailRecord) {
+  return sale.sale_items || sale.items || []
+}
+
+/** Pagos de la venta: los del POS viven en sale_payments; `payments` es la tabla anterior. */
+export function salePayments(sale: SaleDetailRecord): SaleDetailPayment[] {
+  const rows = sale.sale_payments?.length ? sale.sale_payments : (sale.payments || [])
+  return [...rows].sort((a, b) => (a.payment_index ?? 0) - (b.payment_index ?? 0))
+}
+
+export function saleReference(sale: SaleDetailRecord) {
+  return sale.code || sale.sale_number || sale.id.slice(0, 8).toUpperCase()
+}
+
+/**
+ * Subtotal bruto guardado. Antes se mostraba total - IVA: con precios con IVA
+ * incluido y un descuento, «Subtotal - Descuento» no daba el total.
+ */
+export function saleSubtotal(sale: SaleDetailRecord) {
+  return Number(sale.subtotal_amount ?? sale.subtotal ?? (Number(sale.total_amount ?? sale.total ?? 0) + Number(sale.discount_amount ?? sale.discount ?? 0)))
+}
+
+export function toStoredSale(sale: SaleDetailRecord): StoredSale {
+  const customer = Array.isArray(sale.customer) ? sale.customer[0] : sale.customer
+  return {
+    id: sale.id,
+    code: sale.code || sale.sale_number || null,
+    createdAt: sale.created_at,
+    subtotal: saleSubtotal(sale),
+    tax: Number(sale.tax_amount ?? sale.tax ?? 0),
+    discount: Number(sale.discount_amount ?? sale.discount ?? 0),
+    total: Number(sale.total_amount ?? sale.total ?? 0),
+    paymentMethod: sale.payment_method ?? null,
+    customer: customer?.name ? customer : (sale.customer_name ? { name: sale.customer_name } : null),
+    items: saleItems(sale).map(item => ({
+      id: item.id,
+      product_id: item.product_id ?? null,
+      name: item.products?.name || item.product_name || 'Producto',
+      sku: item.products?.sku || item.sku || null,
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unit_price ?? item.price ?? 0),
+      discount: item.discount_amount ?? item.discount ?? null,
+    })),
+    payments: salePayments(sale).map(payment => ({
+      id: payment.id,
+      method: toReceiptPaymentMethod(payment.payment_method ?? payment.method),
+      amount: Number(payment.amount) || 0,
+      reference: payment.reference ?? null,
+    })),
+  }
+}
+
 interface SaleDetailsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -95,57 +160,9 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
         ruc: settings.companyRuc
     }
 
-    const items = (sale.sale_items || sale.items || []).map((item: SaleDetailItem) => ({
-        id: item.id,
-        name: item.products?.name || item.product_name || 'Producto',
-        sku: item.products?.sku || item.sku || 'N/A',
-        price: Number(item.price ?? item.unit_price ?? 0),
-        quantity: Number(item.quantity || 1),
-        discount: Number(item.discount || 0),
-        isService: item.is_service
-    }))
-
-    const payments: Array<import('@/lib/receipt-utils').PaymentSplit> = (sale.payments || []).map((p: SaleDetailPayment) => ({
-        id: p.id,
-        method: toReceiptPaymentMethod(p.method),
-        amount: Number(p.amount),
-        reference: p.reference
-    }))
-    
-    // Si no hay pagos registrados pero hay un método de pago en la venta
-    if (payments.length === 0 && sale.payment_method) {
-        payments.push({
-            id: 'default',
-            method: toReceiptPaymentMethod(sale.payment_method),
-            amount: Number(sale.total_amount ?? sale.total ?? 0),
-        })
-    }
-
-    const receiptData = createReceiptData(
-        items,
-        {
-            subtotal: Number(sale.subtotal ?? (sale.total_amount - (sale.tax_amount || 0))),
-            totalDiscount: Number((sale.discount_amount ?? sale.discount) || 0),
-            tax: Number(sale.tax_amount ?? sale.tax ?? 0),
-            total: Number(sale.total_amount ?? sale.total),
-            change: Number(sale.change_amount || 0),
-        },
-        payments,
-        {
-            name: sale.customer_name || 'Cliente General',
-            phone: '', // Info adicional podría venir del cliente si se carga
-            email: ''
-        },
-        sale.cashier_id ? `Cajero: ${sale.cashier_id}` : 'Sistema POS'
-    )
-
-    // Sobreescribir fecha/hora con la original de la venta
-    const saleDate = new Date(sale.created_at)
-    receiptData.date = saleDate.toLocaleDateString('es-PY', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    receiptData.time = saleDate.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    receiptData.receiptNumber = sale.sale_number || sale.id.slice(0, 12)
-
-    printReceipt(receiptData, companyInfo)
+    // Mismo armado que la reimpresión de Posventa: número y fecha originales,
+    // descuento por línea en moneda y los pagos de sale_payments.
+    printReceipt(buildReprintReceiptData(toStoredSale(sale)), companyInfo)
   }
 
   useEffect(() => {
@@ -169,7 +186,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                 Detalle de la Venta
                 {sale && (
                 <Badge variant="outline" className="ml-2">
-                    {sale.sale_number || (sale.id?.slice(0, 8) + '...')}
+                    {saleReference(sale)}
                 </Badge>
                 )}
             </DialogTitle>
@@ -221,10 +238,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Cliente</span>
                     </div>
-                    <p className="text-lg font-bold">{sale.customer_name || 'Consumidor Final'}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {sale.cashier_id ? `Cajero: ${sale.cashier_id}` : '—'}
-                    </p>
+                    <p className="text-lg font-bold">{toStoredSale(sale).customer?.name || 'Consumidor Final'}</p>
                   </CardContent>
                 </Card>
 
@@ -254,11 +268,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
-                      <span>{formatCurrency(sale.subtotal ?? (sale.total_amount - (sale.tax_amount || 0)))}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>IVA:</span>
-                      <span>{formatCurrency(sale.tax_amount ?? sale.tax ?? 0)}</span>
+                      <span>{formatCurrency(saleSubtotal(sale))}</span>
                     </div>
                     {((sale.discount_amount ?? sale.discount) || 0) > 0 && (
                       <div className="flex justify-between text-primary">
@@ -266,6 +276,10 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                         <span>-{formatCurrency(sale.discount_amount ?? sale.discount)}</span>
                       </div>
                     )}
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>{config.pricesIncludeTax ? 'IVA incluido:' : 'IVA:'}</span>
+                      <span>{formatCurrency(sale.tax_amount ?? sale.tax ?? 0)}</span>
+                    </div>
                     <Separator />
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total:</span>
@@ -297,6 +311,11 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                             <div className="text-xs text-muted-foreground">
                               Unit: {formatCurrency(item.price ?? item.unit_price ?? 0)}
                             </div>
+                            {Number(item.discount_amount ?? item.discount ?? 0) > 0 && (
+                              <div className="text-xs text-primary">
+                                Descuento: -{formatCurrency(Number(item.discount_amount ?? item.discount))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -311,7 +330,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
               </Card>
 
               {/* Pagos registrados */}
-              {Array.isArray(sale.payments) && sale.payments.length > 0 && (
+              {salePayments(sale).length > 0 && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -321,10 +340,10 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 text-sm">
-                      {sale.payments.map((p: SaleDetailPayment) => (
+                      {salePayments(sale).map((p: SaleDetailPayment) => (
                         <div key={p.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
-                          <div className="capitalize">
-                            {p.method}
+                          <div>
+                            {paymentMethodLabel(p.payment_method ?? p.method)}
                             {p.reference && (
                               <span className="ml-2 text-xs text-muted-foreground">({p.reference})</span>
                             )}
@@ -352,8 +371,8 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
             sourceType="sale"
             saleId={sale.id}
             customerId={sale.customer_id || null}
-            reference={sale.sale_number || sale.id?.slice(0, 8)}
-            customerName={sale.customer_name || null}
+            reference={saleReference(sale)}
+            customerName={toStoredSale(sale).customer?.name || null}
             allowedRequestTypes={['product_warranty', 'exchange', 'return']}
             saleItems={(sale.sale_items || sale.items || []).map((item: {
               id: string | number

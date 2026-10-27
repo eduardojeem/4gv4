@@ -18,6 +18,7 @@ import {
 } from './provisioning'
 import { provisionStarterKit } from '@/lib/organization/starter-kit'
 import { defaultOperatingModelFor } from '@/lib/organization/business-profile'
+import { createInitialOnboardingState } from '@/lib/onboarding/shared-setup'
 
 type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
 type RegisteredAuthUser = {
@@ -310,6 +311,11 @@ export async function POST(request: Request) {
               status: 'pending',
               selected_plan: resolvedPlanTier,
               started_at: new Date().toISOString(),
+              shared: createInitialOnboardingState({
+                plan: resolvedPlanTier,
+                businessName: input.companyName,
+                businessCategory: input.businessVertical ?? null,
+              }),
             },
           },
         },

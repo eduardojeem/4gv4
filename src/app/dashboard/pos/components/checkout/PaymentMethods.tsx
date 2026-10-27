@@ -319,13 +319,13 @@ export function PaymentMethods({
       {!isMixedPayment ? (
         // Pago simple
         <div className="space-y-2">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid min-w-0 grid-cols-2 gap-2">
             {paymentMethods.map(method => (
             <Button
               key={method.id}
               variant={paymentMethod === method.id ? "default" : "outline"}
               aria-pressed={paymentMethod === method.id}
-              className={`h-auto min-h-16 w-full flex-col items-start justify-center gap-1 px-3 py-2 text-left transition-all ${
+              className={`h-auto min-h-16 min-w-0 w-full flex-col items-start justify-center gap-1 whitespace-normal break-words px-3 py-2 text-left transition-all ${
                 method.id === 'credit' && !canUseCredit 
                   ? 'opacity-70' // Visualmente distinto pero interactivo
                   : paymentMethod === method.id 
