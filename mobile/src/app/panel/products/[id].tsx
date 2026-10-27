@@ -253,6 +253,25 @@ export default function ProductDetail() {
         {/* Stock */}
         {!service && (
           <Card title="Stock" icon="cube-outline" colors={colors}>
+            {product.variant_stock_summary && product.variant_stock_summary.variant_count > 0 && (
+              <View style={[styles.variantStockSummary, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                <Text style={[styles.small, { color: colors.muted }]}>Estado individual de cada variante</Text>
+                {product.variants?.filter((variant) => variant.is_active !== false).map((variant) => {
+                  const variantStatus = variant.stock_status ?? 'in_stock';
+                  const label = variantStatus === 'out_of_stock' ? 'Agotado' : variantStatus === 'low_stock' ? 'Stock bajo' : 'Disponible';
+                  const color = variantStatus === 'out_of_stock' ? '#DC2626' : variantStatus === 'low_stock' ? '#D97706' : '#16A34A';
+                  return (
+                    <View key={variant.id} style={styles.variantStockLine}>
+                      <Text numberOfLines={1} style={[styles.small, styles.flex, { color: colors.text }]}>{variant.variant_name ?? variant.name ?? 'Variante'}</Text>
+                      <Text style={[styles.small, { color }]}>{label} · {variant.current_stock ?? (Number(variant.stock_quantity) || 0)}</Text>
+                    </View>
+                  );
+                })}
+                <Text style={[styles.small, { color: colors.muted }]}>
+                  {product.variant_stock_summary.out_of_stock_variant_count} agotada{product.variant_stock_summary.out_of_stock_variant_count === 1 ? '' : 's'} · {product.variant_stock_summary.low_stock_variant_count} con stock bajo
+                </Text>
+              </View>
+            )}
             <View style={styles.stockRow}>
               <View style={[styles.stockBadge, { backgroundColor: `${stock.color}1A` }]}>
                 <Text style={[styles.stockValue, { color: stock.color }]}>{Number(product.stock_quantity) || 0}</Text>
@@ -398,6 +417,8 @@ const styles = StyleSheet.create({
   field: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   fieldValue: { fontSize: 14, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
   stockRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  variantStockSummary: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 6 },
+  variantStockLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stockBadge: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', minWidth: 96 },
   stockValue: { fontSize: 28, fontWeight: '900' },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 48, marginTop: 4 },

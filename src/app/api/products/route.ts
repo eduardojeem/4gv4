@@ -22,6 +22,7 @@ import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { recordStockAdjustment } from '@/lib/products/stock-movements'
 import { persistDeviceFields } from '@/lib/products/device-persist'
 import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
+import { matchesProductStockFilter, summarizeVariantStock, type VariantBranchInventoryInput, type VariantStockInput } from '@/lib/inventory/variant-low-stock'
 import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
 import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
@@ -262,14 +263,6 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     if (updatedFrom) queryBuilder = queryBuilder.gte('updated_at', updatedFrom)
     if (updatedTo) queryBuilder = queryBuilder.lt('updated_at', updatedTo)
 
-    if (stockStatus === 'in_stock' && !branchScope.branchId) {
-      queryBuilder = queryBuilder.gt('stock_quantity', 0)
-    } else if (stockStatus === 'out_of_stock' && !branchScope.branchId) {
-      queryBuilder = queryBuilder.eq('stock_quantity', 0)
-    } else if (stockStatus === 'low_stock' && !branchScope.branchId) {
-      queryBuilder = queryBuilder.gt('stock_quantity', 0)
-    }
-    
     const from = (page - 1) * perPage
     const to = from + perPage - 1
     const needsInMemoryPagination =
@@ -376,11 +369,96 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
           }
         })
       : applyBranchInventoryToProducts(cappedProducts, stockMap, branchScoped, thresholdMap)
-    const stockFilteredProducts = branchAwareProducts.filter((product) => {
+    const branchVariantInventory: VariantBranchInventoryInput[] = []
+    const variantProductIds = cappedProducts
+      .filter((product) => Boolean(product.has_variants) || (Array.isArray(product.variants) && product.variants.length > 0))
+      .map((product) => product.id)
+    if (branchScope.branchId && variantProductIds.length > 0) {
+      for (let index = 0; index < variantProductIds.length; index += 200) {
+        const productIds = variantProductIds.slice(index, index + 200)
+        const { data: rows, error: variantInventoryError } = await supabase
+          .from('branch_variant_inventory')
+          .select('organization_id, branch_id, variant_id, stock_quantity, min_stock')
+          .eq('organization_id', organization.id)
+          .eq('branch_id', branchScope.branchId)
+          .in('product_id', productIds)
+        if (variantInventoryError) {
+          logger.error('Branch variant stock read failed for products listing', {
+            organizationId: organization.id,
+            branchId: branchScope.branchId,
+            code: variantInventoryError.code,
+          })
+          return NextResponse.json(
+            { success: false, code: 'BRANCH_VARIANT_STOCK_UNAVAILABLE', error: 'No se pudo leer el stock de variantes de la sucursal activa.' },
+            { status: 503 }
+          )
+        }
+        branchVariantInventory.push(...((rows ?? []) as VariantBranchInventoryInput[]))
+      }
+    }
+
+    const productsWithVariantStock = branchAwareProducts.map((product) => {
+      const variants = Array.isArray(product.variants) ? product.variants as Array<VariantStockInput & Record<string, unknown>> : []
+      if (!Boolean(product.has_variants) && variants.length === 0) return product
+      const evaluation = summarizeVariantStock({
+        organizationId: organization.id,
+        variants,
+        inventory: branchVariantInventory,
+        branchId: branchScope.branchId,
+      })
+      const variantCount = evaluation.summary.variantCount
+      const affectedVariantCount = evaluation.summary.affectedVariantCount
+      return {
+        ...product,
+        ...(branchScope.branchId ? {
+          stock_quantity: evaluation.summary.totalStock,
+          branch_stock_quantity: evaluation.summary.totalStock,
+        } : {}),
+        variant_stock_summary: {
+          variant_count: variantCount,
+          out_of_stock_variant_count: evaluation.summary.outOfStockVariantCount,
+          low_stock_variant_count: evaluation.summary.lowStockVariantCount,
+          affected_variant_count: affectedVariantCount,
+          total_stock: evaluation.summary.totalStock,
+        },
+        variants: variants.map((variant) => {
+          const detail = evaluation.details.get(variant.id)
+          if (!detail || variant.is_active === false) return variant
+          return {
+            ...variant,
+            ...(branchScope.branchId ? { stock_quantity: detail.currentStock, min_stock: detail.minimumStock } : {}),
+            stock_status: detail.status,
+            current_stock: detail.currentStock,
+            minimum_stock: detail.minimumStock,
+          }
+        }),
+      }
+    })
+
+    const stockFilteredProducts = productsWithVariantStock.filter((product) => {
       const stock = Number(product.stock_quantity || 0)
-      if (stockStatus === 'in_stock' && stock <= 0) return false
-      if (stockStatus === 'out_of_stock' && stock > 0) return false
-      if (stockStatus === 'low_stock' && !(stock > 0 && stock <= Number(product.min_stock || 0))) return false
+      const rawSummary = product.variant_stock_summary as {
+        variant_count: number
+        out_of_stock_variant_count: number
+        low_stock_variant_count: number
+        affected_variant_count: number
+        total_stock: number
+      } | undefined
+      const variantSummary = rawSummary ? {
+        variantCount: rawSummary.variant_count,
+        outOfStockVariantCount: rawSummary.out_of_stock_variant_count,
+        lowStockVariantCount: rawSummary.low_stock_variant_count,
+        affectedVariantCount: rawSummary.affected_variant_count,
+        totalStock: rawSummary.total_stock,
+      } : null
+      if (stockStatus === 'in_stock' || stockStatus === 'out_of_stock' || stockStatus === 'low_stock') {
+        if (!matchesProductStockFilter({
+          filter: stockStatus,
+          stock,
+          minimumStock: Number(product.min_stock || 0),
+          variantSummary,
+        })) return false
+      }
       if (
         stockStatus === 'normal_stock' &&
         !(stock > Number(product.min_stock || 0) && stock < Number(product.max_stock || 0))

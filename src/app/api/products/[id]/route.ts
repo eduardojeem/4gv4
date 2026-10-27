@@ -1,4 +1,3 @@
-import { applyVariantBranchStock, loadVariantBranchStock } from '@/lib/products/variant-branch-stock'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,6 +20,7 @@ import {
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
 import { PRODUCT_CLIENT_COLUMNS } from '@/lib/products/cost-columns'
+import { summarizeVariantStock, type VariantBranchInventoryInput, type VariantStockInput } from '@/lib/inventory/variant-low-stock'
 
 type ProductRouteContext = { params: Promise<{ id: string }> }
 
@@ -74,15 +74,56 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScoped
     )[0]
 
-    // Only the edit form opts into branch quantities. Existing detail consumers
-    // continue receiving aggregate variant stock.
-    if (new URL(request.url).searchParams.get('variant_stock_scope') === 'branch') {
+    const variantStockScope = new URL(request.url).searchParams.get('variant_stock_scope')
+    if (variantStockScope === 'branch') {
       if (!requestedBranchId || branchScope.branchId !== requestedBranchId) {
         return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para editar stock de variantes.', code: 'BRANCH_REQUIRED' }, { status: 400 })
       }
-      const variants = Array.isArray(responseProduct.variants) ? responseProduct.variants as Array<{ id: string; stock_quantity?: number | null }> : []
-      const stock = await loadVariantBranchStock(supabase, organization.id, requestedBranchId, variants.map(v => v.id))
-      responseProduct.variants = applyVariantBranchStock(variants, stock)
+    }
+
+    const variants = Array.isArray(responseProduct.variants)
+      ? responseProduct.variants as Array<VariantStockInput & Record<string, unknown>>
+      : []
+    const branchVariantInventory: VariantBranchInventoryInput[] = []
+    if (branchScope.branchId && variants.length > 0) {
+      const { data: rows, error: variantStockError } = await supabase
+        .from('branch_variant_inventory')
+        .select('organization_id, branch_id, variant_id, stock_quantity, min_stock')
+        .eq('organization_id', organization.id)
+        .eq('branch_id', branchScope.branchId)
+        .in('variant_id', variants.map((variant) => variant.id))
+      if (variantStockError) throw variantStockError
+      branchVariantInventory.push(...((rows ?? []) as VariantBranchInventoryInput[]))
+    }
+    if (variants.length > 0 || responseProduct.has_variants) {
+      const evaluation = summarizeVariantStock({
+        organizationId: organization.id,
+        variants,
+        inventory: branchVariantInventory,
+        branchId: branchScope.branchId,
+      })
+      const summary = evaluation.summary
+      Object.assign(responseProduct, {
+        ...(branchScope.branchId ? { stock_quantity: summary.totalStock, branch_stock_quantity: summary.totalStock } : {}),
+        variant_stock_summary: {
+          variant_count: summary.variantCount,
+          out_of_stock_variant_count: summary.outOfStockVariantCount,
+          low_stock_variant_count: summary.lowStockVariantCount,
+          affected_variant_count: summary.affectedVariantCount,
+          total_stock: summary.totalStock,
+        },
+        variants: variants.map((variant) => {
+          const detail = evaluation.details.get(variant.id)
+          if (!detail || variant.is_active === false) return variant
+          return {
+            ...variant,
+            ...(branchScope.branchId ? { stock_quantity: detail.currentStock, min_stock: detail.minimumStock } : {}),
+            stock_status: detail.status,
+            current_stock: detail.currentStock,
+            minimum_stock: detail.minimumStock,
+          }
+        }),
+      })
     }
 
     const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:user.id,organizationId:organization.id})
