@@ -34,6 +34,7 @@ interface SaleSummaryProps {
   WHOLESALE_DISCOUNT_RATE: number
   formatCurrency: (amount: number) => string
   onUpdateQuantity?: (id: string, quantity: number) => void
+  onRemoveItem?: (id: string) => void
 }
 
 export function SaleSummary({
@@ -42,7 +43,8 @@ export function SaleSummary({
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
   formatCurrency,
-  onUpdateQuantity
+  onUpdateQuantity,
+  onRemoveItem,
 }: SaleSummaryProps) {
   const { discount, paymentMethod, isMixedPayment, paymentSplit, creditTerms, setCreditTerms, storeCreditApplied, paymentStatus } = useCheckout()
   const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
@@ -67,17 +69,18 @@ export function SaleSummary({
   const collectNow = (isMixedPayment ? immediatePayment : isCreditSale ? 0 : amountDueAfterStoreCredit) + firstPaymentAmount
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
       <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Detalle del total</h4><span className="text-xs text-muted-foreground">{cart.length} ítems</span></div>
       
       {/* Items del carrito */}
       <div role="region" aria-label="Productos de la venta" tabIndex={0} className="max-h-56 overflow-y-auto overscroll-contain rounded-md border text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring divide-y [scrollbar-gutter:stable] max-sm:max-h-[30dvh]">
+        {cart.length === 0 && <p role="status" className="p-3 text-sm text-muted-foreground">La venta quedó vacía. Volvé al carrito para agregar productos antes de cobrar.</p>}
         {cart.map(item => {
           const appliedUnit = isWholesale
             ? (typeof item.wholesalePrice === 'number' ? item.wholesalePrice : (item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
             : item.price
           return (
-            <CheckoutProductRow key={item.id} item={item} unitPrice={appliedUnit} formatCurrency={formatCurrency} onUpdateQuantity={onUpdateQuantity} disabled={paymentStatus === 'processing'} />
+            <CheckoutProductRow key={item.id} item={item} unitPrice={appliedUnit} formatCurrency={formatCurrency} onUpdateQuantity={onUpdateQuantity} onRemoveItem={onRemoveItem} disabled={paymentStatus === 'processing'} />
           )
         })}
       </div>
@@ -168,9 +171,14 @@ export function SaleSummary({
       <Separator />
 
       {/* Total */}
+      {isCreditSale && <div className="rounded-lg border p-3" aria-label="Precio al contado">
+        <p className="text-sm text-muted-foreground">Precio al contado</p>
+        <p className="break-words text-lg font-semibold tabular-nums">{formatCurrency(cartCalculations.total)}</p>
+        <p className="text-xs text-muted-foreground">Total de la venta sin intereses de financiación.</p>
+      </div>}
       <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg bg-muted px-3 py-3">
-        <span>{isCreditSale ? 'Total final con financiación:' : 'Total:'}</span>
-        <span className="text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatCurrency(displayedTotal)}</span>
+        <span>{isCreditSale ? 'Total final con financiación:' : 'Total al contado:'}</span>
+        <span className="max-w-full break-words text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatCurrency(displayedTotal)}</span>
       </div>
 
       {/* El saldo a favor no baja el total: baja lo que hay que cobrar. */}

@@ -5,6 +5,17 @@ import { CheckoutProductRow } from '../CheckoutProductRow'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 describe('productos del resumen de cobro', () => {
+  it('quita el producto de la venta y bloquea la acción mientras se cobra', () => {
+    const remove = vi.fn()
+    const props = { item: { id: 'p1', name: 'Remera', price: 50000, quantity: 2 }, unitPrice: 50000, formatCurrency: String, onRemoveItem: remove }
+    const view = render(<CheckoutProductRow {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar Remera de la venta' }))
+    expect(remove).toHaveBeenCalledWith('p1')
+    view.rerender(<CheckoutProductRow {...props} disabled />)
+    expect(screen.getByRole('button', { name: 'Quitar Remera de la venta' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar Remera de la venta' }))
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
   it('Escape cierra solo el detalle y devuelve el foco al producto sin cerrar el cobro', async () => {
     const parentChange = vi.fn()
     render(<Dialog open onOpenChange={parentChange}><DialogContent><DialogTitle>Cobrar venta</DialogTitle><DialogDescription>Resumen de venta</DialogDescription><CheckoutProductRow item={{ id: 'p', name: 'Remera', price: 10, quantity: 1 }} unitPrice={10} formatCurrency={String} /></DialogContent></Dialog>)

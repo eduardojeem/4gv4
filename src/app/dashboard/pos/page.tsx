@@ -2617,6 +2617,7 @@ function POSPageContent() {
       {/* Modal de checkout */}
       <CheckoutModal
         onUpdateQuantity={updateQuantity}
+        onRemoveItem={handleRemoveItem}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
         customerRepairs={selectedRepairs}
