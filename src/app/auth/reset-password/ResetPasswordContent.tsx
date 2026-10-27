@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { validatePassword } from '@/lib/auth/password-validation'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { buildMfaPath } from '@/lib/auth/mfa'
+import { loadMfaState } from '@/lib/auth/mfa-client'
 
 export default function ResetPasswordContent() {
   const [password, setPassword] = useState('')
@@ -70,6 +72,12 @@ export default function ResetPasswordContent() {
           return
         }
 
+        // Con 2FA activa, Supabase sólo deja cambiar la contraseña después del código.
+        if ((await loadMfaState(supabase).catch(() => null))?.pending) {
+          router.replace(buildMfaPath('/auth/reset-password'))
+          return
+        }
+
         setValidatingToken(false)
       } catch (err) {
         console.error('Error validating session:', err)
@@ -79,7 +87,7 @@ export default function ResetPasswordContent() {
     }
 
     validateSession()
-  }, [router, supabase.auth])
+  }, [router, supabase])
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()

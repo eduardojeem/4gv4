@@ -28,6 +28,9 @@ import { clearLegacyBiometricCredentials } from '@/lib/legacy-biometric';
 import { palette, usePalette } from '@/lib/palette';
 import { parseRegistrationReturn, registrationNotice } from '@/lib/registration-model';
 import { useSession } from '@/lib/session';
+import { isSessionMfaPending } from '@/lib/mfa-model';
+import { supabase } from '@/lib/supabase';
+import { MfaCodeCard } from '@/components/mfa-code-card';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -37,7 +40,7 @@ const SECURE_KEYS = {
 } as const;
 
 export default function SignInScreen() {
-  const { signIn, setBiometricEnabled } = useSession();
+  const { signIn, setBiometricEnabled, mfaPending } = useSession();
   const colors = usePalette();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -121,6 +124,12 @@ export default function SignInScreen() {
 
       } catch {
         // Almacenamiento no bloqueante
+      }
+      // Con 2FA la pantalla sigue con el paso del código; Face ID se ofrece al terminar.
+      if (isSessionMfaPending((await supabase.auth.getSession()).data.session)) {
+        setBusy(false);
+        setPassword('');
+        return;
       }
       void offerBiometricUnlock();
     }
@@ -222,6 +231,9 @@ export default function SignInScreen() {
               )}
 
               {/* Tarjeta de Formulario Principal */}
+              {mfaPending ? (
+                <MfaCodeCard onVerified={() => void offerBiometricUnlock()} />
+              ) : (
               <View
                 style={[
                   styles.formCard,
@@ -439,6 +451,7 @@ export default function SignInScreen() {
 
                 {hint && <Text style={[styles.formHint, { color: colors.muted }]}>{hint}</Text>}
               </View>
+              )}
 
               {/* Pie de pantalla / Seguridad */}
               <View style={styles.footerContainer}>

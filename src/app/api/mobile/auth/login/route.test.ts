@@ -7,7 +7,7 @@ vi.mock('@/lib/rate-limiter', () => ({
   getClientIp: () => '1.2.3.4',
 }))
 
-const db = { status: 'active' as string | null, roleActive: true as boolean | null, members: 1, profileError: null as unknown, roleError: null as unknown }
+const db = { status: 'active' as string | null, roleActive: true as boolean | null, members: 1, profileError: null as unknown, roleError: null as unknown, adminOrgs: [] as string[], requireAdminMfa: false }
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminSupabase: () => ({
     from: (table: string) => {
@@ -15,6 +15,12 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => builder,
         eq: () => builder,
         neq: () => Promise.resolve({ count: db.members, error: null }),
+        // organization_members de dueño/admin termina en `.in()`; organization_settings sigue con `.eq().limit()`.
+        in: () =>
+          table === 'organization_members'
+            ? Promise.resolve({ data: db.adminOrgs.map((organization_id) => ({ organization_id })), error: null })
+            : builder,
+        limit: () => Promise.resolve({ data: db.requireAdminMfa ? [{ organization_id: db.adminOrgs[0] }] : [], error: null }),
         maybeSingle: () =>
           Promise.resolve({ data: table === 'profiles' ? { status: db.status } : { is_active: db.roleActive }, error: table === 'profiles' ? db.profileError : db.roleError }),
       }
@@ -36,7 +42,7 @@ describe('POST /api/mobile/auth/login', () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-key')
     vi.stubGlobal('fetch', fetchMock)
     check.mockResolvedValue(true)
-    Object.assign(db, { status: 'active', roleActive: true, members: 1, profileError: null as unknown, roleError: null as unknown })
+    Object.assign(db, { status: 'active', roleActive: true, members: 1, profileError: null as unknown, roleError: null as unknown, adminOrgs: [], requireAdminMfa: false })
   })
 
   afterEach(() => {
@@ -66,6 +72,27 @@ describe('POST /api/mobile/auth/login', () => {
     expect(json.code).toBe('not_staff')
     expect(json.access_token).toBeUndefined()
     expect(String(fetchMock.mock.calls[1][0])).toContain('/auth/v1/logout')
+  })
+
+  it('si su comercio exige 2FA a los administradores y no la activó, no da sesión', async () => {
+    Object.assign(db, { adminOrgs: ['org-1'], requireAdminMfa: true })
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', user: { id: 'u', factors: [] } })))
+    const res = await POST(request({ email: 'duenio@b.com', password: 'x' }))
+    expect(res.status).toBe(403)
+    const json = await res.json()
+    expect(json.code).toBe('MFA_ENROLLMENT_REQUIRED')
+    expect(json.access_token).toBeUndefined()
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/auth/v1/logout')
+  })
+
+  it('con 2FA activa devuelve la sesión aal1 para que la app pida el código', async () => {
+    Object.assign(db, { adminOrgs: ['org-1'], requireAdminMfa: true })
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { id: 'u', factors: [{ status: 'verified' }] },
+    })))
+    const res = await POST(request({ email: 'duenio@b.com', password: 'x' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ access_token: 'a', refresh_token: 'r', expires_in: 3600 })
   })
 
   it('rechaza un usuario desactivado', async () => {

@@ -2,11 +2,12 @@ import { setPrivateCacheUser } from './private-cache-context';
 import * as SecureStore from 'expo-secure-store';
 import { clearLegacyBiometricCredentials } from './legacy-biometric';
 import type { Session } from '@supabase/supabase-js';
-import { createContext, use, useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { apiFetch } from './api';
 import { supabase } from './supabase';
+import { describeMfaError, isSessionMfaPending } from './mfa-model';
 import {
   authenticateWithBiometrics,
   clearBiometricUnlock,
@@ -18,7 +19,12 @@ import {
 } from './biometric-lock';
 
 type SessionContextValue = {
+  /** La sesión que puede usar el panel. Con 2FA pendiente es null: el servidor todavía la rechaza. */
   session: Session | null;
+  /** Entró con la contraseña pero falta el código de la app autenticadora. */
+  mfaPending: boolean;
+  /** Verifica el código de 6 dígitos; devuelve el error para mostrar o null si entró. */
+  verifyMfa: (code: string) => Promise<string | null>;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -67,7 +73,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       const on = support.available && enabled;
       setBiometric({ ...support, enabled: on });
       // Al abrir la app con sesión guardada y Face ID activado, primero se desbloquea.
-      setLocked(Boolean(restoredSession) && on);
+      // Si falta el código de 2FA no hay panel que proteger: primero se pide el código.
+      setLocked(Boolean(restoredSession) && on && !isSessionMfaPending(restoredSession));
       setPrivateCacheUser(restoredSession?.user.id ?? null);
       setSession(restoredSession);
       setIsLoading(false);
@@ -133,6 +140,20 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   };
 
+  const verifyMfa = useCallback(async (code: string) => {
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (error) return describeMfaError(error);
+      const factor = data?.totp.find((item) => item.status === 'verified');
+      if (!factor) return describeMfaError({ code: 'mfa_factor_not_found' });
+      // Al verificar, Supabase renueva la sesión como aal2 y `onAuthStateChange` la publica.
+      const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code });
+      return verifyError ? describeMfaError(verifyError) : null;
+    } catch (err) {
+      return describeMfaError(err);
+    }
+  }, []);
+
   const signOut = async () => {
     setPrivateCacheUser(null);
     try {
@@ -146,8 +167,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   };
 
+  const mfaPending = useMemo(() => isSessionMfaPending(session), [session]);
+  const visibleSession = mfaPending ? null : session;
+
   return (
-    <SessionContext.Provider value={{ session, isLoading, signIn, signOut, locked, unlock, biometric, setBiometricEnabled }}>
+    <SessionContext.Provider value={{ session: visibleSession, mfaPending, verifyMfa, isLoading, signIn, signOut, locked, unlock, biometric, setBiometricEnabled }}>
       {children}
     </SessionContext.Provider>
   );

@@ -81,11 +81,14 @@ export default defineConfig({
     }
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/test': path.resolve(__dirname, './src/test'),
-      'expo-local-authentication': path.resolve(__dirname, './src/test/mocks/expo-local-authentication.ts'),
-      'expo-secure-store': path.resolve(__dirname, './src/test/mocks/expo-secure-store.ts'),
-    }
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: '@/test', replacement: path.resolve(__dirname, './src/test') },
+      // Módulos nativos de la app móvil: en CI no se instalan las dependencias de mobile/.
+      { find: 'expo-local-authentication', replacement: path.resolve(__dirname, './src/test/mocks/expo-local-authentication.ts') },
+      { find: 'expo-secure-store', replacement: path.resolve(__dirname, './src/test/mocks/expo-secure-store.ts') },
+      { find: /^expo-file-system$/, replacement: path.resolve(__dirname, './src/test/mocks/expo-file-system.ts') },
+      { find: /^react-native$/, replacement: path.resolve(__dirname, './src/test/mocks/react-native.ts') },
+    ]
   }
 })

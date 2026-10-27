@@ -34,6 +34,8 @@ import { siteUrl } from '@/lib/site-url'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { browserSupportsPasskeys, describePasskeyError, isPasskeyCancellation } from '@/lib/auth/passkeys'
+import { buildMfaPath } from '@/lib/auth/mfa'
+import { loadMfaState } from '@/lib/auth/mfa-client'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -104,6 +106,17 @@ export default function LoginPage() {
   }
 
   const completeLogin = async (userId: string | undefined, method: 'password' | 'passkey') => {
+    const rawRedirectParam = searchParams.get('redirect')
+    const redirectTo = rawRedirectParam ? sanitizeRedirectPath(rawRedirectParam) : '/dashboard'
+
+    // Con 2FA activa la sesión todavía no sirve para el panel ni las APIs: falta
+    // el código. El evento de login se registra cuando se verifica.
+    const mfa = await loadMfaState(supabase).catch(() => null)
+    if (mfa?.pending) {
+      router.push(buildMfaPath(redirectTo))
+      return
+    }
+
     if (userId) {
       try {
         const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
@@ -125,9 +138,6 @@ export default function LoginPage() {
     // marketplace y las tiendas: desde cualquier otra página pública, una
     // cuenta con negocio terminaba en el panel sin haberlo pedido.
     // `sanitizeRedirectPath` descarta lo que no sea una ruta interna.
-    const rawRedirectParam = searchParams.get('redirect')
-    const redirectTo = rawRedirectParam ? sanitizeRedirectPath(rawRedirectParam) : '/dashboard'
-
     router.push(redirectTo)
     router.refresh()
   }

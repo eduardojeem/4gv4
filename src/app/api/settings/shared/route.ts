@@ -29,8 +29,8 @@ export async function GET() {
   const auth = await resolveRequestAuthUser()
   if ('reason' in auth) {
     return NextResponse.json(
-      { success: false, error: auth.reason === 'unauthenticated' ? 'Authentication required' : 'User is inactive' },
-      { status: auth.reason === 'unauthenticated' ? 401 : 403 }
+      { success: false, error: auth.reason !== 'inactive' ? 'Authentication required' : 'User is inactive' },
+      { status: auth.reason !== 'inactive' ? 401 : 403 }
     )
   }
 
