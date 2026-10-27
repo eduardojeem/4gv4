@@ -11,7 +11,8 @@ export interface BusinessStartGuidePayload {
   preferences: StartGuidePreferences
   guide: StartGuideResult
   limitations: string[]
-  setupChecklist: ReturnType<typeof deriveOnboardingChecklist>
+  /** null si el servidor no pudo armarlo; la guía sale igual. */
+  setupChecklist?: ReturnType<typeof deriveOnboardingChecklist> | null
 }
 export function useBusinessStartGuide() {
   const context = useOptionalActiveOrganization()

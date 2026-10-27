@@ -34,7 +34,8 @@ describe('business guide server', () => {
   })
   it('scopes every table lookup to the current organization', async () => {
     await loadStartGuide('actor', 'branch')
-    for (const table of new Set(state.filters.map(filter => filter.table))) expect(state.filters).toContainEqual({ table, key: 'organization_id', value: 'org' })
+    // organizations se acota por su propio id; el resto, por organization_id.
+    for (const table of new Set(state.filters.map(filter => filter.table))) expect(state.filters).toContainEqual({ table, key: table === 'organizations' ? 'id' : 'organization_id', value: 'org' })
     expect(state.filters).toContainEqual({ table: 'sales', key: 'branch_id', value: 'branch' })
   })
   it('rejects an unavailable branch', async () => {
@@ -46,6 +47,13 @@ describe('business guide server', () => {
     const result = await loadStartGuide('actor')
     expect(result.guide.tasks.find(task => task.id === 'catalog')?.state).toBe('unknown')
     expect(result.limitations.some(message => message.includes('producto'))).toBe(true)
+  })
+  it('an unavailable setup checklist is reported, not a broken guide', async () => {
+    state.failTable = 'website_settings'
+    const result = await loadStartGuide('actor')
+    expect(result.setupChecklist).toBeNull()
+    expect(result.limitations).toContain('No se pudo comprobar la configuración opcional del negocio.')
+    expect(result.guide.tasks.length).toBeGreaterThan(0)
   })
   it('does not query unavailable service or repair modules', async () => {
     await loadStartGuide('actor')
