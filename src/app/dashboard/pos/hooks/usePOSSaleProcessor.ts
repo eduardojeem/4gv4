@@ -19,6 +19,7 @@ import type { CartItem, PaymentSplit } from '../types'
 import { firstPaymentError } from '@/lib/credits/first-payment'
 import type { POSCustomer } from '../contexts/POSCustomerContext'
 import type { SaleData } from '@/hooks/usePOSProducts'
+import { buildReceiptLines, saleItemDiscountAmount } from '../lib/cart-pricing'
 
 // ─── Tipos auxiliares ────────────────────────────────────────────────────────
 
@@ -41,6 +42,9 @@ export interface ProcessSaleResult {
     total?: number
     tax?: number
     discount?: number
+    subtotal?: number
+    /** Código guardado en la venta: es el que muestra la reimpresión. */
+    code?: string
     creditSchedule?: unknown
     /** Puntos de fidelidad que sumó la venta, para el comprobante. */
     loyaltyPoints?: number
@@ -236,9 +240,10 @@ export function usePOSSaleProcessor() {
         }
         const receiptPaymentAmount = creditSummary?.financedTotal ?? amountDue
 
+        const receiptLines = buildReceiptLines(combinedCartItems, { isWholesale, orderDiscountRate: generalDiscount })
         const receiptCalculations = {
-          subtotal: cartCalculations.subtotal,
-          totalDiscount: cartCalculations.totalDiscount,
+          subtotal: receiptLines.subtotal,
+          totalDiscount: receiptLines.totalDiscount,
           tax: cartCalculations.tax,
           repairCost: cartCalculations.repairCost,
           total: creditSummary
@@ -269,7 +274,7 @@ export function usePOSSaleProcessor() {
         ]
 
         const receiptData = createReceiptData(
-          combinedCartItems,
+          receiptLines.items,
           receiptCalculations,
           payments,
           customer,
@@ -300,9 +305,7 @@ export function usePOSSaleProcessor() {
               price: item.price,
               quantity: item.quantity,
               stock: item.stock,
-              discount_amount: item.discount
-                ? item.price * item.quantity * (item.discount / 100)
-                : 0,
+              discount_amount: saleItemDiscountAmount(item, isWholesale),
               subtotal: item.price * item.quantity,
             })),
             total: cartCalculations.total,
@@ -375,7 +378,10 @@ export function usePOSSaleProcessor() {
               ? Number(saleResult.data.total)
               : receiptData.total,
             creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
-            receiptNumber: saleResult?.saleId
+            // El mismo número que la reimpresión (sales.code): antes eran dos distintos.
+            receiptNumber: typeof saleResult?.data?.code === 'string' && saleResult.data.code
+              ? saleResult.data.code
+              : saleResult?.saleId
               ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
               : saleResult?.offline && saleResult.offlineId
                 ? `PEND-${saleResult.offlineId.slice(0, 8).toUpperCase()}`
@@ -383,6 +389,9 @@ export function usePOSSaleProcessor() {
             tax: Number.isFinite(Number(saleResult?.data?.tax))
               ? Number(saleResult.data.tax)
               : receiptData.tax,
+            subtotal: Number.isFinite(Number(saleResult?.data?.subtotal))
+              ? Number(saleResult.data.subtotal)
+              : receiptData.subtotal,
             totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
               ? Number(saleResult.data.discount)
               : receiptData.totalDiscount,
@@ -506,14 +515,20 @@ export function usePOSSaleProcessor() {
         ...paymentSplit,
       ]
 
+      const receiptLines = buildReceiptLines(combinedCartItems, { isWholesale, orderDiscountRate: generalDiscount })
+      const mixedReceiptCalculations = {
+        ...cartCalculations,
+        subtotal: receiptLines.subtotal,
+        totalDiscount: receiptLines.totalDiscount,
+      }
       const receiptData = createReceiptData(
-        combinedCartItems,
+        receiptLines.items,
         mixedCreditSummary
           ? {
-              ...cartCalculations,
+              ...mixedReceiptCalculations,
               creditInfo: { ...mixedCreditSummary, interestRate: creditTerms.interestRate },
             }
-          : cartCalculations,
+          : mixedReceiptCalculations,
         receiptPayments,
         customer,
         cashierName
@@ -543,9 +558,7 @@ export function usePOSSaleProcessor() {
             price: item.price,
             quantity: item.quantity,
             stock: item.stock,
-            discount_amount: item.discount
-              ? item.price * item.quantity * (item.discount / 100)
-              : 0,
+            discount_amount: saleItemDiscountAmount(item, isWholesale),
             subtotal: item.price * item.quantity,
           })),
           total: cartCalculations.total,
@@ -604,7 +617,10 @@ export function usePOSSaleProcessor() {
             ? Number(saleResult.data.total)
             : receiptData.total,
           creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
-          receiptNumber: saleResult?.saleId
+          // El mismo número que la reimpresión (sales.code): antes eran dos distintos.
+          receiptNumber: typeof saleResult?.data?.code === 'string' && saleResult.data.code
+            ? saleResult.data.code
+            : saleResult?.saleId
             ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
             : saleResult?.offline && saleResult.offlineId
               ? `PEND-${saleResult.offlineId.slice(0, 8).toUpperCase()}`
@@ -612,6 +628,9 @@ export function usePOSSaleProcessor() {
           tax: Number.isFinite(Number(saleResult?.data?.tax))
             ? Number(saleResult.data.tax)
             : receiptData.tax,
+          subtotal: Number.isFinite(Number(saleResult?.data?.subtotal))
+            ? Number(saleResult.data.subtotal)
+            : receiptData.subtotal,
           totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
             ? Number(saleResult.data.discount)
             : receiptData.totalDiscount,

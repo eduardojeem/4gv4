@@ -33,6 +33,8 @@ export interface CartItem {
   wholesalePrice?: number
   // Resguardo del precio original al agregar
   originalPrice?: number
+  // Precio de oferta vigente por unidad; el carrito lo actualiza desde el catálogo.
+  offerPrice?: number
   // Categoría del producto (para promociones basadas en categoría)
   category?: string
   categoryName?: string

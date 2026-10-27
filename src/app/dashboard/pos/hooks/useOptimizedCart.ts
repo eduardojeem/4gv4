@@ -3,9 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Product } from '../types'
 import { toast } from 'sonner'
-
-// Constantes copiadas de page.tsx
-const WHOLESALE_DISCOUNT_RATE = 10
+import { getActiveOfferPrice, orderDiscountAmount, priceCartLine } from '../lib/cart-pricing'
 
 interface CartConfig {
   taxRate?: number
@@ -214,8 +212,10 @@ export const useOptimizedCart = (
           stock: isService ? 999 : (currentProduct.stock_quantity ?? 0),
           subtotal: itemPrice * quantity,
           image: (product as { image?: string | null }).image || product.image_url || product.images?.[0] || '',
-          wholesalePrice: inferredWholesale,
+          wholesalePrice: inferredWholesale ?? undefined,
           originalPrice: itemPrice,
+          // Los turnos se cobran con su tarifa acordada; el resto, con la oferta vigente.
+          offerPrice: appointmentId ? undefined : getActiveOfferPrice(currentProduct) ?? undefined,
           category: typeof product.category === 'object' ? product.category?.id : product.category,
           categoryName: product.category?.name,
           brand: product.brand || undefined,
@@ -255,6 +255,7 @@ export const useOptimizedCart = (
       image: cartItem.image || productRef?.image || productRef?.image_url || productRef?.images?.[0] || '',
       wholesalePrice: cartItem.wholesalePrice ?? cartItem.wholesale_price ?? productRef?.wholesale_price ?? undefined,
       originalPrice: Number(cartItem.price || productRef?.sale_price || 0),
+      offerPrice: getActiveOfferPrice(productRef, Number(cartItem.price || productRef?.sale_price || 0)) ?? undefined,
       category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category,
       categoryName: productRef?.category?.name,
       brand: productRef?.brand || undefined,
@@ -366,33 +367,39 @@ export const useOptimizedCart = (
   }, [])
 
   /**
+   * Carrito con la oferta vigente del catálogo.
+   *
+   * La oferta se lee del catálogo en cada cálculo, no solo al agregar: si se
+   * activa o termina con el carrito abierto (o restaurado de localStorage), el
+   * cobro sigue al precio que el servidor va a aplicar.
+   */
+  const pricedCart = useMemo(() => {
+    const catalog = new Map(inventoryProducts.map(product => [product.id, product]))
+    return cart.map(item => {
+      if (item.appointmentId || item.isService) return item.offerPrice === undefined ? item : { ...item, offerPrice: undefined }
+      const product = catalog.get(item.productId || item.id)
+      if (!product) return item
+      const offerPrice = getActiveOfferPrice(product, item.variantId ? item.price : undefined) ?? undefined
+      return offerPrice === item.offerPrice ? item : { ...item, offerPrice }
+    })
+  }, [cart, inventoryProducts])
+
+  /**
    * CÃ¡lculos completos (Motor de precios)
    */
   const calculations = useMemo(() => {
     // CÃ¡lculo por item
-    const itemsCalculation = cart.map(item => {
-      const itemDiscountRate = item.discount || 0
-      const unitNonWholesale = item.price
-
-      // Precio mayorista: explÃ­cito o calculado
-      const unitWholesaleCandidate = item.wholesalePrice ?? roundToTwo(item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100)))
-
-      // Precio base a aplicar (segÃºn modo mayorista)
-      const unitApplied = isWholesale ? unitWholesaleCandidate : unitNonWholesale
-
-      // Descuento por item (porcentaje)
-      const discountAmountPerUnit = unitApplied * (itemDiscountRate / 100)
-      const unitAfterItemDiscount = unitApplied - discountAmountPerUnit
-      const lineTotalApplied = unitAfterItemDiscount * item.quantity
-
-      // CÃ¡lculo de referencia (sin mayorista) para saber cuÃ¡nto se ahorrÃ³
-      const unitAfterItemDiscountNonWholesale = unitNonWholesale * (1 - itemDiscountRate / 100)
-      const lineTotalNonWholesale = unitAfterItemDiscountNonWholesale * item.quantity
+    // Misma regla que el servidor y que el ticket (ver lib/cart-pricing): oferta
+    // o descuento manual, el mayor, y nunca la oferta minorista en mayorista.
+    const itemsCalculation = pricedCart.map(item => {
+      const applied = priceCartLine(item, { isWholesale })
+      // Referencia sin mayorista, para saber cuánto se ahorró por precio mayorista.
+      const retail = priceCartLine(item, { isWholesale: false })
 
       return {
-        lineTotal: roundToTwo(lineTotalApplied),
-        lineTotalNonWholesale: roundToTwo(lineTotalNonWholesale),
-        discountAmount: roundToTwo(discountAmountPerUnit * item.quantity)
+        lineTotal: applied.net,
+        lineTotalNonWholesale: retail.net,
+        discountAmount: applied.discountAmount
       }
     })
 
@@ -403,11 +410,12 @@ export const useOptimizedCart = (
 
     // Descuento general (global sobre el subtotal)
     const generalDiscountRate = Math.max(0, Math.min(100, discount))
-    const generalDiscountAmountApplied = roundToTwo(subtotalApplied * (generalDiscountRate / 100))
+    // En moneda entera (Gs.): con 2 decimales un 5% de 12.345 dejaba 617,25.
+    const generalDiscountAmountApplied = orderDiscountAmount(subtotalApplied, generalDiscountRate)
     const subtotalAfterDiscountApplied = roundToTwo(subtotalApplied - generalDiscountAmountApplied)
 
     // Referencia para ahorro mayorista
-    const generalDiscountAmountNonWholesale = roundToTwo(subtotalNonWholesale * (generalDiscountRate / 100))
+    const generalDiscountAmountNonWholesale = orderDiscountAmount(subtotalNonWholesale, generalDiscountRate)
     const subtotalAfterDiscountNonWholesale = roundToTwo(subtotalNonWholesale - generalDiscountAmountNonWholesale)
 
     // Ahorro mayorista
@@ -435,7 +443,7 @@ export const useOptimizedCart = (
       total,
       totalSavings: roundToTwo(totalItemsDiscount + generalDiscountAmountApplied + wholesaleDiscountAmount)
     }
-  }, [cart, isWholesale, discount, taxRate, pricesIncludeTax, roundToTwo])
+  }, [pricedCart, isWholesale, discount, taxRate, pricesIncludeTax, roundToTwo])
 
   const getCartItemQuantity = useCallback((productId: string) => {
     const item = cart.find(i => i.id === productId)
@@ -443,7 +451,7 @@ export const useOptimizedCart = (
   }, [cart])
 
   return {
-    cart,
+    cart: pricedCart,
 
     isWholesale,
     setIsWholesale,

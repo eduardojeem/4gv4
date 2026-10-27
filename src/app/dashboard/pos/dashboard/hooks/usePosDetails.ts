@@ -280,7 +280,7 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
                     created_at,
                     code,
                     total:total_amount,
-                    net:subtotal_amount,
+                    tax:tax_amount,
                     payment_method,
                     customer:customers!customer_id(name)
                 `, { count: 'exact' })
@@ -497,10 +497,11 @@ export function usePosDetails(dateRange: DateRange | undefined, enabled = true) 
             // --- Processing ---
 
             const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
-            // Base sin IVA. Si una venta no tiene subtotal se usa su total, para
-            // no restar un IVA que no conocemos.
+            // Base sin IVA: total cobrado menos el IVA guardado. subtotal_amount no
+            // sirve: es el bruto antes de descuentos y con el IVA adentro, así que
+            // «sin IVA» salía igual o mayor que «con IVA».
             const netSales = salesData?.reduce(
-                (acc, sale) => acc + ((sale as { net?: number | null }).net ?? sale.total ?? 0),
+                (acc, sale) => acc + (sale.total ?? 0) - (Number((sale as { tax?: number | null }).tax) || 0),
                 0
             ) || 0
             const totalTransactions = salesData?.length || 0

@@ -13,6 +13,7 @@ import { creditBusinessDate } from '@/lib/credits/installments'
 import { getCurrencyFractionDigits } from '@/lib/currency'
 import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
 import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
+import { applyCatalogOfferDiscounts, distributeOrderDiscount } from '@/app/dashboard/pos/lib/cart-pricing'
 import type { RepairDeliveryOutcome, RepairQualityCheckResult } from '@/types/repairs'
 
 type JsonRecord = Record<string, unknown>
@@ -331,7 +332,7 @@ export const POST = withTenantAuth(
     if (body.p_appointment_id != null && (!appointmentId || !UUID_PATTERN.test(appointmentId))) return NextResponse.json({ success:false,error:'Turno inválido' },{status:400})
     if (appointmentId && !(await isOrganizationModuleEnabled(organization.id,'services'))) return NextResponse.json({ success:false,error:'El plan no incluye servicios y reservas.' },{status:403})
     const saleData = body.p_sale_data ?? {}
-    const items = normalizeItems(body.p_items)
+    let items = normalizeItems(body.p_items)
     const requestedStoreCreditAmount = finiteNumber(body.p_store_credit_amount ?? 0)
     const payments = normalizePayments(body.p_payments, Boolean(appointmentId) || (requestedStoreCreditAmount !== null && requestedStoreCreditAmount > 0))
     const repairIds = normalizeUuidArray(body.p_repair_ids)
@@ -459,6 +460,29 @@ export const POST = withTenantAuth(
       }
     }
     const taxRate = await getTaxRate(supabase, organization.id)
+    // Los turnos se cobran con su tarifa acordada; el resto, con la oferta
+    // vigente y con el descuento general repartido en las líneas.
+    let saleOrderDiscountRate = orderDiscountRate
+    if (!appointmentId && items.length > 0) {
+      const { data: priceRows, error: priceError } = await supabase
+        .from('products')
+        .select('id, sale_price, wholesale_price, offer_price, has_offer')
+        .eq('organization_id', organization.id)
+        .in('id', [...new Set(items.map(item => item.product_id))])
+      if (priceError) {
+        // Sin precios no se puede aplicar la oferta ni repartir el descuento:
+        // cobrar igual podía registrar otro total que el que vio el cajero.
+        logger.warn('No se pudieron leer los precios de la venta POS', { error: priceError.message })
+        return NextResponse.json({ success: false, error: 'No se pudieron verificar los precios. No se cobró nada; probá de nuevo.' }, { status: 503 })
+      }
+      const fractionDigits = getCurrencyFractionDigits(config.currency)
+      items = applyCatalogOfferDiscounts(items, priceRows ?? [], { priceMode, fractionDigits })
+      const distributed = distributeOrderDiscount(items, priceRows ?? [], { priceMode, rate: orderDiscountRate, fractionDigits })
+      if (distributed) {
+        items = distributed
+        saleOrderDiscountRate = 0
+      }
+    }
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
     let rpcResponse = appointmentId ? await supabase.rpc('process_agenda_pos_sale', {
@@ -478,7 +502,7 @@ export const POST = withTenantAuth(
       p_items: items,
       p_payments: payments,
       p_price_mode: priceMode,
-      p_order_discount_rate: orderDiscountRate,
+      p_order_discount_rate: saleOrderDiscountRate,
       p_notes: typeof saleData.notes === 'string' ? saleData.notes.slice(0, 2000) : null,
       p_tax_rate: taxRate,
       p_prices_include_tax: config.pricesIncludeTax,
@@ -504,7 +528,7 @@ export const POST = withTenantAuth(
         p_items: items,
         p_payments: payments,
         p_price_mode: priceMode,
-        p_order_discount_rate: orderDiscountRate,
+        p_order_discount_rate: saleOrderDiscountRate,
         p_notes: typeof saleData.notes === 'string' ? saleData.notes.slice(0, 2000) : null,
         p_tax_rate: taxRate,
         p_prices_include_tax: config.pricesIncludeTax,
@@ -562,12 +586,23 @@ export const POST = withTenantAuth(
       }
     }
 
+    // Un reintento idempotente devuelve la venta ya creada: su código es el
+    // guardado, no el que se generó en este intento.
+    let savedCode: string | null = code
+    if (result.idempotent === true) {
+      const { data: savedSale } = await supabase.from('sales').select('code').eq('id', saleId).eq('organization_id', organization.id).maybeSingle()
+      savedCode = typeof savedSale?.code === 'string' ? savedSale.code : null
+    }
+
     return NextResponse.json({
       success: true,
       saleId,
       data: {
         id: saleId,
         total: finiteNumber(result.total),
+        subtotal: finiteNumber(result.subtotal),
+        // El código de la venta: el ticket recién emitido y la reimpresión muestran el mismo número.
+        code: savedCode,
         tax: finiteNumber(result.tax),
         discount: finiteNumber(result.discount),
         paymentMethod: result.payment_method,

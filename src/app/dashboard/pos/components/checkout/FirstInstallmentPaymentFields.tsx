@@ -1,7 +1,7 @@
 'use client'
 
 import { DraftNumberInput } from '@/components/ui/draft-number-input'
-import { useId } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import type { FirstInstallmentPayment } from '@/lib/credits/first-payment'
 
 export function FirstInstallmentPaymentFields({ payment, onChange, amount, available, formatCurrency, disabled }: {
@@ -13,6 +13,18 @@ export function FirstInstallmentPaymentFields({ payment, onChange, amount, avail
   disabled: boolean
 }) {
   const id = useId()
+  // Al tildar se precarga el efectivo con el importe de la cuota. Si después
+  // cambian las cuotas o el monto, ese precargado quedaba viejo: con una cuota
+  // mayor la venta se bloqueaba y con una menor aparecía un vuelto que nadie
+  // entregó. Solo se sigue al importe si el cajero no escribió otro valor.
+  const previousAmount = useRef(amount)
+  useEffect(() => {
+    const previous = previousAmount.current
+    previousAmount.current = amount
+    if (previous !== amount && payment?.method === 'cash' && payment.cashReceived === previous) {
+      onChange({ ...payment, cashReceived: amount })
+    }
+  }, [amount, payment, onChange])
   return <fieldset disabled={disabled} className="space-y-3 rounded-lg border-2 border-primary/40 bg-primary/5 p-3 sm:p-4">
     <legend className="rounded-md border border-primary/20 bg-background px-2 py-1 text-sm font-bold text-primary">Cobro al generar el crédito</legend>
     <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-primary/20 bg-background p-3 text-sm has-[:checked]:border-primary has-[:disabled]:cursor-not-allowed">
