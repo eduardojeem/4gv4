@@ -94,6 +94,18 @@ describe('variant low-stock classification', () => {
     expect(matchesProductStockFilter({ filter: 'out_of_stock', stock: 0, minimumStock: 3 })).toBe(true)
   })
 
+  // Igual que dashboard_home_summary: coalesce(i.min_stock, v.min_stock, 0).
+  it('uses the variant minimum when the branch row has no minimum of its own', () => {
+    const variants = [{ id: 'v1', stock_quantity: 10, min_stock: 5, is_active: true }]
+    const inventory = [{ organization_id: 'org-a', branch_id: 'b1', variant_id: 'v1', stock_quantity: 3, min_stock: null }]
+    const branch = summarizeVariantStock({ organizationId: 'org-a', variants, inventory, branchId: 'b1' })
+    expect(branch.details.get('v1')).toMatchObject({ status: 'low_stock', minimumStock: 5 })
+    const all = summarizeVariantStock({ organizationId: 'org-a', variants, inventory, accessibleBranchIds: ['b1'] })
+    expect(all.summary.lowStockVariantCount).toBe(1)
+    const ownMinimum = summarizeVariantStock({ organizationId: 'org-a', variants, inventory: [{ ...inventory[0], min_stock: 2 }], branchId: 'b1' })
+    expect(ownMinimum.details.get('v1')).toMatchObject({ status: 'in_stock', minimumStock: 2 })
+  })
+
   it('does not create stock alerts when all variants are inactive', () => {
     const summary = summarizeVariantStock({ organizationId: 'org-a', variants: [{ id: 'inactive', stock_quantity: 0, min_stock: 5, is_active: false }], inventory: [] }).summary
     expect(matchesProductStockFilter({ filter: 'out_of_stock', stock: 0, minimumStock: 5, variantSummary: summary })).toBe(false)

@@ -88,7 +88,7 @@ export function summarizeVariantStock(input: {
     if (input.branchId) {
       const row = rows.find((candidate) => candidate.branch_id === input.branchId)
       const currentStock = row ? finiteNonNegative(row.stock_quantity) : 0
-      const minimumStock = row ? finiteNonNegative(row.min_stock) : globalMinimum
+      const minimumStock = branchMinimum(row?.min_stock, globalMinimum)
       const status = classifyStock(currentStock, minimumStock)
       details.set(variant.id, { status, currentStock, minimumStock, branchStatuses: [{ branchId: input.branchId, status, currentStock, minimumStock }] })
       continue
@@ -106,7 +106,7 @@ export function summarizeVariantStock(input: {
 
     const branchStatuses = rows.map((row) => {
       const currentStock = finiteNonNegative(row.stock_quantity)
-      const minimumStock = finiteNonNegative(row.min_stock)
+      const minimumStock = branchMinimum(row.min_stock, globalMinimum)
       return { branchId: row.branch_id, status: classifyStock(currentStock, minimumStock), currentStock, minimumStock }
     })
     const status = branchStatuses.some((row) => row.status === 'out_of_stock')
@@ -130,6 +130,15 @@ export function summarizeVariantStock(input: {
   }
 
   return { summary, details }
+}
+
+/**
+ * Mínimo de una sucursal: el suyo si lo tiene; si no, el de la variante. Igual
+ * que dashboard_home_summary (coalesce(i.min_stock, v.min_stock, 0)): con 0 el
+ * listado y el inicio del dashboard contaban distinto el stock bajo.
+ */
+function branchMinimum(value: number | null | undefined, variantMinimum: number) {
+  return value === null || value === undefined ? variantMinimum : finiteNonNegative(value)
 }
 
 function finiteNonNegative(value: number | null | undefined) {

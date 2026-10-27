@@ -19,7 +19,7 @@ function query(table:string){
   if(created&&(filters.id===created.id||requestedIds.includes(created.id)))return {data:single?created:[created],error:null}
   const productId=typeof filters.id==='string'?filters.id:Array.isArray(filters.id)?filters.id[0]:'product';return {data:single?{id:productId,name:'Test',sale_price:100,purchase_price:33,foreign_purchase_price:2,variants:[{id:'variant',stock_quantity:8,purchase_price:22,purchasePrice:22}]}:[{id:productId,name:'Test',purchase_price:33,foreign_purchase_price:2,stock_quantity:0}],error:null}
  }
- if(table==='branch_variant_inventory'){const ids=Array.isArray(filters.variant_id)?filters.variant_id:['variant'];return {data:state.branchReadError?null:ids.map(variant_id=>({variant_id,stock_quantity:3})),error:state.branchReadError?{code:'42501'}:null}}
+ if(table==='branch_variant_inventory'){const ids=Array.isArray(filters.variant_id)?filters.variant_id:['variant'];return {data:state.branchReadError?null:ids.map(variant_id=>({organization_id:filters.organization_id,branch_id:filters.branch_id,variant_id,stock_quantity:3})),error:state.branchReadError?{code:'42501'}:null}}
  if(table==='product_variants'){const id=Array.isArray(filters.id)?filters.id[0]:filters.id||'variant';const row={id,product_id:filters.product_id||'product',organization_id:filters.organization_id||state.org,sku:'SKU',purchase_price:22,sale_price:100,stock_quantity:2,product:{sale_price:100,purchase_price:33}};return {data:filters.id==='foreign'?null:single?row:[row],error:null}}
  return {data:[],error:null}
  }
@@ -161,7 +161,10 @@ it('collection GET applies the same organization cost redaction',async()=>{
 it('opt-in edit read projects authorized branch stock; other consumers keep aggregates', async()=>{
  state.membership='admin';state.branch='branch'
  const plain=await detail(request(),params())
- expect((await plain.json()).data.variants[0].stock_quantity).toBe(8)
+ const plainVariant=(await plain.json()).data.variants[0]
+ expect(plainVariant.stock_quantity).toBe(8)
+ // Sin opt-in el agregado no cambia; lo de la sucursal viaja aparte.
+ expect(plainVariant.current_stock).toBe(3)
  const scoped=await detail({...request(),url:'https://app/api/products/product?variant_stock_scope=branch&branch_id=branch'},params())
  expect(scoped.status).toBe(200)
  expect((await scoped.json()).data.variants[0].stock_quantity).toBe(3)

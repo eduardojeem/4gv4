@@ -103,6 +103,12 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         branchId: branchScope.branchId,
       })
       const summary = evaluation.summary
+      // Solo el formulario de edición (variant_stock_scope=branch) reemplaza el
+      // stock de cada variante por el de la sucursal: guarda por diferencia
+      // contra ese número. El resto sigue viendo el agregado en stock_quantity
+      // y lee lo de la sucursal en current_stock / stock_status.
+      const projectBranchStock = variantStockScope === 'branch' && Boolean(branchScope.branchId)
+      const branchStockByVariant = new Map(branchVariantInventory.map((row) => [row.variant_id, row]))
       Object.assign(responseProduct, {
         ...(branchScope.branchId ? { stock_quantity: summary.totalStock, branch_stock_quantity: summary.totalStock } : {}),
         variant_stock_summary: {
@@ -114,10 +120,15 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         },
         variants: variants.map((variant) => {
           const detail = evaluation.details.get(variant.id)
-          if (!detail || variant.is_active === false) return variant
+          if (!detail || variant.is_active === false) {
+            // Una variante inactiva también se edita: sin fila en la sucursal, su stock ahí es 0.
+            if (!projectBranchStock) return variant
+            const row = branchStockByVariant.get(variant.id)
+            return { ...variant, stock_quantity: Math.max(0, Number(row?.stock_quantity ?? 0) || 0) }
+          }
           return {
             ...variant,
-            ...(branchScope.branchId ? { stock_quantity: detail.currentStock, min_stock: detail.minimumStock } : {}),
+            ...(projectBranchStock ? { stock_quantity: detail.currentStock, min_stock: detail.minimumStock } : {}),
             stock_status: detail.status,
             current_stock: detail.currentStock,
             minimum_stock: detail.minimumStock,
