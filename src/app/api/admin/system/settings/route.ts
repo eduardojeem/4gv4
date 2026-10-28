@@ -10,7 +10,6 @@ import {
 } from '@/lib/validations/system-settings'
 import {
   getTenantAdminSettings,
-  mergeTenantAdminSettings,
   normalizeOrganizationModules,
 } from '@/lib/organization/admin-settings'
 import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
@@ -115,10 +114,6 @@ async function handleTenantUpdate(
       { status: 409 }
     )
   }
-  const tenantSettings = {
-    ...existingTenantSettings,
-    ...withoutPlatformSettings(settings),
-  }
   const effectiveSettings = {
     ...currentEffectiveSettings,
     ...withoutPlatformSettings(settings),
@@ -131,39 +126,19 @@ async function handleTenantUpdate(
     timezone: effectiveSettings.timeZone,
     country_code: regionalPatch.countryCode !== undefined ? regionalPatch.countryCode : orgSettings?.country_code ?? null,
     locale: regionalPatch.locale !== undefined ? regionalPatch.locale : orgSettings?.locale ?? null,
-    modules: mergeTenantAdminSettings(existingModules, tenantSettings),
     repair_max_discount_percent: effectiveSettings.repairMaxDiscountPercent,
     repair_labor_tax_rate: effectiveSettings.repairLaborTaxRate,
     updated_at: new Date().toISOString(),
   }
 
-  const companyNameChanged = settings.companyName !== undefined && settings.companyName !== organization.name
-  if (companyNameChanged) {
-    const { error: companyError } = await supabase
-      .from('organizations')
-      .update({ name: settings.companyName })
-      .eq('id', organizationId)
-    if (companyError) {
-      console.error('Failed to update organization name', { companyError, organizationId })
-      return NextResponse.json(
-        { success: false, error: 'No se pudo actualizar el nombre de la organización' },
-        { status: 500 }
-      )
-    }
-  }
-
-  const { error: organizationError } = await supabase
-    .from('organization_settings')
-    .upsert(organizationUpdate, { onConflict: 'organization_id' })
+  const { error: organizationError } = await supabase.rpc('merge_organization_admin_settings_v2', {
+    p_organization_id: organizationId,
+    p_user_id: context.user.id,
+    p_settings: organizationUpdate,
+    p_admin_settings: withoutPlatformSettings(settings),
+  })
 
   if (organizationError) {
-    if (companyNameChanged) {
-      const { error: rollbackError } = await supabase
-        .from('organizations')
-        .update({ name: organization.name })
-        .eq('id', organizationId)
-      if (rollbackError) console.error('Failed to roll back organization name', { rollbackError, organizationId })
-    }
     console.error('Failed to update tenant settings', { organizationError })
     return NextResponse.json(
       { success: false, error: 'No se pudo guardar la configuración de la organización' },

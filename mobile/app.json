@@ -67,6 +67,13 @@
         {
           "faceIDPermission": "Mi Tienda usa Face ID para desbloquear la app sin escribir la contraseña."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#111827"
+        }
       ]
     ],
     "experiments": {

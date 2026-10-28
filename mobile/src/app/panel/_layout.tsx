@@ -6,6 +6,7 @@ import { PanelHeader, PanelTabBar } from '@/components/panel-chrome';
 import { PanelMenusProvider } from '@/components/panel-menus';
 import { usePalette } from '@/lib/palette';
 import { PanelProvider } from '@/lib/panel';
+import { NotificationsProvider } from '@/lib/notifications-context';
 
 /**
  * Layout del panel, como el dashboard de la web en celular: cabecera con el
@@ -17,16 +18,18 @@ export default function PanelLayout() {
   const dark = useColorScheme() === 'dark';
   return (
     <PanelProvider>
-      <PanelMenusProvider>
-        <StatusBar style={dark ? 'light' : 'dark'} />
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          <PanelHeader />
-          <View style={{ flex: 1 }}>
-            <Slot />
+      <NotificationsProvider>
+        <PanelMenusProvider>
+          <StatusBar style={dark ? 'light' : 'dark'} />
+          <View style={{ flex: 1, backgroundColor: colors.background }}>
+            <PanelHeader />
+            <View style={{ flex: 1 }}>
+              <Slot />
+            </View>
+            <PanelTabBar />
           </View>
-          <PanelTabBar />
-        </View>
-      </PanelMenusProvider>
+        </PanelMenusProvider>
+      </NotificationsProvider>
     </PanelProvider>
   );
 }

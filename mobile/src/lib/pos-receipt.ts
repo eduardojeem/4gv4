@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { lineTotal, unitPrice, type CartLine, type cartTotals, type PaymentInput, type PosSession, type PriceMode } from './pos';
 import { FREQUENCY_LABEL, shortDate, type CreditPlan, type CreditTerms } from './pos-credit';
 import { secureStorage } from './secure-storage';
+import { formatMobileDate, formatMobileNumber } from './regional-format';
 
 /**
  * Comprobante de venta del POS para imprimir (impresora térmica o común, por
@@ -44,7 +45,7 @@ export async function rememberPaper(format: PaperFormat) {
 }
 
 const METHOD: Record<PaymentInput['method'], string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', credit: 'A crédito' };
-const gs = (value: number) => `Gs. ${Math.round(value).toLocaleString('es-PY')}`;
+const gs = (value: number) => `Gs. ${formatMobileNumber(Math.round(value))}`;
 const esc = (value: unknown) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -61,7 +62,7 @@ export function receiptHtml(receipt: SaleReceipt, format: PaperFormat) {
   const ticket = format !== 'A4';
   const narrow = format === '58mm';
   const { business, totals } = receipt;
-  const when = receipt.date.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const when = formatMobileDate(receipt.date, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const issuer = [business.ruc ? `RUC ${business.ruc}` : '', business.address, business.phone ? `Tel. ${business.phone}` : ''].filter(Boolean);
 
   const items = receipt.lines

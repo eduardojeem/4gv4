@@ -65,7 +65,14 @@ function tabla(nombre: string) {
   return q
 }
 
-vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ from: (t: string) => tabla(t) }) }))
+// La configuración del comercio se guarda en una sola llamada atómica
+// (merge_organization_admin_settings_v2): se registra como una escritura más.
+function rpc(nombre: string, args: unknown) {
+  estado.escrituras.push({ tabla: nombre, tipo: 'rpc', payload: args })
+  return Promise.resolve({ data: null, error: null })
+}
+
+vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ from: (t: string) => tabla(t), rpc }) }))
 vi.mock('@/lib/auth/request-auth', () => ({ resolveRequestAuthUser: async () => ({ user: estado.usuario }) }))
 vi.mock('@/lib/saas/context', () => ({
   getCurrentOrganizationContext: async () => estado.contexto,
@@ -94,6 +101,10 @@ const guardar = (body: unknown) =>
   )
 
 const escrituraEn = (t: string) => estado.escrituras.filter((e) => e.tabla === t && e.tipo === 'upsert')
+type GuardadoOrganizacion = { p_organization_id: string; p_settings: Record<string, unknown>; p_admin_settings: Record<string, unknown> }
+const guardadosDeOrganizacion = () => estado.escrituras
+  .filter((e) => e.tabla === 'merge_organization_admin_settings_v2' && e.tipo === 'rpc')
+  .map((e) => e.payload as GuardadoOrganizacion)
 
 beforeEach(() => {
   estado.usuario = { id: 'u-1', role: 'super_admin', email: 'sa@plataforma.com' }
@@ -170,7 +181,8 @@ describe('guardar: el alcance decide dónde se escribe', () => {
     const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
 
     expect(res.status).toBe(200)
-    expect(escrituraEn('organization_settings')).toHaveLength(1)
+    expect(guardadosDeOrganizacion()).toHaveLength(1)
+    expect(guardadosDeOrganizacion()[0].p_organization_id).toBe('org-1')
     expect(escrituraEn('system_settings')).toHaveLength(0)
   })
 
@@ -186,7 +198,7 @@ describe('guardar: el alcance decide dónde se escribe', () => {
     const res = await guardar({ settings: { maintenanceMode: true } })
     expect(res.status).toBe(200)
     expect(escrituraEn('system_settings')).toHaveLength(1)
-    expect(escrituraEn('organization_settings')).toHaveLength(0)
+    expect(guardadosDeOrganizacion()).toHaveLength(0)
   })
 })
 
@@ -209,27 +221,28 @@ describe('guardar un campo no pisa lo demás del comercio con la fila global', (
   it('guardar solo el RUC conserva nombre, moneda, zona y reparaciones del comercio', async () => {
     const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
     expect(res.status).toBe(200)
-    const [escritura] = escrituraEn('organization_settings')
-    expect(escritura.payload).toMatchObject({
+    const [escritura] = guardadosDeOrganizacion()
+    expect(escritura.p_settings).toMatchObject({
       display_name: 'HCA Celular',
       currency: 'USD',
       timezone: 'America/Sao_Paulo',
       repair_max_discount_percent: 35,
       repair_labor_tax_rate: 5,
     })
-    expect((escritura.payload as { modules: { admin_settings: unknown } }).modules.admin_settings).toEqual({ companyRuc: '80012345-6' })
+    // Solo lo que cambió viaja como admin_settings; la función lo fusiona con lo guardado.
+    expect(escritura.p_admin_settings).toEqual({ companyRuc: '80012345-6' })
   })
 
   it('lo que sí se cambia se escribe', async () => {
     const res = await guardar({ settings: { companyName: 'HCA Celulares', timeZone: 'America/Asuncion' }, scope: 'organization' })
     expect(res.status).toBe(200)
-    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ display_name: 'HCA Celulares', timezone: 'America/Asuncion', currency: 'USD' })
+    expect(guardadosDeOrganizacion()[0].p_settings).toMatchObject({ display_name: 'HCA Celulares', timezone: 'America/Asuncion', currency: 'USD' })
   })
 
   it('normaliza país y locale en el límite de escritura organizacional', async () => {
     const res = await guardar({ settings: { countryCode: ' py ', locale: 'es-py' }, scope: 'organization' })
     expect(res.status).toBe(200)
-    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ country_code: 'PY', locale: 'es-PY' })
+    expect(guardadosDeOrganizacion()[0].p_settings).toMatchObject({ country_code: 'PY', locale: 'es-PY' })
   })
 
   it('rechaza país malformado antes de escribir', async () => {
@@ -248,7 +261,7 @@ describe('guardar un campo no pisa lo demás del comercio con la fila global', (
     estado.orgSettings = { ...ORG_SETTINGS, country_code: 'BR', locale: 'pt-BR' }
     const res = await guardar({ settings: { companyRuc: '80012345-6' }, scope: 'organization' })
     expect(res.status).toBe(200)
-    expect(escrituraEn('organization_settings')[0].payload).toMatchObject({ country_code: 'BR', locale: 'pt-BR' })
+    expect(guardadosDeOrganizacion()[0].p_settings).toMatchObject({ country_code: 'BR', locale: 'pt-BR' })
   })
 
   it('no permite guardar identidad regional en los ajustes globales de plataforma', async () => {

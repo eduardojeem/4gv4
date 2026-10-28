@@ -41,3 +41,9 @@ example
 # generated native folders
 /ios
 /android
+
+# Firebase: la configuración llega por la variable de archivo GOOGLE_SERVICES_JSON de EAS
+google-services.json
+GoogleService-Info.plist
+*firebase-adminsdk*.json
+fcm*.json

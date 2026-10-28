@@ -5,6 +5,7 @@ import { useColorScheme } from 'react-native';
 
 import { BiometricLockScreen } from '@/components/biometric-lock-screen';
 import { apiFetch } from '@/lib/api';
+import { useMobileRegionalSettings } from '@/lib/regional-settings-sync';
 import { SessionProvider, useSession } from '@/lib/session';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +23,7 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { session, isLoading, locked } = useSession();
+  useMobileRegionalSettings();
   const sessionUserId = session?.user.id ?? null;
 
   // La pantalla de carga queda hasta saber si hay sesión guardada: así el
