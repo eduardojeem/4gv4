@@ -57,7 +57,7 @@ describe('BusinessProfileCard', () => {
       </SubscriptionStatusProvider>,
     )
 
-    expect(screen.getByText('Perfil y módulos del negocio')).toBeInTheDocument()
+    expect(screen.getByText('Rubro y herramientas')).toBeInTheDocument()
     expect(screen.getByText('Rubro actual')).toBeInTheDocument()
     expect(screen.getByTestId('current-business-vertical')).toHaveTextContent('Ropa y moda')
     expect(screen.getByTestId('current-operating-model')).toHaveTextContent('Venta minorista')
@@ -252,5 +252,7 @@ describe('BusinessProfileCard', () => {
     act(() => actionsRef.current?.reset())
     expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
     expect(onStateChange).toHaveBeenLastCalledWith({ dirty: false, canSave: false })
+    // Dentro de Configuración se guarda con la barra común, sin un segundo botón.
+    expect(screen.queryByRole('button', { name: 'Guardar perfil' })).not.toBeInTheDocument()
   })
 })

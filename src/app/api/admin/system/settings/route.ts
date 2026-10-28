@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { rateLimiter } from '@/lib/rate-limiter'
 import {
   SystemSettingsPartialSchema,
-  mapDBToSettings,
   mapSettingsToDB,
   type SystemSettingsPartial,
 } from '@/lib/validations/system-settings'
@@ -14,6 +14,11 @@ import {
   normalizeOrganizationModules,
 } from '@/lib/organization/admin-settings'
 import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
+import {
+  branchContactPatch,
+  companyInfoContactPatch,
+  resolveTenantEffectiveSettings,
+} from '@/lib/organization/tenant-effective-settings'
 import { normalizeRegionalSettingsPatch, type RegionalSettingsPatch } from '@/lib/regional/settings'
 
 const RATE_LIMIT = 20
@@ -33,10 +38,6 @@ function withoutPlatformSettings(settings: SystemSettingsPartial): SystemSetting
     delete tenantSettings[key]
   }
   return tenantSettings
-}
-
-function toFrontendSettings(row: Record<string, unknown>): SystemSettingsPartial {
-  return mapDBToSettings(row as Parameters<typeof mapDBToSettings>[0])
 }
 
 function toResponseRow(
@@ -68,8 +69,13 @@ async function handleTenantUpdate(
   }
 
   const supabase = createAdminSupabase()
-  const [{ data: globalRow, error: globalError }, { data: orgSettings, error: orgError }, { data: organization, error: organizationReadError }] =
-    await Promise.all([
+  const [
+    { data: globalRow, error: globalError },
+    { data: orgSettings, error: orgError },
+    { data: organization, error: organizationReadError },
+    { data: defaultBranch, error: branchError },
+    { data: companyInfoRow, error: companyInfoError },
+  ] = await Promise.all([
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
@@ -77,10 +83,22 @@ async function handleTenantUpdate(
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+      supabase
+        .from('branches')
+        .select('id, phone, email, address, city')
+        .eq('organization_id', organizationId)
+        .eq('is_default', true)
+        .maybeSingle(),
+      supabase
+        .from('website_settings')
+        .select('value')
+        .eq('organization_id', organizationId)
+        .eq('key', 'company_info')
+        .maybeSingle(),
     ])
 
-  if (globalError || orgError || organizationReadError || !globalRow || !organization) {
-    console.error('Failed to load tenant settings context', { globalError, orgError, organizationReadError })
+  if (globalError || orgError || organizationReadError || branchError || companyInfoError || !globalRow || !organization) {
+    console.error('Failed to load tenant settings context', { globalError, orgError, organizationReadError, branchError, companyInfoError })
     return NextResponse.json(
       { success: false, error: 'No se pudo cargar la configuración actual' },
       { status: 500 }
@@ -90,17 +108,13 @@ async function handleTenantUpdate(
   const existingModules = normalizeOrganizationModules(orgSettings?.modules)
   const existingTenantSettings = getTenantAdminSettings(existingModules)
   // Lo propio del comercio gana sobre la fila global, en el mismo orden que al
-  // cargar (/api/settings/shared). Antes, al guardar un solo campo, el nombre,
-  // la zona horaria y la política de reparaciones salían de la plataforma.
-  const currentEffectiveSettings = {
-    ...toFrontendSettings(globalRow as Record<string, unknown>),
-    ...existingTenantSettings,
-    ...(orgSettings?.display_name ? { companyName: orgSettings.display_name } : {}),
-    ...(orgSettings?.currency ? { currency: orgSettings.currency } : {}),
-    ...(orgSettings?.timezone ? { timeZone: orgSettings.timezone } : {}),
-    repairMaxDiscountPercent: Number(orgSettings?.repair_max_discount_percent ?? 20),
-    repairLaborTaxRate: (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10,
-  }
+  // cargar (/api/settings/shared): la misma función arma las dos respuestas.
+  const currentEffectiveSettings = resolveTenantEffectiveSettings({
+    globalRow: globalRow as Record<string, unknown>,
+    orgSettings,
+    organizationName: organization.name,
+    defaultBranch,
+  })
   if (
     settings.currency !== undefined
     && settings.currency !== currentEffectiveSettings.currency
@@ -183,6 +197,41 @@ async function handleTenantUpdate(
     new_values: { ...withoutPlatformSettings(settings), ...regionalPatch },
   })
   if (auditError) console.error('Failed to audit organization settings update', { auditError, organizationId })
+
+  // El mismo contacto vive también en la sucursal principal y en la ficha de la
+  // tienda: se actualizan para que la web, los tickets y la lista de pendientes
+  // digan lo mismo. Un fallo acá no deshace lo guardado; se registra.
+  const tenantChanges = withoutPlatformSettings(settings)
+  const branchPatch = branchContactPatch(tenantChanges, currentEffectiveSettings, defaultBranch)
+  if (defaultBranch?.id && Object.keys(branchPatch).length > 0) {
+    const { error: branchSyncError } = await supabase
+      .from('branches')
+      .update({ ...branchPatch, updated_at: new Date().toISOString() })
+      .eq('id', defaultBranch.id)
+      .eq('organization_id', organizationId)
+    if (branchSyncError) console.error('Failed to sync default branch contact', { branchSyncError, organizationId })
+  }
+  const companyInfo = companyInfoRow?.value && typeof companyInfoRow.value === 'object' && !Array.isArray(companyInfoRow.value)
+    ? companyInfoRow.value as Record<string, unknown>
+    : null
+  const companyInfoPatch = companyInfoContactPatch(tenantChanges, currentEffectiveSettings, companyInfo)
+  if (companyInfo && Object.keys(companyInfoPatch).length > 0) {
+    const { error: companyInfoSyncError } = await supabase
+      .from('website_settings')
+      .update({ value: { ...companyInfo, ...companyInfoPatch }, updated_by: context.user.id, updated_at: new Date().toISOString() })
+      .eq('organization_id', organizationId)
+      .eq('key', 'company_info')
+    if (companyInfoSyncError) {
+      console.error('Failed to sync storefront company info', { companyInfoSyncError, organizationId })
+    } else {
+      const slug = typeof companyInfo.slug === 'string' ? companyInfo.slug : null
+      try {
+        if (slug) revalidatePath(`/${slug}`, 'layout')
+      } catch (cacheError) {
+        console.warn('Could not revalidate storefront after settings update', cacheError)
+      }
+    }
+  }
 
   return NextResponse.json({
     success: true,

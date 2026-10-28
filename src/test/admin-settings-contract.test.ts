@@ -15,14 +15,18 @@ describe('admin settings contract', () => {
     expect(hook).toContain('confirmCurrencyChange: options.confirmCurrencyChange === true')
   })
 
-  it('does not store organization contact data in the default branch', () => {
+  it('only syncs the default branch contact when it still matches the company contact', () => {
     const updateRoute = read('src/app/api/admin/system/settings/route.ts')
     const sharedRoute = read('src/app/api/settings/shared/route.ts')
+    const resolver = read('src/lib/organization/tenant-effective-settings.ts')
 
+    // Antes se pisaba la sucursal entera con el contacto de la empresa. Ahora
+    // solo los campos vacíos o iguales al valor anterior (branchContactPatch).
     expect(updateRoute).not.toContain('branchChanges')
-    expect(updateRoute).not.toContain(".from('branches')")
+    expect(updateRoute).toContain('branchContactPatch(tenantChanges, currentEffectiveSettings, defaultBranch)')
+    expect(resolver).toContain('if (current && current !== before) continue')
     expect(sharedRoute).toContain('legacyBranchFallback')
-    expect(sharedRoute).toContain('tenantOverrides.companyEmail === undefined')
+    expect(resolver).toContain('tenantOverrides.companyEmail === undefined')
   })
 
   it('validates regional settings as closed option sets', () => {

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/publication'
 import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { invalidateMarketplaceCatalog, samePublicValue } from '@/lib/public/cache-invalidation'
+import { mergeTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -54,6 +55,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   const [
     { data: defaultBranch, error: defaultBranchError },
     { data: currentOrganization, error: currentOrganizationError },
+    { data: currentOrgSettings, error: currentOrgSettingsError },
   ] = await Promise.all([
     admin
       .from('branches')
@@ -66,9 +68,14 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       .select('name, logo_url, slug, marketplace_public, storefront_public')
       .eq('id', orgId)
       .maybeSingle(),
+    admin
+      .from('organization_settings')
+      .select('modules')
+      .eq('organization_id', orgId)
+      .maybeSingle(),
   ])
 
-  if (currentOrganizationError || defaultBranchError || !currentOrganization) {
+  if (currentOrganizationError || defaultBranchError || currentOrgSettingsError || !currentOrganization) {
     return NextResponse.json({ error: 'Error al cargar la organizacion actual' }, { status: 500 })
   }
 
@@ -178,9 +185,21 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
         },
         { onConflict: 'organization_id,key' }
       ),
+    // Configuración (/admin/settings) lee el contacto de admin_settings: sin
+    // esto, cambiar el teléfono o el RUC acá dejaba el anterior allá.
     admin
       .from('organization_settings')
-      .upsert({ organization_id: orgId, display_name: name }, { onConflict: 'organization_id' }),
+      .upsert({
+        organization_id: orgId,
+        display_name: name,
+        modules: mergeTenantAdminSettings(currentOrgSettings?.modules, {
+          companyName: name,
+          ...(phone !== undefined ? { companyPhone: phone } : {}),
+          ...(address !== undefined ? { companyAddress: address } : {}),
+          ...(email === undefined ? {} : email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { companyEmail: email } : {}),
+          ...(typeof companyData.ruc === 'string' ? { companyRuc: companyData.ruc.trim().slice(0, 50) } : {}),
+        }),
+      }, { onConflict: 'organization_id' }),
     defaultBranch?.id
       ? admin
           .from('branches')
