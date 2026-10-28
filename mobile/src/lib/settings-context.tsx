@@ -4,6 +4,7 @@ import { ApiError } from './api';
 import { usePanel } from './panel';
 import { fetchOrgSettings, settingsErrorMessage } from './settings-admin';
 import type { OrgSettings } from './settings-model';
+import { setMobileRegionalFormatConfig } from './regional-format';
 
 type SettingsState = {
   /** Lo último que confirmó el servidor (la base para detectar cambios). */
@@ -57,6 +58,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Otro comercio: lo cargado no sirve ni se muestra; se pide de nuevo.
   const current = loaded && loaded.organizationId === organizationId ? loaded : null;
   useEffect(() => {
+    if (!current?.settings) return;
+    setMobileRegionalFormatConfig({
+      locale: current.settings.locale,
+      countryCode: current.settings.countryCode,
+      language: current.settings.language,
+    });
+  }, [current?.settings]);
+
+  useEffect(() => {
     if (organizationId && canEdit && !current) void load(organizationId);
   }, [organizationId, canEdit, current, load]);
 
@@ -68,7 +78,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const applySaved = useCallback((settings: OrgSettings) => {
     // Si mientras se guardaba se cambió de comercio, no se mezcla con el otro.
-    setLoaded((value) => (value && value.organizationId === organizationId ? { ...value, settings, error: null, offline: false } : value));
+    setLoaded((value) => value && value.organizationId === organizationId ? { ...value, settings, error: null, offline: false } : value);
   }, [organizationId]);
 
   const value = useMemo<SettingsState>(() => ({

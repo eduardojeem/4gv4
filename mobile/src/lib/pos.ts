@@ -1,4 +1,5 @@
 import { subscribePrivateCacheContext } from './private-cache-context';
+import { formatMobileDate, formatMobileNumber } from './regional-format';
 import type { CreditTerms } from './pos-credit';
 import { apiFetch, ApiError } from './api';
 import type { Product } from './products';
@@ -170,11 +171,11 @@ export async function processSale(input: {
 
 /** Texto del comprobante para compartir por WhatsApp. */
 export function receiptText(input: { business: string; lines: CartLine[]; priceMode: PriceMode; totals: ReturnType<typeof cartTotals>; payments: PaymentInput[]; change: number; saleId: string; customerName?: string | null }) {
-  const gs = (value: number) => `Gs. ${Math.round(value).toLocaleString('es-PY')}`;
+  const gs = (value: number) => `Gs. ${formatMobileNumber(Math.round(value))}`;
   const methods: Record<PayMethod, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', credit: 'A crédito' };
   return [
     `*${input.business}*`,
-    `Comprobante de venta · ${new Date().toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+    `Comprobante de venta · ${formatMobileDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
     input.customerName ? `Cliente: ${input.customerName}` : null,
     '',
     ...input.lines.map((line) => `${line.quantity} × ${line.product.name} — ${gs(lineTotal(line, input.priceMode))}`),
