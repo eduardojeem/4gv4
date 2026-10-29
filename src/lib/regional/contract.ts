@@ -166,12 +166,17 @@ export function getCurrencyFractionDigits(currencyCode: CurrencyCode | string): 
 }
 
 export function getRegionalCurrencySymbol(currencyCode: CurrencyCode, locale: LocaleCode | string): string {
-  const parts = new Intl.NumberFormat(locale, {
+  const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currencyCode,
     currencyDisplay: 'narrowSymbol',
-  }).formatToParts(0)
-  return parts.find((part) => part.type === 'currency')?.value ?? currencyCode
+  })
+  // Hermes on iOS (Expo Go) has no NumberFormat.formatToParts: fall back to
+  // stripping the number out of the formatted zero.
+  if (typeof formatter.formatToParts === 'function') {
+    return formatter.formatToParts(0).find((part) => part.type === 'currency')?.value ?? currencyCode
+  }
+  return formatter.format(0).replace(/[\d\s.,  -]/g, '') || currencyCode
 }
 
 export function formatCurrencyAmount(

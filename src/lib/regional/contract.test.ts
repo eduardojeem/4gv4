@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCurrencyAmount,
   getCurrencyFractionDigits,
+  getRegionalCurrencySymbol,
   getSupportedRegionalCountries,
   getRegionalDefaults,
   normalizeCountryCode,
@@ -137,5 +138,20 @@ describe('regional contract', () => {
     expect(usDollarsInSpanish).toContain('1.250,50')
     expect(usDollarsInSpanish).not.toContain('€')
     expect(getCurrencyFractionDigits('unsupported')).toBe(0)
+  })
+
+  // Hermes en iOS (Expo Go) no trae NumberFormat.formatToParts: la app móvil
+  // se caía al cargar con «undefined is not a function».
+  it('resolves currency symbols without NumberFormat.formatToParts', () => {
+    const expected = REGIONAL_CURRENCY_CODES.map((code) => getRegionalCurrencySymbol(code, 'es-PY'))
+    const original = Intl.NumberFormat.prototype.formatToParts
+    try {
+      // @ts-expect-error simulate Hermes on iOS
+      delete Intl.NumberFormat.prototype.formatToParts
+      expect(REGIONAL_CURRENCY_CODES.map((code) => getRegionalCurrencySymbol(code, 'es-PY'))).toEqual(expected)
+    } finally {
+      Intl.NumberFormat.prototype.formatToParts = original
+    }
+    expect(getRegionalCurrencySymbol('PYG', 'es-PY')).toBe('₲')
   })
 })
