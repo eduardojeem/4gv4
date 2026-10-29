@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 import { getSupportedRegionalCountries, REGIONAL_CURRENCIES } from '@/lib/regional/contract'
+import { BUSINESS_VERTICAL_LABELS } from '@/lib/organization/business-labels'
 import {
   ONBOARDING_MODULE_PREFERENCES,
   suggestOnboardingPreferences,
@@ -19,10 +20,7 @@ import {
   type SharedOnboardingState,
 } from '@/lib/onboarding/shared-setup'
 
-const CATEGORY_LABELS: Record<string, string> = {
-  general: 'Comercio general', clothing: 'Ropa y calzado', cosmetics: 'Cosmética', electronics: 'Electrónica y celulares',
-  food: 'Alimentos', hardware: 'Ferretería', barbershop: 'Barbería', beauty_services: 'Servicios de belleza', other: 'Otro',
-}
+const CATEGORY_LABELS: Record<string, string> = BUSINESS_VERTICAL_LABELS
 const TIMEZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu']
 const STEP_NAMES = ['Plan', 'Negocio', 'Sucursal', 'Módulos', 'Listo']
 

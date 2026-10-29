@@ -25,6 +25,7 @@ import { buildStarterCheckout, buildStarterTrustBar, provisionStarterKit } from 
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
 import { getFirstIncompleteStep, normalizeOnboardingState, visibleEntitledModules } from '@/lib/onboarding/shared-setup'
+import { preservedSharedSetupFields } from '@/lib/onboarding/preserve-unasked'
 
 type OnboardingMetadata = Record<string, unknown> & {
   onboarding?: Record<string, unknown>
@@ -164,8 +165,28 @@ export async function POST(request: Request) {
   if (sharedState) {
     const category = sharedState.data.businessCategory
     const branch = sharedState.data.primaryBranch
+    // Lo que el asistente no pregunta se conserva: antes se guardaba vacío y se
+    // perdían el logo, el RUC, el email y la publicación de la tienda.
+    const [{ data: savedCompanyInfo, error: companyInfoError }, { data: savedOrganization, error: organizationError }] = await Promise.all([
+      admin.from('website_settings').select('value').eq('organization_id', organizationId).eq('key', 'company_info').maybeSingle(),
+      admin.from('organizations').select('logo_url, storefront_public').eq('id', organizationId).maybeSingle(),
+    ])
+    if (companyInfoError || organizationError) {
+      logger.error('Failed to load current company data for shared onboarding', { error: (companyInfoError ?? organizationError)?.message, organizationId })
+      return NextResponse.json({ error: 'No se pudo cargar la configuracion.' }, { status: 500 })
+    }
+    const companyInfoValue = (savedCompanyInfo as { value?: unknown } | null)?.value
+    const preserved = preservedSharedSetupFields({
+      adminSettings: currentAdminSettings,
+      companyInfo: companyInfoValue && typeof companyInfoValue === 'object' && !Array.isArray(companyInfoValue)
+        ? companyInfoValue as Record<string, unknown>
+        : null,
+      organizationLogoUrl: savedOrganization?.logo_url ?? null,
+      storefrontPublic: savedOrganization?.storefront_public === true,
+    })
     const canonical = onboardingSchema.safeParse({
       ...input,
+      ...preserved,
       displayName: sharedState.data.businessName,
       currency: sharedState.data.currency,
       timezone: sharedState.data.timezone,
