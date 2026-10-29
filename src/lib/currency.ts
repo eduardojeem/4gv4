@@ -5,7 +5,9 @@ import {
   getCurrencyFractionDigits as getRegionalCurrencyFractionDigits,
   getRegionalCurrencySymbol,
   normalizeCurrencyCode,
+  normalizeCountryCode,
   normalizeLocaleCode,
+  resolveEffectiveLocale,
   type CurrencyCode,
   type LocaleCode,
 } from './regional/contract'
@@ -33,6 +35,8 @@ const DEFAULT_LANGUAGE: SupportedLanguageCode = 'es'
 
 let runtimeCurrency: SupportedCurrencyCode | null = null
 let runtimeLanguage: SupportedLanguageCode | null = null
+let runtimeLocale: LocaleCode | null = null
+let runtimeCountryCode: string | null = null
 
 export function isSupportedCurrency(value: string): value is SupportedCurrencyCode {
   return normalizeCurrencyCode(value) !== null
@@ -51,24 +55,35 @@ export function getCurrencyFractionDigits(code: string): number {
 }
 
 export function getLocaleForLanguage(language: string): string {
-  return SUPPORTED_LANGUAGES.find((item) => item.code === language)?.locale ?? DEFAULT_LOCALE
+  return resolveEffectiveLocale({ language, fallbackLocale: DEFAULT_LOCALE })
 }
 
-export function setRegionalFormatConfig(config: { currency?: string; language?: string }) {
-  if (config.currency && isSupportedCurrency(config.currency)) runtimeCurrency = config.currency
-  if (config.language && isSupportedLanguage(config.language)) runtimeLanguage = config.language
+export function setRegionalFormatConfig(config: {
+  currency?: string | null
+  language?: string | null
+  locale?: string | null
+  countryCode?: string | null
+}) {
+  if ('currency' in config) runtimeCurrency = config.currency ? normalizeCurrencyCode(config.currency) : null
+  if ('language' in config) runtimeLanguage = config.language && isSupportedLanguage(config.language) ? config.language : null
+  if ('locale' in config) runtimeLocale = normalizeLocaleCode(config.locale)
+  if ('countryCode' in config) runtimeCountryCode = normalizeCountryCode(config.countryCode)
 }
 
 export const getLocaleConfig = () => {
   const environmentCurrency = process.env.NEXT_PUBLIC_CURRENCY
   const environmentLanguage = process.env.NEXT_PUBLIC_LANGUAGE
+  const configuredLanguage = runtimeLanguage
+    ?? (environmentLanguage && isSupportedLanguage(environmentLanguage) ? environmentLanguage : null)
   const currency = runtimeCurrency
     ?? (environmentCurrency && isSupportedCurrency(environmentCurrency) ? environmentCurrency : DEFAULT_CURRENCY)
-  const language = runtimeLanguage
-    ?? (environmentLanguage && isSupportedLanguage(environmentLanguage) ? environmentLanguage : DEFAULT_LANGUAGE)
-  const locale = runtimeLanguage
-    ? getLocaleForLanguage(language)
-    : process.env.NEXT_PUBLIC_LOCALE || getLocaleForLanguage(language)
+  const language = configuredLanguage ?? DEFAULT_LANGUAGE
+  const locale = resolveEffectiveLocale({
+    locale: runtimeLocale,
+    countryCode: runtimeCountryCode,
+    language: configuredLanguage,
+    fallbackLocale: process.env.NEXT_PUBLIC_LOCALE || getLocaleForLanguage(language),
+  })
 
   return { locale, currency, language }
 }

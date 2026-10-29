@@ -50,28 +50,12 @@ import {
 } from '@/lib/organization/business-profile'
 import { cn } from '@/lib/utils'
 import { ServiceBusinessFields } from './ServiceBusinessFields'
+import { BUSINESS_VERTICAL_LABELS, OPERATING_MODEL_LABELS } from '@/lib/organization/business-labels'
 import { readServiceBusinessDetails } from '@/lib/organization/service-specialties'
 import { ServiceWebsitePreparationDialog } from '@/components/admin/website/ServiceWebsitePreparationDialog'
 
-const verticalLabels: Record<BusinessVertical, string> = {
-  general: 'Comercio general',
-  clothing: 'Ropa y moda',
-  barbershop: 'Barbería y peluquería',
-  beauty_services: 'Belleza y cuidado personal',
-  cosmetics: 'Cosmética y belleza',
-  electronics: 'Electrónica y tecnología',
-  food: 'Alimentos',
-  hardware: 'Ferretería',
-  other: 'Otro rubro',
-}
-
-const modelLabels: Record<OperatingModel, string> = {
-  retail: 'Venta minorista',
-  wholesale: 'Venta mayorista',
-  service: 'Prestación de servicios',
-  repair: 'Taller y reparaciones',
-  mixed: 'Negocio mixto',
-}
+const verticalLabels = BUSINESS_VERTICAL_LABELS
+const modelLabels = OPERATING_MODEL_LABELS
 
 /** Qué cambia con cada forma de trabajo, para elegir sin adivinar. */
 const modelHints: Record<OperatingModel, string> = {
@@ -316,10 +300,10 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
             </div>
             <div>
               <CardTitle className="text-lg font-semibold tracking-tight">
-                Perfil y módulos del negocio
+                Rubro y herramientas
               </CardTitle>
               <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                Adaptá el sistema a tu actividad. Desactivar un módulo oculta sus herramientas, pero conserva todos sus datos.
+                Contanos a qué te dedicás y elegí qué herramientas ves en el menú. Apagar una la oculta, pero sus datos se conservan.
               </CardDescription>
             </div>
           </div>
@@ -734,7 +718,12 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
         </div>
 
         {/* Vista previa del menú: lo que el equipo va a ver en el panel con esta configuración. */}
-        <section aria-labelledby="visible-menu-title" className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+        <details className="group rounded-xl border border-border/80 bg-muted/20">
+        <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-semibold text-foreground">
+          <LayoutList className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          Ver cómo queda el menú
+        </summary>
+        <section aria-labelledby="visible-menu-title" className="space-y-3 border-t border-border/60 p-4">
           <div className="flex items-start gap-2.5">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <LayoutList className="h-3.5 w-3.5" aria-hidden="true" />
@@ -765,6 +754,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
             ))}
           </div>
         </section>
+        </details>
 
         {/* Footer actions */}
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -778,7 +768,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
               {dependencyProblems.map((problem) => <li key={problem}>{problem}</li>)}
             </ul>
           )}
-          <Button
+          {/* En Configuración se guarda con la barra común; el botón propio queda para usos sueltos. */}
+          {!actionsRef ? <Button
             onClick={() => void save()}
             disabled={!canSave}
             className="gap-2 sm:min-w-44"
@@ -789,7 +780,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
               <Save className="h-4 w-4" />
             )}
             {saving ? 'Guardando perfil…' : prepareWebsite ? 'Guardar y preparar la página' : 'Guardar perfil'}
-          </Button>
+          </Button> : null}
         </div>
       </CardContent>
     </Card>

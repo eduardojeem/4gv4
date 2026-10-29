@@ -31,6 +31,7 @@ describe('historial de migraciones', () => {
       '20261025130103_variant_branch_stock_target_atomic.sql',
       '20261025174643_variant_low_stock_indicator.sql',
       '20261025212829_add_organization_regional_identity.sql',
+      '20261027213300_onboarding_atomic_progress_v2.sql',
     ]) {
       expect(files).toContain(file)
     }

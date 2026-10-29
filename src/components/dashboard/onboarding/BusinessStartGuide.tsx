@@ -43,7 +43,7 @@ export function BusinessStartGuide() {
 function SetupChecklist({ checklist }: { checklist: NonNullable<BusinessStartGuidePayload['setupChecklist']> }) {
   return <section className="space-y-3 rounded-xl border bg-card p-4" aria-label="Lista opcional de configuración">
     <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Configurá tu negocio a tu ritmo</h2><p className="text-sm text-muted-foreground">{checklist.percent}% listo · estos pasos son opcionales y no bloquean el uso del sistema.</p></div><span aria-label={`${checklist.percent}% configurado`} className="rounded-full bg-muted px-3 py-1 text-sm font-semibold">{checklist.percent}%</span></div>
-    {checklist.needsCountryConfirmation && <p className="rounded-md bg-muted px-3 py-2 text-sm">Tu organización todavía no tiene país confirmado. <Link className="font-medium underline underline-offset-4" href="/admin/settings/company">Confirmar país</Link></p>}
+    {checklist.needsCountryConfirmation && <p className="rounded-md bg-muted px-3 py-2 text-sm">Tu organización todavía no tiene país confirmado. <Link className="font-medium underline underline-offset-4" href="/admin/settings#fiscal">Confirmar país</Link></p>}
     <details><summary className="min-h-11 cursor-pointer font-medium">Ver configuración pendiente y completada</summary><ul className="mt-2 grid gap-2 sm:grid-cols-2">{checklist.items.filter(item => item.key !== 'country' || checklist.needsCountryConfirmation).map(item => <li key={item.key} className="rounded-md border p-3 text-sm"><Link href={item.href} className="font-medium underline underline-offset-4">{item.done ? '✓ ' : '○ '}{item.label}</Link></li>)}</ul></details>
   </section>
 }
