@@ -191,7 +191,7 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   }
 }
 
-function applyRegionalSettings(settings: Pick<SharedSettings, 'currency' | 'language'>) {
+function applyRegionalSettings(settings: Pick<SharedSettings, 'currency' | 'language' | 'locale' | 'countryCode'>) {
   setRegionalFormatConfig(settings)
 }
 

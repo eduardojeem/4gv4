@@ -141,7 +141,7 @@ export async function POST(request: Request) {
   if (checkoutError) return NextResponse.json({ error: checkoutError, code: 'CHECKOUT_INVALID' }, { status: 400 })
   const { data: settings, error: settingsError } = await admin
     .from('organization_settings')
-    .select('currency, modules')
+    .select('currency, modules, onboarding_revision')
     .eq('organization_id', organizationId)
     .maybeSingle()
 
@@ -156,6 +156,9 @@ export async function POST(request: Request) {
   const sharedState = requestBody.sharedSetup === true && currentModules.onboarding?.shared
     ? normalizeOnboardingState(currentModules.onboarding.shared)
     : null
+  if (requestBody.sharedSetup === true && (typeof requestBody.expectedRevision !== 'number' || !Number.isSafeInteger(requestBody.expectedRevision) || requestBody.expectedRevision < 0)) {
+    return NextResponse.json({ error: 'Recargá el estado del onboarding antes de finalizar.', code: 'ONBOARDING_REVISION_REQUIRED' }, { status: 400 })
+  }
   if (requestBody.sharedSetup === true && (!sharedState || getFirstIncompleteStep(sharedState) !== 5)) {
     return NextResponse.json({ error: 'Terminá y guardá los pasos obligatorios antes de finalizar.', code: 'ONBOARDING_INCOMPLETE' }, { status: 409 })
   }
@@ -267,6 +270,27 @@ export async function POST(request: Request) {
     email: input.email || '',
   }
 
+  const planInfo = await getOrganizationPlanInfo(organizationId)
+  const entitled = new Set([
+    ...planInfo.entitledModules,
+    ...planInfo.moduleTrials.map(trial => trial.module),
+  ])
+  const suggestedModules = getSuggestedModules(input.businessVertical, input.operatingModel)
+    .filter(module => entitled.has(module))
+  const selectedModulePreferences = sharedState?.data.selectedModules
+  const selectedFromOnboarding = selectedModulePreferences
+    ? visibleEntitledModules(selectedModulePreferences, [...entitled])
+    : null
+  const applySuggestedModules = !alreadyCompleted && (suggestedModules.length > 0 || (selectedFromOnboarding?.length ?? 0) > 0)
+  const enabledModules = applySuggestedModules ? (selectedFromOnboarding?.length ? selectedFromOnboarding : suggestedModules) : null
+  const organizationUpdate: Record<string, unknown> = {
+    ...serviceBusinessDetailsPatch(input),
+    business_vertical: input.businessVertical,
+    operating_model: input.operatingModel,
+    updated_at: now,
+  }
+  if (applySuggestedModules) organizationUpdate.enabled_modules = selectedFromOnboarding ?? suggestedModules
+
   const verticalDefaults = getWebsiteDefaultsForVertical(
     input.businessVertical,
     input.operatingModel,
@@ -311,33 +335,52 @@ export async function POST(request: Request) {
     websiteCompanyInfo.processSectionEnabled = verticalDefaults.company_info?.processSectionEnabled ?? true
   }
 
-  // La publicacion se aplica ANTES de la RPC: la funcion lee
-  // `storefront_public` de `organizations` para estamparlo en `company_info`.
-  // Escribirla despues dejaba la fila publica con el valor de la vez anterior.
-  const publicationUpdate: Record<string, unknown> = {
-    storefront_public: input.storefrontPublic,
-    updated_at: now,
-  }
-  if (!input.storefrontPublic) publicationUpdate.marketplace_public = false
-
-  const { error: publicationError } = await admin
-    .from('organizations')
-    .update(publicationUpdate)
-    .eq('id', organizationId)
-
-  if (publicationError) {
-    logger.error('Failed to apply storefront publication', {
-      error: publicationError.message,
-      organizationId,
+  let completion: unknown
+  let updateError: { message: string } | null = null
+  if (sharedState) {
+    const { data, error } = await admin.rpc('complete_organization_onboarding_v2', {
+      p_organization_id: organizationId,
+      p_user_id: user.id,
+      p_expected_revision: Number(requestBody.expectedRevision),
+      p_display_name: input.displayName,
+      p_currency: input.currency,
+      p_timezone: input.timezone,
+      p_country_code: sharedState.data.countryCode ?? '',
+      p_locale: sharedState.data.locale ?? '',
+      p_logo_url: input.logoUrl || '',
+      p_branch: { ...branchPayload, name: sharedState.data.primaryBranch.name },
+      p_company_info: websiteCompanyInfo,
+      p_admin_settings: toOnboardingAdminSettings(input),
+      p_organization_profile: organizationUpdate,
+      p_storefront_public: input.storefrontPublic,
     })
-    return NextResponse.json({
-      error: 'No se pudo aplicar la visibilidad de la tienda. No se guardó nada.',
-    }, { status: 500 })
-  }
-
-  const { data: completion, error: updateError } = await admin.rpc(
-    'complete_organization_onboarding',
-    {
+    completion = data
+    updateError = error
+    const rpcResult = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    if (!error && rpcResult.code === 'ONBOARDING_REVISION_CONFLICT') {
+      return NextResponse.json({
+        error: 'Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes.',
+        code: rpcResult.code,
+        revision: rpcResult.revision,
+        setupState: rpcResult.setupState,
+      }, { status: 409 })
+    }
+  } else {
+    // Legacy callers retain their existing RPC contract and publication behavior.
+    const publicationUpdate: Record<string, unknown> = {
+      storefront_public: input.storefrontPublic,
+      updated_at: now,
+    }
+    if (!input.storefrontPublic) publicationUpdate.marketplace_public = false
+    const { error: publicationError } = await admin
+      .from('organizations')
+      .update(publicationUpdate)
+      .eq('id', organizationId)
+    if (publicationError) {
+      logger.error('Failed to apply storefront publication', { error: publicationError.message, organizationId })
+      return NextResponse.json({ error: 'No se pudo aplicar la visibilidad de la tienda. No se guardó nada.' }, { status: 500 })
+    }
+    const legacyResult = await admin.rpc('complete_organization_onboarding', {
       p_organization_id: organizationId,
       p_user_id: user.id,
       p_display_name: input.displayName,
@@ -347,41 +390,33 @@ export async function POST(request: Request) {
       p_modules: nextModules,
       p_branch: branchPayload,
       p_company_info: websiteCompanyInfo,
-    }
-  )
+    })
+    completion = legacyResult.data
+    updateError = legacyResult.error
+  }
 
   if (updateError) {
     logger.error('Failed to complete onboarding', { error: updateError.message, organizationId })
-    // La visibilidad se aplico antes de la RPC: si el resto no se guardo, se
-    // vuelve a dejar como estaba en vez de publicar o despublicar a medias.
-    const { error: revertError } = await admin
-      .from('organizations')
-      .update({
-        storefront_public: currentPublication?.storefront_public ?? false,
-        marketplace_public: currentPublication?.marketplace_public ?? false,
-        updated_at: now,
-      })
-      .eq('id', organizationId)
-
-    if (revertError) {
-      logger.error('Failed to revert storefront publication after onboarding error', {
-        error: revertError.message,
-        organizationId,
-      })
+    if (!sharedState) {
+      const { error: revertError } = await admin
+        .from('organizations')
+        .update({
+          storefront_public: currentPublication?.storefront_public ?? false,
+          marketplace_public: currentPublication?.marketplace_public ?? false,
+          updated_at: now,
+        })
+        .eq('id', organizationId)
+      if (revertError) logger.error('Failed to revert storefront publication after onboarding error', { error: revertError.message, organizationId })
     }
 
     return NextResponse.json({ error: 'No se pudo finalizar el onboarding. No se guardó nada.' }, { status: 500 })
   }
 
-  if (sharedState?.data.countryCode && sharedState.data.locale) {
-    const { error: regionalError } = await admin.from('organization_settings').update({
-      country_code: sharedState.data.countryCode,
-      locale: sharedState.data.locale,
-      updated_at: now,
-    }).eq('organization_id', organizationId)
-    if (regionalError) {
-      logger.error('Onboarding saved but regional identity was not persisted', { error: regionalError.message, organizationId })
-      return NextResponse.json({ error: 'La configuración se guardó, pero falta guardar el país e idioma. Volvé a intentar finalizar.', code: 'REGIONAL_SETTINGS_SAVE_FAILED' }, { status: 500 })
+  if (!sharedState) {
+    const { error: profileUpdateError } = await admin.from('organizations').update(organizationUpdate).eq('id', organizationId)
+    if (profileUpdateError) {
+      logger.error('Failed to save onboarding business profile', { error: profileUpdateError.message, organizationId })
+      return NextResponse.json({ error: 'La configuración general se guardó, pero no se pudo aplicar el perfil del negocio. Intentá nuevamente.' }, { status: 500 })
     }
   }
 
@@ -476,47 +511,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const planInfo = await getOrganizationPlanInfo(organizationId)
-  const entitled = new Set([
-    ...planInfo.entitledModules,
-    ...planInfo.moduleTrials.map(trial => trial.module),
-  ])
-  const suggestedModules = getSuggestedModules(input.businessVertical, input.operatingModel)
-    .filter(module => entitled.has(module))
-
-  // Los modulos se sugieren la primera vez. En una revisita, lo que el admin
-  // eligio a mano en /admin/organization-profile —con validacion de plan y
-  // auditoria— manda sobre la sugerencia del rubro.
-  const organizationUpdate: Record<string, unknown> = {
-    ...serviceBusinessDetailsPatch(input),
-    business_vertical: input.businessVertical,
-    operating_model: input.operatingModel,
-    updated_at: now,
-  }
-  // Una lista vacia significa «ningun modulo», no «todos»: si el plan no
-  // habilita ninguno de los sugeridos, se deja sin tocar y la organizacion
-  // conserva los de su plan.
-  const selectedModulePreferences = sharedState?.data.selectedModules
-  const selectedFromOnboarding = selectedModulePreferences
-    ? visibleEntitledModules(selectedModulePreferences, [...entitled])
-    : null
-  const applySuggestedModules = !alreadyCompleted && (suggestedModules.length > 0 || (selectedFromOnboarding?.length ?? 0) > 0)
-  if (applySuggestedModules) {
-    organizationUpdate.enabled_modules = selectedFromOnboarding ?? suggestedModules
-  }
-  const enabledModules = applySuggestedModules ? (selectedFromOnboarding?.length ? selectedFromOnboarding : suggestedModules) : null
-  const { error: profileUpdateError } = await admin
-    .from('organizations')
-    .update(organizationUpdate)
-    .eq('id', organizationId)
-
-  if (profileUpdateError) {
-    logger.error('Failed to save onboarding business profile', { error: profileUpdateError.message, organizationId })
-    return NextResponse.json({
-      error: 'La configuración general se guardó, pero no se pudo aplicar el perfil del negocio. Intentá nuevamente.',
-    }, { status: 500 })
-  }
-
   // La primera vez: caja principal y categorías del rubro elegido, si todavía
   // no tiene. Una empresa creada antes de esto también las recibe al terminar.
   const starterKit = alreadyCompleted
@@ -556,10 +550,14 @@ export async function POST(request: Request) {
   const completedAt = completion && typeof completion === 'object' && !Array.isArray(completion)
     ? String((completion as Record<string, unknown>).completed_at || now)
     : now
+  const completedRevision = completion && typeof completion === 'object' && !Array.isArray(completion)
+    ? (completion as Record<string, unknown>).revision
+    : undefined
 
   return NextResponse.json({
     success: true,
     completedAt,
+    ...(typeof completedRevision === 'number' ? { revision: completedRevision } : {}),
     storefrontPublic: input.storefrontPublic,
     // Con esto en true el sitio quedo sin su contenido inicial y la pantalla lo
     // dice: antes el error se descartaba y la respuesta seguia siendo exitosa.

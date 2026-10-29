@@ -9,8 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
-import { REGIONAL_CURRENCIES } from '@/lib/regional/contract'
-import { REGIONAL_COUNTRY_LABELS } from '@/lib/regional/country-labels'
+import { getSupportedRegionalCountries, REGIONAL_CURRENCIES } from '@/lib/regional/contract'
 import { BUSINESS_VERTICAL_LABELS } from '@/lib/organization/business-labels'
 import {
   ONBOARDING_MODULE_PREFERENCES,
@@ -27,15 +26,18 @@ const STEP_NAMES = ['Plan', 'Negocio', 'Sucursal', 'Módulos', 'Listo']
 
 export function SharedOnboardingWizard({
   initialState,
+  initialRevision,
   planName,
   entitledModules,
 }: {
   initialState: SharedOnboardingState
+  initialRevision: number
   planName: string
   entitledModules: string[]
 }) {
   const router = useRouter()
   const [state, setState] = useState(initialState)
+  const [revision, setRevision] = useState(initialRevision)
   const [selectedModules, setSelectedModules] = useState<string[]>(() => initialState.data.selectedModules ?? suggestOnboardingPreferences(initialState.data.businessCategory, entitledModules))
   const [errors, setErrors] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -78,13 +80,37 @@ export function SharedOnboardingWizard({
       const response = await fetch('/api/onboarding/status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step, data }),
+        body: JSON.stringify({ step, data, expectedRevision: revision }),
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) {
+        if (response.status === 409 && result?.code === 'ONBOARDING_REVISION_CONFLICT') {
+          const latestResponse = await fetch('/api/onboarding/status', { cache: 'no-store' })
+          const latest = await latestResponse.json().catch(() => null)
+          if (latestResponse.ok && latest?.setupState) {
+            const remote = latest.setupState as SharedOnboardingState
+            const localDraft = step === 2
+              ? {
+                  businessName: state.data.businessName,
+                  countryCode: state.data.countryCode,
+                  businessCategory: state.data.businessCategory,
+                  currency: state.data.currency,
+                  timezone: state.data.timezone,
+                  locale: state.data.locale,
+                  regionalConfirmed: state.data.regionalConfirmed,
+                }
+              : step === 3 ? { primaryBranch: state.data.primaryBranch } : { selectedModules }
+            setState({ ...remote, data: { ...remote.data, ...localDraft } })
+            if (step !== 4) setSelectedModules(remote.data.selectedModules ?? [])
+            setRevision(Number(latest.onboardingRevision ?? result.revision ?? revision))
+            toast.info('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisá tu paso y volvé a guardar.')
+            return
+          }
+        }
         setErrors(Array.isArray(result?.fields) ? result.fields : [])
         throw new Error(result?.error || 'No se pudo guardar el paso.')
       }
+      if (Number.isSafeInteger(result?.revision)) setRevision(result.revision)
       if (result?.setupState) setState(result.setupState)
       else setState((current) => ({ ...current, currentStep: step === 2 ? 3 : step === 3 ? 4 : 5 }))
       if (step === 4) setState((current) => ({ ...current, data: { ...current.data, selectedModules } }))
@@ -104,6 +130,7 @@ export function SharedOnboardingWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sharedSetup: true,
+          expectedRevision: revision,
           displayName: state.data.businessName,
           currency: state.data.currency,
           timezone: state.data.timezone,
@@ -121,7 +148,21 @@ export function SharedOnboardingWizard({
         }),
       })
       const result = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(result?.error || 'No se pudo finalizar la configuración.')
+      if (!response.ok) {
+        if (response.status === 409 && result?.code === 'ONBOARDING_REVISION_CONFLICT') {
+          const latestResponse = await fetch('/api/onboarding/status', { cache: 'no-store' })
+          const latest = await latestResponse.json().catch(() => null)
+          if (latestResponse.ok && latest?.setupState) {
+            setState(latest.setupState)
+            setSelectedModules(latest.setupState.data.selectedModules ?? [])
+            setRevision(Number(latest.onboardingRevision ?? result.revision ?? revision))
+            toast.info('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisalos antes de finalizar.')
+            return
+          }
+        }
+        throw new Error(result?.error || 'No se pudo finalizar la configuración.')
+      }
+      if (Number.isSafeInteger(result?.revision)) setRevision(result.revision)
       setState((current) => ({ ...current, completed: true, currentStep: 5, completedAt: result.completedAt ?? new Date().toISOString() }))
       if (destination !== '/dashboard') router.push(destination)
       else toast.success('Tu negocio está listo.');
@@ -162,7 +203,7 @@ export function SharedOnboardingWizard({
           {step === 1 ? <div><h2 className="text-xl font-bold">Elegí tu plan</h2><p className="mt-2 text-muted-foreground">El plan {planName} quedó seleccionado al crear tu cuenta.</p></div> : null}
           {step === 2 ? <div className="space-y-5"><div><h2 className="text-xl font-bold">Contanos sobre tu negocio</h2><p className="mt-1 text-sm text-muted-foreground">Estos datos definen la moneda, el idioma y el horario de tu organización.</p></div>
             <Field label="Nombre del negocio" value={state.data.businessName} onChange={(value) => setBusiness({ businessName: value })} error={fieldError('businessName')} />
-            <div className="space-y-2"><Label htmlFor="setup-country">País</Label><select id="setup-country" className="h-10 w-full rounded-md border bg-background px-3" value={state.data.countryCode ?? ''} onChange={(event) => { const value = event.target.value; const regional = value ? getRegionalSelection(value) : null; setBusiness({ countryCode: value || null, currency: regional?.baseCurrency ?? null, timezone: regional?.timezone ?? null, locale: regional?.locale ?? null, regionalConfirmed: false }) }}><option value="">Seleccioná un país</option>{Object.entries(REGIONAL_COUNTRY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>{fieldError('countryCode') ? <p className="text-xs text-destructive">{fieldError('countryCode')}</p> : null}</div>
+            <div className="space-y-2"><Label htmlFor="setup-country">País</Label><select id="setup-country" className="h-10 w-full rounded-md border bg-background px-3" value={state.data.countryCode ?? ''} onChange={(event) => { const value = event.target.value; const regional = value ? getRegionalSelection(value) : null; setBusiness({ countryCode: value || null, currency: regional?.baseCurrency ?? null, timezone: regional?.timezone ?? null, locale: regional?.locale ?? null, regionalConfirmed: false }) }}><option value="">Seleccioná un país</option>{getSupportedRegionalCountries().map(({ code, label }) => <option key={code} value={code}>{label}</option>)}</select>{fieldError('countryCode') ? <p className="text-xs text-destructive">{fieldError('countryCode')}</p> : null}</div>
             <div className="space-y-2"><Label htmlFor="setup-category">Rubro</Label><select id="setup-category" className="h-10 w-full rounded-md border bg-background px-3" value={state.data.businessCategory ?? ''} onChange={(event) => { const category = (event.target.value || null) as SharedOnboardingState['data']['businessCategory']; setBusiness({ businessCategory: category, selectedModules: null }); setSelectedModules(suggestOnboardingPreferences(category, entitledModules)) }}><option value="">Seleccioná un rubro</option>{BUSINESS_VERTICALS.map((value) => <option key={value} value={value}>{CATEGORY_LABELS[value] ?? value}</option>)}</select>{fieldError('businessCategory') ? <p className="text-xs text-destructive">{fieldError('businessCategory')}</p> : null}</div>
             <div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label htmlFor="setup-currency">Moneda sugerida</Label><select id="setup-currency" className="h-10 w-full rounded-md border bg-background px-3" value={state.data.currency ?? ''} onChange={(event) => setBusiness({ currency: event.target.value || null })}>{REGIONAL_CURRENCIES.map(({ code, name }) => <option key={code} value={code}>{code} · {name}</option>)}</select></div><div className="space-y-2"><Label htmlFor="setup-locale">Idioma sugerido</Label><Input id="setup-locale" value={state.data.locale ?? ''} onChange={(event) => setBusiness({ locale: event.target.value || null })} placeholder="es-PY" /></div><div className="space-y-2"><Label htmlFor="setup-timezone">Zona horaria</Label>{countryTimezoneNeedsChoice ? <select id="setup-timezone" className="h-10 w-full rounded-md border bg-background px-3" value={state.data.timezone ?? ''} onChange={(event) => setBusiness({ timezone: event.target.value || null })}><option value="">Seleccioná una zona</option>{TIMEZONES.map((zone) => <option key={zone} value={zone}>{zone}</option>)}</select> : <Input id="setup-timezone" value={state.data.timezone ?? ''} onChange={(event) => setBusiness({ timezone: event.target.value || null })} />}</div></div>
             <label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={state.data.regionalConfirmed} onChange={(event) => setBusiness({ regionalConfirmed: event.target.checked })} /><span>Confirmo la moneda, el idioma y la zona horaria para este negocio.</span></label>{fieldError('regionalConfirmed') ? <p role="alert" className="text-xs text-destructive">Confirmá los datos regionales para continuar.</p> : null}

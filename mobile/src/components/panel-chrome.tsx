@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette, usePalette } from '@/lib/palette';
 import { hasNativePanelSection, iconFor, panelRoute, ROLE_LABELS, usePanel } from '@/lib/panel';
 
+import { useNotifications } from '@/lib/notifications-context';
 import { usePanelMenus } from './panel-menus';
 
 /**
@@ -17,6 +18,7 @@ export function PanelHeader() {
   const colors = usePalette();
   const { data } = usePanel();
   const { openSections, openProfile } = usePanelMenus();
+  const { unreadCount } = useNotifications();
   const org = data?.organization;
   const initial = (data?.user.name || data?.user.email || '?').charAt(0).toUpperCase();
 
@@ -46,6 +48,21 @@ export function PanelHeader() {
             </Text>
           )}
         </View>
+        <Pressable
+          onPress={() => router.push('/panel/notifications' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Notificaciones"
+          hitSlop={6}
+          style={({ pressed }) => [styles.bellBtn, { borderColor: colors.border, backgroundColor: pressed ? colors.background : 'transparent' }]}>
+          <Ionicons name="notifications-outline" size={20} color={colors.text} />
+          {unreadCount > 0 && (
+            <View style={[styles.badge, { backgroundColor: palette.primary }]}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : String(unreadCount)}
+              </Text>
+            </View>
+          )}
+        </Pressable>
         <Pressable
           onPress={openProfile}
           accessibilityRole="button"
@@ -131,6 +148,9 @@ const styles = StyleSheet.create({
   orgInitial: { color: '#fff', fontSize: 18, fontWeight: '800' },
   orgName: { fontSize: 16, fontWeight: '800' },
   orgMeta: { fontSize: 12, marginTop: 1 },
+  bellBtn: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  badge: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   avatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontSize: 15, fontWeight: '800' },

@@ -7,7 +7,7 @@ import { Field, Notice, Section, WebsiteScreen, websiteStyles } from '@/componen
 import { ApiError, apiFetch } from '@/lib/api';
 import { palette, usePalette } from '@/lib/palette';
 import { BUSINESS_VERTICALS } from '../../../src/lib/organization/business-profile';
-import { REGIONAL_CURRENCIES } from '../../../src/lib/regional/contract';
+import { getSupportedRegionalCountries, REGIONAL_CURRENCIES } from '../../../src/lib/regional/contract';
 import {
   getRegionalSelection,
   ONBOARDING_MODULE_PREFERENCES,
@@ -17,12 +17,11 @@ import {
   type SharedOnboardingState,
 } from '../../../src/lib/onboarding/shared-setup';
 
-type Bootstrap = { setupState: SharedOnboardingState | null; entitledModules: string[] };
+type Bootstrap = { setupState: SharedOnboardingState | null; entitledModules: string[]; onboardingRevision: number };
 const CATEGORIES: Record<string, string> = {
   general: 'Comercio general', clothing: 'Ropa y calzado', cosmetics: 'Cosmética', electronics: 'Electrónica y celulares',
   food: 'Alimentos', hardware: 'Ferretería', barbershop: 'Barbería', beauty_services: 'Servicios de belleza', other: 'Otro',
 };
-const COUNTRIES = [{ code: 'PY', label: 'Paraguay' }, { code: 'BR', label: 'Brasil' }, { code: 'AR', label: 'Argentina' }, { code: 'US', label: 'Estados Unidos' }];
 const US_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
 const STEPS = ['Plan', 'Negocio', 'Sucursal', 'Módulos', 'Listo'];
 
@@ -30,6 +29,7 @@ export default function OnboardingScreen() {
   const colors = usePalette();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [state, setState] = useState<SharedOnboardingState | null>(null);
+  const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,6 +43,7 @@ export default function OnboardingScreen() {
         if (!active) return;
         if (!result.setupState) throw new ApiError('Este comercio no tiene un onboarding inicial pendiente.', 409);
         setBootstrap(result);
+        setRevision(result.onboardingRevision ?? 0);
         setState(result.setupState);
         setSelected(result.setupState.data.selectedModules ?? suggestOnboardingPreferences(result.setupState.data.businessCategory, result.entitledModules ?? []));
       })
@@ -85,15 +86,33 @@ export default function OnboardingScreen() {
     }
     setSaving(true);
     try {
-      const result = await apiFetch<{ setupState?: SharedOnboardingState }>('/api/onboarding/status', {
-        method: 'PATCH', body: JSON.stringify({ step, data }),
+      const result = await apiFetch<{ setupState?: SharedOnboardingState; revision?: number }>('/api/onboarding/status', {
+        method: 'PATCH', body: JSON.stringify({ step, data, expectedRevision: revision }),
       });
+      if (Number.isSafeInteger(result.revision)) setRevision(result.revision as number);
       if (result.setupState) setState(result.setupState);
       else setState((current) => current ? { ...current, currentStep: step === 2 ? 3 : step === 3 ? 4 : 5 } : current);
       if (step === 4) setState((current) => current ? { ...current, data: { ...current.data, selectedModules: selected } } : current);
       setFieldErrors([]);
       setError(null);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409 && cause.body?.code === 'ONBOARDING_REVISION_CONFLICT') {
+        try {
+          const latest = await apiFetch<Bootstrap>('/api/onboarding/status');
+          if (latest.setupState) {
+            const local = state;
+            const localDraft = step === 2 && local
+              ? { businessName: local.data.businessName, countryCode: local.data.countryCode, businessCategory: local.data.businessCategory, currency: local.data.currency, timezone: local.data.timezone, locale: local.data.locale, regionalConfirmed: local.data.regionalConfirmed }
+              : step === 3 && local ? { primaryBranch: local.data.primaryBranch } : { selectedModules: selected };
+            setState({ ...latest.setupState, data: { ...latest.setupState.data, ...localDraft } });
+            setRevision(latest.onboardingRevision ?? 0);
+            setError('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisá tu paso y volvé a guardar.');
+            return;
+          }
+        } catch {
+          // Preserve the current form if a refresh is temporarily unavailable.
+        }
+      }
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar el paso.');
     } finally { setSaving(false); }
   };
@@ -102,10 +121,11 @@ export default function OnboardingScreen() {
     if (!state) return;
     setSaving(true);
     try {
-      const result = await apiFetch<{ completedAt?: string }>('/api/onboarding/complete', {
+      const result = await apiFetch<{ completedAt?: string; revision?: number }>('/api/onboarding/complete', {
         method: 'POST',
         body: JSON.stringify({
           sharedSetup: true,
+          expectedRevision: revision,
           displayName: state.data.businessName,
           currency: state.data.currency,
           timezone: state.data.timezone,
@@ -122,8 +142,22 @@ export default function OnboardingScreen() {
           confirmPublication: false,
         }),
       });
+      if (Number.isSafeInteger(result.revision)) setRevision(result.revision as number);
       setState((current) => current ? { ...current, completed: true, currentStep: 5, completedAt: result.completedAt ?? new Date().toISOString(), completedSteps: [...new Set([...current.completedSteps, 'ready' as const])] } : current);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409 && cause.body?.code === 'ONBOARDING_REVISION_CONFLICT') {
+        try {
+          const latest = await apiFetch<Bootstrap>('/api/onboarding/status');
+          if (latest.setupState) {
+            setState(latest.setupState);
+            setRevision(latest.onboardingRevision ?? 0);
+            setError('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisalos antes de finalizar.');
+            return;
+          }
+        } catch {
+          // Keep the current form visible if refreshing fails.
+        }
+      }
       setError(cause instanceof Error ? cause.message : 'No se pudo finalizar la configuración.');
     } finally { setSaving(false); }
   };
@@ -143,7 +177,7 @@ export default function OnboardingScreen() {
     {error ? <Notice tone="danger" text={error} /> : null}
     {step === 2 ? <Section title="Contanos sobre tu negocio" hint="Los datos regionales se guardan junto a la organización y se sincronizan con la web.">
       <Field label="Nombre del negocio" value={state.data.businessName} onChangeText={(businessName) => updateBusiness({ businessName })} error={hasError('businessName')} />
-      <Text style={[styles.label, { color: colors.text }]}>País</Text><View style={styles.chips}>{COUNTRIES.map(({ code, label }) => <Choice key={code} label={label} selected={state.data.countryCode === code} onPress={() => { const values = getRegionalSelection(code); updateBusiness({ countryCode: code, currency: values?.baseCurrency ?? null, timezone: values?.timezone ?? null, locale: values?.locale ?? null, regionalConfirmed: false }); }} />)}</View>{hasError('countryCode') ? <Text style={styles.error}>{hasError('countryCode')}</Text> : null}
+      <Text style={[styles.label, { color: colors.text }]}>País</Text><View style={styles.chips}>{getSupportedRegionalCountries().map(({ code, label }) => <Choice key={code} label={label} selected={state.data.countryCode === code} onPress={() => { const values = getRegionalSelection(code); updateBusiness({ countryCode: code, currency: values?.baseCurrency ?? null, timezone: values?.timezone ?? null, locale: values?.locale ?? null, regionalConfirmed: false }); }} />)}</View>{hasError('countryCode') ? <Text style={styles.error}>{hasError('countryCode')}</Text> : null}
       <Text style={[styles.label, { color: colors.text }]}>Rubro</Text><View style={styles.chips}>{BUSINESS_VERTICALS.map((category) => <Choice key={category} label={CATEGORIES[category] ?? category} selected={state.data.businessCategory === category} onPress={() => { updateBusiness({ businessCategory: category, selectedModules: null }); setSelected(suggestOnboardingPreferences(category, bootstrap.entitledModules)); }} />)}</View>{hasError('businessCategory') ? <Text style={styles.error}>{hasError('businessCategory')}</Text> : null}
       {state.data.countryCode ? <>
         <Text style={[styles.label, { color: colors.text }]}>Moneda</Text><View style={styles.chips}>{REGIONAL_CURRENCIES.map(({ code }) => <Choice key={code} label={code} selected={state.data.currency === code} onPress={() => updateBusiness({ currency: code })} />)}</View>

@@ -1,3 +1,5 @@
+import { formatMobileCurrency } from './regional-format';
+
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted' | 'cancelled';
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
@@ -18,13 +20,5 @@ export function quoteStatusLabel(status: QuoteStatus) {
 }
 
 export function formatQuoteAmount(amount: number, currency: string) {
-  try {
-    return new Intl.NumberFormat('es-PY', {
-      style: 'currency',
-      currency: currency || 'PYG',
-      maximumFractionDigits: currency === 'PYG' ? 0 : 2,
-    }).format(Number.isFinite(amount) ? amount : 0);
-  } catch {
-    return `Gs. ${Math.round(Number.isFinite(amount) ? amount : 0).toLocaleString('es-PY')}`;
-  }
+  return formatMobileCurrency(amount, currency || 'PYG');
 }

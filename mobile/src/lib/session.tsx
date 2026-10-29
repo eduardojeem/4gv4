@@ -8,6 +8,7 @@ import { AppState, Platform } from 'react-native';
 import { apiFetch } from './api';
 import { supabase } from './supabase';
 import { describeMfaError, isSessionMfaPending } from './mfa-model';
+import { unregisterDeviceFromPush } from './push-notifications';
 import {
   authenticateWithBiometrics,
   clearBiometricUnlock,
@@ -155,6 +156,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signOut = async () => {
+    try {
+      await unregisterDeviceFromPush().catch(() => undefined);
+    } catch {
+      // La limpieza de push no debe bloquear el cierre de sesión del usuario
+    }
     setPrivateCacheUser(null);
     try {
       const { error } = await supabase.auth.signOut({ scope: 'local' });

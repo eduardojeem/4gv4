@@ -1,16 +1,13 @@
-import { REGIONAL_DEFAULT_COUNTRIES, getRegionalDefaults, normalizeLocaleCode, type LocaleCode } from './contract'
+import { getRegionalDefaults, getSupportedRegionalCountries, normalizeLocaleCode, type LocaleCode } from './contract'
 
-/** Los países que hoy se pueden elegir, con su nombre: los mismos en el onboarding y en Configuración. */
-export const REGIONAL_COUNTRY_LABELS: Record<(typeof REGIONAL_DEFAULT_COUNTRIES)[number], string> = {
-  PY: 'Paraguay',
-  BR: 'Brasil',
-  AR: 'Argentina',
-  US: 'Estados Unidos',
-}
+/** Nombre de cada país admitido, tomado del catálogo regional (la única fuente). */
+export const REGIONAL_COUNTRY_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  getSupportedRegionalCountries().map(({ code, label }) => [code, label]),
+)
 
 export function countryLabel(code: string | null | undefined): string {
   if (!code) return ''
-  return REGIONAL_COUNTRY_LABELS[code as keyof typeof REGIONAL_COUNTRY_LABELS] ?? code
+  return REGIONAL_COUNTRY_LABELS[code] ?? code
 }
 
 /**

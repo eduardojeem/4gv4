@@ -59,8 +59,8 @@ import {
   isSupportedCurrency,
 } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { REGIONAL_DEFAULT_COUNTRIES, normalizeCountryCode } from '@/lib/regional/contract'
-import { REGIONAL_COUNTRY_LABELS, countryLabel, localeForRegion, regionalSuggestion } from '@/lib/regional/country-labels'
+import { getSupportedRegionalCountries, normalizeCountryCode } from '@/lib/regional/contract'
+import { countryLabel, localeForRegion, regionalSuggestion } from '@/lib/regional/country-labels'
 
 type FieldErrors = Partial<Record<
   'companyName' | 'companyEmail' | 'companyPhone' | 'companyRuc' | 'companyAddress' | 'city' | 'taxRate',
@@ -688,7 +688,7 @@ export default function AdminSettingsPage() {
                     <Select value={settings.countryCode ?? ''} onValueChange={changeCountry}>
                       <SelectTrigger id="setting-country" className="h-10 bg-background"><SelectValue placeholder="Seleccioná un país" /></SelectTrigger>
                       <SelectContent>
-                        {REGIONAL_DEFAULT_COUNTRIES.map((country) => <SelectItem key={country} value={country}>{REGIONAL_COUNTRY_LABELS[country]}</SelectItem>)}
+                        {getSupportedRegionalCountries().map(({ code, label }) => <SelectItem key={code} value={code}>{label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCurrencyAmount,
   getCurrencyFractionDigits,
+  getSupportedRegionalCountries,
   getRegionalDefaults,
   normalizeCountryCode,
   normalizeCurrencyCode,
   normalizeLocaleCode,
   normalizeTimeZone,
   REGIONAL_CURRENCY_CODES,
+  resolveEffectiveLocale,
   type RegionalSettings,
 } from './contract'
 import { needsCountryConfirmation, normalizeRegionalSettingsPatch } from './settings'
@@ -57,6 +59,26 @@ describe('regional contract', () => {
       timezone: null,
       timezoneSelectionRequired: true,
     })
+    expect(getRegionalDefaults('CA')).toBeNull()
+  })
+
+  it('resolves effective locale from explicit locale, country, then legacy language', () => {
+    expect(resolveEffectiveLocale({ locale: 'es-AR', countryCode: 'AR', language: 'es' })).toBe('es-AR')
+    expect(resolveEffectiveLocale({ locale: 'pt-BR', countryCode: 'BR', language: 'pt' })).toBe('pt-BR')
+    expect(resolveEffectiveLocale({ locale: null, countryCode: 'PY', language: 'es' })).toBe('es-PY')
+    expect(resolveEffectiveLocale({ locale: null, countryCode: 'AR', language: 'es' })).toBe('es-AR')
+    expect(resolveEffectiveLocale({ locale: null, countryCode: null, language: 'es' })).toBe('es-PY')
+    expect(resolveEffectiveLocale({ locale: null, countryCode: 'CA', language: null })).toBe('es-PY')
+  })
+
+  it('exposes one supported country catalog and requires explicit US timezone selection', () => {
+    expect(getSupportedRegionalCountries().map(({ code, status }) => [code, status])).toEqual([
+      ['PY', 'SUPPORTED'], ['BR', 'SUPPORTED'], ['AR', 'SUPPORTED'], ['US', 'SUPPORTED'],
+    ])
+    expect(getSupportedRegionalCountries().find(({ code }) => code === 'US')).toMatchObject({
+      timezoneStrategy: 'explicit', defaultTimezone: null,
+    })
+    expect(getRegionalDefaults('US')).toMatchObject({ timezone: null, timezoneSelectionRequired: true })
     expect(getRegionalDefaults('CA')).toBeNull()
   })
 
