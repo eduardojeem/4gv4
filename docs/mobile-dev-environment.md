@@ -21,7 +21,7 @@ Para regenerar las variables cuando cambie la IP, ejecutá `npm run mobile:dev:e
 
 - `development` utiliza el entorno EAS `development` y no incluye valores cloud en `eas.json`. Para builds EAS futuras, ese entorno debe tener `EXPO_PUBLIC_RUNTIME_ENV=development`, `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` con la IP LAN y credenciales locales vigentes. No se creó ni modificó ninguna variable remota y no se hizo ningún build.
 - `preview` usa el entorno EAS `preview`, sin copiar las URLs de producción. La app rechaza valores de preview vacíos o apuntados a producción hasta que se configure un backend de pruebas independiente.
-- `production` conserva las URLs y la publishable key de producción ya declaradas en `eas.json`. No contiene service role.
+- `production` toma las URLs y la publishable key de producción del entorno EAS `production` (no de `eas.json`). No contiene service role. Para publicar en Google Play, ver `docs/mobile-android-release.md`.
 
 Las variables `EXPO_PUBLIC_*` se incluyen en el bundle; solo deben contener datos públicos. Nunca agregar `service_role` a Expo.
 
