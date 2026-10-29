@@ -25,6 +25,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { buildMfaPath } from '@/lib/auth/mfa'
+import { loadMfaState } from '@/lib/auth/mfa-client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { siteUrl } from '@/lib/site-url'
 import { toast } from 'sonner'
@@ -187,6 +189,12 @@ function LoginTab({
         } else {
           setError('El correo o la contraseña no coinciden con ninguna cuenta activa.')
         }
+        return
+      }
+
+      // Con 2FA activa falta el código: se pide y se vuelve a esta misma página.
+      if ((await loadMfaState(supabase).catch(() => null))?.pending) {
+        window.location.assign(buildMfaPath(`${window.location.pathname}${window.location.search}`))
         return
       }
 

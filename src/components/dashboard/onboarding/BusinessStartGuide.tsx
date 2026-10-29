@@ -13,7 +13,7 @@ export function BusinessStartGuide() {
   </section>
   const { guide, preferences } = data
   const checklist = data.setupChecklist
-  if (preferences.postponed) return <div className="space-y-4"><SetupChecklist checklist={checklist} /><section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+  if (preferences.postponed) return <div className="space-y-4">{checklist && <SetupChecklist checklist={checklist} />}<section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
     <p className="text-sm">Tu guía de preparación sigue disponible.</p>
     <Button variant="outline" disabled={saving || loading} onClick={() => void savePreferences({ ...preferences, postponed: false })}>Continuar preparación</Button>
     {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
@@ -21,7 +21,7 @@ export function BusinessStartGuide() {
   const next = guide.tasks.find(task => task.id === guide.nextTaskId)
   const operationKind = guide.tasks.some(task => task.id === 'first-reservation') ? 'reservation' : guide.tasks.some(task => task.id === 'first-repair') ? 'repair' : guide.tasks.some(task => task.id === 'first-sale') ? 'sale' : null
   return <div className="space-y-4">
-    <SetupChecklist checklist={checklist} />
+    {checklist && <SetupChecklist checklist={checklist} />}
     <section className="space-y-4 rounded-xl border border-primary/30 bg-card p-4 sm:p-5" aria-label="Preparación del negocio">
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-semibold">Preparar mi negocio</h2><p className="text-sm text-muted-foreground">{guide.completed} de {guide.total} requisitos aplicables listos. Las recomendaciones opcionales no bloquean el comienzo.</p></div>
@@ -40,10 +40,10 @@ export function BusinessStartGuide() {
   </div>
 }
 
-function SetupChecklist({ checklist }: { checklist: BusinessStartGuidePayload['setupChecklist'] }) {
+function SetupChecklist({ checklist }: { checklist: NonNullable<BusinessStartGuidePayload['setupChecklist']> }) {
   return <section className="space-y-3 rounded-xl border bg-card p-4" aria-label="Lista opcional de configuración">
     <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Configurá tu negocio a tu ritmo</h2><p className="text-sm text-muted-foreground">{checklist.percent}% listo · estos pasos son opcionales y no bloquean el uso del sistema.</p></div><span aria-label={`${checklist.percent}% configurado`} className="rounded-full bg-muted px-3 py-1 text-sm font-semibold">{checklist.percent}%</span></div>
-    {checklist.needsCountryConfirmation && <p className="rounded-md bg-muted px-3 py-2 text-sm">Tu organización todavía no tiene país confirmado. <Link className="font-medium underline underline-offset-4" href="/admin/settings/company">Confirmar país</Link></p>}
+    {checklist.needsCountryConfirmation && <p className="rounded-md bg-muted px-3 py-2 text-sm">Tu organización todavía no tiene país confirmado. <Link className="font-medium underline underline-offset-4" href="/admin/settings#fiscal">Confirmar país</Link></p>}
     <details><summary className="min-h-11 cursor-pointer font-medium">Ver configuración pendiente y completada</summary><ul className="mt-2 grid gap-2 sm:grid-cols-2">{checklist.items.filter(item => item.key !== 'country' || checklist.needsCountryConfirmation).map(item => <li key={item.key} className="rounded-md border p-3 text-sm"><Link href={item.href} className="font-medium underline underline-offset-4">{item.done ? '✓ ' : '○ '}{item.label}</Link></li>)}</ul></details>
   </section>
 }

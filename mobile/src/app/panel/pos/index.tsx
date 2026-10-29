@@ -28,7 +28,9 @@ import {
   type PosSession,
   type PriceMode,
 } from '@/lib/pos';
-import { fetchCategories, fetchProducts, isService, productImages, type Category, type Product } from '@/lib/products';
+import { fetchCategories, fetchProducts, productImages, type Category, type Product } from '@/lib/products';
+import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, isSellable, sameShelf, type PosShelf } from '@/lib/pos-catalog';
+import { fetchPosCatalog } from '@/lib/pos-catalog-api';
 import { frequentProducts, recordSold } from '@/lib/pos-frequent';
 import { CashSheet, SalesSheet } from '@/components/pos-cash';
 import { PosCustomerSheet } from '@/components/pos-customer';
@@ -63,10 +65,11 @@ export default function PosScreen() {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  // Qué pedido trajo la lista que se ve: mientras no coincide con el actual, está cargando.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  // Qué estante se ve: los más vendidos desde este teléfono, todo, o una categoría.
-  const [shelf, setShelf] = useState<'frequent' | 'all' | string>('frequent');
+  // Qué estante se ve: productos (por defecto), servicios, los más vendidos desde este teléfono o una categoría.
+  const [shelf, setShelf] = useState<PosShelf>(DEFAULT_POS_SHELF);
   const [frequent, setFrequent] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cashOpen, setCashOpen] = useState(false);
@@ -120,33 +123,37 @@ export default function PosScreen() {
   useEffect(() => loadPosPrivateCatalog(session?.branch.id, {
     loadFrequent: frequentProducts,
     loadCategories: fetchCategories,
-    onFrequent: list => {
-      setFrequent(list);
-      if (list.length === 0) setShelf('all');
-    },
+    onFrequent: setFrequent,
     onCategories: rows => setCategories(rows.filter(row => !row.parent_id && (row.products_count ?? 0) > 0).sort((a, b) => (b.products_count ?? 0) - (a.products_count ?? 0))),
   }), [session?.branch.id]);
 
-  const categoryId = shelf !== 'frequent' && shelf !== 'all' ? shelf : null;
+  // Un texto estable por estante: el objeto de categoría cambia en cada render.
+  const shelfKey = typeof shelf === 'string' ? shelf : `category:${shelf.categoryId}`;
+  const requestKey = `${shelfKey}|${search}|${session?.branch.id ?? ''}`;
+  const loadingProducts = loadedKey !== requestKey;
 
   useEffect(() => {
     let active = true;
-    fetchProducts({ query: search, categoryId, page: 1, sort: search ? 'name' : 'stock', direction: 'desc' })
-      .then((page) => active && setProducts(page.products.filter((product) => product.is_active)))
+    fetchPosCatalog(shelf, search)
+      .then((list) => active && setProducts(list))
       .catch(() => active && setProducts([]))
-      .finally(() => active && setLoadingProducts(false));
+      .finally(() => active && setLoadedKey(requestKey));
     return () => {
       active = false;
     };
-  }, [search, categoryId, session?.branch.id]);
+    // requestKey resume shelf, búsqueda y sucursal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey]);
 
   useEffect(() => subscribePrivateCacheContext(() => {
-    setFrequent([]); setCategories([]); setShelf('frequent'); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
+    setFrequent([]); setCategories([]); setShelf(DEFAULT_POS_SHELF); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
   }), []);
 
   // Los frecuentes con el stock y precio que acaba de traer el servidor, si están en la página.
   const fresh = new Map(products.map((product) => [product.id, product]));
-  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product) : products;
+  // Al cambiar de estante no queda a la vista la lista anterior: se ve «cargando».
+  // Los más vendidos se guardan en el teléfono: uno desactivado después no se muestra.
+  const shown = !search && shelf === 'frequent' ? frequent.map((product) => fresh.get(product.id) ?? product).filter(isSellable) : loadingProducts ? [] : products;
 
   const flash = useCallback((text: string) => {
     setToast(text);
@@ -157,7 +164,7 @@ export default function PosScreen() {
 
   const add = (product: Product, amount = 1) => {
     const inCart = quantityOf(product.id);
-    if (!isService(product) && inCart + amount > Number(product.stock_quantity)) {
+    if (!isPosService(product) && inCart + amount > Number(product.stock_quantity)) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       flash(Number(product.stock_quantity) <= 0 ? `«${product.name}» no tiene stock.` : `Solo hay ${product.stock_quantity} de «${product.name}».`);
       return;
@@ -180,7 +187,8 @@ export default function PosScreen() {
     try {
       const page = await fetchProducts({ query: code, page: 1 });
       const found = page.products.find((product) => product.barcode === code || product.sku === code);
-      if (found) add(found);
+      if (found && !isSellable(found)) flash(`«${found.name}» está desactivado.`);
+      else if (found) add(found);
       else flash(`No hay producto con el código ${code}.`);
     } catch {
       flash('No se pudo buscar el código.');
@@ -389,12 +397,19 @@ export default function PosScreen() {
       {/* Estantes */}
       {!search && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves} style={styles.shelvesWrap}>
+          <Shelf label="Productos" icon="cube-outline" selected={shelf === 'products'} onPress={() => setShelf('products')} colors={colors} />
+          <Shelf label="Servicios" icon="construct-outline" selected={shelf === 'services'} onPress={() => setShelf('services')} colors={colors} />
           {frequent.length > 0 && (
             <Shelf label="Más vendidos" icon="flame-outline" selected={shelf === 'frequent'} onPress={() => setShelf('frequent')} colors={colors} />
           )}
-          <Shelf label="Todos" icon="apps-outline" selected={shelf === 'all'} onPress={() => setShelf('all')} colors={colors} />
           {categories.map((category) => (
-            <Shelf key={category.id} label={category.name} selected={shelf === category.id} onPress={() => setShelf(category.id)} colors={colors} />
+            <Shelf
+              key={category.id}
+              label={category.name}
+              selected={sameShelf(shelf, { categoryId: category.id })}
+              onPress={() => setShelf({ categoryId: category.id })}
+              colors={colors}
+            />
           ))}
         </ScrollView>
       )}
@@ -411,7 +426,7 @@ export default function PosScreen() {
           loadingProducts ? (
             <ActivityIndicator style={styles.loading} color={palette.primary} />
           ) : (
-            <Text style={[styles.muted, styles.loading, { color: colors.muted }]}>{search ? `Nada coincide con «${search}».` : 'No hay productos activos.'}</Text>
+            <Text style={[styles.muted, styles.loading, { color: colors.muted }]}>{emptyShelfMessage(shelf, search)}</Text>
           )
         }
         renderItem={({ item }) => <ProductTile product={item} mode={priceMode} inCart={quantityOf(item.id)} colors={colors} onPress={() => add(item)} />}
@@ -468,7 +483,7 @@ export default function PosScreen() {
             mode={priceMode}
             colors={colors}
             onQuantity={(quantity) => {
-              if (!isService(line.product) && quantity > Number(line.product.stock_quantity)) return flash(`Solo hay ${line.product.stock_quantity}.`);
+              if (!isPosService(line.product) && quantity > Number(line.product.stock_quantity)) return flash(`Solo hay ${line.product.stock_quantity}.`);
               setQuantity(line.product.id, quantity);
             }}
             onDiscount={(discount) => setCart((list) => list.map((item) => (item.product.id === line.product.id ? { ...item, discount } : item)))}
@@ -540,8 +555,16 @@ function Quick({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap;
 
 function Shelf({ label, icon, selected, onPress, colors }: { label: string; icon?: keyof typeof Ionicons.glyphMap; selected: boolean; onPress: () => void; colors: Colors }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected }} style={[styles.shelf, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? palette.primary : colors.card }]}>
-      {icon ? <Ionicons name={icon} size={14} color={selected ? '#fff' : colors.muted} /> : null}
+    // Sin elegir también tiene que leerse bien: borde marcado y ícono del color del texto.
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [
+        styles.shelf,
+        { borderColor: selected ? palette.primary : colors.muted, backgroundColor: selected ? palette.primary : colors.card, opacity: pressed ? 0.75 : 1 },
+      ]}>
+      {icon ? <Ionicons name={icon} size={15} color={selected ? '#fff' : colors.text} /> : null}
       <Text numberOfLines={1} style={[styles.shelfText, { color: selected ? '#fff' : colors.text }]}>{label}</Text>
     </Pressable>
   );
@@ -549,7 +572,7 @@ function Shelf({ label, icon, selected, onPress, colors }: { label: string; icon
 
 function ProductTile({ product, mode, inCart, colors, onPress }: { product: Product; mode: PriceMode; inCart: number; colors: Colors; onPress: () => void }) {
   const image = productImages(product)[0];
-  const service = isService(product);
+  const service = isPosService(product);
   const stock = Number(product.stock_quantity) || 0;
   const out = !service && stock <= 0;
   return (
@@ -712,10 +735,10 @@ const styles = StyleSheet.create({
   segmentItem: { borderRadius: 9, paddingHorizontal: 10, justifyContent: 'center' },
   modeText: { fontSize: 12, fontWeight: '800' },
   searchRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 },
-  shelvesWrap: { flexGrow: 0 },
+  shelvesWrap: { flexGrow: 0, minHeight: 52 },
   shelves: { gap: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  shelf: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, maxWidth: 180 },
-  shelfText: { fontSize: 13, fontWeight: '700' },
+  shelf: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 14, height: 38, maxWidth: 190 },
+  shelfText: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 46 },
   searchInput: { flex: 1, fontSize: 15, height: '100%' },
   scanBtn: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

@@ -61,7 +61,7 @@ describe('el contenido del sitio se siembra una sola vez', () => {
   })
 
   it('se usa insert y no upsert, para que no pueda pisar', () => {
-    const bloque = RUTA.slice(RUTA.indexOf('const seedFailures'), RUTA.indexOf('const planInfo'))
+    const bloque = RUTA.slice(RUTA.indexOf('const seedFailures'), RUTA.indexOf('const starterKit'))
     expect(bloque).toContain(".insert({")
     expect(bloque).not.toContain('.upsert(')
   })

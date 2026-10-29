@@ -27,7 +27,12 @@ export async function loadStartGuide(userId: string, branchId?: string) {
   const [plan, settings, setupChecklist] = await Promise.all([
     getOrganizationPlanInfo(organization.id, { strict: true }),
     admin.from('organization_settings').select('display_name, currency, timezone, modules').eq('organization_id', organization.id).maybeSingle(),
-    loadOrganizationSetupChecklist(admin, organization.id),
+    // Opcional: si no se puede armar, la guía sale igual y lo avisa. Antes un
+    // error del catálogo tiraba la guía entera en vez de marcarlo como dudoso.
+    loadOrganizationSetupChecklist(admin, organization.id).catch(() => {
+      limitations.push('No se pudo comprobar la configuración opcional del negocio.')
+      return null
+    }),
   ])
   if (settings.error) throw new StartGuideError(500)
   let branchQuery = admin.from('branches').select('id').eq('organization_id', organization.id).eq('is_active', true)

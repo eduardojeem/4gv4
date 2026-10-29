@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { hasVerifiedFactor, MFA_ENROLLMENT_REQUIRED_CODE } from '@/lib/auth/mfa'
 
 /**
  * Inicio de sesión de la app móvil.
@@ -47,6 +48,29 @@ async function checkStaffAccess(userId: string): Promise<StaffCheck> {
   if (status === 'inactive' || status === 'suspended' || roleActive === false) return 'inactive'
   if (memberships.error) throw memberships.error
   return (memberships.count ?? 0) > 0 ? 'ok' : 'not_staff'
+}
+
+/**
+ * Es dueño o administrador de alguna organización que exige 2FA a sus
+ * administradores. Ante un error (la columna todavía no existe) no se exige,
+ * igual que en el panel.
+ */
+async function requiresAdminMfaEnrollment(userId: string): Promise<boolean> {
+  const admin = createAdminSupabase()
+  const { data: memberships, error } = await admin
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .in('role', ['owner', 'admin'])
+  if (error || !memberships?.length) return false
+  const { data: requiring, error: settingsError } = await admin
+    .from('organization_settings')
+    .select('organization_id')
+    .in('organization_id', memberships.map((row) => row.organization_id))
+    .eq('require_admin_mfa', true)
+    .limit(1)
+  return !settingsError && (requiring?.length ?? 0) > 0
 }
 
 /** Cierra en Supabase la sesión que se abrió para un usuario que no puede entrar. */
@@ -139,6 +163,28 @@ export async function POST(request: NextRequest) {
         : { error: 'Esta app es para el personal del comercio. Tu usuario no pertenece a ningún comercio activo.', code: 'not_staff' },
       { status: 403 }
     )
+  }
+
+  // Con 2FA activa la app pide el código después (con la sesión aal1 y la
+  // anon key). Sin 2FA, si su comercio la exige a los administradores, primero
+  // tiene que activarla desde la web.
+  if (userId && !hasVerifiedFactor(body.user as { factors?: { status?: string }[] } | undefined)) {
+    let enrollmentRequired = false
+    try {
+      enrollmentRequired = await requiresAdminMfaEnrollment(userId)
+    } catch (error) {
+      logger.warn('[mobile-login] No se pudo verificar la exigencia de 2FA', error)
+    }
+    if (enrollmentRequired) {
+      await revokeSession(url, serviceKey, String(body.access_token))
+      return NextResponse.json(
+        {
+          error: 'Tu comercio exige la verificación en dos pasos a los administradores. Activala desde la web en Perfil → Seguridad y volvé a ingresar.',
+          code: MFA_ENROLLMENT_REQUIRED_CODE,
+        },
+        { status: 403 }
+      )
+    }
   }
 
   // Solo lo que la app necesita para `supabase.auth.setSession`.

@@ -2,35 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { resolveBranchScopeForUser } from '@/lib/branches/server'
-import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
-import type { RepairStatus } from '@/types/repairs'
-import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { createClient } from '@/lib/supabase/server'
+import { listAccessibleBranchesForUser, resolveBranchScopeForUser } from '@/lib/branches/server'
+import { getRequestedBranchId } from '@/lib/branches/server'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { mapOrganizationRoleToDashboardRole } from '@/lib/auth/section-access'
+import { getDashboardPermissionsForOrganizationRole } from '@/lib/auth/organization-dashboard-permissions'
+import { filterDashboardNavGroups } from '@/config/dashboard-navigation'
+import { fetchDashboardHomeSummary, type HomeSummaryRpcClient } from '@/lib/dashboard/home-summary'
+import { buildMobileDashboardSummary, mergeDashboardActivity } from '@/lib/mobile/dashboard-summary'
+import { logger } from '@/lib/logger'
 
-type SaleRow = { id: string; total_amount: number | null; status: string; created_at: string }
-type CustomerRow = { id: string; first_name: string | null; last_name: string | null; created_at: string }
-type ProductRow = { id: string; stock_quantity: number | null; min_stock: number | null; unit_measure: string | null; category_id: string | null }
-type CategoryRow = { id: string; name: string }
-type RepairRow = { id: string; device_brand: string | null; device_model: string | null; status: string; created_at: string; delivered_at: string | null; final_cost: number | null; estimated_cost: number | null; paid_amount: number | null }
-
-const startOfLocalDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+const ACTIVITY_WINDOW_HOURS = 72
+const ACTIVITY_LIMIT_PER_SOURCE = 10
 
 export async function GET(request: NextRequest) {
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
   if (authResponse) return authResponse
-  if (!auth.authenticated) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
-  }
+  if (!auth.authenticated) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
 
   const organization = await getCurrentOrganizationContext(auth.user.id)
-  if (!organization) {
-    return NextResponse.json({ error: 'Organización activa no disponible' }, { status: 403 })
-  }
+  if (!organization) return NextResponse.json({ error: 'Organización activa no disponible' }, { status: 403 })
 
-  const requestedBranch = request.nextUrl.searchParams.get('branch')
+  const requestedBranch = getRequestedBranchId(request)
   let branchId: string | null = null
-  if (requestedBranch && requestedBranch !== 'all') {
+  if (requestedBranch) {
     try {
       const scope = await resolveBranchScopeForUser({
         userId: auth.user.id,
@@ -45,113 +42,78 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const now = new Date()
-  const dayStart = startOfLocalDay(now)
-  const dayEnd = new Date(dayStart)
-  dayEnd.setDate(dayEnd.getDate() + 1)
-  const weekStart = new Date(dayStart)
-  weekStart.setDate(weekStart.getDate() - 6)
-  const recentHours = Math.min(72, Math.max(1, Number(request.nextUrl.searchParams.get('recentHours')) || 72))
-  const recentSince = new Date(now.getTime() - recentHours * 60 * 60 * 1000)
-  const admin = createAdminSupabase()
+  try {
+    const plan = await getOrganizationPlanInfo(organization.id)
+    const role = auth.role === 'super_admin' ? 'super_admin' : mapOrganizationRoleToDashboardRole(organization.role)
+    const permissions = new Set(getDashboardPermissionsForOrganizationRole(organization.role))
+    const groups = filterDashboardNavGroups({
+      role,
+      effectiveModules: plan.effectiveModules,
+      hasPermission: (permission) => role === 'super_admin' || permissions.has(permission),
+      businessVertical: plan.businessVertical,
+    })
+    const visibleSections = new Set(groups.flatMap((group) => group.items.map((item) => item.key)))
 
-  let salesQuery = admin
-    .from('sales')
-    .select('id,total_amount,status,created_at')
-    .eq('organization_id', organization.id)
-    .gte('created_at', weekStart.toISOString())
-  let ordersQuery = admin
-    .from('customer_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', organization.id)
-    .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED'])
-  const customersQuery = admin
-    .from('customers')
-    .select('id,first_name,last_name,created_at')
-    .eq('organization_id', organization.id)
-    .gte('created_at', weekStart.toISOString())
-  const productsQuery = admin
-    .from('products')
-    .select('id,stock_quantity,min_stock,unit_measure,category_id')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-  const categoriesQuery = admin
-    .from('categories')
-    .select('id,name')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-  let repairsQuery = admin
-    .from('repairs')
-    .select('id,device_brand,device_model,status,created_at,delivered_at,final_cost,estimated_cost,paid_amount')
-    .eq('organization_id', organization.id)
+    // This RPC is SECURITY INVOKER: forward the mobile Bearer session through the
+    // existing server client so the database enforces membership and branch access.
+    const supabase = await createClient()
+    const home = await fetchDashboardHomeSummary(supabase as unknown as HomeSummaryRpcClient, {
+      userId: auth.user.id,
+      organizationId: organization.id,
+      branchId,
+      role: organization.role,
+      modules: plan.effectiveModules,
+    })
 
-  if (branchId) {
-    salesQuery = salesQuery.eq('branch_id', branchId)
-    ordersQuery = ordersQuery.eq('branch_id', branchId)
-    repairsQuery = repairsQuery.eq('branch_id', branchId)
+    const dashboard = buildMobileDashboardSummary(home, visibleSections)
+    const admin = createAdminSupabase()
+    const recentSince = new Date(Date.now() - ACTIVITY_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
+    const canReadSales = visibleSections.has('pos')
+    const canReadRepairs = visibleSections.has('repairs')
+    const canReadCustomers = visibleSections.has('customers')
+    const allowedBranches = branchId
+      ? [branchId]
+      : (await listAccessibleBranchesForUser({ userId: auth.user.id, role: auth.role, organizationId: organization.id })).map((branch) => branch.id)
+
+    const filterActivityBranch = <T extends { eq: (column: string, value: string) => T; or: (filters: string) => T; is: (column: string, value: null) => T }>(query: T) => {
+      if (branchId) return query.eq('branch_id', branchId)
+      if (allowedBranches.length === 0) return query.is('branch_id', null)
+      return query.or(`branch_id.is.null,branch_id.in.(${allowedBranches.join(',')})`)
+    }
+
+    const [salesResult, repairsResult, customersResult] = await Promise.all([
+      canReadSales
+        ? filterActivityBranch(admin.from('sales').select('id,total_amount,status,created_at').eq('organization_id', organization.id).gte('created_at', recentSince).order('created_at', { ascending: false }).limit(ACTIVITY_LIMIT_PER_SOURCE))
+        : Promise.resolve({ data: [], error: null }),
+      canReadRepairs
+        ? filterActivityBranch(admin.from('repairs').select('id,status,created_at').eq('organization_id', organization.id).gte('created_at', recentSince).order('created_at', { ascending: false }).limit(ACTIVITY_LIMIT_PER_SOURCE))
+        : Promise.resolve({ data: [], error: null }),
+      canReadCustomers
+        ? admin.from('customers').select('id,created_at').eq('organization_id', organization.id).gte('created_at', recentSince).order('created_at', { ascending: false }).limit(ACTIVITY_LIMIT_PER_SOURCE)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    const activityError = salesResult.error || repairsResult.error || customersResult.error
+    if (activityError) {
+      logger.error('[dashboard-summary] No se pudo cargar actividad reciente', { code: activityError.code })
+      return NextResponse.json({ error: 'No se pudo cargar el resumen', retryable: true }, { status: 503 })
+    }
+
+    const recentActivity = mergeDashboardActivity({
+      sales: (salesResult.data ?? []) as Array<{ id: string; status: string | null; total_amount: number | null; created_at: string }>,
+      repairs: (repairsResult.data ?? []) as Array<{ id: string; status: string | null; created_at: string }>,
+      customers: (customersResult.data ?? []) as Array<{ id: string; created_at: string }>,
+    })
+
+    return NextResponse.json({
+      organizationId: organization.id,
+      branchId,
+      ...dashboard,
+      recentActivity,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo cargar el resumen'
+    logger.error('[dashboard-summary] No se pudo calcular el resumen', { message })
+    return NextResponse.json({ error: message, retryable: true }, { status: 503 })
   }
-
-  const [salesResult, ordersResult, customersResult, productsResult, categoriesResult, repairsResult] = await Promise.all([
-    salesQuery,
-    ordersQuery,
-    customersQuery,
-    productsQuery,
-    categoriesQuery,
-    repairsQuery,
-  ])
-
-  const firstError = [salesResult, ordersResult, customersResult, productsResult, categoriesResult, repairsResult]
-    .find((result) => result.error)?.error
-  if (firstError) {
-    console.error('[dashboard-summary] tenant query failed:', firstError.message)
-    return NextResponse.json({ error: 'No se pudo cargar el resumen', retryable: true }, { status: 503 })
-  }
-
-  const sales = (salesResult.data ?? []) as SaleRow[]
-  const customers = (customersResult.data ?? []) as CustomerRow[]
-  const products = (productsResult.data ?? []) as ProductRow[]
-  const categories = (categoriesResult.data ?? []) as CategoryRow[]
-  const repairs = (repairsResult.data ?? []) as RepairRow[]
-  const serviceCategoryIds = new Set(categories.filter((item) => item.name.toLowerCase().includes('servicio')).map((item) => item.id))
-  const services = products.filter((item) => item.unit_measure?.toLowerCase() === 'servicio' || Boolean(item.category_id && serviceCategoryIds.has(item.category_id)))
-  const physicalProducts = products.filter((item) => !services.includes(item))
-  const todaySales = sales.filter((item) => new Date(item.created_at) >= dayStart && new Date(item.created_at) < dayEnd && isCompletedSaleStatus(item.status))
-  const dayStarts = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart)
-    date.setDate(date.getDate() + index)
-    return date
-  })
-  const trendFor = <T extends { created_at: string }>(rows: T[], value: (row: T) => number) => dayStarts.map((start) => {
-    const end = new Date(start)
-    end.setDate(end.getDate() + 1)
-    return rows.filter((row) => new Date(row.created_at) >= start && new Date(row.created_at) < end).reduce((sum, row) => sum + value(row), 0)
-  })
-  const repairAmount = (repair: RepairRow) => Number(repair.final_cost ?? repair.estimated_cost ?? repair.paid_amount ?? 0) || 0
-  const repairsToday = repairs.filter((item) => new Date(item.created_at) >= dayStart && new Date(item.created_at) < dayEnd)
-  const repairsDelivered = repairs.filter((item) => item.delivered_at && new Date(item.delivered_at) >= dayStart && new Date(item.delivered_at) < dayEnd)
-  const repairsReady = repairs.filter((item) => item.status === 'listo')
-
-  const activity = [
-    ...sales.filter((item) => new Date(item.created_at) >= recentSince).map((item) => ({ id: `sale:${item.id}`, type: 'sale', description: 'Venta', amount: Number(item.total_amount ?? 0), status: isCompletedSaleStatus(item.status) ? 'completed' : 'updated', createdAt: item.created_at })),
-    ...repairs.filter((item) => new Date(item.created_at) >= recentSince).map((item) => ({ id: `repair:${item.id}`, type: 'repair', description: `Reparación${[item.device_brand, item.device_model].filter(Boolean).length ? ` - ${[item.device_brand, item.device_model].filter(Boolean).join(' ')}` : ''}`, amount: repairAmount(item), status: item.status === 'listo' || item.status === 'entregado' ? 'completed' : 'in_progress', createdAt: item.created_at })),
-    ...customers.filter((item) => new Date(item.created_at) >= recentSince).map((item) => ({ id: `customer:${item.id}`, type: 'customer', description: `Nuevo cliente${[item.first_name, item.last_name].filter(Boolean).length ? ` - ${[item.first_name, item.last_name].filter(Boolean).join(' ')}` : ''}`, status: 'new', createdAt: item.created_at })),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10)
-
-  return NextResponse.json({
-    organization: { id: organization.id, slug: organization.slug },
-    branchId,
-    salesToday: { count: todaySales.length, amount: todaySales.reduce((sum, item) => sum + Number(item.total_amount ?? 0), 0), trend: trendFor(sales.filter((item) => isCompletedSaleStatus(item.status)), (item) => Number(item.total_amount ?? 0)) },
-    activeOrders: ordersResult.count ?? 0,
-    customersNew: { count: customers.length, trend: trendFor(customers, () => 1) },
-    catalog: { total: products.length, products: physicalProducts.length, services: services.length, lowStock: physicalProducts.filter((item) => Number(item.stock_quantity ?? 0) <= Number(item.min_stock ?? 5)).length },
-    repairs: {
-      // ACTIVE_REPAIR_STATUSES es un Set: `.includes` no existe y tiraba
-      // TypeError en tiempo de ejecucion. El resto del codigo ya usa `.has`.
-      active: repairs.filter((item) => ACTIVE_REPAIR_STATUSES.has(item.status as RepairStatus)).length,
-      today: { count: repairsToday.length, amount: repairsToday.reduce((sum, item) => sum + repairAmount(item), 0) },
-      delivered: { count: repairsDelivered.length, amount: repairsDelivered.reduce((sum, item) => sum + repairAmount(item), 0) },
-      ready: { count: repairsReady.length, amount: repairsReady.reduce((sum, item) => sum + repairAmount(item), 0) },
-    },
-    recentActivity: activity,
-  })
 }

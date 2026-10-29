@@ -6,19 +6,26 @@ const source = readFileSync(resolve(process.cwd(), 'src/app/api/dashboard/summar
 const dashboardPage = readFileSync(resolve(process.cwd(), 'src/app/dashboard/page.tsx'), 'utf8')
 
 describe('dashboard summary tenant contract', () => {
-  it('scopes every operational source to the resolved organization', () => {
-    for (const table of ['sales', 'customer_orders', 'customers', 'products', 'categories', 'repairs']) {
+  it('uses the authenticated aggregate for metrics and scopes bounded activity to the organization', () => {
+    expect(source).toContain('fetchDashboardHomeSummary')
+    expect(source).toContain('const supabase = await createClient()')
+    for (const table of ['sales', 'customers', 'repairs']) {
       const tableStart = source.indexOf(`.from('${table}')`)
       expect(tableStart, `${table} query is missing`).toBeGreaterThan(-1)
-      const query = source.slice(tableStart, tableStart + 500)
+      const query = source.slice(tableStart, tableStart + 350)
       expect(query).toContain(".eq('organization_id', organization.id)")
+      expect(query).toContain('.limit(ACTIVITY_LIMIT_PER_SOURCE)')
     }
+    expect(source).not.toContain(".from('products')")
+    expect(source).not.toContain(".from('customer_orders')")
   })
 
-  it('validates requested branches against the active tenant', () => {
+  it('validates the mobile branch header against the active tenant before passing it to the aggregate', () => {
+    expect(source).toContain('getRequestedBranchId(request)')
     expect(source).toContain('resolveBranchScopeForUser')
     expect(source).toContain('organizationId: organization.id')
     expect(source).toContain('strict: true')
+    expect(source).toContain('branchId,')
   })
 
   it('never accepts an organization id from the request', () => {

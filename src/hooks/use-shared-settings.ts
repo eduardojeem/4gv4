@@ -112,11 +112,13 @@ export interface SaveSettingsOptions {
 export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   companyName: 'Mi Empresa',
   companyLogo: '',
-  companyEmail: 'info@empresa.com',
+  // Vacío es vacío: un email o una ciudad de ejemplo terminaban impresos en
+  // los tickets como si fueran del comercio.
+  companyEmail: '',
   companyPhone: '',
   companyRuc: '',
   companyAddress: '',
-  city: 'Asunción',
+  city: '',
   currency: 'PYG',
   countryCode: null,
   locale: null,
@@ -155,7 +157,7 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   return {
     companyName: data.company_name || DEFAULT_SHARED_SETTINGS.companyName,
     companyLogo: (data as { company_logo?: string | null }).company_logo ?? DEFAULT_SHARED_SETTINGS.companyLogo,
-    companyEmail: data.company_email || DEFAULT_SHARED_SETTINGS.companyEmail,
+    companyEmail: data.company_email ?? DEFAULT_SHARED_SETTINGS.companyEmail,
     companyPhone: data.company_phone ?? DEFAULT_SHARED_SETTINGS.companyPhone,
     companyRuc: data.company_ruc ?? DEFAULT_SHARED_SETTINGS.companyRuc,
     companyAddress: data.company_address ?? DEFAULT_SHARED_SETTINGS.companyAddress,
@@ -189,7 +191,7 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   }
 }
 
-function applyRegionalSettings(settings: Pick<SharedSettings, 'currency' | 'language'>) {
+function applyRegionalSettings(settings: Pick<SharedSettings, 'currency' | 'language' | 'locale' | 'countryCode'>) {
   setRegionalFormatConfig(settings)
 }
 

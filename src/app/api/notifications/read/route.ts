@@ -3,76 +3,93 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 
-// Marca notificaciones globales como leídas o descartadas para el usuario actual.
-//   { id }            -> marca una como leída
-//   { id, dismiss }   -> marca una como leída y descartada (la oculta)
-//   { all: true }     -> marca todas las visibles como leídas
+interface MarkReadBody {
+  notificationId?: string
+  id?: string
+  all?: boolean
+  dismiss?: boolean
+}
+
+/**
+ * POST /api/notifications/read
+ * Marca una o todas las notificaciones operativas como leídas para el usuario autenticado.
+ * Mantiene compatibilidad con descartes de notificaciones globales si se envía dismiss: true.
+ */
 export const POST = withTenantAuth({}, async (request, { user, organization }) => {
   try {
-    const body = await request.json().catch(() => ({})) as {
-      id?: string
-      all?: boolean
-      dismiss?: boolean
+    const body = (await request.json().catch(() => ({}))) as MarkReadBody
+
+    // Compatibilidad legacy con descarte de notificaciones globales
+    if (body.dismiss === true) {
+      const admin = createAdminSupabase()
+      const globalId = body.id || body.notificationId
+      if (!globalId) {
+        return NextResponse.json({ error: 'ID requerido para descartar.' }, { status: 400 })
+      }
+
+      await admin.from('global_notification_reads').upsert(
+        {
+          notification_id: globalId,
+          user_id: user.id,
+          read_at: new Date().toISOString(),
+          dismissed: true,
+        },
+        { onConflict: 'notification_id,user_id' }
+      )
+
+      return NextResponse.json({ success: true, dismissed: true })
     }
 
     const admin = createAdminSupabase()
+    const targetNotificationId = body.notificationId || body.id
 
-    let ids: string[] = []
-    if (body.all) {
-      const { data } = await admin
-        .from('global_notifications')
-        .select('id')
-        .eq('status', 'sent')
-        .or(`target.eq.all,target_org_ids.cs.{${organization.id}}`)
-      ids = (data ?? []).map(r => r.id as string)
-    } else if (body.id) {
-      ids = [body.id]
-    }
-
-    if (ids.length === 0) {
-      return NextResponse.json({ error: 'Sin notificaciones para actualizar.' }, { status: 400 })
-    }
-
-    const isDismiss = body.dismiss === true
-
-    // Al solo marcar como leídas (sin descartar) hay que EXCLUIR las que el
-    // usuario ya descartó: el upsert reescribe la fila completa y, con
-    // `dismissed: false`, resucitaría notificaciones ocultas ("marcar todas
-    // como leídas" las hacía reaparecer).
-    if (!isDismiss) {
-      const { data: dismissedRows } = await admin
-        .from('global_notification_reads')
-        .select('notification_id')
+    // 1. Marcar una notificación individual como leída
+    if (targetNotificationId) {
+      const { data, error } = await admin
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('id', targetNotificationId)
         .eq('user_id', user.id)
-        .eq('dismissed', true)
-        .in('notification_id', ids)
+        .eq('organization_id', organization.id)
+        .is('read_at', null)
+        .select('id')
 
-      const dismissedIds = new Set((dismissedRows ?? []).map(r => r.notification_id as string))
-      ids = ids.filter(id => !dismissedIds.has(id))
-
-      if (ids.length === 0) {
-        return NextResponse.json({ ok: true, updated: 0 })
+      if (error) {
+        logger.error('Failed to mark notification as read', { error, userId: user.id, notificationId: targetNotificationId })
+        return NextResponse.json({ error: 'No se pudo marcar la notificación como leída.' }, { status: 500 })
       }
+
+      return NextResponse.json({
+        success: true,
+        updatedCount: data ? data.length : 0,
+      })
     }
 
-    const now = new Date().toISOString()
-    const rows = ids.map(notification_id => ({
-      notification_id,
-      user_id: user.id,
-      read_at: now,
-      dismissed: isDismiss,
-    }))
+    // 2. Marcar todas las notificaciones como leídas
+    if (body.all === true) {
+      const { data, error } = await admin
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('organization_id', organization.id)
+        .is('read_at', null)
+        .select('id')
 
-    const { error } = await admin
-      .from('global_notification_reads')
-      .upsert(rows, { onConflict: 'notification_id,user_id' })
+      if (error) {
+        logger.error('Failed to mark all notifications as read', { error, userId: user.id, orgId: organization.id })
+        return NextResponse.json({ error: 'No se pudieron marcar las notificaciones como leídas.' }, { status: 500 })
+      }
 
-    if (error) {
-      logger.error('Failed to mark notifications read', { error, userId: user.id })
-      return NextResponse.json({ error: 'No se pudo actualizar.' }, { status: 500 })
+      return NextResponse.json({
+        success: true,
+        updatedCount: data ? data.length : 0,
+      })
     }
 
-    return NextResponse.json({ ok: true, updated: ids.length })
+    return NextResponse.json(
+      { error: 'Se requiere notificationId o all: true para marcar como leído.' },
+      { status: 400 }
+    )
   } catch (error) {
     logger.error('Notifications read POST error', { error })
     return NextResponse.json({ error: 'Error interno.' }, { status: 500 })

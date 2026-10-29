@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { resolveActiveAdminOrganizationId } from '@/lib/admin/active-organization'
 
 const statusSchema = z.enum(['pending', 'published', 'rejected', 'hidden', 'reported', 'all'])
 const verificationSchema = z.enum(['open', 'purchase', 'repair', 'verified', 'all'])
@@ -26,7 +27,7 @@ function safeInteger(value: string | null, fallback: number, minimum: number, ma
 async function getHandler(request: NextRequest, context: AdminAuthContext) {
   try {
     const supabase = createAdminSupabase()
-    const orgId = context.organizationId
+    const orgId = await resolveActiveAdminOrganizationId(context)
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 403 })
     }
@@ -121,7 +122,7 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
 async function patchBulkHandler(request: NextRequest, context: AdminAuthContext) {
   try {
     const supabase = createAdminSupabase()
-    const orgId = context.organizationId
+    const orgId = await resolveActiveAdminOrganizationId(context)
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 403 })
     }

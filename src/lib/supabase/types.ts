@@ -1607,6 +1607,8 @@ export interface Database {
           branding: Json
           modules: Json
           repair_receipt_settings: Json | null
+          onboarding_revision: number
+          require_admin_mfa: boolean
           created_at: string
           updated_at: string
         }
@@ -1620,6 +1622,8 @@ export interface Database {
           branding: Json
           modules: Json
           repair_receipt_settings?: Json | null
+          onboarding_revision?: number
+          require_admin_mfa?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -1633,6 +1637,8 @@ export interface Database {
           branding?: Json
           modules?: Json
           repair_receipt_settings?: Json | null
+          onboarding_revision?: number
+          require_admin_mfa?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -4361,6 +4367,33 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      save_organization_onboarding_progress_v2: {
+        Args: { p_organization_id: string; p_user_id: string; p_expected_revision: number; p_step: number; p_step_payload: Json }
+        Returns: Json
+      }
+      complete_organization_onboarding_v2: {
+        Args: {
+          p_organization_id: string
+          p_user_id: string
+          p_expected_revision: number
+          p_display_name: string
+          p_currency: string
+          p_timezone: string
+          p_country_code: string
+          p_locale: string
+          p_logo_url: string
+          p_branch: Json
+          p_company_info: Json
+          p_admin_settings: Json
+          p_organization_profile: Json
+          p_storefront_public: boolean
+        }
+        Returns: Json
+      }
+      merge_organization_admin_settings_v2: {
+        Args: { p_organization_id: string; p_user_id: string; p_settings: Json; p_admin_settings: Json }
+        Returns: Json
+      }
       dashboard_customer_monthly_summary: {
         Args: { p_organization_id: string; p_start: string; p_end: string; p_time_zone: string }
         Returns: { year: number; month_index: number; revenue: number; sale_count: number }[]

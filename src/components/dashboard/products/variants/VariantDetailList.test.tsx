@@ -1,15 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { VariantDetailList } from './VariantDetailList'
-import { filterDetailVariants, summarizeVariants, type DetailVariant } from './variant-detail-logic'
+import { filterDetailVariants, getVariantStockStatus, summarizeVariants, type DetailVariant } from './variant-detail-logic'
 vi.mock('@/components/ui/app-image', () => ({ AppImage: () => <span>Imagen del producto</span> }))
 const variants: DetailVariant[] = [
-  { id: 'a', name: 'Negro · 128 GB', sku: 'NEG-128', salePrice: 100, purchasePrice: null, stockQuantity: 2, isActive: true, attributes: { Color: 'Negro', Memoria: '128 GB' } },
+  { id: 'a', name: 'Negro · 128 GB', sku: 'NEG-128', salePrice: 100, purchasePrice: null, stockQuantity: 2, minStock: 3, isActive: true, attributes: { Color: 'Negro', Memoria: '128 GB' } },
   { id: 'b', name: 'Blanco · 256 GB', sku: 'BLA-256', salePrice: 150, purchasePrice: 0, stockQuantity: 0, isActive: false, attributes: { Color: 'Blanco', Memoria: '256 GB' } },
 ]
-const props = { variants, canViewCost: false, branchStock: [{variantId: 'a', branchId:'central', branchName:'Casa Central', quantity:2}], branchStockState: 'ready' as const, formatCurrency: (n: number) => `Gs ${n}` }
+const props = { variants, canViewCost: false, branchStock: [{variantId: 'a', branchId:'central', branchName:'Casa Central', quantity:2, minStock:3}], branchStockState: 'ready' as const, formatCurrency: (n: number) => `Gs ${n}` }
 describe('variant detail', () => {
- it('summarizes all variants including inactive/out of stock', () => expect(summarizeVariants(variants)).toEqual({total:2,active:1,outOfStock:1,stock:2}))
+ it('excludes inactive variants from stock alert totals', () => expect(summarizeVariants(variants)).toEqual({total:2,active:1,outOfStock:0,lowStock:1,inStock:0,stock:2}))
+ it('classifies zero, below-minimum, equal-minimum, and above-minimum quantities', () => {
+   expect(getVariantStockStatus(0,3)).toBe('out_of_stock')
+   expect(getVariantStockStatus(2,3)).toBe('low_stock')
+   expect(getVariantStockStatus(3,3)).toBe('low_stock')
+   expect(getVariantStockStatus(4,3)).toBe('in_stock')
+ })
  it('combines search, stock, status and dynamic attribute filters', () => {
    expect(filterDetailVariants(variants, {search:'neg-128',stock:'in_stock',status:'active',attributes:{Color:'Negro'}})).toEqual([variants[0]])
    expect(filterDetailVariants(variants, {search:'',stock:'out_of_stock',status:'inactive',attributes:{Memoria:'256 GB'}})).toEqual([variants[1]])
@@ -28,6 +34,7 @@ describe('variant detail', () => {
    expect(screen.queryByText(/^Margen/)).not.toBeInTheDocument()
    const card = screen.getAllByRole('article')[0]
    expect(within(card).getByText('Casa Central')).toBeInTheDocument()
+   expect(within(card).getByText('2 un. · Stock bajo')).toBeInTheDocument()
  })
  it('preserves unknown versus zero authorized cost', () => {
    render(<VariantDetailList {...props} canViewCost />)

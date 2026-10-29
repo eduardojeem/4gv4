@@ -2,12 +2,8 @@ import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import {
-  mapDBToSettings,
-  mapSettingsToDB,
-  type SystemSettingsPartial,
-} from '@/lib/validations/system-settings'
-import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
+import { mapSettingsToDB } from '@/lib/validations/system-settings'
+import { resolveTenantEffectiveSettings } from '@/lib/organization/tenant-effective-settings'
 import { needsCountryConfirmation } from '@/lib/regional/settings'
 
 // Columnas de `system_settings` que son política de plataforma (super_admin) y
@@ -21,16 +17,12 @@ const PLATFORM_ONLY_DB_COLUMNS = [
   'require_two_factor',
 ] as const
 
-function toFrontendSettings(row: Record<string, unknown>): SystemSettingsPartial {
-  return mapDBToSettings(row as Parameters<typeof mapDBToSettings>[0])
-}
-
 export async function GET() {
   const auth = await resolveRequestAuthUser()
   if ('reason' in auth) {
     return NextResponse.json(
-      { success: false, error: auth.reason === 'unauthenticated' ? 'Authentication required' : 'User is inactive' },
-      { status: auth.reason === 'unauthenticated' ? 401 : 403 }
+      { success: false, error: auth.reason !== 'inactive' ? 'Authentication required' : 'User is inactive' },
+      { status: auth.reason !== 'inactive' ? 401 : 403 }
     )
   }
 
@@ -88,7 +80,7 @@ export async function GET() {
       // de la plataforma (NEXT_PUBLIC_COMPANY_*), que es marca del SaaS.
       admin
         .from('organizations')
-        .select('logo_url')
+        .select('name, logo_url')
         .eq('id', organizationId)
         .maybeSingle(),
     ])
@@ -101,22 +93,14 @@ export async function GET() {
     )
   }
 
-  const effectiveSettings = toFrontendSettings(globalRow as Record<string, unknown>)
-  const tenantOverrides = getTenantAdminSettings(orgSettings?.modules)
-  Object.assign(effectiveSettings, tenantOverrides)
-
-  if (orgSettings?.display_name) effectiveSettings.companyName = orgSettings.display_name
-  if (orgSettings?.currency) effectiveSettings.currency = orgSettings.currency
-  if (orgSettings?.timezone) effectiveSettings.timeZone = orgSettings.timezone
-  effectiveSettings.repairMaxDiscountPercent = Number(orgSettings?.repair_max_discount_percent ?? 20)
-  effectiveSettings.repairLaborTaxRate = (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10
-  // Compatibilidad con organizaciones creadas antes de que el contacto de
-  // empresa se guardara en admin_settings. Una vez configurado, la sucursal ya
-  // no vuelve a sobrescribir estos datos.
-  if (tenantOverrides.companyEmail === undefined && legacyBranchFallback?.email) effectiveSettings.companyEmail = legacyBranchFallback.email
-  if (tenantOverrides.companyPhone === undefined && legacyBranchFallback?.phone) effectiveSettings.companyPhone = legacyBranchFallback.phone
-  if (tenantOverrides.companyAddress === undefined && legacyBranchFallback?.address) effectiveSettings.companyAddress = legacyBranchFallback.address
-  if (tenantOverrides.city === undefined && legacyBranchFallback?.city) effectiveSettings.city = legacyBranchFallback.city
+  // Los datos de la empresa (nombre, email, RUC, contacto) nunca salen de la
+  // fila global: antes un comercio sin email veía el de la plataforma.
+  const effectiveSettings = resolveTenantEffectiveSettings({
+    globalRow: globalRow as Record<string, unknown>,
+    orgSettings,
+    organizationName: organization?.name ?? null,
+    defaultBranch: legacyBranchFallback,
+  })
 
   // No exponer la política de seguridad de la PLATAFORMA a los tenants: estos
   // campos son globales (los administra el super_admin) y no tienen por qué

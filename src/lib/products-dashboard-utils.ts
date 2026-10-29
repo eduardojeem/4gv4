@@ -140,9 +140,15 @@ export function getMinStockThreshold(product: Pick<StockShape, 'min_stock'>): nu
   return Number(product.min_stock ?? 0)
 }
 
-export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
+type VariantStatusShape = { stock_quantity?: number | null; stockQuantity?: number | null; min_stock?: number | null; is_active?: boolean | null }
+type VariantSummaryShape = { variant_count: number; affected_variant_count: number; total_stock: number }
+
+export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: VariantStatusShape[]; variant_stock_summary?: VariantSummaryShape | null }): boolean {
+  if (product.variant_stock_summary) return product.variant_stock_summary.variant_count > 0 && product.variant_stock_summary.total_stock <= 0
   if (product.variants && product.variants.length > 0) {
-    const totalVariantStock = product.variants.reduce((acc: number, v) => {
+    const activeVariants = product.variants.filter((variant) => variant.is_active !== false)
+    if (!activeVariants.length) return false
+    const totalVariantStock = activeVariants.reduce((acc: number, v) => {
       const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
       return acc + (Number.isFinite(qty) ? qty : 0)
     }, 0)
@@ -151,13 +157,17 @@ export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { var
   return Number(product.stock_quantity ?? 0) <= 0
 }
 
-export function isLowStock(product: StockShape & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
-  const stock = (product.variants && product.variants.length > 0)
-    ? product.variants.reduce((acc: number, v) => {
-        const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
-        return acc + (Number.isFinite(qty) ? qty : 0)
-      }, 0)
-    : Number(product.stock_quantity ?? 0)
+export function isLowStock(product: StockShape & { variants?: VariantStatusShape[]; variant_stock_summary?: VariantSummaryShape | null }): boolean {
+  if (product.variant_stock_summary) return product.variant_stock_summary.total_stock > 0 && product.variant_stock_summary.affected_variant_count > 0
+  if (product.variants && product.variants.length > 0) {
+    return product.variants.some((variant) => {
+      if (variant.is_active === false) return false
+      const stock = Number(variant.stock_quantity ?? variant.stockQuantity ?? 0)
+      const minimum = Number(variant.min_stock ?? 0)
+      return Number.isFinite(stock) && stock <= minimum
+    })
+  }
+  const stock = Number(product.stock_quantity ?? 0)
   return stock > 0 && stock <= getMinStockThreshold(product)
 }
 

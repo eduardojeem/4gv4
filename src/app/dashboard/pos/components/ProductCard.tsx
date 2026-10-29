@@ -12,6 +12,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
 import type { Product } from '@/types/product-unified'
 import { getFeaturedProductCreditPlan } from '../lib/product-credit'
+import { resolveProductCardPrice } from '../lib/card-price'
 
 interface ProductCardProps {
   product: Product
@@ -43,14 +44,14 @@ export const ProductCard = memo(({
 }: ProductCardProps) => {
   const stock = product.stock_quantity || 0
   const minStock = product.min_stock || 5
-  const price = product.sale_price || 0
 
   const stockStatus = inventoryManager ? formatStockStatus(stock) : formatStockStatus(stock, minStock)
   const isOutOfStock = stock === 0
 
-  const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
-  const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
-  const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesale_price! : computedWholesale) : price
+  // El mismo precio que cobra el carrito: oferta, mayorista o el de la variante más barata.
+  const cardPrice = resolveProductCardPrice(product, { isWholesale, wholesaleDiscountRate })
+  const appliedPrice = cardPrice.price
+  const priceLabel = `${cardPrice.fromVariants ? 'Desde ' : ''}${formatCurrency(appliedPrice)}`
   const featuredCreditPlan = getFeaturedProductCreditPlan(product, appliedPrice)
   const financingAriaLabel = featuredCreditPlan
     ? ` Hasta ${featuredCreditPlan.count} cuotas desde ${formatCurrency(featuredCreditPlan.installmentAmount)} por mes.`
@@ -89,7 +90,7 @@ export const ProductCard = memo(({
         onKeyDown={handleKeyDown}
         tabIndex={isOutOfStock ? -1 : 0}
         role="button"
-        aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
+        aria-label={`Agregar ${product.name} al carrito. Precio: ${priceLabel}${cardPrice.isOffer ? ' (oferta)' : ''}.${financingAriaLabel}`}
       >
         <CardContent className="p-2">
           <div className="flex items-center gap-3">
@@ -160,12 +161,12 @@ export const ProductCard = memo(({
             {/* Precios y Acciones */}
             <div className="flex items-center gap-2.5">
               <div className="text-right">
-                <div className="font-bold text-xs sm:text-sm text-primary">
-                  {formatCurrency(appliedPrice)}
+                <div className="whitespace-nowrap font-bold text-xs sm:text-sm text-primary">
+                  {priceLabel}
                 </div>
-                {isWholesale && (
-                  <div className="text-[9px] text-muted-foreground line-through">
-                    {formatCurrency(price)}
+                {cardPrice.listPrice !== null && (
+                  <div className="whitespace-nowrap text-[9px] text-muted-foreground line-through">
+                    {formatCurrency(cardPrice.listPrice)}
                   </div>
                 )}
               </div>
@@ -232,7 +233,7 @@ export const ProductCard = memo(({
       onKeyDown={handleKeyDown}
       tabIndex={isOutOfStock ? -1 : 0}
       role="button"
-      aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
+      aria-label={`Agregar ${product.name} al carrito. Precio: ${priceLabel}${cardPrice.isOffer ? ' (oferta)' : ''}.${financingAriaLabel}`}
     >
       {/* Botón Ver Detalle (Flotante en esquina superior derecha) */}
       {onViewDetail && (
@@ -348,11 +349,13 @@ export const ProductCard = memo(({
           {/* Precios + Botón Agregar */}
           <div className="pt-0.5 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
             <div className="flex flex-col min-w-0">
-              {isWholesale && (
-                <span className="text-[10px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
-                  {formatCurrency(price)}
+              {cardPrice.listPrice !== null && (
+                <span className="mb-0.5 flex flex-wrap items-center gap-1 text-[10px] leading-none text-muted-foreground">
+                  {cardPrice.isOffer && <span className="rounded bg-rose-500 px-1 py-px font-semibold text-white">OFERTA</span>}
+                  <span className="line-through">{formatCurrency(cardPrice.listPrice)}</span>
                 </span>
               )}
+              {cardPrice.fromVariants && <span className="text-[10px] leading-none text-muted-foreground">Desde</span>}
               <span className="break-words text-xs font-bold leading-tight tracking-tight text-primary sm:text-sm sm:leading-none">
                 {formatCurrency(appliedPrice)}
               </span>

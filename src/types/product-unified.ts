@@ -33,6 +33,17 @@ export type ProductVariantRecord = ProductVariantInput | {
   stock_quantity?: number | null
   min_stock?: number | null
   is_active?: boolean | null
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
+  current_stock?: number
+  minimum_stock?: number
+}
+
+export type VariantStockSummaryRecord = {
+  variant_count: number
+  out_of_stock_variant_count: number
+  low_stock_variant_count: number
+  affected_variant_count: number
+  total_stock: number
 }
 
 // Unified Product type - extends Supabase with computed fields and compatibility
@@ -63,6 +74,7 @@ export type Product = Omit<DbProduct, 'dimensions' | 'purchase_price'> & {
   has_variants?: boolean | null
   variant_attribute_config?: ProductAttributeDefinition[] | null
   variants?: ProductVariantRecord[]
+  variant_stock_summary?: VariantStockSummaryRecord | null
 
   // Para qué celular es el repuesto. `brand` es la marca del repuesto.
   device_brand?: string | null

@@ -254,14 +254,14 @@ export function mergeOnboardingProgress(modules: unknown, state: SharedOnboardin
 
 export function deriveOnboardingChecklist(input: OnboardingChecklistInput) {
   const items = [
-    { key: 'country', label: 'Confirmar país del negocio', done: Boolean(normalizeCountryCode(input.countryCode)), required: false, href: '/admin/settings#operacion' },
-    { key: 'company', label: 'Completar datos del negocio', done: Boolean(input.businessName?.trim()), required: false, href: '/admin/settings/company' },
+    { key: 'country', label: 'Confirmar país del negocio', done: Boolean(normalizeCountryCode(input.countryCode)), required: false, href: '/admin/settings#fiscal' },
+    { key: 'company', label: 'Completar datos del negocio', done: Boolean(input.businessName?.trim()), required: false, href: '/admin/settings#negocio' },
     { key: 'branch', label: 'Configurar sucursal principal', done: input.branchExists, required: false, href: '/admin/branches' },
-    { key: 'logo', label: 'Agregar logo', done: input.logoExists, required: false, href: '/admin/settings/company' },
+    { key: 'logo', label: 'Agregar logo', done: input.logoExists, required: false, href: '/admin/website' },
     { key: 'product', label: 'Agregar primer producto', done: input.productsCount > 0, required: false, href: '/dashboard/products' },
     { key: 'team', label: 'Invitar empleado', done: input.memberCount > 1, required: false, href: '/admin/users' },
     { key: 'payments', label: 'Configurar medios de pago', done: input.paymentConfigured, required: false, href: '/admin/website?section=checkout' },
-    { key: 'billing', label: 'Configurar facturación', done: input.billingConfigured, required: false, href: '/admin/settings/company' },
+    { key: 'billing', label: 'Configurar facturación', done: input.billingConfigured, required: false, href: '/admin/settings#fiscal' },
     { key: 'storefront', label: 'Publicar tienda online', done: input.storefrontConfigured, required: false, href: '/admin/website' },
     { key: 'marketplace', label: 'Configurar marketplace', done: input.marketplaceConfigured, required: false, href: '/admin/website' },
   ]

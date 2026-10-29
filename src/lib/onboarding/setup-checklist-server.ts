@@ -1,11 +1,12 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { deriveOnboardingChecklist } from './shared-setup'
+import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 /** Estado agregado, sin devolver PII ni datos financieros al dashboard. */
 export async function loadOrganizationSetupChecklist(admin: SupabaseClient, organizationId: string) {
   const [settings, organization, branch, company, checkout, products, members] = await Promise.all([
-    admin.from('organization_settings').select('country_code, display_name').eq('organization_id', organizationId).maybeSingle(),
+    admin.from('organization_settings').select('country_code, display_name, modules').eq('organization_id', organizationId).maybeSingle(),
     admin.from('organizations').select('name, logo_url, storefront_public, marketplace_public').eq('id', organizationId).maybeSingle(),
     admin.from('branches').select('id').eq('organization_id', organizationId).eq('is_default', true).maybeSingle(),
     admin.from('website_settings').select('value').eq('organization_id', organizationId).eq('key', 'company_info').maybeSingle(),
@@ -29,7 +30,9 @@ export async function loadOrganizationSetupChecklist(admin: SupabaseClient, orga
     productsCount: products.count ?? 0,
     memberCount: members.count ?? 0,
     paymentConfigured,
-    billingConfigured: typeof companyInfo.ruc === 'string' && companyInfo.ruc.trim().length > 0,
+    // El RUC se carga en Configuración (admin_settings) o en la ficha de la web.
+    billingConfigured: Boolean(getTenantAdminSettings(settings.data?.modules).companyRuc?.trim())
+      || (typeof companyInfo.ruc === 'string' && companyInfo.ruc.trim().length > 0),
     storefrontConfigured: organization.data?.storefront_public === true,
     marketplaceConfigured: organization.data?.marketplace_public === true,
   })

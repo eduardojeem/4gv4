@@ -213,9 +213,10 @@ export type BranchItem = {
   revenue_total: number;
 };
 
-export async function fetchBranches() {
+export async function fetchBranches(organizationId?: string) {
+  const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : '';
   try {
-    const res = await apiFetch<{ branches: BranchItem[] }>('/api/admin/branches');
+    const res = await apiFetch<{ branches: BranchItem[] }>(`/api/admin/branches${query}`);
     return res.branches ?? [];
   } catch (error) {
     return fail(error, 'No se pudieron cargar las sucursales.');
@@ -223,6 +224,7 @@ export async function fetchBranches() {
 }
 
 export async function createBranch(input: {
+  organization_id?: string;
   name: string;
   code?: string;
   address?: string;

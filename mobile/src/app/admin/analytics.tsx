@@ -28,25 +28,23 @@ export default function AnalyticsAdminScreen() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      fetchWebsiteAnalytics(days).catch(() => null),
-      fetchOverview().catch(() => null),
-    ])
-      .then(([analyticsRes, overviewRes]) => {
-        if (!active) return;
-        setAnalytics(analyticsRes);
-        setOverview(overviewRes);
-        setError(null);
-      })
-      .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar la analítica.');
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      });
+    void Promise.allSettled([fetchWebsiteAnalytics(days), fetchOverview()]).then(([analyticsResult, overviewResult]) => {
+      if (!active) return;
+      const analyticsRes = analyticsResult.status === 'fulfilled' ? analyticsResult.value : null;
+      const overviewRes = overviewResult.status === 'fulfilled' ? overviewResult.value : null;
+      setAnalytics(analyticsRes);
+      setOverview(overviewRes);
+
+      const failed = [analyticsResult, overviewResult].find((result) => result.status === 'rejected');
+      setError(failed?.status === 'rejected'
+        ? failed.reason instanceof Error ? failed.reason.message : 'No se pudo cargar toda la analítica.'
+        : null);
+    }).finally(() => {
+      if (active) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    });
     return () => {
       active = false;
     };
@@ -103,6 +101,16 @@ export default function AnalyticsAdminScreen() {
           </View>
         ) : (
           <>
+            {error && (analytics || overview) ? (
+              <View accessibilityRole="alert" style={[styles.loadWarning, { borderColor: '#D9770666', backgroundColor: '#D9770612' }]}>
+                <Ionicons name="alert-circle-outline" size={18} color="#D97706" />
+                <Text style={[styles.small, styles.flex, { color: colors.text }]}>{error}</Text>
+                <Pressable onPress={reload} accessibilityRole="button">
+                  <Text style={[styles.small, { color: palette.primary, fontWeight: '800' }]}>Reintentar</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {/* Tarjeta de Ventas Comerciales */}
             {overview && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -244,6 +252,7 @@ const styles = StyleSheet.create({
   },
   dayChipText: { fontSize: 12, fontWeight: '700' },
   content: { padding: 16, gap: 14, paddingBottom: 32 },
+  loadWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, padding: 12 },
   loading: { paddingVertical: 40 },
   centerBox: { alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 },
   bold: { fontSize: 14, fontWeight: '800' },

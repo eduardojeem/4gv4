@@ -20,7 +20,7 @@ import { SectionAssistant } from '@/components/admin/website/SectionAssistant'
 import type { CoachSection } from '@/lib/website/section-coach'
 import { WebsiteOverview } from '@/components/admin/website/WebsiteOverview'
 import { WebsiteAssistantDialog } from '@/components/admin/website/WebsiteAssistant'
-import { ArrowLeft, Lock, ArrowRight, ExternalLink, Globe, Images, MoreHorizontal, RotateCw, Sparkles } from 'lucide-react'
+import { ArrowLeft, Lock, ArrowRight, ExternalLink, Globe, Images, MoreHorizontal, RotateCw, Share2, Sparkles } from 'lucide-react'
 import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
@@ -32,6 +32,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ShareStoreCard } from '@/components/dashboard/onboarding/ShareStoreCard'
+import { siteUrl } from '@/lib/site-url'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { resolveStorefrontCapabilities } from '@/lib/website/storefront-capabilities'
@@ -84,6 +87,7 @@ export default function WebsiteAdminPage() {
   const [tab, setTab] = useState<string>('overview')
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   // Los editores copian los ajustes a su estado al montarse: tras aplicar sugerencias se remontan.
   const [editorVersion, setEditorVersion] = useState(0)
   const { count: mediaCount, limit: mediaLimit, isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
@@ -228,6 +232,18 @@ export default function WebsiteAdminPage() {
             isSectionAvailable={(section) => isSectionAvailable(availability, section)}
           />
 
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShareOpen(true)}
+            disabled={!storeHref}
+          >
+            <Share2 className="h-4 w-4" />
+            Compartir
+          </Button>
+
           {storeHref ? (
             <Button size="sm" asChild className="gap-2">
               <Link href={storeHref} target="_blank" rel="noreferrer">
@@ -267,6 +283,28 @@ export default function WebsiteAdminPage() {
             open={mediaDialogOpen}
             onOpenChange={setMediaDialogOpen}
           />
+
+          {storeHref && (
+            <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Compartir tu página web</DialogTitle>
+                  <DialogDescription>
+                    Enlace, WhatsApp y un código QR para descargar, compartir o imprimir.
+                  </DialogDescription>
+                </DialogHeader>
+                <ShareStoreCard
+                  url={siteUrl(storeHref)}
+                  storeName={settings?.company_info.name || orgSlug || 'Mi tienda'}
+                  published={isPublic}
+                  onPublish={() => {
+                    setShareOpen(false)
+                    navigateTo('company', 'website-visibility')
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 

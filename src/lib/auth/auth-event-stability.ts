@@ -7,6 +7,7 @@ export function shouldReuseAuthenticatedUser(
 ): boolean {
   return Boolean(
     nextUserId && currentUserId === nextUserId
-    && (event === 'TOKEN_REFRESHED' || (event === 'SIGNED_IN' && sameAccessToken)),
+    // Pasar el código de 2FA renueva el token (aal2) del mismo usuario: es como un refresh.
+    && (event === 'TOKEN_REFRESHED' || event === 'MFA_CHALLENGE_VERIFIED' || (event === 'SIGNED_IN' && sameAccessToken)),
   )
 }
