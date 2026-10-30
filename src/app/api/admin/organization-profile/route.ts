@@ -22,6 +22,8 @@ async function prepareWebsite(
   organizationId: string,
   userId: string,
   planInfo: Awaited<ReturnType<typeof getOrganizationPlanInfo>>,
+  overwriteCustomContent = false,
+  resetStorefrontStyleToAuto = false,
 ): Promise<{ ok: true; summary: string[] } | { ok: false }> {
   const { data: rows, error } = await supabase
     .from('website_settings')
@@ -44,6 +46,8 @@ async function prepareWebsite(
     capabilities,
     effectiveModules: planInfo.effectiveModules,
     current,
+    overwriteCustomContent,
+    resetStorefrontStyleToAuto,
   })
 
   const now = new Date().toISOString()
@@ -81,6 +85,8 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
   const body = await request.json().catch(() => null)
   // Opcional: además del perfil, dejar la página pública lista para el rubro.
   const wantsWebsite = Boolean(body && typeof body === 'object' && (body as { prepareWebsite?: unknown }).prepareWebsite === true)
+  const overwriteCustomContent = Boolean(body && typeof body === 'object' && (body as { overwriteCustomContent?: unknown }).overwriteCustomContent === true)
+  const resetStorefrontStyleToAuto = Boolean(body && typeof body === 'object' && (body as { resetStorefrontStyleToAuto?: unknown }).resetStorefrontStyleToAuto === true)
   const validation = BusinessProfileInputSchema.safeParse(body)
   if (!validation.success) {
     return NextResponse.json({
@@ -177,7 +183,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     && updatedPlan.operatingModel !== 'mixed'
     && updatedPlan.businessVertical !== 'barbershop'
     && updatedPlan.businessVertical !== 'beauty_services'
-    ? await prepareWebsite(supabase, context.organization.id, context.user.id, updatedPlan)
+    ? await prepareWebsite(supabase, context.organization.id, context.user.id, updatedPlan, overwriteCustomContent, resetStorefrontStyleToAuto)
     : null
 
   // El rubro se ve en el marketplace y en la tienda: que no quede el anterior en caché.

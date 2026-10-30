@@ -122,6 +122,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
   // Lo que cambió al elegir el rubro, para mostrarlo y poder deshacerlo.
   const [autoChange, setAutoChange] = useState<{ label: string; added: OrganizationModule[]; removed: OrganizationModule[]; previous: OrganizationModule[] } | null>(null)
   const [prepareWebsite, setPrepareWebsite] = useState(false)
+  const [overwriteCustomContent, setOverwriteCustomContent] = useState(false)
+  const [resetStorefrontStyleToAuto, setResetStorefrontStyleToAuto] = useState(false)
   const [serviceWebsiteOpen, setServiceWebsiteOpen] = useState(false)
   const isServiceBusiness = SERVICE_FIRST_VERTICALS.has(vertical)
   const entitled = useMemo(
@@ -244,6 +246,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
           operatingModel: model,
           enabledModules: enabled,
           prepareWebsite: prepareWebsite && !isServiceBusiness,
+          overwriteCustomContent: overwriteCustomContent && prepareWebsite,
+          resetStorefrontStyleToAuto: resetStorefrontStyleToAuto && prepareWebsite,
         }),
       })
       const body = await response.json().catch(() => null)
@@ -260,6 +264,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
         toast.success('Perfil del negocio actualizado.')
       }
       setPrepareWebsite(false)
+      setOverwriteCustomContent(false)
+      setResetStorefrontStyleToAuto(false)
       setAutoChange(null)
       router.refresh()
       return true
@@ -277,6 +283,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
     setEnabled(profile.enabledModules ?? profile.effectiveModules)
     setServiceDetails(readServiceBusinessDetails(profile))
     setPrepareWebsite(false)
+    setOverwriteCustomContent(false)
+    setResetStorefrontStyleToAuto(false)
     setAutoChange(null)
   }
 
@@ -455,30 +463,66 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
           <p className="text-xs text-muted-foreground">Guardá el perfil primero; después elegí el estilo, editá los textos y confirmá la propuesta. Cambiar de estilo no borra servicios ni reservas.</p>
           <Button type="button" variant="outline" disabled={saving || dirty} onClick={() => setServiceWebsiteOpen(true)}>Preparar mi página de servicios</Button>
           {serviceWebsiteOpen && <ServiceWebsitePreparationDialog open onOpenChange={setServiceWebsiteOpen} onApplied={() => { toast.success('Página de servicios actualizada.'); router.refresh() }} />}
-        </section> : <label
-          htmlFor="prepare-website"
+        </section> : <div
           className={cn(
-            'flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
+            'rounded-xl border p-3.5 transition-colors',
             prepareWebsite ? 'border-primary/40 bg-primary/[0.04]' : 'border-border/80 hover:bg-muted/30'
           )}
         >
-          <Checkbox
-            id="prepare-website"
-            checked={prepareWebsite}
-            onCheckedChange={(value) => setPrepareWebsite(value === true)}
-            className="mt-0.5"
-          />
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-              Preparar mi página web para {verticalLabels[vertical]}
+          <label
+            htmlFor="prepare-website"
+            className="flex cursor-pointer items-start gap-3"
+          >
+            <Checkbox
+              id="prepare-website"
+              checked={prepareWebsite}
+              onCheckedChange={(value) => setPrepareWebsite(value === true)}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
+                Preparar mi página web para {verticalLabels[vertical]}
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                Al guardar se sugieren la portada, beneficios y forma de venta de este rubro.
+                Tus productos, categorías y datos de contacto nunca se eliminarán.
+              </span>
             </span>
-            <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-              Al guardar se ajustan la plantilla, los textos de la portada, los beneficios, «Cómo atendés», las reservas (si tenés agenda) y cómo vendés.
-              Reemplaza esos textos; no toca tu nombre, logo, contacto, productos ni cuentas bancarias.
-            </span>
-          </span>
-        </label>}
+          </label>
+
+          {prepareWebsite && (
+            <div className="mt-3.5 space-y-3 border-t border-primary/15 pt-3 pl-7">
+              <div className="rounded-lg bg-background/60 p-2.5 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Protección de contenido:</span> Tu plantilla manual y cualquier contenido personalizado que ya tengas cargado se conservarán por defecto.
+              </div>
+
+              <label htmlFor="overwrite-custom" className="flex cursor-pointer items-start gap-2.5 text-xs text-foreground">
+                <Checkbox
+                  id="overwrite-custom"
+                  checked={overwriteCustomContent}
+                  onCheckedChange={(value) => setOverwriteCustomContent(value === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Reemplazar contenido personalizado (portada, beneficios, proceso) con las sugerencias de {verticalLabels[vertical]}
+                </span>
+              </label>
+
+              <label htmlFor="reset-style-auto" className="flex cursor-pointer items-start gap-2.5 text-xs text-foreground">
+                <Checkbox
+                  id="reset-style-auto"
+                  checked={resetStorefrontStyleToAuto}
+                  onCheckedChange={(value) => setResetStorefrontStyleToAuto(value === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Usar plantilla automática recomendada para {verticalLabels[vertical]} (en vez de conservar la plantilla actual)
+                </span>
+              </label>
+            </div>
+          )}
+        </div>}
 
         {/* Recomendaciones y Planes Superiores */}
         <div className="grid gap-4 lg:grid-cols-2">

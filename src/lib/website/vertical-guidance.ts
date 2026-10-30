@@ -35,18 +35,18 @@ export const TRUST_BAR_IDEAS: Record<GuidanceFamily, BenefitIdea[]> = {
   barbershop: [
     { icon: 'clock', title: 'Reservá tu turno', description: 'Elegí el día y la hora que te queden bien' },
     { icon: 'star', title: 'Profesionales con experiencia', description: 'Cortes y barbas a tu estilo' },
-    { icon: 'check', title: 'Higiene garantizada', description: 'Herramientas desinfectadas en cada servicio' },
+    { icon: 'check', title: 'Atención cuidada', description: 'Espacio preparado para tu visita' },
     { icon: 'credit-card', title: 'Pagá en el local', description: 'Efectivo, transferencia o tarjeta' },
   ],
   cosmetics: [
-    { icon: 'award', title: 'Productos originales', description: 'Marcas con procedencia garantizada' },
+    { icon: 'award', title: 'Cuidado personal', description: 'Productos seleccionados para tu rutina' },
     { icon: 'handshake', title: 'Asesoramiento personalizado', description: 'Te ayudamos a elegir según tu piel' },
     { icon: 'truck', title: 'Envíos rápidos', description: 'Recibí tu pedido en tu casa' },
     { icon: 'sparkles', title: 'Novedades cada semana', description: 'Lanzamientos y tendencias' },
   ],
   electronics: [
-    { icon: 'shield', title: 'Garantía', description: 'Todos los equipos con garantía escrita' },
-    { icon: 'award', title: 'Productos originales', description: 'Equipos y accesorios de marca' },
+    { icon: 'shield', title: 'Atención técnica', description: 'Asesoramiento antes y después de comprar' },
+    { icon: 'award', title: 'Equipos y accesorios', description: 'Variedad de marcas y modelos' },
     { icon: 'credit-card', title: 'Pagá en cuotas', description: 'Consultá los planes disponibles' },
     { icon: 'truck', title: 'Envíos a todo el país', description: 'Despacho rápido y seguro' },
   ],
@@ -68,8 +68,8 @@ export const TRUST_BAR_IDEAS: Record<GuidanceFamily, BenefitIdea[]> = {
     { icon: 'credit-card', title: 'Varias formas de pago', description: 'Efectivo, transferencia o tarjeta' },
   ],
   repairs: [
-    { icon: 'wrench', title: 'Diagnóstico sin costo', description: 'Revisamos tu equipo antes de presupuestar' },
-    { icon: 'shield', title: 'Garantía escrita', description: 'En cada reparación' },
+    { icon: 'wrench', title: 'Diagnóstico inicial', description: 'Revisamos tu equipo antes de presupuestar' },
+    { icon: 'shield', title: 'Reparaciones probadas', description: 'Probamos cada equipo antes de entregar' },
     { icon: 'zap', title: 'Reparaciones en el día', description: 'En la mayoría de los casos' },
     { icon: 'check', title: 'Seguí tu reparación', description: 'Consultá el estado online' },
   ],

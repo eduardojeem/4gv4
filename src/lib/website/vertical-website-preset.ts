@@ -1,4 +1,4 @@
-import type { CheckoutSettings, CompanyInfo, ProcessFlow, TrustBarSettings, WebsiteSettings } from '@/types/website-settings'
+import type { CheckoutSettings, CompanyInfo, WebsiteSettings } from '@/types/website-settings'
 import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
 import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical } from '@/lib/website/default-settings'
 import { getCompatibleHeroPresetIds, type StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
@@ -12,6 +12,8 @@ import {
 } from '@/lib/website/vertical-guidance'
 import { isTransferAccountComplete, transferAccounts } from '@/lib/checkout/cart-setup'
 import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
+import { detectStorefrontContentAudit } from '@/lib/website/content-protection'
+import { STOREFRONT_STYLE_LABELS } from '@/lib/website/storefront-style'
 
 /**
  * La página pública lista para un rubro, como cuando se termina el alta, pero
@@ -35,6 +37,16 @@ export interface VerticalWebsitePresetInput {
   /** Módulos activos de la cuenta, para no ofrecer delivery o carrito sin ellos. */
   effectiveModules: readonly string[]
   current: Partial<WebsiteSettings>
+  /**
+   * Si es true, sobrescribe portadas o beneficios que hayan sido personalizados.
+   * Por defecto es false: protege el contenido personalizado del usuario.
+   */
+  overwriteCustomContent?: boolean
+  /**
+   * Si es true, fuerza la plantilla a 'auto'.
+   * Por defecto es false: preserva la plantilla si fue elegida manualmente.
+   */
+  resetStorefrontStyleToAuto?: boolean
 }
 
 const MODE_LABEL: Record<CheckoutSettings['commerceMode'], string> = {
@@ -44,54 +56,91 @@ const MODE_LABEL: Record<CheckoutSettings['commerceMode'], string> = {
 }
 
 export function buildVerticalWebsitePreset(input: VerticalWebsitePresetInput): VerticalWebsitePreset {
-  const { capabilities, effectiveModules } = input
+  const { capabilities, effectiveModules, overwriteCustomContent = false, resetStorefrontStyleToAuto = false } = input
   const family = guidanceFamily(capabilities)
   const defaults = getWebsiteDefaultsForVertical(input.vertical, input.model)
   const current = applyWebsiteSettingsDefaults(input.current)
+  const audit = detectStorefrontContentAudit(input.current)
   const summary: string[] = []
 
-  // Plantilla en «Automático»: sigue al rubro. Las secciones de servicios y
-  // reparaciones se ofrecen solo con su módulo.
+  // Preservación de plantilla manual:
+  // Si el usuario eligió una plantilla manual (modern, tech, etc.), se preserva.
+  // Solo se pasa a 'auto' si ya estaba en 'auto' (o vacía) o si se pidió explícitamente.
+  const currentStyle = current.company_info?.storefrontStyle
+  const isExplicitManualStyle = currentStyle && currentStyle !== 'auto'
+  const targetStyle = !resetStorefrontStyleToAuto && isExplicitManualStyle ? currentStyle : 'auto'
+
   const companyInfo: CompanyInfo = {
     ...current.company_info,
-    storefrontStyle: 'auto',
+    storefrontStyle: targetStyle,
     servicesPageEnabled: capabilities.hasServices && Boolean(defaults.company_info?.servicesPageEnabled ?? input.model === 'service'),
     repairTrackingEnabled: capabilities.hasRepairs,
     processSectionEnabled: true,
   }
-  summary.push('Plantilla en «Automático», según el rubro')
 
-  // Portada: los textos del rubro que respetan los módulos (sin hablar de
-  // reparaciones a quien no las tiene).
-  const preset = HERO_PRESETS.find((item) => item.id === getCompatibleHeroPresetIds(capabilities)[0]) ?? HERO_PRESETS[HERO_PRESETS.length - 1]
-  const heroContent = {
-    ...current.hero_content,
-    enabled: true,
-    badge: preset.badge,
-    title: preset.title,
-    subtitle: preset.subtitle,
-    ctaPrimaryText: preset.ctaPrimaryText,
-    ctaSecondaryText: preset.ctaSecondaryText,
-    trustBadges: [...preset.trustBadges],
+  if (targetStyle !== 'auto') {
+    summary.push(`Plantilla conservada: ${STOREFRONT_STYLE_LABELS[targetStyle] || targetStyle}`)
+  } else {
+    summary.push('Plantilla en «Automático», según el rubro')
   }
-  summary.push('Textos de la portada')
 
-  // Los números de ejemplo quedan apagados: no son datos del negocio.
-  const heroStats = { ...current.hero_stats, ...(defaults.hero_stats ?? {}), enabled: false }
-
-  const trustBar: TrustBarSettings = {
-    enabled: true,
-    position: current.trust_bar?.position ?? 'above_carousel',
-    items: TRUST_BAR_IDEAS[family].map((idea, index) => ({ ...idea, id: `vertical-${index + 1}`, active: true })),
+  // Portada: si tiene contenido personalizado y no se autorizó el reemplazo, se conserva.
+  let heroContent = current.hero_content
+  if (overwriteCustomContent || audit.sections.hero_content !== 'customized') {
+    const preset = HERO_PRESETS.find((item) => item.id === getCompatibleHeroPresetIds(capabilities)[0]) ?? HERO_PRESETS[HERO_PRESETS.length - 1]
+    heroContent = {
+      ...current.hero_content,
+      enabled: true,
+      badge: preset.badge,
+      title: preset.title,
+      subtitle: preset.subtitle,
+      ctaPrimaryText: preset.ctaPrimaryText,
+      ctaSecondaryText: preset.ctaSecondaryText,
+      trustBadges: [...preset.trustBadges],
+    }
+    summary.push('Textos de la portada')
+  } else {
+    summary.push('Portada personalizada conservada')
   }
-  summary.push('Beneficios de comprar en tu tienda')
 
-  const templateId = PROCESS_TEMPLATES_BY_FAMILY[family][0]
-  const template = PROCESS_STEP_TEMPLATES.find((item) => item.id === templateId)
-  const processFlows: ProcessFlow[] = template
-    ? [{ id: `vertical-${template.id}`, title: template.label, description: template.description, active: true, steps: createProcessStepsFromTemplate(template.id) }]
-    : current.process_flows
-  if (template) summary.push(`«Cómo atendés»: recorrido de ${template.label.toLowerCase()}`)
+  // Estadísticas: se mantienen apagadas y sin métricas ficticias de muestra.
+  let heroStats = current.hero_stats
+  if (overwriteCustomContent || audit.sections.hero_stats !== 'customized') {
+    heroStats = {
+      ...current.hero_stats,
+      ...(defaults.hero_stats ?? {}),
+      repairs: '',
+      satisfaction: '',
+      avgTime: '',
+      enabled: false,
+    }
+  }
+
+  // Beneficios / Trust Bar: protege contenido personalizado si existe
+  let trustBar = current.trust_bar
+  if (overwriteCustomContent || audit.sections.trust_bar !== 'customized') {
+    trustBar = {
+      enabled: true,
+      position: current.trust_bar?.position ?? 'above_carousel',
+      items: TRUST_BAR_IDEAS[family].map((idea, index) => ({ ...idea, id: `vertical-${index + 1}`, active: true })),
+    }
+    summary.push('Beneficios de comprar en tu tienda')
+  } else {
+    summary.push('Beneficios personalizados conservados')
+  }
+
+  // «Cómo atendés» / Process Flows: protege flujos personalizados si existen
+  let processFlows = current.process_flows
+  if (overwriteCustomContent || audit.sections.process_flows !== 'customized') {
+    const templateId = PROCESS_TEMPLATES_BY_FAMILY[family][0]
+    const template = PROCESS_STEP_TEMPLATES.find((item) => item.id === templateId)
+    processFlows = template
+      ? [{ id: `vertical-${template.id}`, title: template.label, description: template.description, active: true, steps: createProcessStepsFromTemplate(template.id) }]
+      : current.process_flows
+    if (template) summary.push(`«Cómo atendés»: recorrido de ${template.label.toLowerCase()}`)
+  } else {
+    summary.push('Recorrido de atención personalizado conservado')
+  }
 
   const values: VerticalWebsitePreset['values'] = {
     company_info: companyInfo,
