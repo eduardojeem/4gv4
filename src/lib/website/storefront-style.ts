@@ -32,8 +32,21 @@ export type StorefrontStyle = Exclude<StorefrontStylePreference, 'auto'>
 
 export const DEFAULT_STOREFRONT_STYLE: StorefrontStyle = 'classic'
 
-/** Rubros que en «Automático» toman un aspecto propio; el resto queda clásico. */
-const STYLE_BY_VERTICAL = new Map<BusinessVertical, StorefrontStyle>([['clothing', 'fashion'], ['barbershop', 'services'], ['beauty_services', 'services']])
+/**
+ * Mapeo canónico de rubro a aspecto/plantilla de tienda.
+ * Utilizado para resolver 'auto' y como sugerencia predeterminada.
+ */
+export const STYLE_BY_VERTICAL: Record<BusinessVertical, StorefrontStyle> = {
+  general: 'classic',
+  clothing: 'fashion',
+  cosmetics: 'beauty',
+  electronics: 'tech',
+  food: 'market',
+  hardware: 'classic',
+  barbershop: 'services',
+  beauty_services: 'services',
+  other: 'classic',
+}
 
 export interface StorefrontStyleContext {
   /**
@@ -89,8 +102,12 @@ export function isStorefrontStyleAvailable(style: StorefrontStylePreference, con
 
 export function resolveStorefrontStyle(preference: unknown, businessVertical: unknown, context: StorefrontStyleContext = {}): StorefrontStyle {
   context = { businessVertical, ...context }
-  const byVertical = STYLE_BY_VERTICAL.get(businessVertical as BusinessVertical)
-  const chosen: StorefrontStyle = (
+  const validVertical = typeof businessVertical === 'string' && Object.prototype.hasOwnProperty.call(STYLE_BY_VERTICAL, businessVertical)
+    ? (businessVertical as BusinessVertical)
+    : undefined
+  const byVertical = validVertical ? STYLE_BY_VERTICAL[validVertical] : DEFAULT_STOREFRONT_STYLE
+
+  const isExplicit = (
     preference === 'classic' ||
     preference === 'fashion' ||
     preference === 'sport' ||
@@ -100,8 +117,10 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     preference === 'services' ||
     preference === 'beauty'
   )
-    ? preference
-    : byVertical ?? DEFAULT_STOREFRONT_STYLE
+
+  const chosen: StorefrontStyle = isExplicit
+    ? (preference as StorefrontStyle)
+    : byVertical
 
   // Una plantilla que ya no corresponde (quitó la agenda, cambió de rubro) vuelve
   // a la de su rubro en lugar de mostrar una portada vacía o datos de otro negocio.
@@ -109,10 +128,99 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     // Un negocio de servicios cae en Moderno (fotos y contacto); una tienda, en Clásico (catálogo).
     const order = SERVICE_VERTICALS.has(String(businessVertical)) ? [SERVICES_FALLBACK_STYLE, DEFAULT_STOREFRONT_STYLE] : [DEFAULT_STOREFRONT_STYLE, SERVICES_FALLBACK_STYLE]
     const fallback = [byVertical, ...order]
-      .find((style): style is StorefrontStyle => Boolean(style) && style !== chosen && isStorefrontStyleAvailable(style!, context))
+      .find((style): style is StorefrontStyle => Boolean(style) && style !== chosen && isStorefrontStyleAvailable(style, context))
     return fallback ?? SERVICES_FALLBACK_STYLE
   }
   return chosen
+}
+
+export type TemplateCompatibilityStatus = 'current' | 'recommended' | 'requires_modules' | 'compatible'
+
+export interface TemplateCompatibilityResult {
+  status: TemplateCompatibilityStatus
+  isCurrent: boolean
+  isRecommended: boolean
+  isCompatible: boolean
+  warnings: string[]
+  missingModules: string[]
+  missingData?: string[]
+}
+
+/**
+ * Valida la compatibilidad entre una plantilla, el rubro y los módulos del negocio.
+ * Permite advertir sin bloquear innecesariamente (ALLOW + WARNING).
+ */
+export function getTemplateCompatibility(input: {
+  storefrontStyle: StorefrontStyle
+  currentStyle?: StorefrontStylePreference
+  businessVertical?: unknown
+  modules?: readonly string[] | null
+  servicesAvailable?: boolean
+  repairsAvailable?: boolean
+  catalogAvailable?: boolean
+  categories?: readonly { name: string }[]
+}): TemplateCompatibilityResult {
+  const { storefrontStyle, currentStyle, businessVertical, modules, servicesAvailable, categories } = input
+
+  const vertical = typeof businessVertical === 'string' && Object.prototype.hasOwnProperty.call(STYLE_BY_VERTICAL, businessVertical)
+    ? (businessVertical as BusinessVertical)
+    : undefined
+  const recommendedStyle = vertical ? STYLE_BY_VERTICAL[vertical] : DEFAULT_STOREFRONT_STYLE
+  const isRecommended = storefrontStyle === recommendedStyle
+  const resolvedCurrent = currentStyle === 'auto'
+    ? resolveStorefrontStyle('auto', businessVertical, { servicesAvailable })
+    : currentStyle
+  const isCurrent = currentStyle === storefrontStyle || resolvedCurrent === storefrontStyle
+
+  const warnings: string[] = []
+  const missingModules: string[] = []
+  const missingData: string[] = []
+
+  // Plantilla Servicios: requiere módulos de servicios/agenda
+  if (storefrontStyle === 'services') {
+    const hasServicesModule = modules ? modules.includes('services') : servicesAvailable !== false
+    if (!hasServicesModule || servicesAvailable === false) {
+      missingModules.push('services')
+      warnings.push('Esta plantilla está optimizada para negocios con Servicios y Agenda. Tu organización no tiene esos módulos activos.')
+    }
+  }
+
+  // Plantilla Tech: no bloquea si no tiene repairs (auditoría: tech funciona sin repairs)
+  // Plantilla Beauty: cosmetics funciona sin servicios (auditoría: beauty no requiere agenda para retail)
+
+  // Enlaces de audiencia en Moda y Deportivo
+  if (storefrontStyle === 'fashion' || storefrontStyle === 'sport') {
+    if (categories && categories.length > 0) {
+      const hasAudienceCategories = categories.some((c) =>
+        /mujer|dama|femenin|hombre|caballero|masculin|niñ|nino|infantil|kids|bebe/i.test(c.name)
+      )
+      if (!hasAudienceCategories) {
+        missingData.push('audiences')
+      }
+    }
+  }
+
+  const isCompatible = missingModules.length === 0
+  let status: TemplateCompatibilityStatus
+  if (missingModules.length > 0) {
+    status = 'requires_modules'
+  } else if (isCurrent) {
+    status = 'current'
+  } else if (isRecommended) {
+    status = 'recommended'
+  } else {
+    status = 'compatible'
+  }
+
+  return {
+    status,
+    isCurrent,
+    isRecommended,
+    isCompatible,
+    warnings,
+    missingModules,
+    missingData: missingData.length > 0 ? missingData : undefined,
+  }
 }
 
 export const STOREFRONT_STYLE_LABELS: Record<StorefrontStyle, string> = {
