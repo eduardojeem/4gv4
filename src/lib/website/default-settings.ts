@@ -34,12 +34,11 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        // Apagadas: sin métricas ficticias. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '5.000+',
-        satisfaction: '99%',
-        avgTime: '24-48h',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Elegí tus prendas', description: 'Explorá nuestros modelos, talles y colores disponibles.' },
@@ -67,12 +66,10 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste una compra? Rastreá tu pedido',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '10K+',
-        satisfaction: '99.5%',
-        avgTime: 'En el día',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Explorá el catálogo', description: 'Encontrá los mejores productos para tu rutina.' },
@@ -102,12 +99,10 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste una compra? Rastreá tu pedido',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '5.000+',
-        satisfaction: '4.9★',
-        avgTime: '30 min',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       booking_section: {
         enabled: true,
@@ -142,12 +137,10 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Hiciste un pedido? Consultá el estado de tu delivery',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '15K+',
-        satisfaction: '4.9★',
-        avgTime: '30-45 min',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Elegí tu menú', description: 'Descubrí nuestras opciones, combos y promociones.' },
@@ -176,12 +169,10 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés un pedido? Rastreá el estado de tu despacho',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '8.000+',
-        satisfaction: '98%',
-        avgTime: '24h',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Consultá tu lista', description: 'Buscá tus herramientas o envianos tu lista de materiales.' },
@@ -210,18 +201,16 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés una reparación? Rastreá tu equipo',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '10K+',
-        satisfaction: '99%',
-        avgTime: '24-48h',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Diagnóstico', description: 'Evaluamos tu dispositivo de forma rápida y transparente.' },
         { id: 'step-2', number: 2, title: 'Presupuesto', description: 'Te damos un precio claro y sin sorpresas antes de avanzar.' },
         { id: 'step-3', number: 3, title: 'Reparación especializada', description: 'Reparamos tu equipo con repuestos de calidad.' },
-        { id: 'step-4', number: 4, title: 'Entrega con garantía', description: 'Retirás tu equipo probado y con garantía escrita.' },
+        { id: 'step-4', number: 4, title: 'Entrega verificada', description: 'Retirás tu equipo probado y funcionando.' },
       ],
     }
   }
@@ -244,12 +233,10 @@ export function getWebsiteDefaultsForVertical(
         trackRepairText: '¿Tenés un servicio activo? Rastreá tu orden',
       },
       hero_stats: {
-        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-        // venta. Se muestran cuando la tienda carga los suyos y las activa.
         enabled: false,
-        repairs: '1.500+',
-        satisfaction: '100%',
-        avgTime: 'Inmediato',
+        repairs: '',
+        satisfaction: '',
+        avgTime: '',
       },
       process_steps: [
         { id: 'step-1', number: 1, title: 'Contacto inicial', description: 'Contanos qué necesidad o proyecto tenés.' },
@@ -278,12 +265,10 @@ export function getWebsiteDefaultsForVertical(
       trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
     },
     hero_stats: {
-      // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-      // venta. Se muestran cuando la tienda carga los suyos y las activa.
       enabled: false,
-      repairs: '5.000+',
-      satisfaction: '99%',
-      avgTime: '24h',
+      repairs: '',
+      satisfaction: '',
+      avgTime: '',
     },
     process_steps: [
       { id: 'step-1', number: 1, title: 'Elegí tus productos', description: 'Navegá por nuestras categorías y seleccioná lo que necesitás.' },
@@ -325,12 +310,10 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       trackRepairText: '¿Hiciste una compra? Rastreá el estado de tu pedido',
     },
     hero_stats: {
-      // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
-      // venta. Se muestran cuando la tienda carga los suyos y las activa.
       enabled: false,
-      repairs: '5.000+',
-      satisfaction: '99%',
-      avgTime: '24h'
+      repairs: '',
+      satisfaction: '',
+      avgTime: '',
     },
     offers_section: {
       enabled: true,
@@ -400,7 +383,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
     brands_section: {
       enabled: false,
       title: 'Marcas destacadas',
-      subtitle: 'Encontrá productos originales con garantía y respaldo de marca',
+      subtitle: 'Encontrá productos y marcas destacadas',
       showOnHome: false,
       showOnProducts: false,
       showOnOffers: false,

@@ -11,10 +11,10 @@ vi.mock('next/navigation', () => ({
 }))
 
 describe('StorefrontAudienceLinks', () => {
-  it('offers direct shopping paths for a clothing store', () => {
+  it('offers direct shopping paths for a clothing store when audience categories exist', () => {
     render(
       <StorefrontStyleProvider style="fashion">
-        <StorefrontAudienceLinks />
+        <StorefrontAudienceLinks categories={[{ name: 'Ropa Mujer' }, { name: 'Ropa Hombre' }, { name: 'Calzado Niños' }]} />
       </StorefrontStyleProvider>,
     )
 
@@ -25,10 +25,30 @@ describe('StorefrontAudienceLinks', () => {
     expect(screen.getByRole('link', { name: /ofertas/i })).toHaveAttribute('href', '/dabasica/productos?ofertas=true')
   })
 
+  it('hides audience links in fashion if no Mujer/Hombre/Niños categories exist', () => {
+    const { container } = render(
+      <StorefrontStyleProvider style="fashion">
+        <StorefrontAudienceLinks categories={[{ name: 'General' }, { name: 'Accesorios Varios' }]} />
+      </StorefrontStyleProvider>,
+    )
+
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('hides audience links in sport if no Mujer/Hombre/Niños categories exist', () => {
+    const { container } = render(
+      <StorefrontStyleProvider style="sport">
+        <StorefrontAudienceLinks categories={[{ name: 'Pelotas' }, { name: 'Mancuernas' }]} />
+      </StorefrontStyleProvider>,
+    )
+
+    expect(container).toBeEmptyDOMElement()
+  })
+
   it('does not add fashion navigation to classic storefronts', () => {
     const { container } = render(
       <StorefrontStyleProvider style="classic">
-        <StorefrontAudienceLinks />
+        <StorefrontAudienceLinks categories={[{ name: 'Ropa Mujer' }]} />
       </StorefrontStyleProvider>,
     )
 
@@ -39,7 +59,7 @@ describe('StorefrontAudienceLinks', () => {
     for (const style of ['market', 'services', 'tech'] as const) {
       const { container, unmount } = render(
         <StorefrontStyleProvider style={style}>
-          <StorefrontAudienceLinks />
+          <StorefrontAudienceLinks categories={[{ name: 'Ropa Mujer' }]} />
         </StorefrontStyleProvider>,
       )
       expect(container).toBeEmptyDOMElement()

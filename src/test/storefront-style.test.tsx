@@ -98,10 +98,20 @@ describe('qué aspecto toma la tienda', () => {
     expect(resolveStorefrontStyle(undefined, 'clothing')).toBe('fashion')
   })
 
-  it('en Automático, los demás rubros quedan como siempre', () => {
-    for (const rubro of ['general', 'electronics', 'cosmetics', 'food', 'hardware', 'other', null, undefined, 'constructor']) {
-      expect(resolveStorefrontStyle('auto', rubro)).toBe('classic')
-    }
+  it('en Automático, resuelve según STYLE_BY_VERTICAL y classic fallback', () => {
+    expect(resolveStorefrontStyle('auto', 'general')).toBe('classic')
+    expect(resolveStorefrontStyle('auto', 'clothing')).toBe('fashion')
+    expect(resolveStorefrontStyle('auto', 'cosmetics')).toBe('beauty')
+    expect(resolveStorefrontStyle('auto', 'electronics')).toBe('tech')
+    expect(resolveStorefrontStyle('auto', 'food')).toBe('market')
+    expect(resolveStorefrontStyle('auto', 'hardware')).toBe('classic')
+    expect(resolveStorefrontStyle('auto', 'barbershop')).toBe('services')
+    expect(resolveStorefrontStyle('auto', 'beauty_services')).toBe('services')
+    expect(resolveStorefrontStyle('auto', 'other')).toBe('classic')
+    expect(resolveStorefrontStyle('auto', null)).toBe('classic')
+    expect(resolveStorefrontStyle('auto', undefined)).toBe('classic')
+    expect(resolveStorefrontStyle('auto', 'constructor')).toBe('classic')
+    expect(resolveStorefrontStyle('auto', 'unknown_rubro')).toBe('classic')
   })
 
   it('lo que elige el dueño gana sobre el rubro', () => {
@@ -111,7 +121,7 @@ describe('qué aspecto toma la tienda', () => {
 
   it('un valor desconocido no rompe la tienda: decide el rubro', () => {
     expect(resolveStorefrontStyle('minimal', 'clothing')).toBe('fashion')
-    expect(resolveStorefrontStyle('minimal', 'electronics')).toBe('classic')
+    expect(resolveStorefrontStyle('minimal', 'electronics')).toBe('tech')
   })
 
   it('las tiendas existentes arrancan en Automático', () => {

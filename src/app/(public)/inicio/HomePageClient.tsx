@@ -60,9 +60,9 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   }
 
   const hero_stats = settings.hero_stats ?? {
-    repairs: '100%',
-    satisfaction: '4.9★',
-    avgTime: '24h',
+    repairs: '',
+    satisfaction: '',
+    avgTime: '',
   }
 
   const hero_content = useMemo(() => settings.hero_content ?? {
