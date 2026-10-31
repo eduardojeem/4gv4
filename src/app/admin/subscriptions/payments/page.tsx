@@ -8,6 +8,7 @@ import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { isValidPagoparOrderHash, type PagoparOrderDisplayStatus } from '@/lib/payments/pagopar'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { verifySubscriptionPagoparPayment } from '@/lib/saas/pagopar-subscription-status'
+import { syncPagoparPaymentStatus } from '@/lib/saas/pagopar-reconciliation'
 import { isValidStripeCheckoutSessionId } from '@/lib/payments/stripe'
 import {
   verifySubscriptionStripePayment,
@@ -108,6 +109,18 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
   const verification = isValidPagoparOrderHash(hash)
     ? await verifySubscriptionPagoparPayment(organization.id, hash)
     : null
+  // Si la notificación de Pagopar no llegó, la confirmación del servidor
+  // (nunca un dato del navegador) aplica el pago acá mismo.
+  const syncOutcome = verification?.kind === 'verified'
+    ? await syncPagoparPaymentStatus(verification.localPayment, verification.providerOrder).catch((error: unknown) => {
+      console.error('[pagopar-return] No se pudo aplicar el pago verificado.', {
+        organizationId: organization.id,
+        paymentId: verification.localPayment.id,
+        reason: error instanceof Error ? error.message : 'unknown_error',
+      })
+      return null
+    })
+    : null
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-5 py-4 sm:py-8">
@@ -127,7 +140,7 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
         const { localPayment, providerOrder } = verification
         const content = STATUS_CONTENT[providerOrder.status]
         const StatusIcon = content.icon
-        const subscriptionApplied = localPayment.status === 'paid'
+        const subscriptionApplied = localPayment.status === 'paid' || syncOutcome === 'applied'
 
         return (
           <section className={`rounded-xl border p-5 sm:p-6 ${content.tone}`}>
@@ -140,7 +153,9 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
                   <h1 className="text-xl font-bold">{content.title}</h1>
                   <Badge variant="secondary">{content.badge}</Badge>
                 </div>
-                <p className="mt-2 text-sm leading-6 opacity-80">{content.description}</p>
+                <p className="mt-2 text-sm leading-6 opacity-80">
+                  {providerOrder.status === 'approved' ? 'Pagopar confirmó el cobro.' : content.description}
+                </p>
 
                 <dl className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2">
                   <div><dt className="text-xs opacity-65">Monto verificado</dt><dd className="mt-0.5 font-semibold">{money(providerOrder.amount, localPayment.currency)}</dd></div>
@@ -151,7 +166,7 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
 
                 {providerOrder.status === 'approved' && (
                   <p className="mt-4 rounded-lg border border-current/15 bg-background/55 px-3 py-2 text-xs font-medium">
-                    {subscriptionApplied ? 'El webhook ya confirmó y aplicó este pago.' : 'Pagopar aprobó el pago. La activación aparecerá cuando llegue la notificación segura del webhook.'}
+                    {subscriptionApplied ? 'El pago ya está aplicado a tu suscripción.' : 'Pagopar aprobó el pago, pero todavía no pudimos aplicarlo. Verificá nuevamente en unos instantes.'}
                   </p>
                 )}
               </div>
@@ -164,7 +179,7 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
         <Button asChild variant="outline"><Link href="/admin/subscriptions#payment-history">Ver historial de pagos</Link></Button>
         <Button asChild><Link href={`/admin/subscriptions/payments?hash=${encodeURIComponent(hash)}`}>Verificar nuevamente</Link></Button>
       </div>
-      <p className="text-center text-xs text-muted-foreground">Esta pantalla solamente consulta y muestra el estado. No activa planes desde el navegador.</p>
+      <p className="text-center text-xs text-muted-foreground">El estado se consulta directamente a Pagopar desde el servidor; los datos del enlace no activan planes.</p>
     </main>
   )
 }
