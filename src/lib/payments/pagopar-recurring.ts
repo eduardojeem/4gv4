@@ -7,7 +7,9 @@ import { isPagoparConfigured } from '@/lib/payments/pagopar'
  * por eso además de las claves se exige PAGOPAR_RECURRING_ENABLED=true.
  *
  * Referencia: "Catastro de tarjetas - Pagos recurrentes - Preautorización"
- * en soporte.pagopar.com.
+ * de la documentación de Pagopar. Pagopar ahora opera con la marca uPay: el
+ * viejo soporte.pagopar.com ya no existe y el soporte es soporte@upay.com.py;
+ * la API y el checkout siguen en pagopar.com.
  */
 
 const PAGOPAR_RECURRING_BASE_URL = 'https://api.pagopar.com/api/pago-recurrente/3.0'

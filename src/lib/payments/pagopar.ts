@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'crypto'
 
 const PAGOPAR_API_BASE_URL = 'https://api.pagopar.com/api'
 const PAGOPAR_CHECKOUT_BASE_URL = 'https://www.pagopar.com/pagos'
@@ -260,7 +260,7 @@ export async function queryPagoparOrder(hash: string): Promise<PagoparOrderStatu
 
 function normalizePagoparError(message: string) {
   if (message.includes('servicios o productos virtuales')) {
-    return 'Pagopar rechazo el pago porque el comercio no esta habilitado para cobrar servicios o productos virtuales. Solicita a Pagopar que habilite productos virtuales para esta cuenta.'
+    return 'Pagopar rechazo el pago porque el comercio no esta habilitado para cobrar servicios o productos virtuales. Solicita a Pagopar (soporte@upay.com.py) que habilite productos virtuales para esta cuenta.'
   }
 
   return message
@@ -467,5 +467,7 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
 
 export function validatePagoparNotificationToken(hash: string, token: string) {
   const privateKey = requiredEnv('PAGOPAR_PRIVATE_KEY')
-  return sha1(`${privateKey}${hash}`) === token
+  const expected = Buffer.from(sha1(`${privateKey}${hash}`))
+  const received = Buffer.from(token)
+  return expected.length === received.length && timingSafeEqual(expected, received)
 }

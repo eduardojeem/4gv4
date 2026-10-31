@@ -45,9 +45,9 @@ export async function POST(request: Request) {
 
 async function handleNotification(request: Request) {
   const payload = await request.json().catch(() => null) as PagoparNotification | null
-  const item = payload?.resultado?.[0]
+  const item = Array.isArray(payload?.resultado) ? payload.resultado[0] : undefined
 
-  if (!item?.hash_pedido || !item?.token) {
+  if (!payload || !item?.hash_pedido || !item?.token) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
@@ -82,32 +82,53 @@ async function handleNotification(request: Request) {
       return NextResponse.json({ error: 'Payment was not applied' }, { status: 500 })
     }
 
-    return NextResponse.json({
-      success: true,
-      applied: result.applied === true,
-      plan: result.plan_id,
-    })
+    return acknowledge(payload)
   }
 
-  const status = item.cancelado === true ? 'failed' : 'pending'
-  const { data: payment, error } = await admin
+  const { data: payment, error: lookupError } = await admin
     .from('subscription_payments')
-    .update({
-      status,
-      payment_method: paymentMethod,
-      provider_payment_id: providerPaymentId || null,
-    })
+    .select('id, status')
     .eq('provider', 'pagopar')
     .eq('external_reference', item.hash_pedido)
-    .select('id')
     .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (lookupError) {
+    return NextResponse.json({ error: lookupError.message }, { status: 500 })
   }
   if (!payment) {
     return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ success: true, applied: false, status })
+  // Un pago ya aplicado no vuelve atrás por una notificación: si Pagopar
+  // reversó el cobro, la suscripción se corrige a mano.
+  if (payment.status === 'paid') {
+    console.warn('[pagopar-webhook] Notificación sin pago para un pago ya aplicado.', {
+      paymentId: payment.id,
+      cancelled: item.cancelado === true,
+    })
+    return acknowledge(payload)
+  }
+
+  const { error } = await admin
+    .from('subscription_payments')
+    .update({
+      status: item.cancelado === true ? 'failed' : 'pending',
+      payment_method: paymentMethod,
+      provider_payment_id: providerPaymentId || null,
+    })
+    .eq('id', payment.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return acknowledge(payload)
+}
+
+/**
+ * Pagopar da la notificación por recibida solo si se le devuelve el mismo
+ * `resultado` que envió; con cualquier otra respuesta la sigue reintentando.
+ */
+function acknowledge(payload: PagoparNotification) {
+  return NextResponse.json(payload.resultado)
 }
