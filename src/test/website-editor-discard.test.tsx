@@ -1,0 +1,70 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import WebsiteAdminPage from '@/app/admin/website/page'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+const state=vi.hoisted(()=>({settings:{} as ReturnType<typeof getWebsiteSettingsDefaults>}))
+vi.mock('@/hooks/useWebsiteSettings',()=>({useAdminWebsiteSettings:()=>({settings:state.settings,refresh:vi.fn(),refetch:vi.fn(),isRefreshing:false,isSaving:false,isLoading:false})}))
+vi.mock('@/contexts/SubscriptionStatusContext',()=>({useSubscriptionStatus:()=>({businessVertical:'general',operatingModel:'retail',effectiveModules:['inventory','website'],planName:'Test'})}))
+vi.mock('@/hooks/useWebsiteMediaQuota',()=>({useWebsiteMediaQuota:()=>({isAtLimit:false,count:0,limit:20})}))
+vi.mock('@/components/admin/website/WebsiteNavigation',()=>({WebsiteNavigation:({onChange}:{onChange:(value:string)=>void})=><nav>{['publication','public-info','design-brand','brands','hero'].map(id=><button key={id} onClick={()=>onChange(id)}>Ir a {id}</button>)}</nav>}))
+vi.mock('@/components/admin/website/HeroEditor',()=>({HeroEditor:({onNavigate}:{onNavigate:(section:'company',anchor:'website-appearance'|'website-visibility'|'website-identity')=>void})=><div>{(['website-appearance','website-visibility','website-identity'] as const).map(anchor=><button key={anchor} onClick={()=>onNavigate('company',anchor)}>Enlace legado {anchor}</button>)}</div>}))
+vi.mock('@/components/admin/website/WebsiteOverview',()=>({WebsiteOverview:()=>null}))
+vi.mock('@/components/admin/website/WebsiteAssistant',()=>({WebsiteAssistantDialog:()=>null}))
+vi.mock('@/components/admin/website/WebsiteHowItWorksDialog',()=>({WebsiteHowItWorksDialog:()=>null}))
+vi.mock('@/components/admin/website/SectionAssistant',()=>({SectionAssistant:()=>null}))
+vi.mock('@/components/admin/website/WebsiteSectionIntro',()=>({WebsiteSectionIntro:()=>null}))
+vi.mock('@/components/admin/website/WebsiteMediaLibraryDialog',()=>({WebsiteMediaLibraryDialog:()=>null}))
+vi.mock('@/components/admin/website/WebsiteMediaQuotaBanner',()=>({WebsiteMediaQuotaBanner:()=>null}))
+vi.mock('@/components/admin/website/BrandsSectionEditor',()=>({BrandsSectionEditor:()=>null}))
+vi.mock('@/components/admin/website/StorefrontAppearanceEditor',()=>({StorefrontAppearanceEditor:()=>null}))
+beforeEach(()=>{
+ state.settings=getWebsiteSettingsDefaults()
+ state.settings.company_info={...state.settings.company_info,name:'Tienda sintética',slug:'sintetica',phone:'0981123456',whatsapp:'595981123456',storefrontPublic:true,marketplacePublic:false}
+ state.settings.checkout.commerceMode='whatsapp'
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({success:true,organization:{slug:'sintetica'}})}))
+ vi.spyOn(window,'confirm').mockReturnValue(true)
+ vi.spyOn(window,'scrollTo').mockImplementation(()=>{})
+})
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()})
+const go=(id:string)=>fireEvent.click(screen.getByRole('button',{name:'Ir a '+id}))
+const publication=()=>screen.getByRole('switch',{name:'Alternar visualización de Publicar tienda'})
+const requests=()=>vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('sync-company'))
+describe('descarte real entre pestañas del editor',()=>{
+ it.each([['website-appearance','Diseño de la tienda'],['website-visibility','Publicación'],['website-identity','Información pública']])('resuelve enlace legado %s a su sección real',async(anchor,title)=>{
+  await act(async()=>{render(<WebsiteAdminPage />)})
+  // El caso verifica el enrutamiento; JSDOM no implementa el scroll nativo.
+  vi.spyOn(window, 'setTimeout').mockReturnValue(0)
+  go('hero')
+  fireEvent.click(screen.getByRole('button',{name:'Enlace legado '+anchor}))
+  expect(screen.getByRole('heading',{level:2,name:title})).toBeInTheDocument()
+ })
+ it('no retira la publicación al guardar información después de descartar',async()=>{
+  await act(async()=>{ render(<WebsiteAdminPage />) })
+  go('publication')
+  fireEvent.click(publication())
+  go('public-info')
+  expect(window.confirm).toHaveBeenCalledOnce()
+  fireEvent.change(screen.getByLabelText('Teléfono'),{target:{value:'0981999888'}})
+  fireEvent.click(screen.getByRole('button',{name:'Guardar cambios'}))
+  await waitFor(()=>expect(requests()).toHaveLength(1))
+  expect(JSON.parse(String(requests()[0][1]?.body))).toMatchObject({storefrontPublic:true,phone:'0981999888'})
+ })
+ it('cancelar conserva la pestaña y el borrador',async()=>{
+  vi.mocked(window.confirm).mockReturnValue(false)
+  await act(async()=>{ render(<WebsiteAdminPage />) })
+  go('publication')
+  fireEvent.click(publication())
+  go('public-info')
+  expect(publication()).toHaveAttribute('aria-checked','false')
+  expect(requests()).toHaveLength(0)
+ })
+ it.each(['design-brand','brands'])('descarta al salir a %s y no recupera el borrador al volver',async target=>{
+  await act(async()=>{ render(<WebsiteAdminPage />) })
+  go('publication')
+  fireEvent.click(publication())
+  go(target)
+  go('publication')
+  expect(publication()).toHaveAttribute('aria-checked','true')
+  expect(requests()).toHaveLength(0)
+ })
+})

@@ -10,7 +10,9 @@ import {
   Briefcase, Package,
   Search, ShoppingBag,
   Sparkles, Truck,
-  Wrench, Clock
+  Wrench, Clock,
+  ShieldCheck, CheckCircle2,
+  Smartphone
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -133,6 +135,9 @@ function ClassicHeroSection({
   const [searchQuery, setSearchQuery] = useState('')
   const mapsHref = getCompanyMapsHref(companyInfo.mapsUrl, companyInfo.address)
 
+  const isTechService = hasRepairs ||
+    /reparaci|taller|servicio t[eé]cnico/i.test(`${heroContent.badge || ''} ${heroContent.title || ''}`)
+
   const closedToday = mounted
     ? (() => {
         const dayIdx = new Date().getDay()
@@ -158,8 +163,8 @@ function ClassicHeroSection({
   if (heroContent.enabled === false) return null
 
   return (
-    <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.06] via-background to-background py-10 sm:py-16 lg:py-20">
-      {/* Luces de ambiente sutiles */}
+    <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.05] via-background to-background py-10 sm:py-16 lg:py-20">
+      {/* Luces de ambiente sutiles y malla tecnológica */}
       <div className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute right-0 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
 
@@ -172,8 +177,8 @@ function ClassicHeroSection({
             {/* Badges superiores: Estado & Tienda */}
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-xs">
-                <Sparkles className="h-3.5 w-3.5" />
-                {heroContent.badge || 'Catálogo Oficial'}
+                {isTechService ? <Wrench className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {heroContent.badge || (isTechService ? 'Servicio técnico especializado' : 'Catálogo de productos')}
               </span>
 
               <span
@@ -190,8 +195,15 @@ function ClassicHeroSection({
                     closedToday ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'
                   )}
                 />
-                {closedToday ? 'Cerrado hoy' : 'Abierto hoy'}
+                {closedToday ? 'Cerrado hoy' : (isTechService ? 'Taller activo hoy' : 'Abierto hoy')}
               </span>
+
+              {isTechService && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-muted/40 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  Consulta técnica
+                </span>
+              )}
             </div>
 
             {/* Título Principal */}
@@ -205,6 +217,24 @@ function ClassicHeroSection({
                 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.'}
             </p>
 
+            {/* Badges de Confianza Rápida en Taller */}
+            {isTechService && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/80 px-2.5 py-1 text-xs font-medium text-foreground/90 shadow-2xs">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Revisión de equipos
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/80 px-2.5 py-1 text-xs font-medium text-foreground/90 shadow-2xs">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  Consultá disponibilidad
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/80 px-2.5 py-1 text-xs font-medium text-foreground/90 shadow-2xs">
+                  <Smartphone className="h-3.5 w-3.5 text-primary" />
+                  Equipos y accesorios
+                </span>
+              </div>
+            )}
+
             {/* ── Buscador Directo en el Hero ── */}
             {(capabilities?.hasCatalog ?? true) && <form
               onSubmit={handleSearchSubmit}
@@ -215,7 +245,7 @@ function ClassicHeroSection({
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="¿Qué estás buscando hoy?..."
+                  placeholder={isTechService ? '¿Buscás un repuesto, accesorio o equipo?...' : '¿Qué estás buscando hoy?...'}
                   className="h-10 border-0 bg-transparent pl-9 pr-3 text-xs sm:text-sm focus-visible:ring-0 shadow-none placeholder:text-muted-foreground/70"
                 />
               </div>
@@ -267,15 +297,20 @@ function ClassicHeroSection({
               <div className="mt-4">
                 <Link
                   href={`${tenantPrefix}${tracking.href}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-xl text-xs font-semibold transition-all',
+                    isTechService
+                      ? 'border border-primary/25 bg-primary/[0.04] px-3.5 py-2 text-foreground hover:border-primary/50 hover:bg-primary/[0.08] hover:shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
                 >
                   {tracking.kind === 'repairs'
                     ? <Wrench className="h-3.5 w-3.5 text-primary" />
                     : <Truck className="h-3.5 w-3.5 text-primary" />}
                   <span>{tracking.kind === 'repairs'
-                    ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'
+                    ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí en tiempo real'
                     : '¿Hiciste una compra? Rastreá el estado de tu pedido aquí'}</span>
-                  <ArrowRight className="h-3 w-3 opacity-60" />
+                  <ArrowRight className="h-3 w-3 opacity-60 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </div>
             )}
@@ -288,8 +323,8 @@ function ClassicHeroSection({
                empujaban los productos fuera de la pantalla. */}
           <div className="lg:col-span-5 flex justify-center lg:justify-end">
             <div className="relative w-full max-w-md">
-              {/* Tarjeta de Resumen Comercial */}
-              <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xl space-y-4 lg:p-6 lg:space-y-6">
+              {/* Tarjeta de Resumen Comercial y Taller */}
+              <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card/90 backdrop-blur-md p-4 shadow-xl space-y-4 lg:p-6 lg:space-y-5">
 
                 {/* Logo e Identidad de la Tienda */}
                 <div className="hidden lg:flex items-center gap-3.5 pb-4 border-b border-border/60">
@@ -304,13 +339,15 @@ function ClassicHeroSection({
                     </div>
                   ) : (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-extrabold text-sm shadow-xs">
-                      {companyInfo.name?.slice(0, 2).toUpperCase() || '4G'}
+                      {companyInfo.name?.slice(0, 2).toUpperCase() || 'T'}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate font-bold text-base text-foreground">
-                      {companyInfo.name || 'Tienda Oficial'}
-                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="truncate font-bold text-base text-foreground">
+                        {companyInfo.name || 'La tienda'}
+                      </h2>
+                    </div>
                     {mapsHref ? (
                       <a
                         href={mapsHref}
@@ -329,16 +366,35 @@ function ClassicHeroSection({
                 </div>
 
                 {/* Estadísticas de Confianza */}
-                {heroStats.enabled !== false && (
+                {heroStats.enabled !== false && [heroStats.repairs, heroStats.satisfaction, heroStats.avgTime].some(value => value?.trim()) && (
                   <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/40 p-3.5 text-center border border-border/40">
-                    <AnimatedStat value={heroStats.repairs || '100%'} label={capabilities?.metricLabels[0] ?? 'Garantía'} />
-                    <AnimatedStat value={heroStats.satisfaction || '4.9★'} label={capabilities?.metricLabels[1] ?? 'Valoración'} />
-                    <AnimatedStat value={heroStats.avgTime || '24h'} label={capabilities?.metricLabels[2] ?? 'Despacho'} />
+                    <AnimatedStat value={heroStats.repairs || '—'} label={capabilities?.metricLabels[0] ?? 'Garantía'} />
+                    <AnimatedStat value={heroStats.satisfaction || '—'} label={capabilities?.metricLabels[1] ?? 'Valoración'} />
+                    <AnimatedStat value={heroStats.avgTime || '—'} label={capabilities?.metricLabels[2] ?? 'Despacho'} />
                   </div>
                 )}
 
                 {/* Accesos Rápidos de Compra (duplican los CTA del hero en movil) */}
                 <div className="hidden lg:block space-y-2">
+                  {/* Si tiene reparaciones, acceso prioritario al seguimiento técnico */}
+                  {isTechService && (
+                    <Link
+                      href={`${tenantPrefix}/mis-reparaciones`}
+                      className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs font-bold text-foreground transition-all hover:border-primary/60 hover:bg-primary/10 hover:shadow-xs group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                          <Wrench className="h-4 w-4" />
+                        </div>
+                        <div className="text-left">
+                          <span className="block font-bold">Rastrear orden técnica</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">Consultá estado en vivo con código o CI</span>
+                        </div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-primary transition-transform group-hover:translate-x-1" />
+                    </Link>
+                  )}
+
                   {(capabilities?.hasCatalog ?? true) && <Link
                     href={`${tenantPrefix}/productos`}
                     className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"
@@ -347,7 +403,7 @@ function ClassicHeroSection({
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Package className="h-4 w-4" />
                       </div>
-                      <span>Ver catálogo completo de productos</span>
+                      <span>Ver catálogo de productos & repuestos</span>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
                   </Link>}

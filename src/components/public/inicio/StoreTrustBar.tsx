@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { TrustBarSettings } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   truck: Truck,
@@ -36,33 +37,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   handshake: HeartHandshake,
   check: CheckCircle2,
 }
-
-const DEFAULT_BENEFITS = [
-  {
-    icon: 'truck',
-    title: 'Envíos Rápidos',
-    description: 'A domicilio o retiro en tienda',
-    active: true,
-  },
-  {
-    icon: 'credit-card',
-    title: 'Medios de Pago',
-    description: 'Tarjetas, cuotas y transferencias',
-    active: true,
-  },
-  {
-    icon: 'shield',
-    title: 'Compra Segura',
-    description: 'Garantía oficial en tus compras',
-    active: true,
-  },
-  {
-    icon: 'message',
-    title: 'Atención Directa',
-    description: 'Asesoramiento personalizado',
-    active: true,
-  },
-]
 
 const BENEFIT_COLOR_THEMES = [
   {
@@ -90,11 +64,13 @@ export function StoreTrustBar({
   settings?: TrustBarSettings
   className?: string
 }) {
-  if (settings && settings.enabled === false) {
+  const storefrontStyle = useStorefrontStyle()
+
+  if (!settings || settings.enabled === false) {
     return null
   }
 
-  const items = settings?.items?.length ? settings.items : DEFAULT_BENEFITS
+  const items = settings.items ?? []
   const activeItems = items.filter((b) => b.active !== false && b.title.trim() !== '')
 
   if (activeItems.length === 0) {
@@ -114,7 +90,11 @@ export function StoreTrustBar({
       : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
 
   return (
-    <div className={cn('border-b border-primary/15 bg-gradient-to-r from-primary/[0.04] via-card/85 to-primary/[0.05] backdrop-blur-xs py-5 sm:py-6', className)}>
+    <div className={cn(
+      'border-b border-primary/15 bg-gradient-to-r from-primary/[0.04] via-card/85 to-primary/[0.05] backdrop-blur-xs py-5 sm:py-6',
+      storefrontStyle === 'beauty' && 'border-border/60 bg-background py-4 sm:py-5',
+      className,
+    )}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className={cn('grid gap-3.5 sm:gap-4 md:gap-5', gridColsClass)}>
           {activeItems.map((b, idx) => {
@@ -126,13 +106,13 @@ export function StoreTrustBar({
                 key={('id' in b && b.id) || idx}
                 className={cn(
                   'group flex items-center gap-3.5 rounded-2xl border border-border/80 bg-card/90 p-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:bg-card',
-                  theme.hoverBorder
+                  storefrontStyle === 'beauty' ? 'rounded-xl border-border/60 bg-card p-3 shadow-none hover:translate-y-0 hover:shadow-none' : theme.hoverBorder
                 )}
               >
                 <div
                   className={cn(
                     'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 group-hover:scale-105 group-hover:shadow-xs',
-                    theme.bg
+                    storefrontStyle === 'beauty' ? 'border-primary/15 bg-primary/5 text-primary group-hover:scale-100 group-hover:shadow-none' : theme.bg
                   )}
                 >
                   <Icon className="h-5 w-5" />

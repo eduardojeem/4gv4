@@ -194,6 +194,7 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
         </>
       )}
 
+      {style === 'wholesale-pro' && (<><NavRow /><div className="rounded border bg-background p-1"><Bar className="w-3/4" /></div><div className="rounded bg-primary/10 p-2"><Bar className="w-1/2" /></div><ProductRow style={style} count={4} /></>)}
       {style === 'services' && (
         <>
           <NavRow dark />

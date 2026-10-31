@@ -44,7 +44,7 @@ export function getWebsiteDefaultsForVertical(
         { id: 'step-1', number: 1, title: 'Elegí tus prendas', description: 'Explorá nuestros modelos, talles y colores disponibles.' },
         { id: 'step-2', number: 2, title: 'Confirmá tu pedido', description: 'Coordinamos el medio de pago más cómodo para vos.' },
         { id: 'step-3', number: 3, title: 'Preparamos tu pedido', description: 'Lo dejamos listo con el máximo cuidado.' },
-        { id: 'step-4', number: 4, title: 'Retirá o recibí tu compra', description: 'Retiro en el local o envío, según la zona.' },
+        { id: 'step-4', number: 4, title: 'Coordiná la entrega', description: 'Revisá las opciones de entrega disponibles en la tienda.' },
       ],
     }
   }
@@ -75,7 +75,7 @@ export function getWebsiteDefaultsForVertical(
         { id: 'step-1', number: 1, title: 'Explorá el catálogo', description: 'Encontrá los mejores productos para tu rutina.' },
         { id: 'step-2', number: 2, title: 'Asesoría directa', description: 'Te orientamos para elegir la opción ideal para vos.' },
         { id: 'step-3', number: 3, title: 'Coordiná el pago', description: 'Con los medios de pago que ofrece la tienda.' },
-        { id: 'step-4', number: 4, title: 'Recibí tu compra', description: 'Retiro en el local o envío, según la zona.' },
+        { id: 'step-4', number: 4, title: 'Coordiná la entrega', description: 'Revisá las opciones de entrega disponibles en la tienda.' },
       ],
     }
   }
@@ -178,7 +178,7 @@ export function getWebsiteDefaultsForVertical(
         { id: 'step-1', number: 1, title: 'Consultá tu lista', description: 'Buscá tus herramientas o envianos tu lista de materiales.' },
         { id: 'step-2', number: 2, title: 'Presupuesto rápido', description: 'Cotización con los mejores precios y descuentos por cantidad.' },
         { id: 'step-3', number: 3, title: 'Pago flexible', description: 'Facturación legal, transferencias y tarjetas.' },
-        { id: 'step-4', number: 4, title: 'Retiro o envío', description: 'Retiro en sucursal o envío, según la zona.' },
+        { id: 'step-4', number: 4, title: 'Coordiná la entrega', description: 'Revisá las opciones de entrega disponibles en la tienda.' },
       ],
     }
   }
@@ -193,7 +193,7 @@ export function getWebsiteDefaultsForVertical(
       hero_content: {
         enabled: true,
         badge: 'Servicio Técnico & Tecnología',
-        title: 'Reparación profesional y equipos garantizados',
+        title: 'Reparación profesional y atención cercana',
         subtitle: 'Diagnóstico claro, presupuesto antes de reparar y seguimiento online.',
         trustBadges: ['Presupuesto antes de reparar', 'Seguimiento online', 'Atención personalizada'],
         ctaPrimaryText: 'Ver productos',
@@ -256,7 +256,7 @@ export function getWebsiteDefaultsForVertical(
     },
     hero_content: {
       enabled: true,
-      badge: 'Catálogo Oficial',
+      badge: 'Catálogo',
       title: 'Los mejores productos al mejor precio',
       subtitle: 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.',
       trustBadges: ['Atención personalizada', 'Consultas por WhatsApp', 'Precios actualizados'],
@@ -274,7 +274,7 @@ export function getWebsiteDefaultsForVertical(
       { id: 'step-1', number: 1, title: 'Elegí tus productos', description: 'Navegá por nuestras categorías y seleccioná lo que necesitás.' },
       { id: 'step-2', number: 2, title: 'Confirmá tu pedido', description: 'Completá tus datos y método de entrega preferido.' },
       { id: 'step-3', number: 3, title: 'Coordiná el pago', description: 'Elegí entre los medios de pago que ofrece la tienda.' },
-      { id: 'step-4', number: 4, title: 'Recibí tu compra', description: 'Retiro en el local o envío, según lo que ofrezca la tienda.' },
+      { id: 'step-4', number: 4, title: 'Coordiná la entrega', description: 'Revisá las opciones de entrega disponibles en la tienda.' },
     ],
   }
 }
@@ -301,7 +301,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
     },
     hero_content: {
       enabled: true,
-      badge: 'Catálogo Oficial',
+      badge: 'Catálogo',
       title: 'Los mejores productos al mejor precio',
       subtitle: 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.',
       trustBadges: ['Atención personalizada', 'Consultas por WhatsApp', 'Precios actualizados'],
@@ -347,43 +347,14 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       slides: [],
     },
     trust_bar: {
-      enabled: true,
+      enabled: false,
       position: 'above_carousel',
-      items: [
-        {
-          id: 'shipping',
-          icon: 'package',
-          title: 'Retiro o envío',
-          description: 'Coordinamos la entrega con vos',
-          active: true,
-        },
-        {
-          id: 'payment',
-          icon: 'credit-card',
-          title: 'Medios de pago',
-          description: 'Consultá las opciones disponibles',
-          active: true,
-        },
-        {
-          id: 'warranty',
-          icon: 'shield',
-          title: 'Compra clara',
-          description: 'Precios y condiciones a la vista',
-          active: true,
-        },
-        {
-          id: 'support',
-          icon: 'message',
-          title: 'Atención Directa',
-          description: 'Asesoramiento personalizado',
-          active: true,
-        },
-      ],
+      items: [],
     },
     brands_section: {
       enabled: false,
       title: 'Marcas destacadas',
-      subtitle: 'Encontrá productos y marcas destacadas',
+      subtitle: 'Descubrí las marcas disponibles en la tienda',
       showOnHome: false,
       showOnProducts: false,
       showOnOffers: false,

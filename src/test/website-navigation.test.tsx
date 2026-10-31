@@ -5,30 +5,29 @@ import { ServicesPublicationStatus } from '@/components/admin/website/ServicesPu
 import { resolveSectionAvailability } from '@/lib/website/section-availability'
 
 describe('website navigation', () => {
-  it('lists the summary plus all twelve sections and requests navigation from the mobile selector', () => {
+  it('lists the reorganized sections and navigates to the template editor from mobile', () => {
     const change = vi.fn()
-    render(<WebsiteNavigation value="company" onChange={change} />)
-    // El resumen guiado más las doce secciones editables.
-    expect(screen.getAllByRole('option')).toHaveLength(13)
+    render(<WebsiteNavigation value="public-info" onChange={change} />)
+    expect(screen.getByRole('option', { name: 'Resumen' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Plantilla' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Menú y pie de página' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'SEO y compartir' })).toBeInTheDocument()
+    expect(screen.getAllByRole('option')).toHaveLength(19)
     expect(screen.getAllByRole('option')[0]).toHaveValue('overview')
-    fireEvent.change(screen.getByLabelText('Editar sección'), { target: { value: 'services' } })
-    expect(change).toHaveBeenCalledWith('services')
-    expect(screen.getByLabelText('Editar sección')).toHaveValue('company')
-    fireEvent.click(screen.getByRole('button', { name: 'Banners promocionales' }))
-    expect(change).toHaveBeenCalledWith('carousel')
+    fireEvent.change(screen.getByLabelText('Ir a sección'), { target: { value: 'design-template' } })
+    expect(change).toHaveBeenCalledWith('design-template')
+    expect(screen.queryByRole('option', { name: 'Editar SEO' })).not.toBeInTheDocument()
   })
 })
 
 describe('website navigation by business focus', () => {
-  it('folds the sections a barbershop rarely needs under "Más secciones"', () => {
+  it('keeps service recommendations easy to find and leaves other sections available', () => {
     const change = vi.fn()
     render(<WebsiteNavigation value="overview" onChange={change} focus="services" progress={{ done: 2, total: 9 }} />)
-    // El selector móvil sigue ofreciendo todo.
-    expect(screen.getAllByRole('option')).toHaveLength(13)
-    expect(screen.getByRole('button', { name: 'Reservas online' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Marcas destacadas' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Más secciones/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Marcas destacadas' }))
+    expect(screen.getAllByRole('option')).toHaveLength(19)
+    expect(screen.getByRole('button', { name: 'Reservas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marcas' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Marcas' }))
     expect(change).toHaveBeenCalledWith('brands')
     expect(screen.getByText('2/9')).toBeInTheDocument()
   })
@@ -41,12 +40,12 @@ describe('website navigation by business focus', () => {
     expect(options).not.toContain('gallery')
     expect(options).not.toContain('services')
     expect(options).toContain('offers')
-    expect(screen.getAllByText('9 secciones').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('15 secciones').length).toBeGreaterThan(0)
   })
 
   it('keeps a folded section visible while it is the one being edited', () => {
     render(<WebsiteNavigation value="brands" onChange={vi.fn()} focus="services" />)
-    expect(screen.getByRole('button', { name: 'Marcas destacadas' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Marcas' })).toHaveAttribute('aria-current', 'page')
   })
 })
 

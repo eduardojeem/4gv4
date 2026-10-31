@@ -23,6 +23,13 @@ const TONES: Array<{ value: AssistantTone; label: string }> = [
 ]
 
 const SECTION_LABELS: Record<string, string> = {
+  'design-template': 'Plantilla',
+  'design-brand': 'Marca',
+  'design-preview': 'Vista previa',
+  'navigation-footer': 'Navegación y pie',
+  'public-info': 'Datos públicos',
+  'seo-share': 'SEO y compartir',
+  publication: 'Publicación',
   company: 'Empresa y publicación',
   checkout: 'Pagos y entregas',
   hero: 'Portada',

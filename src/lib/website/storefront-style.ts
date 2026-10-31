@@ -25,6 +25,7 @@ export const STOREFRONT_STYLE_PREFERENCES = [
   'modern',
   'services',
   'beauty',
+  'wholesale-pro',
 ] as const
 
 export type StorefrontStylePreference = (typeof STOREFRONT_STYLE_PREFERENCES)[number]
@@ -89,7 +90,7 @@ const SERVICES_FALLBACK_STYLE: StorefrontStyle = 'modern'
  *   solo las que encajan con el rubro.
  */
 export function isStorefrontStyleAvailable(style: StorefrontStylePreference, context: StorefrontStyleContext = {}): boolean {
-  if (style === 'auto') return true
+  if (style === 'auto' || style === 'wholesale-pro') return true
   const vertical = typeof context.businessVertical === 'string' ? context.businessVertical : ''
   if (style === 'services') {
     return context.servicesAvailable !== false && !PRODUCT_VERTICALS.has(vertical)
@@ -115,7 +116,8 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     preference === 'market' ||
     preference === 'modern' ||
     preference === 'services' ||
-    preference === 'beauty'
+    preference === 'beauty' ||
+    preference === 'wholesale-pro'
   )
 
   const chosen: StorefrontStyle = isExplicit
@@ -166,7 +168,7 @@ export function getTemplateCompatibility(input: {
     ? (businessVertical as BusinessVertical)
     : undefined
   const recommendedStyle = vertical ? STYLE_BY_VERTICAL[vertical] : DEFAULT_STOREFRONT_STYLE
-  const isRecommended = storefrontStyle === recommendedStyle
+  const isRecommended = storefrontStyle === 'wholesale-pro' ? ['electronics', 'hardware', 'general'].includes(String(vertical)) : storefrontStyle === recommendedStyle
   const resolvedCurrent = currentStyle === 'auto'
     ? resolveStorefrontStyle('auto', businessVertical, { servicesAvailable })
     : currentStyle
@@ -224,6 +226,7 @@ export function getTemplateCompatibility(input: {
 }
 
 export const STOREFRONT_STYLE_LABELS: Record<StorefrontStyle, string> = {
+  'wholesale-pro': 'Mayorista & Retail',
   classic: 'Clásico',
   fashion: 'Moda',
   sport: 'Deportivo',
@@ -239,6 +242,7 @@ export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
+  { value: 'wholesale-pro', label: 'Mayorista & Retail', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.' },
   { value: 'auto', label: 'Automático', description: 'Se elige según el rubro de tu negocio.' },
   { value: 'classic', label: 'Clásico', description: 'Foto completa en tarjetas apaisadas. Para tecnología, ferretería o almacén.' },
   { value: 'fashion', label: 'Moda', description: 'Fotos verticales a sangre, títulos elegantes y categorías con foto.' },
@@ -276,6 +280,7 @@ export interface StorefrontTemplateMeta {
 }
 
 export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTemplateMeta> = {
+  'wholesale-pro': { id: 'wholesale-pro', name: 'Mayorista & Retail', badge: 'Catálogo profesional', tagline: 'Encontrá lo que necesitás', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.', recommendedVerticals: ['Electrónica', 'Ferretería', 'General'], recommendedColors: ['blue','indigo','teal'], features: ['Buscador protagonista','Categorías accesibles','Precios según tu cuenta'], accentGradient: 'from-slate-700 to-slate-900', badgeColorClass: 'bg-primary/10 text-primary', variants: [] },
   classic: {
     id: 'classic',
     name: 'Clásico Universal',
@@ -473,6 +478,7 @@ const STYLE_KEYWORDS: ReadonlyArray<{ style: StorefrontStyle; pattern: RegExp }>
 ]
 
 const HEADER_BY_STYLE: Record<StorefrontStyle, Exclude<StorefrontHeaderStyle, 'glass'>> = {
+  'wholesale-pro': 'solid',
   classic: 'solid',
   fashion: 'solid',
   sport: 'dark',
@@ -547,6 +553,7 @@ export function usesPortraitMedia(style: StorefrontStyle) {
 
 /** Titulos de seccion. */
 export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
+  'wholesale-pro': 'font-semibold tracking-tight',
   classic: 'font-extrabold tracking-tight',
   fashion: 'font-serif tracking-tight',
   sport: 'font-black uppercase italic tracking-tighter',
@@ -559,6 +566,7 @@ export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
 
 /** Etiqueta chica sobre los titulos. */
 export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
+  'wholesale-pro': 'text-xs font-semibold uppercase tracking-wide text-muted-foreground',
   classic: 'text-xs font-bold uppercase tracking-wider text-primary',
   fashion: 'text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground',
   sport: 'inline-block -skew-x-6 bg-primary px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-primary-foreground',
@@ -571,6 +579,7 @@ export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
 
 /** Esquinas de fotos y botones. */
 export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
+  'wholesale-pro': 'rounded-lg',
   classic: 'rounded-xl',
   fashion: 'rounded-none',
   sport: 'rounded-md',

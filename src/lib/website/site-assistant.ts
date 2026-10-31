@@ -148,6 +148,13 @@ const TONE: Record<AssistantTone, { closing: string[]; secondary: string }> = {
 }
 
 const TIP_ADVICE: Record<TipSection, string> = {
+  'design-template': 'Elegí una plantilla que represente tu rubro y revisá cómo muestra tus productos o servicios.',
+  'design-brand': 'Usá tu logo y colores para que la tienda se reconozca como tu negocio.',
+  'design-preview': 'Revisá la tienda en teléfono y computadora antes de publicar.',
+  'navigation-footer': 'Comprobá que los enlaces y datos del pie sean claros y estén actualizados.',
+  'public-info': 'Completá el nombre, la descripción y los medios de contacto que querés hacer públicos.',
+  'seo-share': 'Compartí el enlace de tu tienda y revisá cómo aparece al enviarlo.',
+  publication: 'Revisá los requisitos pendientes antes de publicar tu tienda.',
   company: 'Completá logo y WhatsApp: es lo primero que mira un cliente nuevo.',
   checkout: 'Definí cómo te compran (carrito, WhatsApp o solo catálogo) y activá al menos un pago y una entrega.',
   hero: 'Aplicá la portada sugerida y revisá que el botón principal lleve a la acción correcta.',

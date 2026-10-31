@@ -109,7 +109,7 @@ describe('StoreOffersPromoShowcase', () => {
     mockSwrLoading = false
   })
 
-  it('renderiza la vitrina con datos del comercio, badge oficial e información real de la empresa', () => {
+  it('renderiza la vitrina con el nombre del comercio e información real de la empresa', () => {
     render(
       <StoreOffersPromoShowcase
         companyInfo={{
@@ -133,8 +133,8 @@ describe('StoreOffersPromoShowcase', () => {
     // Nombre de la tienda
     expect(screen.getAllByText('4G Celulares Store').length).toBeGreaterThan(0)
 
-    // Insignia oficial y ciudad en el header de la tarjeta
-    expect(screen.getByText('Tienda Oficial')).toBeInTheDocument()
+    // El encabezado usa el nombre del comercio sin atribuir una verificación oficial.
+    expect(screen.getAllByText('4G Celulares Store').length).toBeGreaterThan(1)
     expect(screen.getAllByText(/Asunción/).length).toBeGreaterThan(0)
 
     // Información real de la empresa en la tarjeta promocional

@@ -173,6 +173,13 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
             onToggle={(value) => patch('enabled', value)}
           />
 
+          <div role="note" className="flex items-start gap-2.5 rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <span className="text-sm">💡</span>
+            <p className="leading-relaxed">
+              <strong className="text-foreground">Recopilación automática:</strong> La tienda muestra cualquier producto que tenga configurado un precio de oferta activo en tu catálogo. Si aún no cargaste precios de rebaja, el bloque se mantendrá oculto automáticamente en la portada para cuidar la estética del sitio.
+            </p>
+          </div>
+
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="offers-eyebrow">Etiqueta superior</Label>
@@ -263,7 +270,7 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
               </div>
               <p className="text-sm font-bold text-foreground">Productos en oferta activa</p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                El catálogo recopila automáticamente cualquier producto que tenga configurado un &quot;precio de oferta&quot;.
+                El catálogo recopila automáticamente cualquier producto que tenga configurado un &quot;precio de oferta&quot;. Si no hay ninguno cargado, la sección se mantiene oculta en la portada.
               </p>
             </div>
             <Button asChild variant="outline" className="w-fit rounded-xl text-xs font-semibold">

@@ -132,7 +132,7 @@ export function FeaturedProducts() {
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
               {storefrontStyle === 'classic'
-                ? 'Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.'
+                ? 'Descubrí los artículos disponibles en el catálogo.'
                 : featuredCopy.text}
             </p>
           </div>

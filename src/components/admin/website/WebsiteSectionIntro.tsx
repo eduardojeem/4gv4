@@ -36,16 +36,16 @@ export const WEBSITE_SECTION_HELP = {
     note: 'Ocultar una marca no borra sus productos del catálogo, solo la quita de la marquesina de portada.',
   },
   carousel: {
-    title: 'Banners promocionales', description: 'Mostrá campañas con imágenes y mensajes breves.',
+    title: 'Banners del inicio', description: 'Campañas visuales e imágenes destacadas en la portada principal (/inicio).',
     steps: ['Agregá una imagen y un mensaje.', 'Revisá el destino del enlace y el orden.', 'Activá los banners que quieras mostrar y guardá.'],
     examples: ['Ropa: un banner de nueva temporada que lleva a la colección.', 'Ferretería: una campaña de herramientas destacadas.'],
-    note: 'Un banner no cambia el precio de un producto. El descuento debe configurarse en el catálogo o en promociones.',
+    note: 'Estos banners se exhiben en la portada principal de tu tienda. Para diseñar banners exclusivos de la página /ofertas o crear cupones, visitá la sección de Promociones.',
   },
   offers: {
-    title: 'Ofertas del catálogo', description: 'Personalizá cómo se presentan los productos en oferta o diseñá banners de campaña en Promociones.',
-    steps: ['Configurá primero los precios de oferta en el catálogo o creá reglas en Promociones.', 'Elegí el título, descripción y color de acento de esta sección.', 'Podés diseñar banners publicitarios y carruseles en la sección de Promociones.'],
+    title: 'Ofertas del catálogo', description: 'Personalizá cómo se presentan los productos en oferta en la portada y en /ofertas.',
+    steps: ['Cargá precios de oferta en Gestión de productos o creá reglas en Promociones.', 'Elegí el título, descripción y color de acento de esta sección.', 'Si no hay productos en rebaja cargados, la portada se auto-oculta para proteger el diseño.'],
     examples: ['Cosméticos: “Ofertas de la semana” con productos que tengan precio de oferta.', 'Ferretería: “Precios especiales” para herramientas seleccionadas.'],
-    note: 'Para diseñar banners publicitarios de campañas, activar carrusel automático o crear cupones, visitá la sección de Promociones.',
+    note: 'Esta sección recopila automáticamente los productos con precio de oferta activo. Para diseñar banners publicitarios de campañas o crear cupones, visitá la sección de Promociones.',
   },
   services: {
     title: 'Servicios que ofrecés', description: 'Explicá el alcance, precio y tiempo de tus servicios.',

@@ -1,5 +1,7 @@
 'use client'
 
+import { WholesaleHeader } from '@/components/public/wholesale/WholesaleHeader'
+
 import { WhatsAppIcon, InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/public/SocialIcons'
 
 import Link from 'next/link'
@@ -252,6 +254,8 @@ export function PublicHeader({
     return pathname === href || pathname.startsWith(`${href}/`)
   }
 
+  if (storefrontStyle === 'wholesale-pro') return <WholesaleHeader settings={effectiveSettings ?? null} />
+
   return (
     <header
       className={cn(
@@ -359,7 +363,7 @@ export function PublicHeader({
             <div className="flex items-center gap-3 shrink-0">
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/20">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                Tienda Oficial
+                Tienda
               </span>
 
               {hasSocials && (
@@ -930,7 +934,7 @@ export function PublicHeader({
                   </div>
                 )}
                 <span className="font-bold text-sm text-foreground truncate">
-                  {companyInfo?.name || 'Tienda Oficial'}
+                  {companyInfo?.name || 'Tienda'}
                 </span>
               </div>
 

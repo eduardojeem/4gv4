@@ -7,6 +7,7 @@ import { Play, Pause, Sparkles } from 'lucide-react'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import { getBrandLogoOrFallback } from '@/lib/website/brand-catalog'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import type { BrandsSectionSettings } from '@/types/website-settings'
 
 interface BrandDisplayItem {
@@ -70,6 +71,8 @@ export function StoreBrandTicker({
   title?: string
 }) {
   const pathname = usePathname()
+  const storefrontStyle = useStorefrontStyle()
+  const isBeauty = storefrontStyle === 'beauty'
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
@@ -123,7 +126,7 @@ export function StoreBrandTicker({
   }
 
   const headingText = title || settings?.title || 'Marcas destacadas'
-  const subtitleText = settings?.subtitle || 'Encontrá productos originales con garantía y respaldo de marca'
+  const subtitleText = settings?.subtitle || (isBeauty ? '' : 'Descubrí las marcas disponibles en la tienda')
 
   return (
     <section className="border-b border-border/80 bg-background py-8 sm:py-10 overflow-hidden">
@@ -145,7 +148,7 @@ export function StoreBrandTicker({
           </div>
 
           {/* Controles de Movimiento y Pausa */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          {!isBeauty && <div className="flex items-center gap-2 self-start sm:self-auto">
             {/* Indicador de estado de animación */}
             <button
               type="button"
@@ -190,10 +193,18 @@ export function StoreBrandTicker({
                 <Play className="h-3.5 w-3.5 fill-current ml-0.5" />
               )}
             </button>
-          </div>
+          </div>}
         </div>
 
-        {/* Contenedor del Carrusel con Desvanecimiento Lateral y Movimiento Continuo */}
+        {isBeauty ? (
+          <ul aria-label={headingText} className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+            {displayBrands.map((brand) => (
+              <li key={brand.id} className="flex min-h-20 items-center justify-center rounded-xl border border-border/70 bg-card p-4">
+                <StoreBrandCard brand={brand} tenantPrefix={tenantPrefix} />
+              </li>
+            ))}
+          </ul>
+        ) : (
         <div className="relative w-full select-none overflow-hidden py-1">
           {/* Sombras de desvanecimiento lateral en ambos bordes */}
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-28 bg-gradient-to-r from-background via-background/80 to-transparent" />
@@ -231,6 +242,7 @@ export function StoreBrandTicker({
             </div>
           </div>
         </div>
+        )}
       </div>
     </section>
   )

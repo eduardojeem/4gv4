@@ -338,7 +338,7 @@ export function StoreOffersPromoShowcase({
               Ofertas Imperdibles de la Semana
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
-              Descuentos exclusivos por tiempo limitado en repuestos, accesorios y productos seleccionados con garantía oficial de {storeName}.
+              Ofertas disponibles en productos seleccionados del catálogo de {storeName}.
             </p>
           </div>
 
@@ -448,10 +448,10 @@ export function StoreOffersPromoShowcase({
                     <div>
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-400/20 border border-rose-300/30 px-2 py-0.5 text-[10px] font-extrabold text-rose-300 uppercase tracking-wide">
                         <BadgeCheck className="h-3 w-3 text-rose-300" />
-                        Tienda Oficial
+                        {storeName}
                       </span>
                       <p className="text-xs text-rose-100/80 mt-0.5 font-medium">
-                        {companyInfo.city || 'Garantía oficial'}
+                        {companyInfo.city || 'Tienda online'}
                       </p>
                     </div>
                   </div>

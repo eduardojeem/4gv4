@@ -35,9 +35,9 @@ describe('preparar la página web para el rubro', () => {
     expect(values.booking_section).toBeUndefined()
   })
 
-  it('la plantilla vuelve a «Automático» y se conservan nombre, logo y contacto', () => {
+  it('la plantilla manual se conserva junto con nombre, logo y contacto', () => {
     const { values } = prepare('clothing', 'retail', ['inventory', 'orders'], myStore)
-    expect(values.company_info).toMatchObject({ storefrontStyle: 'auto', name: 'Mi Tienda', logoUrl: '/logo.png', phone: '0981123456' })
+    expect(values.company_info).toMatchObject({ storefrontStyle: 'tech', name: 'Mi Tienda', logoUrl: '/logo.png', phone: '0981123456' })
   })
 
   it('los números de ejemplo quedan apagados', () => {
@@ -69,3 +69,6 @@ describe('preparar la página web para el rubro', () => {
     expect(route).toContain("revalidateTag('marketplace:organizations', 'max')")
   })
 })
+
+it('conserva Wholesale Pro al cambiar de rubro',()=>{const current={company_info:{...myStore.company_info,storefrontStyle:'wholesale-pro' as const}};expect(prepare('cosmetics','retail',['inventory'],current).values.company_info?.storefrontStyle).toBe('wholesale-pro')})
+it('vuelve a Automático solamente cuando se pide explícitamente',()=>{const effectiveModules:OrganizationModule[]=['inventory'];const result=buildVerticalWebsitePreset({vertical:'clothing',model:'retail',capabilities:resolveStorefrontCapabilities({businessVertical:'clothing',operatingModel:'retail',effectiveModules}),effectiveModules,current:myStore,resetStorefrontStyleToAuto:true});expect(result.values.company_info?.storefrontStyle).toBe('auto')})

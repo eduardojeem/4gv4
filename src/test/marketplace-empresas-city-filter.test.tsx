@@ -269,7 +269,8 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
     expect(screen.getByText('TikTok')).toBeInTheDocument()
     expect(screen.getByText('iPhone 15 Pro Max')).toBeInTheDocument()
     expect(screen.getByText(/1\.200\.000/)).toBeInTheDocument()
-    expect(screen.getByText('Visitar Tienda Oficial')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Visitar tienda' })).toHaveAttribute('href', '/mega-asu/inicio')
+    expect(screen.queryByText('Visitar Tienda Oficial')).not.toBeInTheDocument()
 
     // El RUC no debe mostrarse en el modal
     expect(screen.queryByText(/80012345-6/)).not.toBeInTheDocument()

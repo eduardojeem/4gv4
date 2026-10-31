@@ -32,7 +32,7 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
             Nuestras Sucursales
           </h2>
           <p className="mt-2 text-muted-foreground max-w-lg mx-auto">
-            Visitanos en cualquiera de nuestras ubicaciones. Todas con el mismo servicio y garantía.
+            Encontrá la sucursal que te quede más cómoda y consultá sus horarios de atención.
           </p>
         </div>
 

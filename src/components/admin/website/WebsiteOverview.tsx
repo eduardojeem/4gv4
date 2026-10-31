@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, CheckCircle2, Circle, ExternalLink, Lock, Minus, PartyPopper, Sparkles } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Circle, ExternalLink, Lock, Minus, PartyPopper, Sparkles, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { STOREFRONT_TEMPLATES_METADATA, type StorefrontStyle } from '@/lib/website/storefront-style'
 import type { WebsiteSectionAnchor, WebsiteSectionId, WebsiteSetupChecklist, WebsiteSetupStep } from '@/lib/website/setup-checklist'
 import type { SectionAvailability, WebsiteEditableSection } from '@/lib/website/section-availability'
 
@@ -21,7 +22,7 @@ const SECTION_LABELS: Record<WebsiteEditableSection, string> = {
   hero: 'Portada',
   trust_bar: 'Beneficios',
   brands: 'Marcas destacadas',
-  carousel: 'Banners promocionales',
+  carousel: 'Banners del inicio',
   offers: 'Ofertas',
   announcement: 'Aviso emergente',
   booking: 'Reservas online',
@@ -132,6 +133,10 @@ function StepRow({ step, index, onNavigate }: { step: WebsiteSetupStep; index?: 
 export function WebsiteOverview({
   checklist,
   businessLabel,
+  storeName,
+  currentTemplate,
+  storefrontStyle,
+  publicUrl,
   storeHref,
   isPublic,
   onOpenAi,
@@ -141,6 +146,10 @@ export function WebsiteOverview({
 }: {
   checklist: WebsiteSetupChecklist
   businessLabel: string
+  storeName: string
+  currentTemplate: string
+  storefrontStyle?: StorefrontStyle
+  publicUrl: string | null
   storeHref: string | null
   isPublic: boolean
   onOpenAi: () => void
@@ -153,6 +162,28 @@ export function WebsiteOverview({
 
   return (
     <div className="space-y-5">
+      <section aria-label="Tienda online" className="rounded-2xl border bg-card p-5 shadow-2xs sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Tienda online</p>
+            <h2 className="mt-1 break-words text-xl font-semibold">{storeName || businessLabel}</h2>
+            <p className="mt-1 break-all text-sm text-muted-foreground">{publicUrl || 'Todavía no tiene una dirección pública'}</p>
+            <span className={cn('mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs', isPublic ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300')}>
+              <span className={cn('h-1.5 w-1.5 rounded-full', isPublic ? 'bg-emerald-500' : 'bg-amber-500')} />
+              {isPublic ? 'Publicada' : 'Sin publicar'}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {isPublic && storeHref && <Link href={storeHref} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted">Ver tienda <ExternalLink className="h-4 w-4" /></Link>}
+            <Button type="button" size="sm" className="gap-2" onClick={() => onNavigate('design-template')}><Palette className="h-4 w-4" />Diseñar tienda</Button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="text-xs text-muted-foreground">Plantilla actual</p><p className="text-sm font-semibold">{currentTemplate}</p>{storefrontStyle && <p className="mt-1 text-xs text-muted-foreground">{STOREFRONT_TEMPLATES_METADATA[storefrontStyle].tagline}</p>}</div>
+          <Button type="button" variant="outline" size="sm" onClick={() => onNavigate('design-template')}>Cambiar plantilla</Button>
+        </div>
+      </section>
+
       {/* Progreso y siguiente paso */}
       <section aria-labelledby="website-progress-title" className="rounded-2xl border bg-card p-5 shadow-2xs sm:p-6">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">

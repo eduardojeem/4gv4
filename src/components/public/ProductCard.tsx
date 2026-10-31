@@ -280,6 +280,7 @@ export function ProductCard(props: ProductCardProps) {
       <article
         className={cn(
           'group relative flex flex-col overflow-hidden bg-card transition-all duration-300',
+          storefrontStyle === 'wholesale-pro' && 'h-full rounded-lg border border-border/70 bg-card shadow-none hover:border-primary/50 transition-all [&_h3]:text-sm [&_h3]:leading-snug',
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
@@ -299,8 +300,8 @@ export function ProductCard(props: ProductCardProps) {
           className={cn(
             'relative overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
             // Cosmética y súper: el envase sobre blanco, en cuadrado.
-            storefrontStyle === 'beauty' || isMarket ? 'aspect-square bg-white' : 'bg-muted/30',
-            storefrontStyle !== 'beauty' && !isMarket && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
+            storefrontStyle === 'wholesale-pro' ? 'aspect-square bg-white dark:bg-muted/10' : storefrontStyle === 'beauty' || isMarket ? 'aspect-square bg-white' : 'bg-muted/30',
+            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
           aria-label={`Vista rápida de ${product.name}`}
         >
@@ -311,9 +312,11 @@ export function ProductCard(props: ProductCardProps) {
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
-                coverImage
+                coverImage && storefrontStyle !== 'wholesale-pro'
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
-                  : 'object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]'
+                  : storefrontStyle === 'wholesale-pro'
+                    ? 'object-contain p-3 transition-transform duration-500 group-hover:scale-[1.05]'
+                    : 'object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]'
               }
               priority={priority}
               quality={75}
@@ -387,8 +390,13 @@ export function ProductCard(props: ProductCardProps) {
         )}
 
         {/* ── Info area ── */}
-        <div className={cn('flex flex-1 flex-col gap-1.5 px-3.5 pb-3.5 pt-3', isMarket && 'items-center gap-1 px-3 pb-3 pt-2 text-center')}>
+        <div className={cn(
+          'flex flex-1 flex-col gap-1.5 px-3.5 pb-3.5 pt-3',
+          isMarket && 'items-center gap-1 px-3 pb-3 pt-2 text-center',
+          storefrontStyle === 'wholesale-pro' && 'gap-1 px-3 pb-3 pt-2.5'
+        )}>
           {/* Brand · Category */}
+          {storefrontStyle === 'wholesale-pro' && product.sku && <p className="truncate font-mono text-[11px] text-muted-foreground" title={product.sku}>SKU: {product.sku}</p>}
           {!isMarket && (product.brand || product.category) && (
             <p className="truncate text-[11px] font-medium text-muted-foreground">
               {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
@@ -417,6 +425,7 @@ export function ProductCard(props: ProductCardProps) {
           {/* Product name */}
           <h3 className={cn(
             'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
+            storefrontStyle === 'wholesale-pro' && 'font-semibold group-hover:text-primary transition-colors',
             storefrontStyle === 'classic' && 'font-semibold',
             storefrontStyle === 'fashion' && 'font-bold group-hover:text-primary transition-colors',
             storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight',
@@ -516,13 +525,19 @@ export function ProductCard(props: ProductCardProps) {
             </div>
           ) : (
           <div
-            className="mt-3 flex items-center gap-2"
+            className={cn(
+              'mt-3 flex items-center gap-2',
+              storefrontStyle === 'wholesale-pro' && 'mt-2 gap-1.5'
+            )}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <Link
               href={productHref}
-              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-[0.98]"
+              className={cn(
+                'relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-[0.98]',
+                storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold'
+              )}
               aria-label={`Ver detalle de ${product.name}`}
             >
               <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -536,7 +551,10 @@ export function ProductCard(props: ProductCardProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 suppressHydrationWarning
-                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20"
+                className={cn(
+                  'relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20',
+                  storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold'
+                )}
                 aria-label={`Preguntar el precio de ${product.name} por WhatsApp`}
               >
                 <WhatsAppIcon className="h-3.5 w-3.5 shrink-0" />
@@ -551,6 +569,7 @@ export function ProductCard(props: ProductCardProps) {
                 disabled={!isInStock}
                 className={cn(
                   'relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                  storefrontStyle === 'wholesale-pro' && 'h-8 w-8 rounded-md',
                   justAdded
                     ? 'bg-emerald-600 text-white shadow-emerald-600/20'
                     : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'

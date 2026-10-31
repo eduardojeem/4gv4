@@ -51,6 +51,15 @@ export function usePromotions() {
         const response = await fetch(`/api/promotions?limit=100&page=${page}`, { cache: 'no-store', signal: controller.signal })
         const result = await response.json()
         if (controller.signal.aborted || currentScope.current !== requestScope) return
+        // Restricciones comerciales esperadas: conservar el bloqueo sin reportarlo como un fallo técnico.
+        if ((response.status === 402 && result.code === 'MODULE_NOT_ENTITLED') ||
+            (response.status === 403 && result.code === 'MODULE_DISABLED')) {
+          setPromotions([])
+          setError(result.code === 'MODULE_DISABLED'
+            ? 'El módulo de promociones está desactivado para esta organización.'
+            : 'Tu plan no incluye el módulo de promociones.')
+          return
+        }
         if (!response.ok) throw new Error(result.error || 'No se pudieron cargar promociones')
         const batch: Promotion[] = result.promotions || []
         all.push(...batch)

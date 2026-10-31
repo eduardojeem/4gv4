@@ -41,6 +41,7 @@ interface StorefrontAppearanceEditorProps {
   businessVertical?: string | null
   /** `/slug` de la tienda ya publicada; sin publicar, la vista real no existe. */
   storePath: string | null
+  mode?: 'all' | 'template' | 'brand' | 'preview'
 }
 
 export function StorefrontAppearanceEditor({
@@ -49,6 +50,7 @@ export function StorefrontAppearanceEditor({
   customColorError,
   businessVertical,
   storePath,
+  mode = 'all',
 }: StorefrontAppearanceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [suggestionDismissed, setSuggestionDismissed] = useState(false)
@@ -94,7 +96,7 @@ export function StorefrontAppearanceEditor({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
       <div className="min-w-0 space-y-8">
-        {!followsSuggestion && !suggestionDismissed && (
+        {(mode === 'all' || mode === 'template' || mode === 'brand') && !followsSuggestion && !suggestionDismissed && (
           <div className="flex items-start gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Sparkles aria-hidden="true" className="h-4 w-4" />
@@ -123,7 +125,7 @@ export function StorefrontAppearanceEditor({
           </div>
         )}
 
-        <Step
+        {(mode === 'all' || mode === 'template') && <Step
           number={1}
           id="storefrontStyleLabel"
           title="Plantilla"
@@ -153,9 +155,9 @@ export function StorefrontAppearanceEditor({
               </p>
             )}
           </BrandColorScope>
-        </Step>
+        </Step>}
 
-        <Step number={2} title="Color de marca" hint="Botones, enlaces y la portada del inicio.">
+        {(mode === 'all' || mode === 'brand') && <><Step number={2} title="Color de marca" hint="Botones, enlaces y la portada del inicio.">
           <div role="group" aria-label="Color de marca" className="flex flex-wrap gap-2.5">
             {BRAND_COLORS.map((color) => {
               const selected = brandColor === color.key
@@ -301,11 +303,11 @@ export function StorefrontAppearanceEditor({
               onCheckedChange={(checked) => onChange({ showTopBar: checked })}
             />
           </div>
-        </Step>
+        </Step></>}
       </div>
 
       {/* Vista previa fija mientras se edita */}
-      <aside className="lg:sticky lg:top-4 lg:self-start">
+      {(mode === 'all' || mode === 'preview') && <aside className="lg:sticky lg:top-4 lg:self-start">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-semibold">Vista previa</p>
           <span className="text-xs text-muted-foreground">Se actualiza al instante</span>
@@ -315,7 +317,7 @@ export function StorefrontAppearanceEditor({
           <Eye aria-hidden="true" className="h-4 w-4" />
           {storePath ? 'Ver con mis productos' : 'Comparar plantillas'}
         </Button>
-      </aside>
+      </aside>}
 
       {previewOpen && (
         <StorefrontTemplatePreviewDialog

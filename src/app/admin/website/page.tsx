@@ -45,6 +45,7 @@ import {
 } from '@/lib/website/setup-checklist'
 import { isSectionAvailable, resolveSectionAvailability, type WebsiteEditableSection } from '@/lib/website/section-availability'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
+import { STOREFRONT_STYLE_LABELS } from '@/lib/website/storefront-style'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -103,6 +104,8 @@ export default function WebsiteAdminPage() {
       const ok = window.confirm('Tenés cambios sin guardar. ¿Descartarlos y cambiar de sección?')
       if (!ok) return false
       dirtyRef.current = false
+      // También elimina borradores de editores que permanecen montados entre pestañas.
+      setEditorVersion((version) => version + 1)
     }
     setTab(next)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -110,7 +113,10 @@ export default function WebsiteAdminPage() {
   }
 
   const navigateTo = (section: Exclude<WebsiteSectionId, 'overview'>, anchor?: WebsiteSectionAnchor) => {
-    if (!handleTabChange(section)) return
+    const target = section === 'company'
+      ? anchor === 'website-appearance' ? 'design-template' : anchor === 'website-visibility' ? 'publication' : 'public-info'
+      : section
+    if (!handleTabChange(target)) return
     if (anchor) window.setTimeout(() => revealAnchor(anchor), 50)
   }
 
@@ -179,6 +185,7 @@ export default function WebsiteAdminPage() {
   )
 
   const show = (section: WebsiteEditableSection) => tab === section && availability[section].available
+  const companyEditorTab = tab === 'public-info' || tab === 'publication' || tab.startsWith('design-')
   const lockedSection = tab !== 'overview' && tab in availability && !availability[tab as WebsiteEditableSection].available
     ? (tab as WebsiteEditableSection)
     : null
@@ -204,16 +211,32 @@ export default function WebsiteAdminPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold">Sitio web</h1>
               {settings && (
-                <span
-                  role="status"
+                <button
+                  type="button"
+                  onClick={() => !isPublic && navigateTo('publication', 'website-visibility')}
+                  disabled={isPublic}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs',
-                    isPublic ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                    'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs transition-colors',
+                    isPublic
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-default'
+                      : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300 cursor-pointer',
                   )}
+                  title={isPublic ? 'Tu tienda está publicada' : 'Hacé clic para publicar tu tienda'}
                 >
                   <span className={cn('h-1.5 w-1.5 rounded-full', isPublic ? 'bg-emerald-500' : 'bg-amber-500')} />
                   {isPublic ? 'Publicada' : 'Sin publicar'}
-                </span>
+                </button>
+              )}
+              {!isPublic && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigateTo('publication', 'website-visibility')}
+                  className="h-6 rounded-full border-amber-500/40 bg-amber-500/10 px-2.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+                >
+                  Publicar tienda →
+                </Button>
               )}
             </div>
             <p className="text-sm text-muted-foreground">Armá y personalizá la tienda online de tu negocio</p>
@@ -258,6 +281,21 @@ export default function WebsiteAdminPage() {
             </Button>
           )}
 
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setMediaDialogOpen(true)}
+            title="Historial y cuota de imágenes del sitio"
+          >
+            <Images className="h-4 w-4 text-primary" />
+            <span className="hidden sm:inline font-medium">Imágenes</span>
+            <span className={cn('tabular-nums font-semibold', isMediaAtLimit ? 'text-destructive' : 'text-foreground')}>
+              {mediaCount}/{mediaLimit}
+            </span>
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" size="icon" className="h-9 w-9" aria-label="Más opciones">
@@ -299,7 +337,7 @@ export default function WebsiteAdminPage() {
                   published={isPublic}
                   onPublish={() => {
                     setShareOpen(false)
-                    navigateTo('company', 'website-visibility')
+                    navigateTo('publication', 'website-visibility')
                   }}
                 />
               </DialogContent>
@@ -326,8 +364,12 @@ export default function WebsiteAdminPage() {
             <WebsiteOverview
               checklist={checklist}
               businessLabel={storefrontCapabilities.businessLabel}
-              storeHref={isPublic ? storeHref : null}
+              storeHref={storeHref}
               isPublic={isPublic}
+              storeName={settings?.company_info.name || storefrontCapabilities.businessLabel}
+              currentTemplate={STOREFRONT_STYLE_LABELS[storefrontStyle]}
+              storefrontStyle={storefrontStyle}
+              publicUrl={storeHref ? siteUrl(storeHref) : null}
               onOpenAi={openAssistant}
               onNavigate={navigateTo}
               availability={availability}
@@ -342,8 +384,21 @@ export default function WebsiteAdminPage() {
             <div className="h-64 animate-pulse rounded-2xl border bg-muted/30" aria-label="Cargando resumen" />
           )
         )}
-        {show('company') && <section aria-label="Editor de sección">{intro('company')}<CompanyInfoForm /></section>}
-        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}
+        <section aria-label="Información de la tienda" hidden={!companyEditorTab} className={companyEditorTab ? undefined : 'hidden'}>
+          {companyEditorTab && tab === 'public-info' && <div className="mb-4 rounded-xl border bg-muted/20 p-4"><h2 className="text-base font-semibold">Información pública</h2><p className="mt-1 text-sm text-muted-foreground">Descripción, contacto, redes y horarios que se muestran en tu tienda.</p></div>}
+          {companyEditorTab && tab === 'publication' && <div className="mb-4 rounded-xl border bg-muted/20 p-4"><h2 className="text-base font-semibold">Publicación</h2><p className="mt-1 text-sm text-muted-foreground">Guardá los cambios por separado de publicar o retirar tu tienda.</p></div>}
+          {companyEditorTab && tab.startsWith('design-') && <div className="mb-4 rounded-xl border bg-muted/20 p-4"><h2 className="text-base font-semibold">Diseño de la tienda</h2><p className="mt-1 text-sm text-muted-foreground">La plantilla define la presentación; la marca ajusta el logo y el estilo visual.</p></div>}
+          <CompanyInfoForm activeSection={tab} />
+        </section>
+        {tab === 'navigation-footer' && <section className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
+          <div><h2 className="text-base font-semibold">Navegación y pie de página</h2><p className="mt-1 text-sm text-muted-foreground">El menú y el pie se arman con las secciones activas, los datos públicos y los módulos de tu cuenta. No hay un editor manual disponible.</p></div>
+          <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => navigateTo('public-info')}>Revisar datos públicos</Button><Button type="button" variant="outline" onClick={() => navigateTo('hero')}>Revisar secciones de inicio</Button></div>
+        </section>}
+        {tab === 'seo-share' && <section className="space-y-5 rounded-2xl border bg-card p-5 sm:p-6">
+          <div><h2 className="text-base font-semibold">SEO y compartir</h2><p className="mt-1 text-sm text-muted-foreground">Compartí el enlace y el código QR de tu tienda. Los datos SEO se generan automáticamente; no hay un editor manual disponible en este momento.</p></div>
+          {storeHref ? <ShareStoreCard url={siteUrl(storeHref)} storeName={settings?.company_info.name || orgSlug || 'Mi tienda'} published={isPublic} onPublish={() => navigateTo('publication')} /> : <p className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">La dirección pública aparecerá cuando configures el enlace de tu tienda.</p>}
+        </section>}
+        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target, anchor) => navigateTo(target, anchor)} /></section>}
         {show('trust_bar') && <section aria-label="Editor de sección">{intro('trust_bar')}<TrustBarEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
         {show('brands') && <section aria-label="Editor de sección">{intro('brands')}<BrandsSectionEditor /></section>}
         {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}

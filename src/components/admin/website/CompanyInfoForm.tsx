@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils'
 import { getPublicationIssues } from '@/lib/website/publication'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
-export function CompanyInfoForm() {
+export function CompanyInfoForm({ activeSection = 'all' }: { activeSection?: string }) {
   const { settings, isLoading, error, isSaving, refetch } = useAdminWebsiteSettings()
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -58,8 +58,22 @@ export function CompanyInfoForm() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [confirmPublication, setConfirmPublication] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const [saveCompleted, setSaveCompleted] = useState(false)
   const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
   const hasChanges = draft !== null
+  const sectionMode = activeSection === 'all'
+    ? 'all'
+    : activeSection === 'public-info'
+      ? 'info'
+      : activeSection === 'publication'
+        ? 'publication'
+        : activeSection.startsWith('design-')
+          ? activeSection
+          : 'hidden'
+  const showInfo = sectionMode === 'all' || sectionMode === 'info'
+  const showPublication = sectionMode === 'all' || sectionMode === 'publication'
+  const showAppearance = sectionMode.startsWith('design-') || sectionMode === 'all'
   const focusInvalidField = useRef(false)
   useEffect(() => {
     if (!focusInvalidField.current) return
@@ -280,6 +294,7 @@ export function CompanyInfoForm() {
       const syncBody = await syncRes.json().catch(() => ({}))
 
       if (!syncRes.ok || syncBody?.success === false) {
+        setSaveFailed(true)
         toast.error(syncBody?.error || 'Error al sincronizar datos. Verifique si el enlace web ya está en uso.')
         return
       }
@@ -290,12 +305,15 @@ export function CompanyInfoForm() {
         icon: <Check className="h-4 w-4" />,
       })
       setDraft(null)
+      setSaveFailed(false)
+      setSaveCompleted(true)
       setConfirmPublication(false)
 
       if (sanitizedData.slug) {
         window.dispatchEvent(new CustomEvent('website-slug-updated', { detail: sanitizedData.slug }))
       }
     } catch {
+      setSaveFailed(true)
       toast.error('No se pudo guardar la información de la empresa')
     } finally {
       setIsSyncing(false)
@@ -303,6 +321,8 @@ export function CompanyInfoForm() {
   }
 
   const handleAppearanceChange = (patch: Partial<CompanyInfo>) => {
+    setSaveFailed(false)
+    setSaveCompleted(false)
     if ('brandColor' in patch || 'customBrandColor' in patch) {
       setErrors((current) => {
         if (!current.customBrandColor) return current
@@ -315,6 +335,8 @@ export function CompanyInfoForm() {
   }
 
   const handleChange = (field: keyof CompanyInfo | string, value: string) => {
+    setSaveFailed(false)
+    setSaveCompleted(false)
     const key = String(field)
     if (errors[key]) {
       setErrors((prev) => {
@@ -362,26 +384,19 @@ export function CompanyInfoForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-8 md:space-y-10 pb-24 md:pb-8">
       {/* Aviso si la cuota de imágenes llega al límite */}
-      <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />
+      {(sectionMode === 'all' || sectionMode === 'design-brand') && <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />}
 
-      {/* Identidad */}
-      <SectionCard id="website-identity" icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
+      {/* Datos públicos de la empresa */}
+      {(showInfo || sectionMode === 'design-brand') && <SectionCard id="website-identity" icon={sectionMode === 'design-brand' ? Images : Building2} title={sectionMode === 'design-brand' ? 'Logo de tu tienda' : 'Datos públicos'} description={sectionMode === 'design-brand' ? 'Imagen de marca que aparece en el encabezado de tu tienda.' : 'Descripción y nombre visible de tu negocio'}>
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
-            <Input
-              id="companyName"
-              value={formData.name || ''}
-              onChange={(e) => handleChange('name', e.target.value)}
-              placeholder="Mi Empresa S.A."
-              maxLength={100}
-              aria-invalid={!!errors.name}
-              className="h-11"
-            />
-            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-          </div>
+          {showInfo && <div className="space-y-2 rounded-xl border bg-muted/20 p-4 md:col-span-1">
+            <Label className="text-sm font-medium">Nombre del negocio</Label>
+            <p className="break-words text-sm font-semibold">{formData.name || 'Sin configurar'}</p>
+            <p className="text-xs text-muted-foreground">Se administra junto con los datos legales de la organización.</p>
+            <Link href="/admin/settings" className="inline-flex text-xs font-semibold text-primary hover:underline">Editar en Configuración</Link>
+          </div>}
 
-          <div className="space-y-2 md:col-span-1">
+          {showInfo && <div className="space-y-2 md:col-span-1">
             <Label htmlFor="companySlogan" className="text-sm font-medium">
               Subtítulo / Eslogan <span className="text-xs font-normal text-muted-foreground">— debajo del nombre</span>
             </Label>
@@ -395,9 +410,9 @@ export function CompanyInfoForm() {
               className="h-11"
             />
             {errors.slogan && <p className="text-xs text-destructive">{errors.slogan}</p>}
-          </div>
+          </div>}
 
-          <div className="space-y-2">
+          {sectionMode === 'all' || sectionMode === 'design-brand' ? <div className="space-y-2 md:col-span-2">
             <Label htmlFor="logoUrl" className="text-sm font-medium">Logo</Label>
             <div className="flex items-start gap-3">
               {formData.logoUrl && (
@@ -450,10 +465,10 @@ export function CompanyInfoForm() {
                 <span>Elegir del historial</span>
               </button>
             </div>
-          </div>
+          </div> : null}
 
           {/* Descripción de la Empresa */}
-          <div className="space-y-2 md:col-span-3">
+          {showInfo && <div className="space-y-2 md:col-span-3">
             <Label htmlFor="companyDescription" className="text-sm font-medium flex items-center gap-1.5">
               <span>Descripción de la empresa</span>
               <span className="text-xs font-normal text-muted-foreground">— Se muestra en el detalle de tu tienda y en el Marketplace</span>
@@ -470,12 +485,12 @@ export function CompanyInfoForm() {
             <p className="text-[11px] text-muted-foreground">
               Esta descripción se mostrará en el directorio de empresas y en el modal de detalles para que los clientes conozcan tu propuesta.
             </p>
-          </div>
+          </div>}
         </div>
-      </SectionCard>
+      </SectionCard>}
 
       {/* Historial de Logos e Imágenes — Sección Destacada debajo de Identidad */}
-      <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
+      {sectionMode === 'all' || sectionMode === 'design-brand' ? <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20">
@@ -511,9 +526,9 @@ export function CompanyInfoForm() {
             </Button>
           </div>
         </div>
-      </div>
+      </div> : null}
 
-      <WebsiteMediaLibraryDialog
+      {(sectionMode === 'all' || sectionMode === 'design-brand') && <WebsiteMediaLibraryDialog
         open={logoMediaOpen}
         onOpenChange={setLogoMediaOpen}
         filterSection="logo"
@@ -523,9 +538,16 @@ export function CompanyInfoForm() {
           handleChange('logoUrl', url)
           toast.success('Logo seleccionado del historial')
         }}
-      />
+      />}
 
-      <SectionCard id="website-visibility" icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
+      {showPublication && sectionMode === 'publication' && <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</p><p className="mt-1 text-sm font-semibold">{formData.storefrontPublic ? 'Tienda publicada' : 'Tienda sin publicar'}</p><p className="mt-1 break-all text-xs text-muted-foreground">{formData.slug ? `${typeof window !== 'undefined' ? window.location.origin : ''}/${formData.slug}/inicio` : 'Configurá una ruta pública para obtener el enlace.'}</p></div>
+          {formData.storefrontPublic && publishedStorePath && <Button type="button" variant="outline" size="sm" onClick={() => window.open(publishedStorePath, '_blank', 'noopener,noreferrer')}>Ver tienda</Button>}
+        </div>
+        {getPublicationIssues(formData, settings?.checkout.commerceMode ?? 'cart').length > 0 && <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"><p className="text-xs font-semibold">Requisitos pendientes</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">{getPublicationIssues(formData, settings?.checkout.commerceMode ?? 'cart').map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
+      </div>}
+      {showPublication && <SectionCard id="website-visibility" icon={Globe} title="Publicación" description="Configurá el enlace, revisá el estado y decidí si tu tienda será visible">
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
@@ -557,7 +579,7 @@ export function CompanyInfoForm() {
             compact
             description="Activa el enlace público de tu tienda. Al desactivarlo también se oculta del Marketplace, sin borrar datos del sistema. Los cambios se aplican al guardar."
             enabled={formData.storefrontPublic === true}
-            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
+            onToggle={(checked) => { setSaveFailed(false); setSaveCompleted(false); setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false })) }}
           />
           <PublicVisibilityCard
             title="Visibilidad en Marketplace General"
@@ -566,24 +588,25 @@ export function CompanyInfoForm() {
             description="Permite descubrir tu empresa y sus productos en el Marketplace. Requiere la tienda publicada; podés publicar solo tu enlace y mantener esta opción desactivada."
             disabled={formData.storefrontPublic !== true}
             enabled={formData.storefrontPublic === true && formData.marketplacePublic === true}
-            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+            onToggle={(checked) => { setSaveFailed(false); setSaveCompleted(false); setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked })) }}
           />
         </div>
-      </SectionCard>
+      </SectionCard>}
 
       {/* Personalización visual */}
-      <SectionCard id="website-appearance" collapsible icon={Sparkles} title="Personalización visual" description="Plantilla, color y encabezado de tu tienda.">
+      {showAppearance && <SectionCard id={sectionMode === 'design-template' ? 'design-template' : 'website-appearance'} icon={Sparkles} title={sectionMode === 'design-template' ? 'Plantilla' : sectionMode === 'design-brand' ? 'Marca' : sectionMode === 'design-preview' ? 'Vista previa' : 'Diseño'} description="Plantilla, logo, color y encabezado. Tus productos y textos se conservan al cambiar la presentación.">
         <StorefrontAppearanceEditor
           value={formData}
           onChange={handleAppearanceChange}
           customColorError={errors.customBrandColor}
           businessVertical={businessVertical}
           storePath={publishedStorePath}
+          mode={sectionMode === 'all' ? 'all' : sectionMode === 'design-template' ? 'template' : sectionMode === 'design-brand' ? 'brand' : 'preview'}
         />
-      </SectionCard>
+      </SectionCard>}
 
       {/* Contacto */}
-      <SectionCard id="website-contact" icon={Phone} title="Información de contacto" description="Datos mostrados en el portal público">
+      {showInfo && <><SectionCard id="website-contact" icon={Phone} title="Contacto" description="Datos que verán las personas en tu tienda">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-medium">
@@ -790,13 +813,11 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Legal */}
-      <SectionCard collapsible icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
+      <SectionCard collapsible icon={Building2} title="Datos del negocio" description="Los datos legales y fiscales se administran en Configuración">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="ruc" className="text-sm font-medium">
-              RUC / Tax ID <span className="text-xs font-normal text-muted-foreground">— opcional</span>
-            </Label>
-            <Input id="ruc" value={formData.ruc || ''} onChange={(e) => handleChange('ruc', e.target.value)} placeholder="12345678-9" maxLength={50} className="h-11" />
+            <Label className="text-sm font-medium">RUC / Tax ID</Label>
+            <p className="text-sm text-muted-foreground">{formData.ruc || 'Sin configurar'}</p>
           </div>
           {/* El tipo de negocio se movio a Configuracion > Empresa. Se sigue
               guardando en company_info, asi que este formulario lo conserva al
@@ -839,19 +860,20 @@ export function CompanyInfoForm() {
           ))}
         </div>
       </SectionCard>
+      </>}
 
       {/* Save bar */}
-      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+      {sectionMode !== 'hidden' && <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
         <div className="flex items-center gap-2 text-xs">
           <span
             className={cn(
               'h-2.5 w-2.5 rounded-full shrink-0',
-              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+              hasChanges ? 'bg-amber-500 animate-pulse' : saveFailed ? 'bg-destructive' : 'bg-emerald-500'
             )}
             aria-hidden="true"
           />
-          <span className="font-semibold text-foreground">
-            {hasChanges ? 'Hay cambios sin guardar' : 'Configuración de empresa al día'}
+          <span aria-live="polite" className="font-semibold text-foreground">
+            {isSaving || isSyncing ? 'Guardando…' : saveFailed ? 'Error' : hasChanges ? 'Cambios sin guardar' : saveCompleted ? 'Guardado' : 'Sin cambios'}
           </span>
         </div>
 
@@ -863,6 +885,8 @@ export function CompanyInfoForm() {
               onClick={() => {
                 setDraft(null)
                 setErrors({})
+                setSaveFailed(false)
+                setSaveCompleted(false)
               }}
               className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
             >
@@ -887,8 +911,8 @@ export function CompanyInfoForm() {
             )}
           </Button>
         </div>
-      </div>
-      <Dialog open={confirmPublication} onOpenChange={(open) => { if (!isSyncing) setConfirmPublication(open) }}>
+      </div>}
+      {(sectionMode === 'all' || sectionMode === 'publication') && <Dialog open={confirmPublication} onOpenChange={(open) => { if (!isSyncing) setConfirmPublication(open) }}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader><DialogTitle>Revisar y publicar tienda</DialogTitle><DialogDescription>Al confirmar, los visitantes podrán acceder al contenido guardado de tu tienda.</DialogDescription></DialogHeader>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
@@ -901,7 +925,7 @@ export function CompanyInfoForm() {
           <p className="rounded-lg bg-muted p-3 text-sm">Revisá los productos activos, precios y textos guardados. Podés volver a ocultar la tienda desde Empresa sin borrar información.</p>
           <DialogFooter><Button type="button" variant="outline" disabled={isSyncing} onClick={() => setConfirmPublication(false)}>Volver a revisar</Button><Button type="button" disabled={isSyncing} onClick={(event) => { void handleSubmit(event, true) }}>{isSyncing ? 'Publicando…' : 'Confirmar publicación'}</Button></DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </form>
   )
 }

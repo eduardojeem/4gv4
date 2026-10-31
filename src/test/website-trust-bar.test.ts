@@ -29,12 +29,12 @@ describe('trust_bar website setting', () => {
     expect(SETTING_SCHEMAS.trust_bar).toBeDefined()
   })
 
-  it('provides complete and valid defaults', () => {
+  it('starts disabled until the business configures its own benefits', () => {
     const defaults = getWebsiteSettingsDefaults().trust_bar
     expect(defaults).toBeDefined()
-    expect(defaults?.enabled).toBe(true)
+    expect(defaults?.enabled).toBe(false)
     expect(defaults?.position).toBe('above_carousel')
-    expect(defaults?.items).toHaveLength(4)
+    expect(defaults?.items).toHaveLength(0)
     expect(validateSetting('trust_bar', defaults).success).toBe(true)
   })
 

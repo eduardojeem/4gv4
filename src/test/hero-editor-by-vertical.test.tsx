@@ -39,7 +39,7 @@ describe('Portada según la plantilla y el rubro', () => {
     expect(screen.getAllByText('Lomas Valentina')).toHaveLength(2)
     expect(screen.getByRole('link', { name: 'Ir a la agenda' })).toHaveAttribute('href', '/dashboard/agenda/configuracion#servicios')
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar plantilla' }))
-    expect(onNavigate).toHaveBeenCalledWith('company')
+    expect(onNavigate).toHaveBeenCalledWith('design-template')
   })
 
   it('una tienda de ropa ve botones de productos, sin el bloque de agenda', () => {

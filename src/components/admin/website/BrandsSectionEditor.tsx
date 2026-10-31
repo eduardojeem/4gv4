@@ -34,6 +34,8 @@ import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMed
 import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { cn } from '@/lib/utils'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { getBrandEditorGuidance, matchesBrandSearch } from '@/lib/website/brand-editor-guidance'
 
 interface CatalogBrandInfo {
   id: string
@@ -45,6 +47,9 @@ interface CatalogBrandInfo {
 
 export function BrandsSectionEditor() {
   const { settings, isSaving, updateSetting } = useAdminWebsiteSettings()
+  const { businessVertical } = useSubscriptionStatus()
+  const guidance = getBrandEditorGuidance(businessVertical)
+  const [brandSearch, setBrandSearch] = useState('')
   const defaults = getWebsiteSettingsDefaults().brands_section!
   const [draft, setDraft] = useState<BrandsSectionSettings | null>(null)
   const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
@@ -320,7 +325,7 @@ export function BrandsSectionEditor() {
   }
 
   const restoreDefaults = () => {
-    if (!window.confirm('¿Deseás restaurar las marcas predeterminadas?')) return
+    if (!window.confirm('¿Restablecer toda la sección? Se reemplazarán marcas, logos, textos y ubicaciones por la configuración inicial. Podés descartar antes de guardar.')) return
     setDraft({ ...defaults })
   }
 
@@ -351,11 +356,27 @@ export function BrandsSectionEditor() {
 
       {/* ── Tarjeta de Control Principal ── */}
       <SectionCard
-        title="Marquesina de Marcas Destacadas"
-        description="Seleccioná qué marcas exhibir en tu tienda con movimiento continuo, sincronizalas con tus marcas del catálogo y configuralas para tus secciones públicas."
+        title="Marcas de tu negocio"
+        description="Seleccioná marcas reales de tu oferta y revisá cómo se verán antes de guardar."
         icon={Tag}
       >
         <div className="space-y-6">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <p className="text-sm">{guidance.hint}</p>
+            <p className="text-xs text-muted-foreground">{current.items.filter(item => item.active).length} visibles de {current.items.length} configuradas</p>
+          </div>
+          <section aria-label="Vista previa de marcas" className="rounded-lg border p-3 space-y-3">
+            <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>Vista previa · sin animación</span><span>{current.enabled ? 'Sección habilitada' : 'Desactivada: no se publica'}</span></div>
+            <p className="font-semibold text-sm">{current.title}</p>
+            {current.subtitle && <p className="text-xs text-muted-foreground">{current.subtitle}</p>}
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {current.items.filter(item => item.active).map(item => <div key={item.id} className="shrink-0 rounded-md border bg-background px-3 py-2 flex items-center gap-2">
+                {item.imageUrl && <AppImage src={item.imageUrl} alt="" className="h-6 w-12 object-contain" />}
+                <span className="text-xs font-medium">{item.name}</span>
+              </div>)}
+              {!current.items.some(item => item.active) && <p className="text-xs text-muted-foreground">Seleccioná una marca visible para ver la cinta.</p>}
+            </div>
+          </section>
           {/* Switch de Activación General */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-muted/20">
             <div className="space-y-1">
@@ -415,7 +436,8 @@ export function BrandsSectionEditor() {
 
       {/* ── Visibilidad en Secciones Públicas ── */}
       <SectionCard
-        title="Visibilidad en Secciones Públicas"
+        collapsible
+        title="Dónde mostrar las marcas"
         description="Elegí en qué páginas públicas de la tienda querés mostrar la cinta continua de marcas."
         icon={Globe}
       >
@@ -494,11 +516,11 @@ export function BrandsSectionEditor() {
               <span className="font-semibold text-foreground">
                 {isLoadingCatalogBrands
                   ? 'Detectando marcas de tus productos y tienda...'
-                  : `Detectadas: ${catalogBrands.length} marca(s) en tu inventario y sección de marcas`}
+                  : `Disponibles: ${catalogBrands.length} marca(s). Lectura de hasta 100 marcas y 100 productos; conteos parciales.`}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -520,7 +542,7 @@ export function BrandsSectionEditor() {
                 className="h-8 text-xs font-semibold gap-1.5"
               >
                 <Check className="h-3.5 w-3.5 text-emerald-600" />
-                Sincronizar todas a la marquesina
+                Agregar todas las detectadas
               </Button>
               <Button
                 type="button"
@@ -537,6 +559,11 @@ export function BrandsSectionEditor() {
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="catalog-brand-search">Buscar marcas detectadas</Label>
+            <Input id="catalog-brand-search" value={brandSearch} onChange={event => setBrandSearch(event.target.value)} placeholder="Buscar por nombre…" />
+          </div>
+          {!isLoadingCatalogBrands && catalogBrands.length > 0 && !catalogBrands.some(brand => matchesBrandSearch(brand.name, brandSearch)) && <p role="status" className="text-sm text-muted-foreground">No hay coincidencias. Probá otro nombre o agregá una marca propia.</p>}
           {isLoadingCatalogBrands ? (
             <div className="flex items-center justify-center p-6 text-xs text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -557,7 +584,7 @@ export function BrandsSectionEditor() {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2.5">
-              {catalogBrands.map((b) => {
+              {catalogBrands.filter(brand => matchesBrandSearch(brand.name, brandSearch)).map((b) => {
                 const alreadyInMarquee = current.items.some(
                   (item) => item.name.toLowerCase() === b.name.toLowerCase() || item.id === b.id
                 )
@@ -615,12 +642,14 @@ export function BrandsSectionEditor() {
 
       {/* ── Marcas Populares y Personalizadas ── */}
       <SectionCard
-        title="Otras Marcas Populares y Personalizadas"
-        description="Sumá marcas comerciales reconocidas o agregá cualquier otra marca con su propio logo."
+        collapsible
+        title="Agregar otra marca o explorar sugerencias"
+        description="Agregá una marca propia. Las sugerencias disponibles dependen del rubro y no se agregan automáticamente."
         icon={Sparkles}
       >
+        {guidance.categories.length === 0 && <p className="text-xs text-muted-foreground">Para este rubro, elegí marcas de tu catálogo o ingresá una propia. No se agregan ejemplos genéricos.</p>}
         <div className="flex flex-wrap gap-2.5">
-          {POPULAR_PRESET_BRANDS.map((preset) => {
+          {POPULAR_PRESET_BRANDS.filter(preset => guidance.categories.includes(preset.category)).map((preset) => {
             const alreadyInList = current.items.some(
               (item) => item.name.toLowerCase() === preset.name.toLowerCase() || item.id === preset.id
             )
@@ -652,13 +681,13 @@ export function BrandsSectionEditor() {
         {/* ── Agregar marca personalizada con Logo ── */}
         <div className="mt-6 pt-5 border-t border-border/60 space-y-3">
           <Label className="text-xs font-bold block text-foreground">
-            ¿Vendés otra marca que no esté arriba? Agregala con su logo propio:
+            Agregá una marca de tu oferta. El logo es opcional:
           </Label>
 
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
             {/* Nombre */}
             <div className="sm:col-span-4 space-y-1.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Nombre de la marca</span>
+              <Label htmlFor="custom-brand-input" className="text-[11px] font-medium text-muted-foreground">Nombre de la marca</Label>
               <Input
                 id="custom-brand-input"
                 value={customBrandName}
@@ -669,7 +698,7 @@ export function BrandsSectionEditor() {
                     addCustomBrand()
                   }
                 }}
-                placeholder="Ej: Lacoste, Topper, Tommy..."
+                placeholder={guidance.placeholder}
                 className="h-10 text-sm"
               />
             </div>
@@ -761,7 +790,7 @@ export function BrandsSectionEditor() {
 
       {/* ── Lista de Marcas Configuradas en la Marquesina ── */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold">Marcas en tu marquesina ({current.items.length})</h3>
             <p className="text-xs text-muted-foreground">
@@ -791,7 +820,7 @@ export function BrandsSectionEditor() {
               className="text-xs text-muted-foreground hover:text-foreground h-8"
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              Restaurar sugeridas
+              Restablecer sección
             </Button>
           </div>
         </div>
@@ -800,7 +829,7 @@ export function BrandsSectionEditor() {
           <div className="rounded-xl border border-dashed p-8 text-center bg-muted/10">
             <p className="text-sm font-semibold text-muted-foreground">No tenés ninguna marca en la marquesina</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Podés sincronizar las marcas de tu tienda arriba o sumar marcas populares.
+              Agregá marcas de tu catálogo o cargá una marca propia. No se publicará ninguna hasta que la selecciones y guardes.
             </p>
           </div>
         ) : (

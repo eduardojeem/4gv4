@@ -1,7 +1,7 @@
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 import type { StorefrontStyle } from '@/lib/website/storefront-style'
-import type { WebsiteSectionId } from '@/lib/website/setup-checklist'
+import type { WebsiteEditableSection } from '@/lib/website/section-availability'
 import { MAX_STORE_ANNOUNCEMENTS, announcementStatus, normalizeAnnouncementList } from '@/lib/announcements/announcement'
 import { getConfiguredProcessFlows } from '@/lib/website/process-steps'
 import { guidanceFamily, showsFinancialServices } from '@/lib/website/vertical-guidance'
@@ -13,7 +13,7 @@ import { reviewCartSetup } from '@/lib/checkout/cart-setup'
  * (sin servicios externos) y dice qué falta, qué no conviene y qué sigue.
  */
 
-export type CoachSection = Exclude<WebsiteSectionId, 'overview'>
+export type CoachSection = WebsiteEditableSection
 export type CoachLevel = 'ok' | 'warn' | 'tip'
 
 export type CoachAction =

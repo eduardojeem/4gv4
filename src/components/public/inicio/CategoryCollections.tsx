@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils'
 const COLLECTION_COPY: Partial<Record<StorefrontStyle, { eyebrow: string; title: string; text: string; cta: string }>> = {
   fashion: { eyebrow: 'Colecciones', title: 'Comprá por categoría', text: 'Encontrá el corte, modelo y color ideal para tu estilo.', cta: 'Ver colección' },
   sport: { eyebrow: 'Equipate', title: 'Comprá por categoría', text: 'Todo lo que necesitás para entrenar, ordenado por tipo.', cta: 'Ver todo' },
-  beauty: { eyebrow: 'Comprá por necesidad', title: 'Encontrá lo que buscás', text: 'Rostro, cabello, maquillaje, fragancias: elegí por dónde empezar.', cta: 'Ver productos' },
+  beauty: { eyebrow: 'Explorá la tienda', title: 'Categorías para descubrir', text: 'Elegí una categoría y encontrá los productos disponibles.', cta: 'Ver categoría' },
+  tech: { eyebrow: 'Ecosistema Tecnológico', title: 'Comprá por categoría', text: 'Explorá los productos disponibles por categoría.', cta: 'Ver equipos' },
 }
 const DEFAULT_COLLECTION_COPY = { eyebrow: 'Explorá nuestras categorías', title: 'Categorías destacadas', text: 'Recorré la tienda por tipo de producto.', cta: 'Ver categoría' }
 import type { PublicProduct } from '@/types/public'
@@ -89,34 +90,38 @@ export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle,
 
   if (style === 'beauty') {
     return (
-      <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-14">
+      <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-pink-700 dark:text-pink-300">{copy.eyebrow}</span>
-            <h2 id="categorias-principales-titulo" className={cn('mt-2 text-2xl text-foreground sm:text-3xl', STOREFRONT_HEADING_CLASS[style])}>
+          <div className="mb-8 flex flex-col items-start text-left sm:mb-10">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{copy.eyebrow}</span>
+            <h2 id="categorias-principales-titulo" className={cn('mt-2 text-2xl text-foreground sm:text-3xl lg:text-4xl', STOREFRONT_HEADING_CLASS[style])}>
               {copy.title}
             </h2>
             <p className="mt-2 max-w-lg text-sm text-muted-foreground">{copy.text}</p>
           </div>
-          {/* Círculos con foto: se recorren de costado en el celular. */}
-          <ul className="-mx-4 flex snap-x gap-5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:flex-wrap sm:justify-center sm:gap-8 sm:overflow-visible sm:px-0">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-5">
             {displayCollections.map((col) => (
-              <li key={col.id} className="shrink-0 snap-start">
+              <li key={col.id}>
                 <Link
                   href={col.href}
-                  className="group flex w-24 flex-col items-center gap-2 text-center focus-visible:outline-none sm:w-28"
+                  className="group block h-full overflow-hidden rounded-2xl border border-stone-200 bg-card transition-colors hover:border-stone-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-stone-800 dark:hover:border-stone-600"
                 >
-                  <span className="relative block h-24 w-24 overflow-hidden rounded-full border-2 border-pink-200/70 bg-gradient-to-br from-pink-50 to-rose-100 shadow-sm transition-all duration-300 group-hover:border-pink-400 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-primary dark:border-pink-900/50 dark:from-pink-950/40 dark:to-rose-950/30 sm:h-28 sm:w-28">
+                  <span className="relative block aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-stone-900">
                     {col.imageUrl ? (
-                      <Image src={col.imageUrl} alt="" fill sizes="112px" className="object-contain p-3 transition-transform duration-500 group-hover:scale-110" />
+                      <Image src={col.imageUrl} alt="" fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                     ) : (
-                      <span className="flex h-full items-center justify-center text-2xl text-pink-400" aria-hidden="true">{col.name.charAt(0)}</span>
+                      <span className="flex h-full items-center justify-center text-3xl font-light text-muted-foreground/60" aria-hidden="true">{col.name.charAt(0)}</span>
                     )}
                   </span>
-                  <span className="line-clamp-2 text-sm leading-tight text-foreground">{col.name}</span>
-                  {typeof col.count === 'number' && col.count > 0 && (
-                    <span className="text-[11px] text-muted-foreground">{col.count} {col.count === 1 ? 'producto' : 'productos'}</span>
-                  )}
+                  <span className="flex items-center justify-between gap-2 p-3 sm:p-4">
+                    <span className="min-w-0">
+                      <span className="block line-clamp-1 text-sm font-medium text-foreground sm:text-base">{col.name}</span>
+                      {typeof col.count === 'number' && col.count > 0 && (
+                        <span className="mt-1 block text-xs text-muted-foreground">{col.count} {col.count === 1 ? 'producto' : 'productos'}</span>
+                      )}
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+                  </span>
                 </Link>
               </li>
             ))}

@@ -260,7 +260,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                 >
                   <Link href={`/${currentOrg.slug}/inicio`} className="flex items-center justify-center gap-2">
                     <Store className="h-4 w-4 text-emerald-800" />
-                    <span>Visitar Tienda Oficial</span>
+                    <span>Visitar tienda</span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>

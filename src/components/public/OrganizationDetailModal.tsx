@@ -462,7 +462,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
 
           <Button asChild size="sm" className="gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-xs">
             <Link href={storeUrl}>
-              <span>Visitar Tienda Oficial</span>
+              <span>Visitar tienda</span>
               <ExternalLink className="h-3.5 w-3.5" />
             </Link>
           </Button>

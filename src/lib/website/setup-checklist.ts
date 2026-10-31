@@ -1,10 +1,17 @@
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
-import { resolveSectionAvailability } from '@/lib/website/section-availability'
+import { resolveSectionAvailability, type WebsiteEditableSection } from '@/lib/website/section-availability'
 
 /** Pestañas del editor del sitio. `overview` es el resumen guiado. */
 export type WebsiteSectionId =
   | 'overview'
+  | 'design-template'
+  | 'design-brand'
+  | 'design-preview'
+  | 'navigation-footer'
+  | 'public-info'
+  | 'seo-share'
+  | 'publication'
   | 'company'
   | 'checkout'
   | 'hero'
@@ -19,7 +26,7 @@ export type WebsiteSectionId =
   | 'process'
 
 /** Ancla dentro de una pestaña (tarjetas de Empresa y publicación). */
-export type WebsiteSectionAnchor = 'website-identity' | 'website-visibility' | 'website-appearance' | 'website-contact'
+export type WebsiteSectionAnchor = 'website-identity' | 'website-visibility' | 'website-appearance' | 'website-contact' | 'design-template'
 
 export interface WebsiteSetupStep {
   id: string
@@ -48,14 +55,14 @@ export function resolveWebsiteFocus(capabilities: Pick<StorefrontCapabilities, '
 }
 
 /** Secciones que más rinden según el foco; el resto queda en "Más secciones". */
-export const FOCUS_SECTIONS: Record<WebsiteFocus, Array<Exclude<WebsiteSectionId, 'overview'>>> = {
+export const FOCUS_SECTIONS: Record<WebsiteFocus, WebsiteEditableSection[]> = {
   services: ['company', 'checkout', 'hero', 'booking', 'services', 'gallery', 'trust_bar', 'process'],
   repairs: ['company', 'checkout', 'hero', 'services', 'process', 'trust_bar', 'carousel', 'announcement'],
   retail: ['company', 'checkout', 'hero', 'trust_bar', 'carousel', 'offers', 'brands', 'announcement'],
 }
 
 export function isSectionRecommended(section: WebsiteSectionId, focus: WebsiteFocus): boolean {
-  return section === 'overview' || FOCUS_SECTIONS[focus].includes(section)
+  return section === 'overview' || !(section in resolveSectionAvailability({ hasCatalog: true, hasServices: true, hasRepairs: true })) || FOCUS_SECTIONS[focus].includes(section as WebsiteEditableSection)
 }
 
 const filled = (value?: string | null) => Boolean(value && value.trim())
@@ -86,8 +93,7 @@ function essentials(settings: WebsiteSettings): WebsiteSetupStep[] {
   return [
     {
       id: 'identity',
-      section: 'company',
-      anchor: 'website-identity',
+      section: 'public-info',
       title: 'Datos y contacto',
       why: 'Tu nombre, logo y un contacto dan confianza desde el primer vistazo.',
       done: identityDone,
@@ -96,8 +102,8 @@ function essentials(settings: WebsiteSettings): WebsiteSetupStep[] {
     },
     {
       id: 'appearance',
-      section: 'company',
-      anchor: 'website-appearance',
+      section: 'design-template',
+      anchor: 'design-template',
       title: 'Plantilla y colores',
       why: 'Elegí el diseño que mejor va con tu rubro; podés cambiarlo cuando quieras.',
       done: Boolean(style && style !== 'auto'),
@@ -126,8 +132,7 @@ function essentials(settings: WebsiteSettings): WebsiteSetupStep[] {
     },
     {
       id: 'publish',
-      section: 'company',
-      anchor: 'website-visibility',
+      section: 'publication',
       title: 'Publicar la tienda',
       why: 'Mientras no la publiques, nadie más puede ver tu sitio.',
       done: company.storefrontPublic === true,
@@ -247,7 +252,28 @@ export function buildWebsiteSetupChecklist(
   const focus = resolveWebsiteFocus(capabilities)
   // Un paso de una sección que la cuenta no puede usar no se pide.
   const availability = resolveSectionAvailability(capabilities)
-  const usable = (step: WebsiteSetupStep) => availability[step.section].available
+  const editableSection: Record<WebsiteSetupStep['section'], keyof typeof availability> = {
+    'design-template': 'company',
+    'design-brand': 'company',
+    'design-preview': 'company',
+    'navigation-footer': 'company',
+    'public-info': 'company',
+    'seo-share': 'company',
+    publication: 'company',
+    company: 'company',
+    checkout: 'checkout',
+    hero: 'hero',
+    trust_bar: 'trust_bar',
+    brands: 'brands',
+    carousel: 'carousel',
+    offers: 'offers',
+    announcement: 'announcement',
+    booking: 'booking',
+    gallery: 'gallery',
+    services: 'services',
+    process: 'process',
+  }
+  const usable = (step: WebsiteSetupStep) => availability[editableSection[step.section]].available
   const base = essentials(settings).filter(usable)
   const extra = recommended(settings, focus).filter(usable)
   const all = [...base, ...extra]

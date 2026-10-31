@@ -1,5 +1,7 @@
 'use client'
 
+import { WholesaleFooter } from '@/components/public/wholesale/WholesaleFooter'
+
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -34,7 +36,8 @@ export function PublicFooter({
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   // En la plantilla «Servicios» el pie lleva a las secciones del negocio, no a la tienda.
-  const isServices = useStorefrontStyle() === 'services'
+  const style = useStorefrontStyle()
+  const isServices = style === 'services'
   const galleryVisible = Boolean(effectiveSettings?.gallery_section?.enabled && effectiveSettings.gallery_section.images?.length)
 
   const phoneDisplay = company?.phone || ''
@@ -56,6 +59,8 @@ export function PublicFooter({
     )
   const repairsEnabled = repairsModuleEnabled && isPublicRepairsAvailable(company, effectiveSettings?.services)
 
+  if (style === 'wholesale-pro') return <WholesaleFooter company={company} prefix={tenantPrefix} />
+
   return (
     <footer className="relative overflow-hidden border-t-2 border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-muted/40">
       {/* Luz ambiental sutil en el pie */}
@@ -71,7 +76,7 @@ export function PublicFooter({
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {company?.slogan || (isServices
                 ? `${companyName}. Reservá tu turno online y conocé nuestros servicios.`
-                : `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`)}
+                : `${companyName} - Conocé el catálogo y consultá disponibilidad y condiciones.`)}
             </p>
           </div>
 

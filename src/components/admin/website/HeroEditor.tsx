@@ -39,7 +39,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { CompanyInfo, HeroContent, HeroStats } from '@/types/website-settings'
-import type { WebsiteSectionId } from '@/lib/website/setup-checklist'
+import type { WebsiteSectionAnchor, WebsiteSectionId } from '@/lib/website/setup-checklist'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { cn } from '@/lib/utils'
@@ -73,7 +73,7 @@ interface HeroEditorProps {
   /** Plantilla de la tienda: el editor pide solo lo que esa portada muestra. */
   storefrontStyle?: StorefrontStyle
   /** Ir a otra sección del editor (datos del negocio, banners…). */
-  onNavigate?: (section: Exclude<WebsiteSectionId, 'overview'>) => void
+  onNavigate?: (section: Exclude<WebsiteSectionId, 'overview'>, anchor?: WebsiteSectionAnchor) => void
 }
 
 const DEFAULT_CAPABILITIES = resolveStorefrontCapabilities({
@@ -331,7 +331,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           </ul>
         </div>
         {onNavigate && (
-          <Button type="button" variant="ghost" size="sm" className="shrink-0 self-start sm:self-center" onClick={() => onNavigate('company')}>
+          <Button type="button" variant="ghost" size="sm" className="shrink-0 self-start sm:self-center" onClick={() => onNavigate('design-template')}>
             Cambiar plantilla <ArrowRight className="h-3.5 w-3.5" />
           </Button>
         )}

@@ -36,8 +36,8 @@ describe('plantilla Belleza', () => {
     expect(suggestStorefrontAppearance({ businessVertical: 'general', name: 'Salón de belleza Ana' }).style).toBe('services')
   })
 
-  it('«Automático» no cambia el aspecto de las tiendas de cosmética que ya existen', () => {
-    expect(resolveStorefrontStyle('auto', 'cosmetics')).toBe('classic')
+  it('«Automático» resuelve Belleza para las tiendas de cosmética', () => {
+    expect(resolveStorefrontStyle('auto', 'cosmetics')).toBe('beauty')
   })
 
   it('aparece en el selector de plantillas', () => {

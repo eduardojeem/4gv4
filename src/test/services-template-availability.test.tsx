@@ -19,7 +19,7 @@ describe('la plantilla Servicios necesita la agenda', () => {
   it('una tienda de ropa que la eligió vuelve a la plantilla de su rubro', () => {
     expect(resolveStorefrontStyle('services', 'clothing', { servicesAvailable: false })).toBe('fashion')
     // Una tienda sin plantilla propia vuelve a la de catálogo.
-    expect(resolveStorefrontStyle('services', 'electronics', { servicesAvailable: false })).toBe('classic')
+    expect(resolveStorefrontStyle('services', 'electronics', { servicesAvailable: false })).toBe('tech')
   })
 
   it('una barbería sin agenda no queda con una portada vacía', () => {
