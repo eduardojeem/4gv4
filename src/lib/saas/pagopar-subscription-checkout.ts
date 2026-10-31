@@ -128,6 +128,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       externalReference,
       itemId: Number.parseInt(payment.id.replace(/[^\d]/g, '').slice(0, 9), 10) || 1,
       paymentMethod,
+      correlationId,
     })
 
     const { error: updateError } = await admin
@@ -155,9 +156,11 @@ export async function createSubscriptionPagoparCheckout(params: {
       .update({ status: 'failed' })
       .eq('id', payment.id)
 
+    // 424 y no 502: Cloudflare, delante del sitio, reemplaza las respuestas
+    // 502 por su propia página y el usuario perdería el motivo del rechazo.
     throw new SubscriptionCheckoutError(
       error instanceof Error ? error.message : 'No se pudo iniciar el pago con Pagopar.',
-      502,
+      424,
       undefined,
       error instanceof PagoparOrderCreationError ? error.correlationId : correlationId,
     )
