@@ -284,10 +284,10 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
-          storefrontStyle === 'tech' && 'rounded-xl border border-primary/20 shadow-xs hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
+          storefrontStyle === 'tech' && 'rounded-2xl border border-border/70 bg-card shadow-xs hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
           storefrontStyle === 'market' && 'rounded-2xl border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-md',
           storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
-          storefrontStyle === 'beauty' && 'rounded-3xl border border-pink-100 shadow-xs hover:border-pink-300 hover:shadow-lg hover:shadow-pink-500/10 dark:border-pink-900/40',
+          storefrontStyle === 'beauty' && 'rounded-2xl border border-stone-200/80 shadow-xs hover:border-stone-400 hover:shadow-md dark:border-stone-800 dark:hover:border-stone-600',
           storefrontStyle === 'services' && 'rounded-2xl border border-border/50 shadow-xs hover:border-primary/40 hover:shadow-lg',
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
@@ -299,9 +299,13 @@ export function ProductCard(props: ProductCardProps) {
           onClick={() => setQuickViewOpen(true)}
           className={cn(
             'relative overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
-            // Cosmética y súper: el envase sobre blanco, en cuadrado.
-            storefrontStyle === 'wholesale-pro' ? 'aspect-square bg-white dark:bg-muted/10' : storefrontStyle === 'beauty' || isMarket ? 'aspect-square bg-white' : 'bg-muted/30',
-            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
+            // Cosmética y súper: el envase sobre blanco, en cuadrado. En tecnología, dispositivo entero sobre superficie neutra.
+            storefrontStyle === 'beauty' || isMarket || storefrontStyle === 'wholesale-pro'
+              ? 'aspect-square bg-white dark:bg-muted/10'
+              : storefrontStyle === 'tech'
+              ? 'aspect-square bg-muted/15 dark:bg-muted/10'
+              : 'bg-muted/30',
+            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && storefrontStyle !== 'tech' && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
           aria-label={`Vista rápida de ${product.name}`}
         >
@@ -312,7 +316,9 @@ export function ProductCard(props: ProductCardProps) {
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
-                coverImage && storefrontStyle !== 'wholesale-pro'
+                storefrontStyle === 'tech'
+                  ? 'object-contain p-3.5 sm:p-4 transition-transform duration-500 group-hover:scale-[1.05]'
+                  : coverImage && storefrontStyle !== 'wholesale-pro'
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
                   : storefrontStyle === 'wholesale-pro'
                     ? 'object-contain p-3 transition-transform duration-500 group-hover:scale-[1.05]'
@@ -433,7 +439,7 @@ export function ProductCard(props: ProductCardProps) {
             storefrontStyle === 'market' && 'font-bold text-xs sm:text-sm',
             storefrontStyle === 'modern' && 'font-bold tracking-tight text-foreground/90',
             storefrontStyle === 'services' && 'font-semibold',
-            storefrontStyle === 'beauty' && 'group-hover:text-pink-700 transition-colors dark:group-hover:text-pink-300'
+            storefrontStyle === 'beauty' && 'group-hover:text-primary transition-colors'
           )}>
             {product.name}
           </h3>

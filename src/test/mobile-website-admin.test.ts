@@ -24,7 +24,9 @@ import {
 } from '../../mobile/src/lib/website-admin'
 import { ApiError } from '../../mobile/src/lib/api'
 import {
+  BOOKING_PRESETS,
   HOME_SECTIONS,
+  bookingIssues,
   buildCompanyPayload,
   companyIssues,
   emptySlide,
@@ -151,6 +153,18 @@ describe('validaciones (espejo del servidor)', () => {
     expect(slideIssues({ ...slide, imageUrl: 'https://cdn.test/a.webp', imageAlt: 'Ofertas', ctaText: 'Ver' })).toHaveProperty('ctaText')
     expect(slideIssues({ ...slide, imageUrl: 'https://cdn.test/a.webp', imageAlt: 'Ofertas', ctaHref: 'javascript:x' })).toHaveProperty('ctaHref')
     expect(slideIssues({ ...slide, imageUrl: 'https://cdn.test/a.webp', imageAlt: 'Ofertas', ctaText: 'Ver', ctaHref: '/ofertas' })).toEqual({})
+  })
+
+  it('reservas y citas: valida textos mínimos y plantillas multirrubro', () => {
+    expect(bookingIssues({ enabled: true, title: 'a' })).toHaveProperty('title')
+    expect(bookingIssues({ enabled: false, title: '' })).toEqual({})
+
+    // Todas las plantillas multirrubro son válidas sin errores
+    for (const preset of BOOKING_PRESETS) {
+      expect(preset.badge.length).toBeGreaterThan(0)
+      expect(preset.title.length).toBeGreaterThanOrEqual(2)
+      expect(bookingIssues({ enabled: true, ...preset })).toEqual({})
+    }
   })
 })
 

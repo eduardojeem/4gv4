@@ -4,6 +4,7 @@ import { WholesaleFooter } from '@/components/public/wholesale/WholesaleFooter'
 
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -38,6 +39,7 @@ export function PublicFooter({
   // En la plantilla «Servicios» el pie lleva a las secciones del negocio, no a la tienda.
   const style = useStorefrontStyle()
   const isServices = style === 'services'
+  const isBeauty = style === 'beauty'
   const galleryVisible = Boolean(effectiveSettings?.gallery_section?.enabled && effectiveSettings.gallery_section.images?.length)
 
   const phoneDisplay = company?.phone || ''
@@ -58,13 +60,20 @@ export function PublicFooter({
       effectiveSettings?.services
     )
   const repairsEnabled = repairsModuleEnabled && isPublicRepairsAvailable(company, effectiveSettings?.services)
+  const tagline = company?.slogan || (isServices
+    ? `${companyName}. Reservá tu turno online y conocé nuestros servicios.`
+    : isBeauty
+      ? ''
+      : `${companyName} - Conocé el catálogo y consultá disponibilidad y condiciones.`)
 
   if (style === 'wholesale-pro') return <WholesaleFooter company={company} prefix={tenantPrefix} />
 
   return (
-    <footer className="relative overflow-hidden border-t-2 border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-muted/40">
+    <footer className={isBeauty
+      ? 'relative overflow-hidden border-t border-border/60 bg-background'
+      : 'relative overflow-hidden border-t-2 border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-muted/40'}>
       {/* Luz ambiental sutil en el pie */}
-      <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 h-64 w-[600px] rounded-full bg-primary/5 blur-3xl" />
+      {!isBeauty && <div className="pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 h-64 w-[600px] rounded-full bg-primary/5 blur-3xl" />}
       <div className="container relative mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           
@@ -73,11 +82,7 @@ export function PublicFooter({
             <p className="text-base font-extrabold text-foreground tracking-tight">
               {companyName}
             </p>
-            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              {company?.slogan || (isServices
-                ? `${companyName}. Reservá tu turno online y conocé nuestros servicios.`
-                : `${companyName} - Conocé el catálogo y consultá disponibilidad y condiciones.`)}
-            </p>
+            {tagline && <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">{tagline}</p>}
           </div>
 
           {/* Links */}
@@ -220,7 +225,7 @@ export function PublicFooter({
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center gap-5 border-t border-border/50 pt-6 text-xs text-muted-foreground sm:flex-row sm:justify-between sm:gap-4">
+        <div className={cn('flex flex-col items-center gap-5 pt-6 text-xs text-muted-foreground sm:flex-row sm:justify-between sm:gap-4', isBeauty ? 'mt-10 border-t border-border/50' : 'mt-6 border-t border-border/40')}>
           <p className="order-2 text-center sm:order-1 sm:text-left">
             © {new Date().getFullYear()} {companyName}. Todos los derechos reservados.
           </p>

@@ -22,7 +22,7 @@ export function profileMenuSections(access: Access): ProfileMenuSection[] {
     {
       key: 'account',
       label: 'Cuenta',
-      entries: [{ key: 'profile', icon: 'person-circle-outline', title: 'Mi perfil', subtitle: 'Nombre, foto y contraseña', web: '/dashboard/profile' }],
+      entries: [{ key: 'profile', icon: 'person-circle-outline', title: 'Mi perfil', subtitle: 'Nombre, foto y contraseña', route: '/panel/profile' }],
     },
   ];
 

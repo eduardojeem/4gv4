@@ -24,6 +24,14 @@ describe('menú de perfil del panel móvil', () => {
     expect(business.entries.every((entry) => !entry.web)).toBe(true)
   })
 
+  it('Mi perfil abre la pantalla nativa en la app y no la web', () => {
+    const entry = profileMenuSections({ isAdmin: false, isSuperAdmin: false, hasAdministration: false })
+      .flatMap((section) => section.entries)
+      .find((item) => item.key === 'profile')!
+    expect(entry.route).toBe('/panel/profile')
+    expect(entry.web).toBeUndefined()
+  })
+
   it('Administración usa el mismo permiso que su pantalla', () => {
     expect(canOpenAdministration({ isAdmin: false, isSuperAdmin: false, hasAdministration: true })).toBe(true)
     expect(canOpenAdministration({ isAdmin: false, isSuperAdmin: true, hasAdministration: false })).toBe(true)

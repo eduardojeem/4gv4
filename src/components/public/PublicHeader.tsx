@@ -90,10 +90,11 @@ export function PublicHeader({
   const isBeauty = storefrontStyle === 'beauty'
   // Supermercado: los pasillos a mano y un buscador pensado para la lista del súper.
   const isMarket = storefrontStyle === 'market'
+  const isTech = storefrontStyle === 'tech'
   const lightHeader = companyInfo?.headerStyle !== 'accent' && companyInfo?.headerStyle !== 'dark'
   const beautyLight = isBeauty && lightHeader
   const { categories } = usePublicCategories()
-  const beautyCategories = isBeauty || isMarket
+  const storeCategories = isBeauty || isMarket || isTech
     ? categories
         .filter((category) => !category.parent_id && (category.productCount ?? 0) > 0)
         .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
@@ -268,7 +269,7 @@ export function PublicHeader({
         companyInfo?.headerStyle === 'accent' && 'bg-primary text-primary-foreground border-primary/20',
         companyInfo?.headerStyle === 'dark' && 'bg-slate-950 text-white border-slate-900',
         companyInfo?.headerStyle === 'solid' && 'bg-background text-foreground border-border/80',
-        beautyLight && 'border-pink-100 dark:border-pink-950/60'
+        beautyLight && 'border-border/80'
       )}
     >
       {/* Top bar — only when the org provides contact or location info */}
@@ -279,7 +280,7 @@ export function PublicHeader({
             : companyInfo?.headerStyle === 'dark'
             ? 'border-slate-900 bg-slate-900/60 text-slate-400'
             : beautyLight
-            ? 'border-pink-100 bg-gradient-to-r from-pink-50 via-rose-50 to-fuchsia-50 text-foreground/90 dark:border-pink-950/60 dark:from-pink-950/30 dark:via-rose-950/20 dark:to-fuchsia-950/30'
+            ? 'border-border/70 bg-muted/35 text-foreground/90'
             : 'border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 text-foreground/90'
         }`}>
           <div className="container flex h-auto items-center justify-between gap-4">
@@ -375,7 +376,7 @@ export function PublicHeader({
                         href={instagramUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded-full p-1 text-muted-foreground hover:text-pink-600 hover:bg-pink-500/10 transition-colors"
+                        className={cn('rounded-full p-1 text-muted-foreground transition-colors', isBeauty ? 'hover:text-foreground hover:bg-muted' : 'hover:text-pink-600 hover:bg-pink-500/10')}
                         title="Instagram"
                         aria-label="Instagram de la tienda"
                       >
@@ -434,7 +435,7 @@ export function PublicHeader({
               companyInfo?.headerStyle === 'accent'
                 ? 'bg-white text-primary'
                 : beautyLight
-                ? 'bg-gradient-to-br from-pink-400 to-fuchsia-500 text-white'
+                ? 'bg-muted text-primary ring-1 ring-border/70'
                 : 'bg-primary text-primary-foreground'
             )}>
               {isBeauty ? <Sparkles className="h-4.5 w-4.5" /> : <Store className="h-4.5 w-4.5" />}
@@ -463,7 +464,7 @@ export function PublicHeader({
             'hidden md:flex items-center transition-all duration-300 ease-in-out',
             searchFocused
               ? 'flex-1 max-w-2xl mx-3'
-              : 'flex-1 max-w-xs xl:max-w-sm mx-2'
+              : 'flex-1 max-w-sm xl:max-w-md mx-2'
           )}
         >
           <form onSubmit={handleSearchSubmit} className="relative w-full">
@@ -475,7 +476,15 @@ export function PublicHeader({
             />
             <input
               type="search"
-              placeholder={isBeauty ? 'Buscá sérums, perfumes, labiales…' : isMarket ? 'Buscá leche, arroz, detergente…' : `Buscar productos en ${companyInfo?.name || 'la tienda'}...`}
+              placeholder={
+                isBeauty
+                  ? 'Buscá sérums, perfumes, labiales…'
+                  : isMarket
+                  ? 'Buscá leche, arroz, detergente…'
+                  : isTech
+                  ? '¿Qué estás buscando? (ej. iPhone, cargador, notebook, repuesto…)'
+                  : `Buscar productos en ${companyInfo?.name || 'la tienda'}...`
+              }
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -496,7 +505,7 @@ export function PublicHeader({
                   : companyInfo?.headerStyle === 'dark'
                     ? 'h-9 border-slate-800 bg-slate-900/80 pl-9 pr-8 text-xs text-white hover:border-slate-700'
                     : beautyLight
-                    ? 'h-9 border-pink-100 bg-pink-50/60 pl-9 pr-8 text-xs text-foreground hover:border-pink-200 dark:border-pink-950/60 dark:bg-pink-950/20'
+                    ? 'h-9 border-border/70 bg-muted/35 pl-9 pr-8 text-xs text-foreground hover:border-primary/40 dark:bg-muted/20'
                     : 'h-9 border-border/70 bg-muted/35 pl-9 pr-8 text-xs text-foreground hover:border-border hover:bg-muted/60'
               )}
             />
@@ -544,9 +553,9 @@ export function PublicHeader({
                   'relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-200',
                   isBeauty ? 'rounded-full' : 'rounded-xl',
                   active && beautyLight
-                    ? 'text-pink-700 bg-pink-50 ring-1 ring-pink-200 dark:text-pink-300 dark:bg-pink-950/40 dark:ring-pink-900/60'
+                    ? 'text-primary bg-primary/10 ring-1 ring-primary/20'
                     : !active && beautyLight
-                    ? 'text-muted-foreground hover:text-pink-700 hover:bg-pink-50/70 dark:hover:text-pink-300 dark:hover:bg-pink-950/30'
+                    ? 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
                     : active
                     ? companyInfo?.headerStyle === 'accent'
                       ? 'text-primary bg-white shadow-xs'
@@ -560,7 +569,7 @@ export function PublicHeader({
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                 )}
               >
-                {LinkIcon && <LinkIcon className={cn('h-3.5 w-3.5 shrink-0', isOffer && 'text-rose-500', isOffer && !isBeauty && 'animate-pulse')} />}
+                {LinkIcon && <LinkIcon className={cn('h-3.5 w-3.5 shrink-0', isOffer && (isBeauty ? 'text-primary' : 'text-rose-500'), isOffer && !isBeauty && 'animate-pulse')} />}
                 <span>{link.label}</span>
                 {isOffer && !isBeauty && (
                   <span className="rounded-full bg-rose-600 px-1 py-0.2 text-[8px] font-black uppercase text-white shadow-2xs">
@@ -835,16 +844,16 @@ export function PublicHeader({
         </div>
       )}
 
-      {beautyCategories.length >= 2 && (
+      {storeCategories.length >= 2 && (
         <nav
           aria-label="Categorías"
           className={cn(
             'border-t',
-            isMarket ? 'border-border/60' : beautyLight ? 'border-pink-100 dark:border-pink-950/60' : 'border-white/10'
+            isMarket || isTech || beautyLight ? 'border-border/60' : 'border-white/10'
           )}
         >
           <ul className="container flex items-center gap-1 overflow-x-auto py-1.5 [scrollbar-width:none] md:justify-center md:gap-2">
-            {beautyCategories.map((category) => {
+            {storeCategories.map((category) => {
               const active = activeCategoryId === category.id
               return (
                 <li key={category.id} className="shrink-0">
@@ -853,13 +862,15 @@ export function PublicHeader({
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'block rounded-full px-3 py-1 text-xs tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                      isMarket && 'font-semibold',
+                      (isMarket || isTech) && 'font-semibold',
                       active
-                        ? isMarket ? 'bg-primary text-primary-foreground' : 'bg-pink-500 text-white'
-                        : isMarket && lightHeader
-                        ? 'text-foreground/80 hover:bg-primary/10 hover:text-primary'
+                        ? isMarket || isTech || isBeauty ? 'bg-primary text-primary-foreground shadow-xs' : 'bg-pink-500 text-white'
+                        : isMarket || isTech
+                        ? lightHeader
+                          ? 'text-foreground/80 hover:bg-primary/10 hover:text-primary'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
                         : beautyLight
-                        ? 'text-foreground/80 hover:bg-pink-50 hover:text-pink-700 dark:hover:bg-pink-950/40 dark:hover:text-pink-300'
+                        ? 'text-foreground/80 hover:bg-muted hover:text-foreground'
                         : 'opacity-85 hover:bg-white/10 hover:opacity-100'
                     )}
                   >
@@ -873,7 +884,7 @@ export function PublicHeader({
                 href={withTenantPrefix('/productos')}
                 className={cn(
                   'flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  isMarket && lightHeader ? 'font-semibold text-primary hover:bg-primary/10' : beautyLight ? 'text-pink-700 hover:bg-pink-50 dark:text-pink-300 dark:hover:bg-pink-950/40' : 'hover:bg-white/10'
+                  (isMarket || isTech) && lightHeader ? 'font-semibold text-primary hover:bg-primary/10' : beautyLight ? 'text-foreground/80 hover:bg-muted' : 'hover:bg-white/10'
                 )}
               >
                 Ver todo <ChevronRight className="h-3 w-3" aria-hidden="true" />
@@ -1007,11 +1018,11 @@ export function PublicHeader({
                       className={cn(
                         'flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-background px-1 py-2 text-[10px] font-semibold transition-colors text-center',
                         pathname === (tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos') || pathname === '/marketplace/favoritos'
-                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                          ? isBeauty ? 'border-primary/30 bg-primary/10 text-primary font-bold' : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       )}
                     >
-                      <Heart className={cn('h-3.5 w-3.5 shrink-0', pathname.includes('/favoritos') ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                      <Heart className={cn('h-3.5 w-3.5 shrink-0', pathname.includes('/favoritos') ? isBeauty ? 'fill-primary text-primary' : 'fill-rose-500 text-rose-500' : isBeauty ? 'text-primary' : 'text-rose-500')} />
                       <span className="leading-tight">Favoritos</span>
                     </Link>
                   </div>
@@ -1046,11 +1057,11 @@ export function PublicHeader({
                       className={cn(
                         'flex items-center justify-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-semibold transition-colors',
                         pathname === (tenantPrefix ? `${tenantPrefix}/favoritos` : '/marketplace/favoritos') || pathname === '/marketplace/favoritos'
-                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                          ? isBeauty ? 'border-primary/30 bg-primary/10 text-primary font-bold' : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       )}
                     >
-                      <Heart className={cn('h-3.5 w-3.5', pathname.includes('/favoritos') ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                      <Heart className={cn('h-3.5 w-3.5', pathname.includes('/favoritos') ? isBeauty ? 'fill-primary text-primary' : 'fill-rose-500 text-rose-500' : isBeauty ? 'text-primary' : 'text-rose-500')} />
                       <span>Favoritos</span>
                     </Link>
                   </div>
@@ -1081,7 +1092,7 @@ export function PublicHeader({
                     )}
                   >
                     <div className="flex items-center gap-2.5">
-                      {Icon && <Icon className={cn('h-4 w-4', isOffer && 'text-rose-500')} />}
+                      {Icon && <Icon className={cn('h-4 w-4', isOffer && (isBeauty ? 'text-primary' : 'text-rose-500'))} />}
                       <span>{link.label}</span>
                       {isOffer && (
                         <span className="rounded-full bg-rose-600 px-1.5 py-0.5 text-[8px] font-black uppercase text-white shadow-2xs">

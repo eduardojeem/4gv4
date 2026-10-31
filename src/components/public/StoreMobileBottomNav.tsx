@@ -16,10 +16,13 @@ import { usePublicCart } from '@/hooks/use-public-cart'
 import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { AuthModal } from '@/components/public/AuthModal'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { cn } from '@/lib/utils'
 
 export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?: boolean }) {
   const pathname = usePathname()
+  const storefrontStyle = useStorefrontStyle()
+  const isBeauty = storefrontStyle === 'beauty'
   const { user } = useAuth()
   const { count } = usePublicCart()
   const { open: openCart } = useCartDrawer()
@@ -78,7 +81,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
               className={cn(
                 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
                 tab.emphasized
-                  ? 'font-bold text-rose-700 dark:text-rose-400'
+                  ? isBeauty ? 'font-bold text-primary' : 'font-bold text-rose-700 dark:text-rose-400'
                   : tab.isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -88,7 +91,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200',
                   tab.emphasized
-                    ? 'scale-110 bg-rose-600 text-white shadow-md ring-2 ring-rose-500/25 group-hover:bg-rose-500'
+                    ? isBeauty ? 'scale-110 bg-primary text-primary-foreground shadow-sm' : 'scale-110 bg-rose-600 text-white shadow-md ring-2 ring-rose-500/25 group-hover:bg-rose-500'
                     : tab.isActive
                     ? 'bg-primary/10 text-primary scale-110 shadow-xs'
                     : 'group-hover:bg-muted text-muted-foreground'
