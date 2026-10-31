@@ -288,27 +288,42 @@ export function useCredits(enabled = true) {
 
         // Unsubscribe any existing channel before creating a new one
         if (channelRef.current) {
-            channelRef.current.unsubscribe()
+            try {
+                channelRef.current.unsubscribe()
+            } catch {
+                // Limpieza segura
+            }
         }
 
-        const channel = supabase
-            .channel('credits_realtime_hook')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_payments' }, () => scheduleRefresh())
+        try {
+            const channel = supabase
+                .channel('credits_realtime_hook')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_payments' }, () => scheduleRefresh())
 
-        channel.subscribe()
-        channelRef.current = channel
+            channel.subscribe()
+            channelRef.current = channel
+        } catch (err) {
+            console.warn('[useCredits] Realtime no disponible:', err)
+            channelRef.current = null
+        }
 
         return () => {
             if (realtimeRefreshTimeoutRef.current) {
                 clearTimeout(realtimeRefreshTimeoutRef.current)
                 realtimeRefreshTimeoutRef.current = null
             }
-            channel.unsubscribe()
-            channelRef.current = null
+            if (channelRef.current) {
+                try {
+                    channelRef.current.unsubscribe()
+                } catch {
+                    // Limpieza segura
+                }
+                channelRef.current = null
+            }
         }
     }, [enabled, supabase, scheduleRefresh])
     const markInstallmentPaid = useCallback(async (

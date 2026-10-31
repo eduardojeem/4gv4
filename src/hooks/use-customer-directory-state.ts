@@ -161,11 +161,26 @@ export function useCustomerDirectoryState() {
 
   useEffect(() => {
     if (!organizationId) return
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return
     const client = createClient()
-    const channel = client.channel(`customer_directory:${organizationId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers', filter: `organization_id=eq.${organizationId}` }, () => setRevision((value) => value + 1))
-      .subscribe()
-    return () => { void client.removeChannel(channel) }
+    let channel: ReturnType<typeof client.channel> | null = null
+    try {
+      channel = client.channel(`customer_directory:${organizationId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'customers', filter: `organization_id=eq.${organizationId}` }, () => setRevision((value) => value + 1))
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[customer_directory] Realtime no disponible:', err)
+      channel = null
+    }
+    return () => {
+      if (channel) {
+        try {
+          void client.removeChannel(channel)
+        } catch {
+          // Limpieza segura
+        }
+      }
+    }
   }, [organizationId])
 
   const setPage = useCallback((page: number) => setState((prev) => ({

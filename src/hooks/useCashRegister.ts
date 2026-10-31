@@ -828,71 +828,86 @@ export function useCashRegister() {
         if (!config.supabase.isConfigured || !supabase || !currentSession) return
 
         const sessionId = currentSession.id
-        const channelName = `cash_session_${sessionId}_${Date.now()}`
+        if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return
 
-        const channel = supabase
-            .channel(channelName)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'cash_movements',
-                    filter: `session_id=eq.${sessionId}`
-                },
-                (payload) => {
-                    const newMovement = payload.new as CashMovement
-                    setCurrentSession(prev => {
-                        if (!prev || prev.id !== sessionId) return prev
-                        const exists = prev.movements.some(m => m.id === newMovement.id)
-                        if (exists) return prev
-                        return {
-                            ...prev,
-                            movements: [...prev.movements, newMovement]
-                        }
-                    })
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'cash_movements',
-                    filter: `session_id=eq.${sessionId}`
-                },
-                (payload) => {
-                    const oldId = payload.old?.id
-                    if (!oldId) return
-                    setCurrentSession(prev => {
-                        if (!prev || prev.id !== sessionId) return prev
-                        return {
-                            ...prev,
-                            movements: prev.movements.filter(m => m.id !== oldId)
-                        }
-                    })
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'cash_closures',
-                    filter: `id=eq.${sessionId}`
-                },
-                (payload) => {
-                    const updated = payload.new as { date?: string | null; closed_at?: string | null; closing_balance?: number }
-                    if (updated && (updated.date || updated.closed_at)) {
-                        setCurrentSession(null)
-                        toast.info('El turno de caja ha sido cerrado.')
+        const channelName = `cash_session_${sessionId}_${Date.now()}`
+        let channel: ReturnType<typeof supabase.channel> | null = null
+
+        try {
+            channel = supabase
+                .channel(channelName)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'cash_movements',
+                        filter: `session_id=eq.${sessionId}`
+                    },
+                    (payload) => {
+                        const newMovement = payload.new as CashMovement
+                        setCurrentSession(prev => {
+                            if (!prev || prev.id !== sessionId) return prev
+                            const exists = prev.movements.some(m => m.id === newMovement.id)
+                            if (exists) return prev
+                            return {
+                                ...prev,
+                                movements: [...prev.movements, newMovement]
+                            }
+                        })
                     }
-                }
-            )
-            .subscribe()
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'DELETE',
+                        schema: 'public',
+                        table: 'cash_movements',
+                        filter: `session_id=eq.${sessionId}`
+                    },
+                    (payload) => {
+                        const oldId = payload.old?.id
+                        if (!oldId) return
+                        setCurrentSession(prev => {
+                            if (!prev || prev.id !== sessionId) return prev
+                            return {
+                                ...prev,
+                                movements: prev.movements.filter(m => m.id !== oldId)
+                            }
+                        })
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'cash_closures',
+                        filter: `id=eq.${sessionId}`
+                    },
+                    (payload) => {
+                        const updated = payload.new as { date?: string | null; closed_at?: string | null; closing_balance?: number }
+                        if (updated && (updated.date || updated.closed_at)) {
+                            setCurrentSession(null)
+                            toast.info('El turno de caja ha sido cerrado.')
+                        }
+                    }
+                )
+
+            channel.subscribe()
+        } catch (err) {
+            console.warn('[useCashRegister] Realtime no disponible:', err)
+            channel = null
+        }
 
         return () => {
-            supabase?.removeChannel(channel)
+            if (channel) {
+                try {
+                    supabase?.removeChannel(channel)
+                } catch {
+                    // Limpieza segura
+                }
+            }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture
     }, [selectedBranchId, supabase, currentSession?.id])
