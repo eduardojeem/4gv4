@@ -300,10 +300,12 @@ export function ProductCard(props: ProductCardProps) {
           className={cn(
             'relative overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
             // Cosmética y súper: el envase sobre blanco, en cuadrado. En tecnología, dispositivo entero sobre superficie neutra.
-            storefrontStyle === 'beauty' || isMarket || storefrontStyle === 'wholesale-pro'
+            storefrontStyle === 'wholesale-pro'
               ? 'aspect-square bg-white dark:bg-muted/10'
+              : storefrontStyle === 'beauty' || isMarket
+              ? 'aspect-square bg-white'
               : storefrontStyle === 'tech'
-              ? 'aspect-square bg-muted/15 dark:bg-muted/10'
+              ? 'aspect-square bg-muted/15'
               : 'bg-muted/30',
             storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && storefrontStyle !== 'tech' && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
@@ -317,7 +319,7 @@ export function ProductCard(props: ProductCardProps) {
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
                 storefrontStyle === 'tech'
-                  ? 'object-contain p-3.5 sm:p-4 transition-transform duration-500 group-hover:scale-[1.05]'
+                  ? 'object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]'
                   : coverImage && storefrontStyle !== 'wholesale-pro'
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
                   : storefrontStyle === 'wholesale-pro'
