@@ -155,9 +155,10 @@ export async function createSubscriptionStripeCheckout(params: {
       .update({ status: 'failed' })
       .eq('id', payment.id)
 
+    // 424 y no 502: Cloudflare reemplaza las respuestas 502 por su propia página.
     throw new SubscriptionCheckoutError(
       error instanceof Error ? error.message : 'No se pudo iniciar el pago con Stripe.',
-      502,
+      424,
       undefined,
       correlationId,
     )
