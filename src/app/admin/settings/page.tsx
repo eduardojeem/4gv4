@@ -22,7 +22,8 @@ import {
   Sparkles,
   Store,
   Sun,
-  Laptop
+  Laptop,
+  Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExchangeRatesManager } from '@/components/dashboard/currency/ExchangeRatesManager'
@@ -38,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { BusinessProfileCard, type BusinessProfileActions } from '@/components/admin/settings/BusinessProfileCard'
+import { SettingsSetupCard, type SettingsSetupStatus, type SettingsTarget } from '@/components/admin/settings/SettingsSetupCard'
 import { AdminMfaPolicyCard } from '@/components/admin/security/admin-mfa-policy-card'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
@@ -54,32 +56,61 @@ import {
   SUPPORTED_LANGUAGES,
   formatCurrency,
   getCurrencyDefinition,
+  isSupportedCurrency,
 } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { REGIONAL_DEFAULT_COUNTRIES, normalizeCountryCode } from '@/lib/regional/contract'
+import { getSupportedRegionalCountries, normalizeCountryCode } from '@/lib/regional/contract'
+import { countryLabel, localeForRegion, regionalSuggestion } from '@/lib/regional/country-labels'
 
 type FieldErrors = Partial<Record<
   'companyName' | 'companyEmail' | 'companyPhone' | 'companyRuc' | 'companyAddress' | 'city' | 'taxRate',
   string
 >>
 
-type SettingsTab = 'company' | 'operations' | 'appearance'
+type SettingsTab = SettingsTarget | 'appearance'
 
 const HASH_BY_TAB: Record<SettingsTab, string> = {
-  company: 'empresa',
-  operations: 'operacion',
+  negocio: 'negocio',
+  fiscal: 'fiscal',
+  rubro: 'rubro',
   appearance: 'apariencia',
 }
 
+// Los enlaces viejos del resto del panel (#empresa, #operacion, #monedas)
+// siguen llevando a donde estaba cada cosa.
 const TAB_BY_HASH: Record<string, SettingsTab | undefined> = {
-  empresa: 'company',
-  operacion: 'operations',
+  negocio: 'negocio',
+  empresa: 'negocio',
+  fiscal: 'fiscal',
+  operacion: 'fiscal',
+  monedas: 'fiscal',
+  rubro: 'rubro',
   apariencia: 'appearance',
+}
+
+/** Qué pestaña tiene cada campo, para llevar al dueño a lo que falta o está mal. */
+const TAB_BY_FIELD: Record<keyof FieldErrors, SettingsTarget> = {
+  companyName: 'negocio',
+  companyEmail: 'negocio',
+  companyPhone: 'negocio',
+  companyAddress: 'negocio',
+  city: 'negocio',
+  companyRuc: 'fiscal',
+  taxRate: 'fiscal',
 }
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return <p id={id} className="text-xs font-medium text-destructive mt-1" role="alert">{message}</p>
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <span>{children}</span>
+      <span className="h-px flex-1 bg-border/60" />
+    </div>
+  )
 }
 
 export default function AdminSettingsPage() {
@@ -99,28 +130,64 @@ export default function AdminSettingsPage() {
   const { loading: authLoading } = useAuth()
   const { theme: activeTheme, colorScheme: activeColorScheme, setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
-  const [activeTab, setActiveTab] = useState<SettingsTab>('company')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('negocio')
 
-  // La pestaña va en la direccion (#empresa, #operacion, #apariencia): al
-  // recargar se vuelve a la misma. Los enlaces «Tipo de cambio» del resto del
-  // panel llegan con #monedas, que vive en Operacion.
+  // Lo que dejó el onboarding y lo que falta fuera de esta pantalla.
+  const [setupStatus, setSetupStatus] = useState<SettingsSetupStatus | null>(null)
+  const loadSetupStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/settings/setup-status', { cache: 'no-store' })
+      const body = await response.json().catch(() => null)
+      if (response.ok && body?.success) setSetupStatus(body.data as SettingsSetupStatus)
+    } catch {
+      // Opcional: sin esto la tarjeta muestra solo los datos de esta pantalla.
+    }
+  }, [])
   useEffect(() => {
-    const hash = window.location.hash.slice(1)
-    const fromHash = hash === 'monedas' ? 'operations' : TAB_BY_HASH[hash]
-    if (!fromHash) return
-    const timer = window.setTimeout(() => {
-      setActiveTab(fromHash)
-      if (hash === 'monedas') {
-        window.setTimeout(() => document.getElementById('monedas')?.scrollIntoView({ behavior: 'smooth' }), 150)
-      }
-    }, 0)
+    if (scope !== 'organization') return
+    const timer = window.setTimeout(() => void loadSetupStatus(), 0)
     return () => window.clearTimeout(timer)
+  }, [scope, loadSetupStatus])
+
+  // La pestaña va en la dirección (#negocio, #fiscal, #rubro, #apariencia): al
+  // recargar se vuelve a la misma. Los enlaces «Tipo de cambio» del resto del
+  // panel llegan con #monedas, que vive en Fiscal y región.
+  useEffect(() => {
+    let timer: number | undefined
+    const applyHash = () => {
+      const hash = window.location.hash.slice(1)
+      const fromHash = TAB_BY_HASH[hash]
+      if (!fromHash) return
+      timer = window.setTimeout(() => {
+        setActiveTab(fromHash)
+        if (hash === 'monedas') {
+          window.setTimeout(() => document.getElementById('monedas')?.scrollIntoView({ behavior: 'smooth' }), 150)
+        }
+      }, 0)
+    }
+    applyHash()
+    // Un enlace a otra pestaña desde la misma página solo cambia el ancla.
+    window.addEventListener('hashchange', applyHash)
+    return () => {
+      window.removeEventListener('hashchange', applyHash)
+      window.clearTimeout(timer)
+    }
   }, [])
 
   const changeTab = (value: string) => {
     const tab = value as SettingsTab
     setActiveTab(tab)
     window.history.replaceState(null, '', `#${HASH_BY_TAB[tab]}`)
+  }
+
+  // Desde la tarjeta «Tu negocio»: abre la pestaña y deja el cursor en el campo.
+  const goTo = (tab: SettingsTarget, field?: string) => {
+    changeTab(tab)
+    window.setTimeout(() => {
+      const target = field ? document.getElementById(field) : document.getElementById('settings-tabs')
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (target instanceof HTMLElement && field) target.focus({ preventScroll: true })
+    }, 80)
   }
   const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
 
@@ -134,7 +201,7 @@ export default function AdminSettingsPage() {
     const next: FieldErrors = {}
     const name = settings.companyName.trim()
     const email = settings.companyEmail.trim()
-    if (!name) next.companyName = 'Ingresá el nombre de la empresa.'
+    if (!name) next.companyName = 'Ingresá el nombre de tu negocio.'
     else if (name.length > 100) next.companyName = 'El nombre no puede superar 100 caracteres.'
     // El email es opcional: solo se valida el formato si se cargó.
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.companyEmail = 'Ingresá un email válido.'
@@ -162,7 +229,11 @@ export default function AdminSettingsPage() {
   }, [])
 
   const currencyChanged = settings.currency !== originalSettings.currency
-  const settingsCanSave = errorCount === 0 && (!currencyChanged || currencyChangeConfirmed)
+  // Sin productos ni ventas no hay importes que el cambio afecte: no se pide
+  // confirmar nada, como en el onboarding.
+  const currencyChangeIsHarmless = setupStatus?.hasBusinessData === false
+  const currencyConfirmed = currencyChangeConfirmed || currencyChangeIsHarmless
+  const settingsCanSave = errorCount === 0 && (!currencyChanged || currencyConfirmed)
   const hasPendingChanges = hasChanges || profileState.dirty
   const canSave = (!hasChanges || settingsCanSave) && (!profileState.dirty || profileState.canSave)
   const selectedCurrency = getCurrencyDefinition(settings.currency)
@@ -174,6 +245,8 @@ export default function AdminSettingsPage() {
   })
   const changedFields = useMemo(() => (
     Object.keys(settings).reduce((count, key) => {
+      // El locale se deriva del idioma y el país: no es un cambio aparte.
+      if (key === 'locale') return count
       const typedKey = key as keyof typeof settings
       return JSON.stringify(settings[typedKey]) === JSON.stringify(originalSettings[typedKey]) ? count : count + 1
     }, 0)
@@ -201,22 +274,52 @@ export default function AdminSettingsPage() {
     setColorScheme(value)
   }
 
+  // El idioma de los formatos y el país forman el `locale` que guardó el
+  // onboarding (es-PY): se actualiza junto con cualquiera de los dos.
+  const changeCountry = (value: string) => {
+    const country = normalizeCountryCode(value)
+    updateSetting('countryCode', country)
+    updateSetting('locale', localeForRegion(settings.language, country))
+  }
+  const changeLanguage = (value: string) => {
+    updateSetting('language', value)
+    updateSetting('locale', localeForRegion(value, settings.countryCode))
+  }
+  const changeCurrency = (value: string) => {
+    updateSetting('currency', value)
+    setCurrencyChangeConfirmed(false)
+  }
+
+  const suggestion = regionalSuggestion(settings.countryCode)
+  const suggestionDiffers = Boolean(suggestion && (
+    (isSupportedCurrency(suggestion.currency) && suggestion.currency !== settings.currency)
+    || (suggestion.timeZone && suggestion.timeZone !== settings.timeZone)
+    || suggestion.language !== settings.language
+  ))
+  const applySuggestion = () => {
+    if (!suggestion) return
+    if (isSupportedCurrency(suggestion.currency) && suggestion.currency !== settings.currency) changeCurrency(suggestion.currency)
+    if (suggestion.timeZone) updateSetting('timeZone', suggestion.timeZone)
+    changeLanguage(suggestion.language)
+  }
+
   const handleSave = async () => {
     setSubmitAttempted(true)
     if (!canSave) {
       if (hasChanges && !settingsCanSave) {
-        changeTab(validationErrors.taxRate || currencyChanged ? 'operations' : 'company')
-        toast.error(currencyChanged && !currencyChangeConfirmed
+        const firstError = (Object.keys(validationErrors) as Array<keyof FieldErrors>)[0]
+        changeTab(firstError ? TAB_BY_FIELD[firstError] : 'fiscal')
+        toast.error(!firstError && currencyChanged && !currencyConfirmed
           ? 'Confirmá el impacto del cambio de moneda antes de guardar.'
           : 'Revisá los campos marcados antes de guardar.')
       } else {
-        changeTab('company')
-        toast.error('Revisá el perfil del negocio antes de guardar.')
+        changeTab('rubro')
+        toast.error('Revisá el rubro y las herramientas antes de guardar.')
       }
       return
     }
     if (hasChanges) {
-      const result = await saveSettings({ confirmCurrencyChange: currencyChangeConfirmed })
+      const result = await saveSettings({ confirmCurrencyChange: currencyConfirmed })
       if (!result.success) {
         toast.error(result.error || t.saveError)
         return
@@ -228,6 +331,7 @@ export default function AdminSettingsPage() {
     }
     // El perfil avisa por su cuenta si se guardo o no.
     if (profileState.dirty) await profileActionsRef.current?.save()
+    void loadSetupStatus()
   }
 
   // Ctrl+S / Cmd+S para guardar.
@@ -264,7 +368,7 @@ export default function AdminSettingsPage() {
             <h3 className="text-sm font-semibold text-foreground">
               {authLoading ? t.loadingAuth : t.loadingSettings}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">Sincronizando preferencias del sistema...</p>
+            <p className="mt-1 text-xs text-muted-foreground">Trayendo los datos de tu negocio…</p>
           </div>
         </div>
       </div>
@@ -329,28 +433,34 @@ export default function AdminSettingsPage() {
   const activeSystemColorScheme = isSystemColorScheme(activeColorScheme) ? activeColorScheme : DEFAULT_SYSTEM_COLOR_SCHEME
   const selectedColorScheme = getSystemColorSchemeOption(activeSystemColorScheme)
   const selectedColorSchemeText = t.appearance.colorSchemes[selectedColorScheme.value] ?? selectedColorScheme
-  const timeZoneOptions = Object.entries(t.regional.timeZones)
+  // Una zona que no está en la lista (la guardó el onboarding o la app) se
+  // muestra igual: antes el desplegable quedaba en blanco.
+  const timeZoneOptions: Array<[string, string]> = Object.entries(t.regional.timeZones)
+  if (settings.timeZone && !timeZoneOptions.some(([value]) => value === settings.timeZone)) {
+    timeZoneOptions.unshift([settings.timeZone, settings.timeZone.replace(/_/g, ' ')])
+  }
+  const branchName = setupStatus?.branch?.name
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
       {/* Encabezado Principal */}
       <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-primary/[0.03] p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Configuración de la organización
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                Datos de la empresa, impuestos, moneda y formato regional.
-              </p>
-            </div>
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Configuración
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+              Los datos de tu negocio, impuestos, moneda y las herramientas que usás.
+            </p>
           </div>
         </div>
       </div>
+
+      <SettingsSetupCard saved={originalSettings} status={setupStatus} onGoTo={goTo} />
 
       {/* Barra flotante de cambios pendientes */}
       {hasPendingChanges ? (
@@ -368,9 +478,9 @@ export default function AdminSettingsPage() {
                   ? 'Revisá los valores y guardá para aplicarlos (Ctrl + S).'
                   : errorCount > 0
                     ? `${errorCount} campo${errorCount === 1 ? '' : 's'} requiere${errorCount === 1 ? '' : 'n'} atención.`
-                    : currencyChanged && !currencyChangeConfirmed
+                    : currencyChanged && !currencyConfirmed
                       ? 'Falta confirmar el cambio de moneda.'
-                      : 'Revisá el perfil del negocio.'}
+                      : 'Revisá el rubro y las herramientas.'}
               </p>
             </div>
           </div>
@@ -388,16 +498,20 @@ export default function AdminSettingsPage() {
       ) : null}
 
       {/* Tabs principales */}
-      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
+      <Tabs id="settings-tabs" value={activeTab} onValueChange={changeTab} className="space-y-6">
         <div className="border-b border-border/80 pb-3">
-          <TabsList className="grid h-11 w-full grid-cols-3 sm:w-[480px] p-1 bg-muted/60 rounded-xl">
-            <TabsTrigger value="company" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <Building2 className="h-4 w-4" />
-              Empresa
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 bg-muted/60 rounded-xl sm:h-11 sm:grid-cols-4">
+            <TabsTrigger value="negocio" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Store className="h-4 w-4" />
+              Negocio
             </TabsTrigger>
-            <TabsTrigger value="operations" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <TabsTrigger value="fiscal" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <ReceiptText className="h-4 w-4" />
-              Operación
+              Fiscal y región
+            </TabsTrigger>
+            <TabsTrigger value="rubro" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Building2 className="h-4 w-4" />
+              Rubro y herramientas
             </TabsTrigger>
             <TabsTrigger value="appearance" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <Palette className="h-4 w-4" />
@@ -406,13 +520,8 @@ export default function AdminSettingsPage() {
           </TabsList>
         </div>
 
-        {/* TAB 1: EMPRESA */}
-        {/* Conservar el borrador del perfil y sus acciones al cambiar de pestaña. */}
-        <TabsContent value="company" forceMount className="m-0 space-y-6 focus-visible:outline-none data-[state=inactive]:hidden">
-          {/* Business Profile Component */}
-          <BusinessProfileCard onStateChange={handleProfileState} actionsRef={profileActionsRef} />
-
-          {/* Información Legal y Facturación */}
+        {/* TAB 1: NEGOCIO */}
+        <TabsContent value="negocio" className="m-0 space-y-6 focus-visible:outline-none">
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="border-b bg-muted/20 pb-5">
               <div className="flex items-center gap-3">
@@ -421,72 +530,61 @@ export default function AdminSettingsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-lg font-semibold tracking-tight">
-                    Identidad y contacto empresarial
+                    Datos del negocio
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Información utilizada en tickets, recibos, presupuestos y documentos generados por el sistema.
+                    Aparecen en tus tickets, recibos y presupuestos, y en la ficha de tu tienda online.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6 p-5 sm:p-6">
-              {/* Sección 1: Datos Principales */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <span>Identificación fiscal y razón social</span>
-                  <span className="h-px flex-1 bg-border/60" />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="companyName" className="text-xs font-medium text-foreground flex items-center gap-1">
-                      Nombre de la empresa <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="companyName"
-                      value={settings.companyName}
-                      onChange={(event) => updateSetting('companyName', event.target.value)}
-                      onBlur={() => touch('companyName')}
-                      placeholder="Ej: Innova Tech S.A."
-                      className="h-10"
-                      aria-invalid={Boolean(visibleError('companyName'))}
-                      aria-describedby={visibleError('companyName') ? 'companyName-error' : undefined}
-                    />
-                    <FieldError id="companyName-error" message={visibleError('companyName')} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="companyRuc" className="text-xs font-medium text-foreground">
-                      RUC o identificación fiscal
-                    </Label>
-                    <Input
-                      id="companyRuc"
-                      value={settings.companyRuc}
-                      onChange={(event) => updateSetting('companyRuc', event.target.value)}
-                      onBlur={() => touch('companyRuc')}
-                      placeholder="Ej: 80012345-6"
-                      className="h-10"
-                      aria-invalid={Boolean(visibleError('companyRuc'))}
-                      aria-describedby={visibleError('companyRuc') ? 'companyRuc-error' : undefined}
-                    />
-                    <FieldError id="companyRuc-error" message={visibleError('companyRuc')} />
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="text-xs font-medium text-foreground flex items-center gap-1">
+                  Nombre del negocio <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="companyName"
+                  value={settings.companyName}
+                  onChange={(event) => updateSetting('companyName', event.target.value)}
+                  onBlur={() => touch('companyName')}
+                  placeholder="Ej: Innova Tech"
+                  className="h-10"
+                  aria-invalid={Boolean(visibleError('companyName'))}
+                  aria-describedby={visibleError('companyName') ? 'companyName-error' : 'companyName-help'}
+                />
+                <FieldError id="companyName-error" message={visibleError('companyName')} />
+                {!visibleError('companyName') ? (
+                  <p id="companyName-help" className="text-xs text-muted-foreground">Es el nombre que ven tus clientes en los tickets y en tu tienda.</p>
+                ) : null}
               </div>
 
-              {/* Sección 2: Canales de Contacto */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <span>Canales de contacto corporativo</span>
-                  <span className="h-px flex-1 bg-border/60" />
-                </div>
-
+                <SectionHeading>Cómo te contactan</SectionHeading>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="companyPhone" className="text-xs font-medium text-foreground flex items-center gap-1">
+                      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                      Teléfono o WhatsApp
+                    </Label>
+                    <Input
+                      id="companyPhone"
+                      value={settings.companyPhone}
+                      onChange={(event) => updateSetting('companyPhone', event.target.value)}
+                      onBlur={() => touch('companyPhone')}
+                      placeholder="+595 981 000 000"
+                      className="h-10"
+                      aria-invalid={Boolean(visibleError('companyPhone'))}
+                      aria-describedby={visibleError('companyPhone') ? 'companyPhone-error' : undefined}
+                    />
+                    <FieldError id="companyPhone-error" message={visibleError('companyPhone')} />
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="companyEmail" className="text-xs font-medium text-foreground flex items-center gap-1">
                       <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                      Email empresarial
+                      Email
                       <span className="font-normal text-muted-foreground">(opcional)</span>
                     </Label>
                     <Input
@@ -495,46 +593,23 @@ export default function AdminSettingsPage() {
                       value={settings.companyEmail}
                       onChange={(event) => updateSetting('companyEmail', event.target.value)}
                       onBlur={() => touch('companyEmail')}
-                      placeholder="contacto@miempresa.com"
+                      placeholder="contacto@minegocio.com"
                       className="h-10"
                       aria-invalid={Boolean(visibleError('companyEmail'))}
                       aria-describedby={visibleError('companyEmail') ? 'companyEmail-error' : undefined}
                     />
                     <FieldError id="companyEmail-error" message={visibleError('companyEmail')} />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="companyPhone" className="text-xs font-medium text-foreground flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                      Teléfono empresarial
-                    </Label>
-                    <Input
-                      id="companyPhone"
-                      value={settings.companyPhone}
-                      onChange={(event) => updateSetting('companyPhone', event.target.value)}
-                      onBlur={() => touch('companyPhone')}
-                      placeholder="+595 21 000 000"
-                      className="h-10"
-                      aria-invalid={Boolean(visibleError('companyPhone'))}
-                      aria-describedby={visibleError('companyPhone') ? 'companyPhone-error' : undefined}
-                    />
-                    <FieldError id="companyPhone-error" message={visibleError('companyPhone')} />
-                  </div>
                 </div>
               </div>
 
-              {/* Sección 3: Ubicación */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <span>Ubicación y domicilio central</span>
-                  <span className="h-px flex-1 bg-border/60" />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
+                <SectionHeading>Dónde estás</SectionHeading>
+                <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="companyAddress" className="text-xs font-medium text-foreground flex items-center gap-1">
                       <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                      Dirección empresarial
+                      Dirección
                     </Label>
                     <Textarea
                       id="companyAddress"
@@ -542,7 +617,7 @@ export default function AdminSettingsPage() {
                       onChange={(event) => updateSetting('companyAddress', event.target.value)}
                       onBlur={() => touch('companyAddress')}
                       rows={2}
-                      placeholder="Avda. Principal 1234, Edificio Central"
+                      placeholder="Avda. Principal 1234"
                       className="resize-none"
                       aria-invalid={Boolean(visibleError('companyAddress'))}
                       aria-describedby={visibleError('companyAddress') ? 'companyAddress-error' : undefined}
@@ -550,9 +625,9 @@ export default function AdminSettingsPage() {
                     <FieldError id="companyAddress-error" message={visibleError('companyAddress')} />
                   </div>
 
-                  <div className="space-y-2 sm:col-span-1">
+                  <div className="space-y-2">
                     <Label htmlFor="city" className="text-xs font-medium text-foreground">
-                      Ciudad / Localidad
+                      Ciudad
                     </Label>
                     <Input
                       id="city"
@@ -569,12 +644,19 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
 
+              <div className="flex items-start gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="leading-relaxed">
+                  El teléfono, la dirección y la ciudad son también los de tu sucursal principal{branchName ? <> (<strong className="text-foreground">{branchName}</strong>)</> : null} y los de tu tienda online: al guardar se actualizan ahí también.
+                  {' '}¿Tenés más de un local? Cargalos en <Link href="/admin/branches" className="font-medium text-primary underline underline-offset-2">Sucursales</Link>.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* TAB 2: OPERACIÓN */}
-        <TabsContent value="operations" className="m-0 space-y-6 focus-visible:outline-none">
+        {/* TAB 2: FISCAL Y REGIÓN */}
+        <TabsContent value="fiscal" className="m-0 space-y-6 focus-visible:outline-none">
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="border-b bg-muted/20 pb-5">
               <div className="flex items-center gap-3">
@@ -583,44 +665,121 @@ export default function AdminSettingsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-lg font-semibold tracking-tight">
-                    Ventas y configuración regional
+                    País, impuestos y moneda
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Valores aplicados a cálculos del Punto de Venta (POS), tasas impositivas y formato de fechas.
+                    Se usan en la caja, los comprobantes y los informes.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6 p-5 sm:p-6">
-              {settings.needsCountryConfirmation ? <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                <Label htmlFor="setting-country" className="text-sm font-semibold">Confirmá el país de tu negocio</Label>
-                <p className="mt-1 text-xs">Esta confirmación regional es opcional. No convierte precios ni modifica operaciones existentes.</p>
-                <Select value={settings.countryCode ?? ''} onValueChange={(value) => updateSetting('countryCode', normalizeCountryCode(value))}>
-                  <SelectTrigger id="setting-country" className="mt-3 h-10 bg-background"><SelectValue placeholder="Seleccioná un país" /></SelectTrigger>
-                  <SelectContent>
-                    {REGIONAL_DEFAULT_COUNTRIES.map((country) => <SelectItem key={country} value={country}>{country === 'PY' ? 'Paraguay' : country === 'BR' ? 'Brasil' : country === 'AR' ? 'Argentina' : 'Estados Unidos'}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div> : null}
-              {/* Bloque Moneda e Idioma */}
-              <div className="grid gap-5 lg:grid-cols-2">
-                {/* Moneda Base */}
-                <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-4">
+              {/* País: siempre visible y editable; antes solo aparecía si faltaba. */}
+              <div className={cn(
+                'space-y-3 rounded-xl border p-4',
+                settings.needsCountryConfirmation && !settings.countryCode
+                  ? 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
+                  : 'border-border/80 bg-card',
+              )}>
+                <div className="grid gap-4 sm:grid-cols-2 sm:items-end">
+                  <div className="space-y-2">
+                    <Label htmlFor="setting-country" className="text-xs font-semibold">País del negocio</Label>
+                    <Select value={settings.countryCode ?? ''} onValueChange={changeCountry}>
+                      <SelectTrigger id="setting-country" className="h-10 bg-background"><SelectValue placeholder="Seleccioná un país" /></SelectTrigger>
+                      <SelectContent>
+                        {getSupportedRegionalCountries().map(({ code, label }) => <SelectItem key={code} value={code}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {settings.countryCode
+                      ? 'Define lo que te sugerimos para moneda, formato y zona horaria. Cambiarlo no convierte precios ni modifica ventas.'
+                      : 'Todavía no confirmaste el país. Elegilo para que te sugiramos moneda, formato y zona horaria; no cambia nada de lo que ya cargaste.'}
+                  </p>
+                </div>
+                {suggestion && suggestionDiffers ? (
+                  <div className="flex flex-col gap-2 rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs text-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      En {countryLabel(settings.countryCode)} lo habitual es {suggestion.currency}
+                      {suggestion.timeZone ? ` y la hora de ${t.regional.timeZones[suggestion.timeZone as keyof typeof t.regional.timeZones] ?? suggestion.timeZone}` : ''}.
+                    </span>
+                    <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 bg-background text-xs" onClick={applySuggestion}>
+                      <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Usar lo habitual
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-4">
+                <SectionHeading>Datos fiscales</SectionHeading>
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="companyRuc" className="text-xs font-semibold text-foreground">
+                      RUC o identificación fiscal
+                    </Label>
+                    <Input
+                      id="companyRuc"
+                      value={settings.companyRuc}
+                      onChange={(event) => updateSetting('companyRuc', event.target.value)}
+                      onBlur={() => touch('companyRuc')}
+                      placeholder="Ej: 80012345-6"
+                      className="h-10"
+                      aria-invalid={Boolean(visibleError('companyRuc'))}
+                      aria-describedby={visibleError('companyRuc') ? 'companyRuc-error' : 'companyRuc-help'}
+                    />
+                    <FieldError id="companyRuc-error" message={visibleError('companyRuc')} />
+                    {!visibleError('companyRuc') ? (
+                      <p id="companyRuc-help" className="text-xs text-muted-foreground">Sale impreso en tus tickets y comprobantes.</p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="taxRate" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Percent className="h-3.5 w-3.5 text-primary" />
+                        IVA general (%)
+                      </Label>
+                      {Number.isFinite(settings.taxRate) ? (
+                        <Badge variant="secondary" className="text-xs font-mono font-normal">
+                          {settings.taxRate}%
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <Input
+                      id="taxRate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={Number.isFinite(settings.taxRate) ? settings.taxRate : ''}
+                      // Vacio no es 0: antes borrar el campo guardaba 0% sin avisar.
+                      onChange={(event) => updateSetting('taxRate', event.target.value === '' ? Number.NaN : Number(event.target.value))}
+                      onBlur={() => touch('taxRate')}
+                      className="h-10"
+                      aria-invalid={Boolean(visibleError('taxRate'))}
+                      aria-describedby={visibleError('taxRate') ? 'taxRate-error' : 'taxRate-help'}
+                    />
+                    <FieldError id="taxRate-error" message={visibleError('taxRate')} />
+                    {!visibleError('taxRate') ? (
+                      <p id="taxRate-help" className="text-xs text-muted-foreground leading-relaxed">
+                        {settings.countryCode === 'PY' ? 'En Paraguay la tasa general es 10%. ' : ''}
+                        Se aplica a las ventas y presupuestos nuevos. Por ahora es una sola tasa: no se pueden combinar 10% y 5% en la misma venta.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <SectionHeading>Moneda, formato y hora</SectionHeading>
+                <div className="grid gap-5 lg:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="currency" className="text-xs font-semibold text-foreground">
-                      Moneda base de la organización
+                      Moneda de tu negocio
                     </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Se utiliza para definir precios, operaciones de caja, ventas en POS y reportes contables.
-                    </p>
-                    <Select
-                      value={settings.currency}
-                      onValueChange={(value) => {
-                        updateSetting('currency', value)
-                        setCurrencyChangeConfirmed(false)
-                      }}
-                    >
+                    <Select value={settings.currency} onValueChange={changeCurrency}>
                       <SelectTrigger id="currency" className="h-10">
                         <SelectValue />
                       </SelectTrigger>
@@ -632,39 +791,14 @@ export default function AdminSettingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Con la que ponés precios, cobrás y ves los informes.</p>
                   </div>
 
-                  {/* Vista Previa de Precio */}
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                          Formato en POS y comprobantes
-                        </span>
-                        <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
-                          {currencyPreview}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="border-primary/30 bg-background text-primary font-mono text-xs">
-                        {selectedCurrency.code}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Idioma y Formato */}
-                <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="setting-language" className="text-xs font-semibold text-foreground">
-                      Formato regional
+                      Formato de números y fechas
                     </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Define los separadores de miles y decimales y el formato de las fechas.
-                    </p>
-                    <Select
-                      value={settings.language}
-                      onValueChange={(value) => updateSetting('language', value)}
-                    >
+                    <Select value={settings.language} onValueChange={changeLanguage}>
                       <SelectTrigger id="setting-language" className="h-10">
                         <SelectValue />
                       </SelectTrigger>
@@ -676,109 +810,82 @@ export default function AdminSettingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Separadores de miles y decimales ({selectedLanguage.locale}). El panel sigue en español.</p>
                   </div>
 
-                  <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <p className="leading-relaxed">
-                      Formato elegido: <strong className="text-foreground">{selectedLanguage.locale}</strong>. Cambia cómo se ven números y fechas; los textos del panel siguen en español.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bloque Impuestos y Zona Horaria */}
-              <div className="grid gap-5 sm:grid-cols-2">
-                {/* IVA */}
-                <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="taxRate" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Percent className="h-3.5 w-3.5 text-primary" />
-                      Tasa general de IVA (%)
+                  <div className="space-y-2">
+                    <Label htmlFor="setting-timezone" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      Zona horaria
                     </Label>
-                    {Number.isFinite(settings.taxRate) ? (
-                      <Badge variant="secondary" className="text-xs font-mono font-normal">
-                        {settings.taxRate}%
-                      </Badge>
-                    ) : null}
+                    <Select value={settings.timeZone} onValueChange={(value) => updateSetting('timeZone', value)}>
+                      <SelectTrigger id="setting-timezone" className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timeZoneOptions.map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Define el día de los cierres de caja y los informes.</p>
                   </div>
-                  <Input
-                    id="taxRate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={Number.isFinite(settings.taxRate) ? settings.taxRate : ''}
-                    // Vacio no es 0: antes borrar el campo guardaba 0% sin avisar.
-                    onChange={(event) => updateSetting('taxRate', event.target.value === '' ? Number.NaN : Number(event.target.value))}
-                    onBlur={() => touch('taxRate')}
-                    className="h-10"
-                    aria-invalid={Boolean(visibleError('taxRate'))}
-                    aria-describedby={visibleError('taxRate') ? 'taxRate-error' : 'taxRate-help'}
-                  />
-                  <FieldError id="taxRate-error" message={visibleError('taxRate')} />
-                  {!visibleError('taxRate') ? (
-                    <p id="taxRate-help" className="text-xs text-muted-foreground leading-relaxed">
-                      Se aplica a todas las ventas y presupuestos nuevos. Es una sola tasa: todavía no se pueden combinar 10% y 5% en una misma venta.
-                    </p>
-                  ) : null}
                 </div>
 
-                {/* Zona Horaria */}
-                <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
-                  <Label htmlFor="setting-timezone" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-primary" />
-                    Zona horaria
-                  </Label>
-                  <Select value={settings.timeZone} onValueChange={(value) => updateSetting('timeZone', value)}>
-                    <SelectTrigger id="setting-timezone" className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timeZoneOptions.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Determina la fecha de los cierres diarios de caja, reportes y métricas analíticas.
-                  </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Así se ve un precio
+                    </span>
+                    <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
+                      {currencyPreview}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="border-primary/30 bg-background text-primary font-mono text-xs">
+                    {selectedCurrency.code}
+                  </Badge>
                 </div>
               </div>
 
-              {/* Alerta si cambia de moneda */}
+              {/* Aviso si cambia la moneda: rojo solo si hay importes que se ven afectados. */}
               {currencyChanged ? (
-                <Alert variant="destructive" className="rounded-xl border-destructive/40 bg-destructive/5 shadow-sm">
-                  <AlertCircle className="h-5 w-5" />
-                  <AlertTitle className="font-semibold">Cambio de moneda pendiente de confirmación</AlertTitle>
-                  <AlertDescription className="mt-2 space-y-3 text-xs leading-relaxed">
-                    <p>
-                      Cambiar de <strong className="font-bold">{originalSettings.currency}</strong> a <strong className="font-bold">{settings.currency}</strong> no convierte automáticamente precios existentes, deudas ni registros contables anteriores. Los datos históricos pasarán a representarse con el nuevo símbolo monetario.
-                    </p>
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/30 bg-background/80 p-3 text-foreground transition-colors hover:bg-background">
-                      <Checkbox
-                        checked={currencyChangeConfirmed}
-                        onCheckedChange={(checked) => setCurrencyChangeConfirmed(checked === true)}
-                        aria-describedby="currency-change-confirmation"
-                        className="mt-0.5"
-                      />
-                      <span id="currency-change-confirmation" className="text-xs font-medium leading-5">
-                        Entiendo el impacto en precios y saldos, y confirmo el cambio de moneda para esta organización.
-                      </span>
-                    </label>
-                  </AlertDescription>
-                </Alert>
+                currencyChangeIsHarmless ? (
+                  <Alert className="rounded-xl border-primary/30 bg-primary/5">
+                    <Info className="h-5 w-5" />
+                    <AlertTitle className="font-semibold">Vas a cambiar de {originalSettings.currency} a {settings.currency}</AlertTitle>
+                    <AlertDescription className="mt-1 text-xs leading-relaxed">
+                      Todavía no cargaste productos ni ventas, así que no hay importes que se vean afectados.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert variant="destructive" className="rounded-xl border-destructive/40 bg-destructive/5 shadow-sm">
+                    <AlertCircle className="h-5 w-5" />
+                    <AlertTitle className="font-semibold">Confirmá el cambio de moneda</AlertTitle>
+                    <AlertDescription className="mt-2 space-y-3 text-xs leading-relaxed">
+                      <p>
+                        Cambiar de <strong className="font-bold">{originalSettings.currency}</strong> a <strong className="font-bold">{settings.currency}</strong> no convierte los precios, las deudas ni las ventas que ya tenés: los mismos números pasan a mostrarse en la moneda nueva.
+                      </p>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/30 bg-background/80 p-3 text-foreground transition-colors hover:bg-background">
+                        <Checkbox
+                          checked={currencyChangeConfirmed}
+                          onCheckedChange={(checked) => setCurrencyChangeConfirmed(checked === true)}
+                          aria-describedby="currency-change-confirmation"
+                          className="mt-0.5"
+                        />
+                        <span id="currency-change-confirmation" className="text-xs font-medium leading-5">
+                          Entiendo que los importes no se convierten y confirmo el cambio de moneda.
+                        </span>
+                      </label>
+                    </AlertDescription>
+                  </Alert>
+                )
               ) : null}
 
-              {/* Alcance Operativo Banner */}
               <div className="flex items-start gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 text-xs text-muted-foreground">
                 <Globe className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-foreground">Información sobre el alcance de cambios</p>
-                  <p className="leading-relaxed">
-                    El IVA y el formato regional se aplican a lo nuevo: no modifican ventas ya emitidas ni los nombres de productos y textos que cargaste.
-                  </p>
-                </div>
+                <p className="leading-relaxed">
+                  El IVA y el formato se aplican a lo nuevo: no cambian las ventas que ya hiciste ni los nombres de tus productos.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -790,9 +897,9 @@ export default function AdminSettingsPage() {
                   <Coins className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold tracking-tight">Monedas y tipo de cambio</CardTitle>
+                  <CardTitle className="text-lg font-semibold tracking-tight">Otras monedas y tipo de cambio</CardTitle>
                   <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Para poner precios en dólares u otra moneda y que se conviertan solos a tu moneda.
+                    Para poner precios en dólares u otra moneda y que se conviertan solos a la tuya.
                   </CardDescription>
                 </div>
               </div>
@@ -803,7 +910,13 @@ export default function AdminSettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* TAB 3: APARIENCIA */}
+        {/* TAB 3: RUBRO Y HERRAMIENTAS */}
+        {/* Conservar el borrador del perfil y sus acciones al cambiar de pestaña. */}
+        <TabsContent value="rubro" forceMount className="m-0 space-y-6 focus-visible:outline-none data-[state=inactive]:hidden">
+          <BusinessProfileCard onStateChange={handleProfileState} actionsRef={profileActionsRef} />
+        </TabsContent>
+
+        {/* TAB 4: APARIENCIA */}
         <TabsContent value="appearance" className="m-0 space-y-6 focus-visible:outline-none">
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="border-b bg-muted/20 pb-5">
@@ -922,7 +1035,7 @@ export default function AdminSettingsPage() {
       {/* Hub de Accesos Directos a Otras Secciones de Administración */}
       <div className="space-y-3 pt-4">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>Otras áreas de configuración administrativa</span>
+          <span>Más configuración</span>
           <span className="h-px flex-1 bg-border/60" />
         </div>
 

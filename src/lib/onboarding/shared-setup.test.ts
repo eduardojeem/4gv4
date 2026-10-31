@@ -62,12 +62,16 @@ describe('contrato único de onboarding compartido', () => {
     expect(getFirstIncompleteStep(normalizeOnboardingState((retry.onboarding as Record<string, unknown>).shared))).toBe(2)
   })
 
-  it('reintentar la sucursal actualiza la existente y recupera un insert concurrente', () => {
+  it('serializa la sucursal principal en el RPC y evita duplicarla al reintentar', () => {
     const route = readFileSync('src/app/api/onboarding/status/route.ts', 'utf8')
-    expect(route).toContain(".eq('organization_id', organization.id).eq('is_default', true)")
-    expect(route).toContain(".eq('organization_id', organization.id).eq('slug', 'principal')")
-    expect(route).toContain("error?.code === '23505'")
-    expect(route).toContain(".eq('id', concurrentBranch.id).eq('organization_id', organization.id)")
+    const migration = readFileSync('supabase/migrations/20261027213300_onboarding_atomic_progress_v2.sql', 'utf8')
+    expect(route).toContain("admin.rpc('save_organization_onboarding_progress_v2'")
+    expect(route).not.toContain(".from('branches').insert")
+    expect(migration).toContain('SELECT b.id INTO v_branch_id')
+    expect(migration).toContain("AND (b.is_default OR b.slug = 'principal')")
+    expect(migration).toContain('FOR UPDATE')
+    expect(migration).toContain('INSERT INTO public.branches')
+    expect(migration).toContain('UPDATE public.branches AS b SET')
   })
 
   it('filtra preferencias de módulos por capacidades efectivas del plan', () => {

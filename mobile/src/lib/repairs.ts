@@ -2,6 +2,7 @@ import { subscribePrivateCacheContext } from './private-cache-context';
 import type { Ionicons } from '@expo/vector-icons';
 
 import { ApiError, apiFetch } from './api';
+import { formatMobileDate } from './regional-format';
 
 /**
  * Reparaciones en la app: las mismas APIs que la sección de la web
@@ -195,7 +196,7 @@ export function money(repair: Repair) {
 export function shortDate(iso?: string | null) {
   if (!iso) return '—';
   const date = new Date(iso);
-  return date.toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
+  return formatMobileDate(date, { day: '2-digit', month: 'short' });
 }
 
 export function daysSince(iso: string) {

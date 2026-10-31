@@ -60,7 +60,7 @@ export default async function DashboardOnboardingPage() {
       .maybeSingle(),
     admin
       .from('organization_settings')
-      .select('display_name, currency, timezone, country_code, locale, modules')
+      .select('display_name, currency, timezone, country_code, locale, modules, onboarding_revision')
       .eq('organization_id', organization.id)
       .maybeSingle(),
     admin
@@ -139,7 +139,7 @@ export default async function DashboardOnboardingPage() {
       businessCategory: businessProfile?.business_vertical ?? null,
       branch: branch ?? null,
     })
-    return <SharedOnboardingWizard initialState={state} planName={planInfo?.name ?? organization.plan ?? 'Free'} entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : []} />
+    return <SharedOnboardingWizard initialState={state} initialRevision={settings?.onboarding_revision ?? 0} planName={planInfo?.name ?? organization.plan ?? 'Free'} entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : []} />
   }
   const adminSettings = getTenantAdminSettings(settings?.modules)
   const companyInfo = (companyInfoSetting?.value ?? {}) as {

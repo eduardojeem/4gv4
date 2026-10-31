@@ -8,7 +8,6 @@ import {
   mergeCanonicalOnboardingData,
   getFirstIncompleteStep,
   filterOnboardingPreferences,
-  mergeOnboardingProgress,
   normalizeOnboardingState,
   validateBranchStep,
   validateBusinessStep,
@@ -48,7 +47,7 @@ export async function GET() {
   const [{ data: settings, error: settingsError }, { data: branch, error: branchError }, { data: companyInfoSetting, error: companyInfoError }, { data: businessProfile, error: businessProfileError }, planInfo] = await Promise.all([
     admin
       .from('organization_settings')
-      .select('display_name, currency, timezone, country_code, locale, modules')
+      .select('display_name, currency, timezone, country_code, locale, modules, onboarding_revision')
       .eq('organization_id', organization.id)
       .maybeSingle(),
     admin
@@ -112,6 +111,7 @@ export async function GET() {
   return NextResponse.json({
     needsOnboarding,
     completed: isCompleted,
+    onboardingRevision: settings?.onboarding_revision ?? 0,
     hasCompanyBasics,
     hasContactBasics,
     organization,
@@ -133,7 +133,7 @@ export async function PATCH(request: Request) {
 
   const [{ data: profile, error: profileError }, { data: settings, error: settingsError }] = await Promise.all([
     admin.from('profiles').select('role, status').eq('id', user.id).maybeSingle(),
-    admin.from('organization_settings').select('modules').eq('organization_id', organization.id).maybeSingle(),
+    admin.from('organization_settings').select('modules, onboarding_revision').eq('organization_id', organization.id).maybeSingle(),
   ])
   if (profileError || settingsError) return NextResponse.json({ error: 'No se pudo cargar el onboarding.' }, { status: 500 })
   const active = profile?.status !== 'inactive' && profile?.status !== 'suspended'
@@ -142,7 +142,8 @@ export async function PATCH(request: Request) {
   }
 
   const body = await request.json().catch(() => null)
-  if (!isRecord(body) || ![2, 3, 4].includes(Number(body.step)) || !isRecord(body.data)) {
+  if (!isRecord(body) || ![2, 3, 4].includes(Number(body.step)) || !isRecord(body.data)
+      || typeof body.expectedRevision !== 'number' || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0) {
     return NextResponse.json({ error: 'Paso de onboarding inválido.' }, { status: 400 })
   }
   const step = Number(body.step) as 2 | 3 | 4
@@ -152,6 +153,7 @@ export async function PATCH(request: Request) {
   if (onboarding.status === 'completed') return NextResponse.json({ error: 'La configuración inicial ya fue completada.' }, { status: 409 })
   const state = normalizeOnboardingState(onboarding.shared)
   const data = body.data
+  let stepPayload: Record<string, unknown>
 
   if (step === 2) {
     const candidate = { ...state.data, ...data }
@@ -179,6 +181,16 @@ export async function PATCH(request: Request) {
       ...(categoryChanged ? { selectedModules: null } : {}),
     }
     if (categoryChanged) state.completedSteps = state.completedSteps.filter((completedStep) => completedStep !== 'modules' && completedStep !== 'ready')
+    stepPayload = {
+      businessName: state.data.businessName,
+      countryCode: state.data.countryCode,
+      businessCategory: state.data.businessCategory,
+      currency: state.data.currency,
+      timezone: state.data.timezone,
+      locale: state.data.locale,
+      regionalConfirmed: state.data.regionalConfirmed,
+      ...(categoryChanged ? { selectedModules: null } : {}),
+    }
   } else if (step === 3) {
     const candidate = { ...state.data.primaryBranch, ...data }
     const result = validateBranchStep({ name: typeof candidate.name === 'string' ? candidate.name : '', city: typeof candidate.city === 'string' ? candidate.city : '' })
@@ -192,37 +204,7 @@ export async function PATCH(request: Request) {
       is_active: true,
       updated_at: new Date().toISOString(),
     }
-    const branchQuery = admin.from('branches').update(branchPayload).eq('organization_id', organization.id).eq('is_default', true)
-    const { data: updatedBranch, error: branchError } = await branchQuery.select('id').maybeSingle()
-    if (branchError) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
-    let branchId = updatedBranch?.id
-    if (!branchId) {
-      const { data: existingBranch, error: existingBranchError } = await admin.from('branches').select('id').eq('organization_id', organization.id).eq('slug', 'principal').maybeSingle()
-      if (existingBranchError) return NextResponse.json({ error: 'No se pudo buscar la sucursal principal.' }, { status: 500 })
-      if (existingBranch?.id) {
-        const { error } = await admin.from('branches').update(branchPayload).eq('id', existingBranch.id).eq('organization_id', organization.id)
-        if (error) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
-        branchId = existingBranch.id
-      } else {
-        const { data: created, error } = await admin.from('branches').insert({
-          organization_id: organization.id, code: 'principal', slug: 'principal', ...branchPayload,
-        }).select('id').single()
-        if (!error && created) {
-          branchId = created.id
-        } else if (error?.code === '23505') {
-          // Dos reintentos simultáneos pueden competir al provisionar una
-          // sucursal legacy ausente. Recuperar la fila ganadora evita duplicar
-          // o convertir un conflicto idempotente en un error visible.
-          const { data: concurrentBranch, error: concurrentLookupError } = await admin.from('branches').select('id').eq('organization_id', organization.id).eq('slug', 'principal').maybeSingle()
-          if (concurrentLookupError || !concurrentBranch) return NextResponse.json({ error: 'No se pudo resolver la sucursal principal.' }, { status: 500 })
-          const { error: concurrentUpdateError } = await admin.from('branches').update(branchPayload).eq('id', concurrentBranch.id).eq('organization_id', organization.id)
-          if (concurrentUpdateError) return NextResponse.json({ error: 'No se pudo guardar la sucursal principal.' }, { status: 500 })
-          branchId = concurrentBranch.id
-        } else {
-          return NextResponse.json({ error: 'No se pudo crear la sucursal principal.' }, { status: 500 })
-        }
-      }
-    }
+    const branchId = state.data.primaryBranch.id
     state.data.primaryBranch = {
       id: branchId,
       name: branchPayload.name,
@@ -231,6 +213,7 @@ export async function PATCH(request: Request) {
       phone: branchPayload.phone,
       hours: typeof candidate.hours === 'string' ? candidate.hours.trim() : '',
     }
+    stepPayload = { ...state.data.primaryBranch }
   } else {
     if (!Array.isArray(data.selectedModules) || data.selectedModules.some((module) => typeof module !== 'string')) {
       return NextResponse.json({ error: 'Seleccioná los módulos que querés usar.' }, { status: 400 })
@@ -242,15 +225,30 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'El plan actual no incluye uno o más módulos seleccionados.', code: 'MODULE_NOT_ENTITLED' }, { status: 403 })
     }
     state.data.selectedModules = selected
+    stepPayload = { selectedModules: selected }
   }
 
-  const completed = new Set(state.completedSteps)
-  completed.add(step === 2 ? 'business' : step === 3 ? 'branch' : 'modules')
-  state.completedSteps = [...completed]
-  state.currentStep = step === 2 ? 3 : step === 3 ? 4 : 5
-  const mergedModules = mergeOnboardingProgress(currentModules, state, state.currentStep)
-  const { error: saveError } = await admin.from('organization_settings').update({ modules: mergedModules, updated_at: new Date().toISOString() }).eq('organization_id', organization.id)
-  if (saveError) return NextResponse.json({ error: 'No se pudo guardar el progreso del onboarding.' }, { status: 500 })
+  const { data: saveResult, error: saveError } = await admin.rpc('save_organization_onboarding_progress_v2', {
+    p_organization_id: organization.id,
+    p_user_id: user.id,
+    p_expected_revision: Number(body.expectedRevision),
+    p_step: step,
+    p_step_payload: stepPayload,
+  })
+  if (saveError) {
+    logger.error('Failed to save onboarding progress', { error: saveError.message, organizationId: organization.id })
+    return NextResponse.json({ error: 'No se pudo guardar el progreso del onboarding.' }, { status: 500 })
+  }
+  const saved = isRecord(saveResult) ? saveResult : {}
+  if (saved.code === 'ONBOARDING_REVISION_CONFLICT') {
+    return NextResponse.json({
+      error: 'Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes.',
+      code: saved.code,
+      revision: saved.revision,
+      setupState: saved.setupState,
+    }, { status: 409 })
+  }
 
-  return NextResponse.json({ success: true, setupState: state, nextStep: getFirstIncompleteStep(state) })
+  const setupState = saved.setupState ? normalizeOnboardingState(saved.setupState) : state
+  return NextResponse.json({ success: true, setupState, revision: saved.revision, nextStep: getFirstIncompleteStep(setupState) })
 }

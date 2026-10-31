@@ -27,7 +27,9 @@
         "android.permission.CAMERA"
       ],
       "blockedPermissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -66,6 +68,13 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Mi Tienda usa Face ID para desbloquear la app sin escribir la contraseña."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#111827"
         }
       ]
     ],
