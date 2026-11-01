@@ -35,9 +35,17 @@ describe('menú de perfil del panel móvil', () => {
   it('Administración usa el mismo permiso que su pantalla', () => {
     expect(canOpenAdministration({ isAdmin: false, isSuperAdmin: false, hasAdministration: true })).toBe(true)
     expect(canOpenAdministration({ isAdmin: false, isSuperAdmin: true, hasAdministration: false })).toBe(true)
-    expect(keys({ isAdmin: false, isSuperAdmin: false, hasAdministration: false })).toEqual(['profile', 'marketplace'])
+    expect(keys({ isAdmin: false, isSuperAdmin: false, hasAdministration: false })).toEqual(['profile', 'feedback', 'marketplace'])
     // Configuración sigue siendo solo para administradores, como en la web.
     expect(keys({ isAdmin: false, isSuperAdmin: false, hasAdministration: true })).not.toContain('settings')
+  })
+
+  it('Enviar comentarios abre su pantalla en la app, para cualquier usuario', () => {
+    const entry = profileMenuSections({ isAdmin: false, isSuperAdmin: false, hasAdministration: false })
+      .flatMap((section) => section.entries)
+      .find((item) => item.key === 'feedback')!
+    expect(entry).toMatchObject({ title: 'Enviar comentarios', route: '/feedback' })
+    expect(read('app/_layout.tsx')).toContain('<Stack.Screen name="feedback" />')
   })
 
   it('Super Admin sigue en la web y solo para el super admin', () => {
