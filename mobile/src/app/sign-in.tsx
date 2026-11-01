@@ -160,6 +160,9 @@ export default function SignInScreen() {
   const togglePasswordVisibility = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowPassword((prev) => !prev);
+    setTimeout(() => {
+      passwordRef.current?.setSelection?.(password.length, password.length);
+    }, 50);
   };
 
   const toggleRememberEmail = async () => {
@@ -293,7 +296,10 @@ export default function SignInScreen() {
                       returnKeyType="next"
                       onSubmitEditing={() => passwordRef.current?.focus()}
                       editable={!busy}
-                      style={[styles.textInput, { color: colors.text }]}
+                      cursorColor={palette.primary}
+                      selectionColor={`${palette.primary}35`}
+                      underlineColorAndroid="transparent"
+                      style={[styles.textInput, { color: isDark ? '#F8FAFC' : '#0F172A' }]}
                     />
                     {email.length > 0 && !busy && (
                       <Pressable
@@ -348,27 +354,40 @@ export default function SignInScreen() {
                       onFocus={() => setFocused('password')}
                       onBlur={() => setFocused(null)}
                       accessibilityLabel="Contraseña"
-                      placeholder="••••••••••••"
+                      placeholder="Ingresá tu contraseña"
                       placeholderTextColor={colors.muted}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
                       autoComplete="password"
                       textContentType="password"
                       returnKeyType="go"
                       onSubmitEditing={submit}
                       editable={!busy}
-                      style={[styles.textInput, { color: colors.text }]}
+                      cursorColor={palette.primary}
+                      selectionColor={`${palette.primary}35`}
+                      underlineColorAndroid="transparent"
+                      style={[
+                        styles.textInput,
+                        {
+                          color: isDark ? '#F8FAFC' : '#0F172A',
+                        },
+                      ]}
                     />
                     <Pressable
                       onPress={togglePasswordVisibility}
                       accessibilityRole="button"
                       accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
-                      hitSlop={8}
-                      style={styles.actionIcon}>
+                      hitSlop={10}
+                      style={[
+                        styles.actionIcon,
+                        showPassword && { backgroundColor: `${palette.primary}18`, borderRadius: 8 },
+                      ]}>
                       <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={20}
-                        color={focused === 'password' ? palette.primary : colors.muted}
+                        name={showPassword ? 'eye-off' : 'eye-outline'}
+                        size={21}
+                        color={showPassword ? palette.primary : focused === 'password' ? colors.text : colors.muted}
                       />
                     </Pressable>
                   </View>
@@ -609,14 +628,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 15,
     paddingHorizontal: 14,
-    height: 52,
+    minHeight: 52,
   },
   fieldIcon: { marginRight: 10 },
   textInput: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
-    height: '100%',
+    fontSize: 16,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    paddingHorizontal: 0,
+    textAlignVertical: 'center',
   },
   actionIcon: { padding: 4 },
   errorRow: {
