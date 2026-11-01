@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,6 +31,7 @@ import {
   daysSince,
   DEVICE_ICONS,
   deviceName,
+  fetchRepair,
   money,
   NEXT_STATUSES,
   PRIORITY,
@@ -58,7 +60,48 @@ export default function RepairDetail() {
   const colors = usePalette();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [repair, setRepair] = useState<Repair | undefined>(() => (id ? cachedRepair(id) : undefined));
+  const [loading, setLoading] = useState(() => !repair && Boolean(id));
+  const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [target, setTarget] = useState<RepairStatus | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    if (!repair) setLoading(true);
+    fetchRepair(id)
+      .then((data) => {
+        if (!active) return;
+        setRepair(data);
+        setFetchError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        if (!repair) {
+          setFetchError(err instanceof Error ? err.message : 'No se pudo cargar la reparación.');
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  const onRefresh = async () => {
+    if (!id) return;
+    setRefreshing(true);
+    try {
+      const data = await fetchRepair(id);
+      setRepair(data);
+      setFetchError(null);
+    } catch {
+      // keep current data
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,11 +113,20 @@ export default function RepairDetail() {
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/panel/repairs' as never));
 
+  if (loading && !repair) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={palette.primary} />
+        <Text style={[styles.small, { color: colors.muted, marginTop: 12 }]}>Cargando reparación…</Text>
+      </View>
+    );
+  }
+
   if (!repair) {
     return (
       <View style={styles.center}>
         <Ionicons name="search-outline" size={30} color={colors.muted} />
-        <Text style={[styles.h2, { color: colors.text }]}>No encontramos la reparación</Text>
+        <Text style={[styles.h2, { color: colors.text }]}>{fetchError || 'No encontramos la reparación'}</Text>
         <Pressable onPress={() => router.replace('/panel/repairs' as never)} style={[styles.outline, { borderColor: colors.border }]}>
           <Text style={{ color: colors.text, fontWeight: '700' }}>Ir a reparaciones</Text>
         </Pressable>
@@ -147,7 +199,7 @@ export default function RepairDetail() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
         {/* Estado y avance */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rowBetween}>

@@ -23,6 +23,7 @@ import {
   DEVICE_ICONS,
   DEVICE_TYPES,
   fetchCostHistory,
+  FREQUENT_ISSUES,
   fetchTechnicians,
   isWholesale,
   money,
@@ -208,8 +209,34 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
           </Field>
         </View>
       </View>
+      <Text style={[styles.label, { color: colors.text }]}>Problemas frecuentes</Text>
+      <View style={styles.chips}>
+        {FREQUENT_ISSUES.map((item) => (
+          <Chip
+            key={item.label}
+            label={item.label}
+            icon={item.icon}
+            selected={edit.issue.includes(item.issue)}
+            onPress={() => {
+              const current = edit.issue.trim();
+              if (current.includes(item.issue)) {
+                const escaped = item.issue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const cleaned = current
+                  .replace(new RegExp("\\.?\\s*" + escaped + "\\.?", "g"), "")
+                  .replace(/^\s*\.\s*/, "")
+                  .replace(/\.\s*\./g, ".")
+                  .trim();
+                set("issue", cleaned);
+              } else {
+                set("issue", current ? `${current.replace(/[.,]$/, "")}. ${item.issue}`.slice(0, 500) : item.issue);
+              }
+            }}
+            colors={colors}
+          />
+        ))}
+      </View>
       <Field label="Problema informado" colors={colors}>
-        <TextInput value={edit.issue} onChangeText={(v) => set('issue', v)} multiline maxLength={200} style={[styles.input, styles.multiline, { color: colors.text }]} />
+        <TextInput value={edit.issue} onChangeText={(v) => set("issue", v)} multiline maxLength={500} style={[styles.input, styles.multiline, { color: colors.text }]} />
       </Field>
       <Field label="Diagnóstico" colors={colors}>
         <TextInput
@@ -605,7 +632,34 @@ export function PaymentSheet({ repair, visible, onClose, onSaved }: { repair: Re
       <Field label="Monto" colors={colors}>
         <Text style={[styles.prefix, { color: colors.muted }]}>Gs.</Text>
         <TextInput value={amount} onChangeText={(v) => setAmount(pretty(v))} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.text }]} />
+        {amount ? (
+          <Pressable onPress={() => setAmount('')} hitSlop={8} accessibilityLabel="Borrar monto">
+            <Ionicons name="close-circle" size={17} color={colors.muted} />
+          </Pressable>
+        ) : null}
       </Field>
+      {balance > 0 && (
+        <View style={styles.chipsRow}>
+          <Pressable
+            onPress={() => setAmount(pretty(balance))}
+            style={[styles.chip, { backgroundColor: '#16A34A18', borderColor: '#16A34A' }]}>
+            <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+            <Text style={[styles.chipText, { color: '#16A34A', fontWeight: '800' }]}>
+              Cobrar saldo total: {formatGs(balance)}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+      <View style={[styles.chipsRow, { marginTop: 4 }]}>
+        {[20000, 50000, 100000].map((preset) => (
+          <Pressable
+            key={preset}
+            onPress={() => setAmount(pretty(preset))}
+            style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <Text style={[styles.chipText, { color: colors.text, fontWeight: '700' }]}>+{formatGs(preset)}</Text>
+          </Pressable>
+        ))}
+      </View>
       {needsReference && (
         <Field label={method === 'card' ? 'N.º de comprobante (voucher)' : 'Referencia de la transferencia'} colors={colors}>
           <TextInput value={reference} onChangeText={setReference} autoCapitalize="characters" style={[styles.input, { color: colors.text }]} />

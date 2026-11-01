@@ -481,7 +481,10 @@ export async function GET(request: NextRequest) {
     const technicianId = searchParams.get('technicianId') || null
     const offset = (page - 1) * pageSize
 
+    const cleanTicketSearch = search.replace(/^#+/, '').trim()
     const escapedSearch = search.replace(/[%,()_]/g, (character) => `\\${character}`)
+    const escapedTicketSearch = cleanTicketSearch.replace(/[%,()_]/g, (character) => `\\${character}`)
+    const searchDigits = search.replace(/\D/g, '')
     let matchingCustomerIds: string[] = []
     if (escapedSearch) {
       const customerFilter = [
@@ -489,6 +492,7 @@ export async function GET(request: NextRequest) {
         `first_name.ilike.%${escapedSearch}%`,
         `last_name.ilike.%${escapedSearch}%`,
         `phone.ilike.%${escapedSearch}%`,
+        ...(searchDigits.length >= 4 ? [`phone.ilike.%${searchDigits}%`] : []),
       ].join(',')
       const { data: matchingCustomers, error: customerSearchError } = await ctx.supabase
         .from('customers')
@@ -533,6 +537,12 @@ export async function GET(request: NextRequest) {
           `device_model.ilike.%${escapedSearch}%`,
           `problem_description.ilike.%${escapedSearch}%`,
           `ticket_number.ilike.%${escapedSearch}%`,
+          ...(escapedTicketSearch && escapedTicketSearch !== escapedSearch
+            ? [`ticket_number.ilike.%${escapedTicketSearch}%`]
+            : []),
+          `imei.ilike.%${escapedSearch}%`,
+          `serial_number.ilike.%${escapedSearch}%`,
+          ...(searchDigits.length >= 6 ? [`imei.ilike.%${searchDigits}%`] : []),
           ...(
             matchingCustomerIds.length > 0
               ? [`customer_id.in.(${matchingCustomerIds.join(',')})`]

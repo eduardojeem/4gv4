@@ -144,6 +144,28 @@ function normalizeImages(
     .filter((image): image is NonNullable<typeof image> => Boolean(image))
 }
 
+export async function GET(request: NextRequest, context: RouteParams) {
+  try {
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.read')
+    if (isNextResponse(ctx)) return ctx
+
+    const { id } = await context.params
+    const { data: repair, error } = await fetchRepairById(ctx, id)
+
+    if (error) throw error
+    if (!repair) {
+      return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    }
+
+    return NextResponse.json({ repair })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error interno al obtener la reparación.' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PATCH(request: NextRequest, context: RouteParams) {
   try {
     const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
