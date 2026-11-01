@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -382,7 +382,7 @@ export function PlatformFinanceCenter({
   const previewPyg = form && form.amount ? Number(form.amount) * (form.currency === 'PYG' ? 1 : Number(form.fxRatePyg) || 0) : 0
 
   // Búsqueda de gasto asociado para una herramienta del stack
-  const findRegisteredExpense = (tool: PlatformSystemTool): PlatformExpense | undefined => {
+  const findRegisteredExpense = useCallback((tool: PlatformSystemTool): PlatformExpense | undefined => {
     const norm = (s: string) => s.toLowerCase().trim()
     const toolName = norm(tool.name)
     const toolProvider = norm(tool.provider)
@@ -400,7 +400,7 @@ export function PlatformFinanceCenter({
         (tool.id === 'pagopar' && (ep.includes('pagopar') || ep.includes('bancard')))
       )
     })
-  }
+  }, [expenses])
 
   const registerToolExpense = (tool: PlatformSystemTool) => {
     setForm(
@@ -459,11 +459,11 @@ export function PlatformFinanceCenter({
 
       return true
     })
-  }, [toolSearch, toolCategoryFilter, toolStatusFilter, expenses])
+  }, [toolSearch, toolCategoryFilter, toolStatusFilter, findRegisteredExpense])
 
   const registeredToolsCount = useMemo(
     () => PLATFORM_SYSTEM_TOOLS.filter((t) => Boolean(findRegisteredExpense(t))).length,
-    [expenses],
+    [findRegisteredExpense],
   )
 
   const activeExpensesCount = useMemo(
