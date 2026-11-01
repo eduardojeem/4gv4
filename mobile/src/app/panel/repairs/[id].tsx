@@ -331,6 +331,7 @@ export default function RepairDetail() {
           <Field label="Equipo" value={deviceName(repair)} colors={colors} />
           {repair.imei ? <Field label="IMEI" value={repair.imei} colors={colors} mono /> : null}
           {repair.serial_number ? <Field label="N.º de serie" value={repair.serial_number} colors={colors} mono /> : null}
+          <AccessInfoField repair={repair} colors={colors} />
           {priority ? <Field label="Prioridad" value={priority.label} colors={colors} tone={priority.color} /> : null}
           {repair.problem_description ? <Block label="Problema informado" value={repair.problem_description} colors={colors} /> : null}
           {repair.diagnosis ? <Block label="Diagnóstico" value={repair.diagnosis} colors={colors} /> : null}
@@ -571,8 +572,50 @@ function Money({ label, value, colors, tone }: { label: string; value: string; c
   );
 }
 
+function AccessInfoField({ repair, colors }: { repair: Repair; colors: Colors }) {
+  const [revealed, setRevealed] = useState(false);
+  const type = repair.access_type || 'none';
+  const pwd = repair.access_password;
+
+  if (type === 'none') {
+    return <Field label="Desbloqueo" value="Sin bloqueo" colors={colors} tone="#16A34A" />;
+  }
+
+  if (type === 'biometric') {
+    return <Field label="Desbloqueo" value="Biométrico (Huella/Rostro)" colors={colors} tone="#D97706" />;
+  }
+
+  const typeLabel =
+    type === 'pin' ? 'PIN' : type === 'pattern' ? 'Patrón' : type === 'password' ? 'Contraseña' : 'Acceso';
+
+  return (
+    <View style={styles.accessFieldWrap}>
+      <View style={styles.field}>
+        <Text style={[styles.small, { color: colors.muted }]}>{typeLabel}</Text>
+        <View style={styles.accessValueRow}>
+          <Text style={[styles.fieldValue, styles.mono, { color: colors.text }]} selectable>
+            {pwd ? (revealed ? pwd : '••••••••') : 'No registrado'}
+          </Text>
+          {pwd ? (
+            <Pressable
+              onPress={() => setRevealed((v) => !v)}
+              hitSlop={8}
+              style={styles.eyeBtn}
+              accessibilityLabel={revealed ? 'Ocultar dato de desbloqueo' : 'Mostrar dato de desbloqueo'}>
+              <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={18} color={palette.primary} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  accessFieldWrap: { width: '100%' },
+  accessValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eyeBtn: { padding: 4 },
   bold: { fontWeight: '800' },
   mono: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },

@@ -24,6 +24,8 @@ export type Repair = {
   serial_number?: string | null;
   problem_description?: string | null;
   diagnosis?: string | null;
+  access_type?: AccessType | null;
+  access_password?: string | null;
   estimated_cost?: number | null;
   final_cost?: number | null;
   paid_amount?: number | null;
@@ -289,12 +291,82 @@ export const DEVICE_TYPES: { key: 'smartphone' | 'tablet' | 'laptop' | 'desktop'
   { key: 'other', label: 'Otro' },
 ];
 
-export const ACCESS_TYPES: { key: 'none' | 'pin' | 'pattern' | 'password'; label: string }[] = [
-  { key: 'none', label: 'Sin bloqueo' },
-  { key: 'pin', label: 'PIN' },
-  { key: 'pattern', label: 'Patrón' },
-  { key: 'password', label: 'Contraseña' },
+export type AccessType = 'none' | 'pin' | 'pattern' | 'password' | 'biometric' | 'other';
+
+export const ACCESS_TYPES: {
+  key: AccessType;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  hint: string;
+}[] = [
+  { key: 'none', label: 'Sin bloqueo', icon: 'lock-open-outline', color: '#16A34A', hint: 'El equipo no tiene clave ni bloqueo' },
+  { key: 'pin', label: 'PIN', icon: 'keypad-outline', color: '#2563EB', hint: 'Código numérico de desbloqueo' },
+  { key: 'pattern', label: 'Patrón', icon: 'grid-outline', color: '#7C3AED', hint: 'Patrón táctil 3×3' },
+  { key: 'password', label: 'Contraseña', icon: 'text-outline', color: '#059669', hint: 'Clave alfanumérica' },
+  { key: 'biometric', label: 'Biométrico', icon: 'finger-print-outline', color: '#D97706', hint: 'Huella / reconocimiento facial' },
+  { key: 'other', label: 'Otro', icon: 'help-circle-outline', color: '#64748B', hint: 'Otro método o notas de acceso' },
 ];
+
+/**
+ * Validaciones de acceso idénticas al esquema oficial de la web (repair.schema.ts).
+ */
+export function validateRepairAccess(accessType: AccessType, password?: string | null): string | null {
+  const type = accessType || 'none';
+  const pwd = (password || '').trim();
+
+  if (type === 'none' || type === 'biometric') {
+    return null;
+  }
+
+  if (type === 'pin') {
+    if (!pwd) {
+      return 'Ingresá el PIN del dispositivo (o cambiá el tipo de acceso).';
+    }
+    if (!/^[\d\s,/-]+$/.test(pwd)) {
+      return 'El PIN solo puede contener números (separá varios con comas).';
+    }
+    if (pwd.length > 100) {
+      return 'El PIN es demasiado largo (máximo 100 caracteres).';
+    }
+    return null;
+  }
+
+  if (type === 'password') {
+    if (!pwd) {
+      return 'Ingresá la contraseña del dispositivo (o cambiá el tipo de acceso).';
+    }
+    if (pwd.length > 100) {
+      return 'La contraseña es demasiado larga (máximo 100 caracteres).';
+    }
+    return null;
+  }
+
+  if (type === 'pattern') {
+    if (!pwd) {
+      return 'Dibujá el patrón de desbloqueo (o cambiá el tipo de acceso).';
+    }
+    if (pwd.length < 2) {
+      return 'El patrón debe conectar al menos 2 puntos.';
+    }
+    if (pwd.length > 100) {
+      return 'El patrón es demasiado largo (máximo 100 caracteres).';
+    }
+    return null;
+  }
+
+  if (type === 'other') {
+    if (!pwd) {
+      return 'Describí el método de desbloqueo o acceso al equipo.';
+    }
+    if (pwd.length > 200) {
+      return 'La descripción es demasiado larga (máximo 200 caracteres).';
+    }
+    return null;
+  }
+
+  return null;
+}
 
 export type NewRepairInput = {
   customer_id: string;
@@ -305,7 +377,7 @@ export type NewRepairInput = {
   serial_number?: string;
   problem_description: string;
   diagnosis?: string;
-  access_type: (typeof ACCESS_TYPES)[number]['key'];
+  access_type: AccessType;
   access_password?: string;
   priority: 'low' | 'medium' | 'high';
   estimated_cost: number;
@@ -535,6 +607,8 @@ export type RepairEdit = {
   model: string;
   imei?: string | null;
   serialNumber?: string | null;
+  accessType?: AccessType;
+  accessPassword?: string | null;
   issue: string;
   description: string;
   priority: 'low' | 'medium' | 'high';
@@ -553,6 +627,10 @@ export async function updateRepair(id: string, edit: RepairEdit) {
       imei: edit.imei?.trim() || null,
       serial_number: (edit.serialNumber ?? edit.imei)?.trim() || null,
       serialNumber: (edit.serialNumber ?? edit.imei)?.trim() || null,
+      access_type: edit.accessType,
+      accessType: edit.accessType,
+      access_password: edit.accessType === 'none' ? null : edit.accessPassword?.trim() || null,
+      accessPassword: edit.accessType === 'none' ? null : edit.accessPassword?.trim() || null,
       issue: edit.issue.trim(),
       description: edit.description.trim() || null,
       priority: edit.priority,
