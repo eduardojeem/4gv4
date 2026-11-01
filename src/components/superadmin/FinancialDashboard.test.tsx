@@ -23,7 +23,7 @@ describe('Resumen de facturación', () => {
   it('pone ingresos, costos y resultado juntos, y manda el detalle a su sección', () => {
     render(<FinancialDashboard data={base} />)
 
-    expect(screen.getByRole('heading', { name: 'Resumen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Facturación' })).toBeInTheDocument()
     expect(screen.getByText('Margen 62,5% sobre el MRR')).toBeInTheDocument()
     expect(screen.getByText('Costo mensual').closest('a')).toHaveAttribute('href', '/superadmin/finanzas')
     expect(screen.getByText('Cobrado (30 días)').closest('a')).toHaveAttribute('href', '/superadmin/invoices')

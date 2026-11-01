@@ -378,9 +378,18 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess, activeStore
               <div className="flex items-center justify-between rounded-xl border px-5 py-4">
                 <div>
                   <p className="text-sm font-semibold">Plan activo</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Un plan inactivo no se puede contratar; las tiendas que ya lo tienen lo conservan.</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {activeStores > 0 && plan.is_active
+                      ? `No se puede desactivar mientras ${activeStores === 1 ? 'una tienda lo usa' : `${activeStores} tiendas lo usan`}: primero pasalas a otro plan.`
+                      : 'Un plan inactivo no aparece en la página de precios ni se puede contratar.'}
+                  </p>
                 </div>
-                <Switch checked={form.isActive} onCheckedChange={(checked) => set('isActive', checked)} aria-label="Plan activo" />
+                <Switch
+                  checked={form.isActive}
+                  onCheckedChange={(checked) => set('isActive', checked)}
+                  disabled={activeStores > 0 && plan.is_active}
+                  aria-label="Plan activo"
+                />
               </div>
               <div className="flex items-center justify-between rounded-xl border px-5 py-4">
                 <div>
@@ -420,6 +429,9 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess, activeStore
                     </li>
                   ))}
                 </ul>
+                {activeStores > 0 && impact.loweredLimits.some((limit) => limit.key === 'products') && (
+                  <p>Las tiendas que superen el nuevo cupo de productos tienen 7 días para ajustarse; después se desactivan los que sobran.</p>
+                )}
               </div>
             </div>
           )}
