@@ -423,3 +423,22 @@ export function renderSubscriptionReceiptEmail(params: {
     },
   })
 }
+
+/** Confirmación del pedido de eliminación de cuenta. */
+export function renderAccountDeletionRequestedEmail(params: {
+  scheduledFor: string
+  closedOrganizations: string[]
+  supportEmail: string
+}) {
+  const date = new Date(params.scheduledFor).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric' })
+  const closed = params.closedOrganizations.length
+    ? `<p>Como eras el único administrador, se cerró: ${params.closedOrganizations.map(escapeText).join(', ')}.</p>`
+    : ''
+  return renderBrandedEmail({
+    title: 'Recibimos tu pedido de eliminar la cuenta',
+    preview: `Tu cuenta quedó bloqueada y tus datos personales se eliminan el ${date}.`,
+    intro: 'Tu cuenta quedó bloqueada desde ahora y ya no podés iniciar sesión.',
+    bodyHtml: `<p>El ${escapeText(date)} se eliminan tus datos personales (nombre, correo, teléfono, foto y preferencias). Los registros comerciales y fiscales de los negocios se conservan sin tus datos, como exige la ley.</p>${closed}<p>Si no fuiste vos o te arrepentiste, escribinos a ${escapeText(params.supportEmail)} antes de esa fecha.</p>`,
+    brand: { name: 'MiTiendaPY', color: '#2563eb' },
+  })
+}

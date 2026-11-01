@@ -20,6 +20,11 @@ export function LegalFooterLinks({ className }: { className?: string }) {
           </Link>
         </li>
         <li>
+          <Link href="/saas/eliminar-cuenta" className="hover:text-foreground hover:underline">
+            Eliminar cuenta
+          </Link>
+        </li>
+        <li>
           <button type="button" suppressHydrationWarning onClick={openCookiePreferences} className="hover:text-foreground hover:underline">
             Preferencias de cookies
           </button>

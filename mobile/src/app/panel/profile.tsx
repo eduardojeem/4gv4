@@ -533,6 +533,13 @@ export default function MobileUserProfileScreen() {
                 <Ionicons name="log-out-outline" size={20} color={palette.danger} />
                 <Text style={[styles.logoutBtnText, { color: palette.danger }]}>Cerrar sesión</Text>
               </Pressable>
+              <Pressable
+                onPress={() => router.push('/delete-account' as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Eliminar mi cuenta"
+                hitSlop={8}>
+                <Text style={[styles.deleteAccountText, { color: palette.danger }]}>Eliminar mi cuenta</Text>
+              </Pressable>
               <Text style={[styles.footerText, { color: colors.muted }]}>
                 MiTiendaPy Móvil · Sesión protegida
               </Text>
@@ -829,5 +836,10 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
