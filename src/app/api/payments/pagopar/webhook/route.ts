@@ -1,8 +1,10 @@
 import { NextResponse, after } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { recordWebhookEvent } from '@/lib/health/webhook-log'
+import { notifySubscriptionChargeback, sendSubscriptionPaymentReceipt } from '@/lib/saas/subscription-notifications'
 import {
   parsePagoparNotificationAmount,
+  queryPagoparOrder,
   validatePagoparNotificationToken,
 } from '@/lib/payments/pagopar'
 
@@ -81,6 +83,9 @@ async function handleNotification(request: Request) {
     if (!result) {
       return NextResponse.json({ error: 'Payment was not applied' }, { status: 500 })
     }
+    if (result.applied === true && result.payment_id) {
+      after(() => sendSubscriptionPaymentReceipt(result.payment_id))
+    }
 
     return acknowledge(payload)
   }
@@ -101,11 +106,11 @@ async function handleNotification(request: Request) {
 
   // Un pago ya aplicado no vuelve atrás por una notificación: si Pagopar
   // reversó el cobro, la suscripción se corrige a mano.
+  // Un pago ya aplicado que Pagopar notifica como no pagado es una reversión o
+  // un contracargo. No se confía solo en la notificación: se confirma
+  // consultando el pedido y recién ahí se registra y se quita el período.
   if (payment.status === 'paid') {
-    console.warn('[pagopar-webhook] Notificación sin pago para un pago ya aplicado.', {
-      paymentId: payment.id,
-      cancelled: item.cancelado === true,
-    })
+    after(() => handlePagoparReversal(payment.id, item.hash_pedido as string))
     return acknowledge(payload)
   }
 
@@ -123,6 +128,30 @@ async function handleNotification(request: Request) {
   }
 
   return acknowledge(payload)
+}
+
+async function handlePagoparReversal(paymentId: string, hash: string) {
+  try {
+    const order = await queryPagoparOrder(hash)
+    if (order.status === 'approved') {
+      console.warn('[pagopar-webhook] Notificación sin pago, pero Pagopar confirma el cobro.', { paymentId })
+      return
+    }
+    const { data, error } = await createAdminSupabase().rpc('refund_subscription_payment', {
+      p_actor_id: null,
+      p_payment_id: paymentId,
+      p_reason: 'Reversión o contracargo informado por Pagopar',
+      p_revoke_access: true,
+      p_chargeback: true,
+    })
+    if (error) {
+      console.error('[pagopar-webhook] No se pudo registrar la reversión.', { paymentId, code: error.code })
+      return
+    }
+    await notifySubscriptionChargeback(data as { id: string; organization_id: string; amount: number })
+  } catch (error) {
+    console.error('[pagopar-webhook] No se pudo verificar la reversión.', { paymentId, error })
+  }
 }
 
 /**

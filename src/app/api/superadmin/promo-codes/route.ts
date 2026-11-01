@@ -53,11 +53,13 @@ export async function POST(request: NextRequest) {
   const value = parsed.data
   const admin = createAdminSupabase()
 
-  if (value.benefitType === 'activate_plan') {
+  // Cualquier cupón atado a un plan (activar o descontar) tiene que apuntar a
+  // uno vigente; si no, el canje fallaba con un error genérico.
+  if (value.targetPlan) {
     const { data: plan, error: planError } = await admin
       .from('subscription_plans')
       .select('tier')
-      .eq('tier', value.targetPlan!.toLowerCase())
+      .eq('tier', value.targetPlan.toLowerCase())
       .eq('is_active', true)
       .maybeSingle()
 

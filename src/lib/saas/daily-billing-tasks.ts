@@ -2,11 +2,13 @@ import 'server-only'
 import { reconcilePendingPagoparPayments } from '@/lib/saas/pagopar-reconciliation'
 import { sendPlanGraceNotifications } from '@/lib/saas/plan-grace-notifications'
 import { runSubscriptionAutopay } from '@/lib/saas/subscription-autopay'
+import { sendSubscriptionReminders } from '@/lib/saas/subscription-notifications'
 
 /**
  * Las tareas de cobro que viven en la aplicación (no en pg_cron). Corren una
  * vez por día desde el cron de Vercel; antes eran tres endpoints POST que nada
- * llamaba. Cada tarea es independiente: si una falla, las demás corren igual.
+ * llamaba. Incluye los recordatorios de vencimiento y de pago pendiente.
+ * Cada tarea es independiente: si una falla, las demás corren igual.
  */
 export type DailyTaskResult = { ok: true; data: unknown } | { ok: false; error: string }
 
@@ -14,6 +16,7 @@ export const DAILY_BILLING_TASKS: Record<string, () => Promise<unknown>> = {
   pagoparReconcile: () => reconcilePendingPagoparPayments(),
   subscriptionAutopay: () => runSubscriptionAutopay(),
   planGraceNotifications: () => sendPlanGraceNotifications(),
+  subscriptionReminders: () => sendSubscriptionReminders(),
 }
 
 export async function runDailyBillingTasks(

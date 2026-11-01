@@ -9,6 +9,7 @@ import {
   type LocalPagoparSubscriptionPayment,
 } from '@/lib/saas/pagopar-subscription-status'
 import { AUTOPAY_PAYMENT_METHOD } from '@/lib/saas/subscription-autopay'
+import { sendSubscriptionPaymentReceipt } from '@/lib/saas/subscription-notifications'
 
 /**
  * Los pedidos vencen a las 72 h (fecha_maxima_pago); se mira un día más para
@@ -53,6 +54,7 @@ export async function syncPagoparPaymentStatus(
       p_amount: providerOrder.amount,
     })
     if (error) throw new Error(`No se pudo aplicar el pago: ${error.message}`)
+    await sendSubscriptionPaymentReceipt(localPayment.id)
     return 'applied'
   }
 

@@ -359,3 +359,67 @@ export function renderTransferReviewedEmail(params: {
     },
   })
 }
+
+// ---------------------------------------------------------------------------
+// Ciclo de la suscripción: recordatorios, recibo y reversión
+// ---------------------------------------------------------------------------
+
+/** Aviso del ciclo: vencimiento cercano, pago pendiente o baja a Gratuito. */
+export function renderSubscriptionNoticeEmail(params: {
+  title: string
+  preview: string
+  intro: string
+  detail: string
+  ctaLabel: string
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { title, preview, intro, detail, ctaLabel, manageUrl, brand } = params
+  return renderBrandedEmail({
+    title,
+    preview,
+    intro,
+    bodyHtml: `<p>${escapeText(detail)}</p>`,
+    cta: { label: ctaLabel, url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiTiendaPY',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: 'Tus datos y tu historial se conservan siempre.',
+  })
+}
+
+/** Recibo de un pago de la suscripción (no es una factura legal). */
+export function renderSubscriptionReceiptEmail(params: {
+  companyName: string
+  planName: string
+  amountPyg: number
+  method: string
+  paidAt: string
+  periodEndsAt: string | null
+  reference: string
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, planName, amountPyg, method, paidAt, periodEndsAt, reference, manageUrl, brand } = params
+  const date = (value: string) => new Intl.DateTimeFormat('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' }).format(new Date(value))
+  return renderBrandedEmail({
+    title: 'Recibimos tu pago',
+    preview: `${formatPyg(amountPyg)} por el plan ${planName}.`,
+    intro: `Hola, registramos el pago de "${companyName}". Gracias.`,
+    bodyHtml: `
+      <p>Plan: <strong>${escapeText(planName)}</strong></p>
+      <p>Monto: <strong>${escapeText(formatPyg(amountPyg))}</strong> · ${escapeText(method)}</p>
+      <p>Fecha del pago: ${escapeText(date(paidAt))}</p>
+      ${periodEndsAt ? `<p>Tu plan está pago hasta el <strong>${escapeText(date(periodEndsAt))}</strong>.</p>` : ''}
+      <p style="color:#64748b;font-size:12px">Referencia: ${escapeText(reference)}. Este correo es un comprobante de pago, no una factura legal.</p>
+    `,
+    cta: { label: 'Ver mi suscripción', url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiTiendaPY',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+  })
+}

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { sendSubscriptionPaymentReceipt } from '@/lib/saas/subscription-notifications'
 
 const manualPaymentSchema = z.object({
   plan: z.enum(['BASIC', 'PRO', 'ENTERPRISE']),
@@ -72,6 +73,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     request,
     severity: 'high',
   })
+
+  if (result?.payment_id) await sendSubscriptionPaymentReceipt(result.payment_id)
 
   return NextResponse.json({ success: true, paymentId: result?.payment_id ?? null, plan: result?.plan_id ?? parsed.data.plan })
 }
