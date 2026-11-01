@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, CreditCard, Globe, QrCode, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BankTransferPayment } from '@/components/admin/subscriptions/BankTransferPayment'
@@ -48,6 +48,16 @@ export function SubscriptionPaymentPanel({
   const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>(
     billingIncomplete && canPayByTransfer ? 'transfer' : 'card',
   )
+
+  // «Cambiar de plan» crea la solicitud de transferencia y vuelve acá con
+  // #pay-transfer para mostrar los datos bancarios y subir el comprobante.
+  useEffect(() => {
+    if (window.location.hash !== '#pay-transfer' || !canPayByTransfer) return
+    queueMicrotask(() => {
+      setPaymentMethod('transfer')
+      document.getElementById('pay')?.scrollIntoView({ block: 'start' })
+    })
+  }, [canPayByTransfer])
 
   // En el plan gratuito no hay mes que pagar: tarjeta y QR se eligen junto con
   // el plan nuevo en «Cambiar de plan»; la transferencia deja elegir el plan acá.
@@ -115,11 +125,11 @@ export function SubscriptionPaymentPanel({
     <section
       id="pay"
       aria-labelledby="subscription-pay-title"
-      className="scroll-mt-24 rounded-3xl border border-border bg-card p-5 shadow-2xs sm:p-6"
+      className="scroll-mt-24 rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 via-card to-card p-5 shadow-sm sm:p-6 dark:border-emerald-500/30 dark:from-emerald-500/[0.12]"
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
             <Wallet className="h-5 w-5" />
           </div>
           <div>
@@ -187,7 +197,7 @@ export function SubscriptionPaymentPanel({
             </p>
           </div>
         ) : (
-          <BankTransferPayment canPay={canPayByTransfer} />
+          <BankTransferPayment canPay={canPayByTransfer} embedded />
         )}
 
         {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
