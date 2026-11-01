@@ -5,39 +5,38 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import {
-  Boxes,
+  Activity,
+  AlertCircle,
+  Bot,
   Building2,
   Check,
   CheckCircle2,
   ChevronRight,
-  ClipboardList,
+  Code2,
   CreditCard,
   Crown,
+  Database,
   Download,
+  ExternalLink,
   Filter,
   Globe,
-  Handshake,
   Info,
   Layers,
   Loader2,
-  MousePointerClick,
+  Mail,
   Package,
   Pencil,
   Plus,
   Scale,
   Search,
+  Server,
   ShieldCheck,
-  ShoppingCart,
+  Smartphone,
   Sparkles,
   Star,
-  TicketPercent,
   Trash2,
   TrendingUp,
-  Truck,
-  Users,
   Wallet,
-  Warehouse,
-  Wrench,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -78,16 +77,13 @@ import {
 } from '@/lib/superadmin/platform-finance'
 import { createExpenseAction, deleteExpenseAction, updateExpenseAction } from '@/app/superadmin/finanzas/actions'
 import {
-  PLAN_FEATURES,
-  PLAN_FEATURE_GROUP_LABEL,
-  type PlanFeatureDefinition,
-  type PlanFeatureGroup,
-} from '@/lib/saas/plan-feature-catalog'
-import { PLAN_FEATURE_ICONS } from '@/components/superadmin/plans/plan-feature-icons'
-import {
   DEFAULT_PLATFORM_PLANS,
   type PlatformPlanMetric,
 } from '@/lib/superadmin/platform-expenses'
+import {
+  PLATFORM_SYSTEM_TOOLS,
+  type PlatformSystemTool,
+} from '@/lib/superadmin/platform-tools-catalog'
 
 const gs = (value: number) => formatCurrency(Math.round(value), { currency: 'PYG' })
 
@@ -183,33 +179,14 @@ const tierBadge: Record<string, string> = {
   enterprise: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
 }
 
-const groupBadge: Record<PlanFeatureGroup, string> = {
-  venta: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300',
-  operacion: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
-  gestion: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300',
-  servicio: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
-}
-
-const FEATURE_INFRASTRUCTURE: Record<string, { service: string; hint: string }> = {
-  pos: { service: 'Supabase Postgres', hint: 'Transacciones atómicas, caja y tickets' },
-  ecommerce: { service: 'Vercel Edge & CDN', hint: 'Catálogo público SSR/ISR y assets' },
-  orders: { service: 'Supabase Realtime & Resend', hint: 'Websockets de pedidos y notificaciones' },
-  delivery: { service: 'Postgres & Mapas', hint: 'Geocodificación y cálculo de tarifas de envío' },
-  promotions: { service: 'Postgres DB', hint: 'Reglas de precios dinámicos y cupones' },
-  credits: { service: 'Postgres Ledger', hint: 'Libro de cuentas corrientes y control de cuotas' },
-  inventory: { service: 'Supabase Storage & DB', hint: 'Imágenes CDN y control de existencias' },
-  inventoryAdmin: { service: 'Postgres Triggers', hint: 'Kardex multisede y auditoría de stock' },
-  repairs: { service: 'Postgres DB', hint: 'Taller, órdenes SAT y trazabilidad' },
-  services: { service: 'Postgres DB & Cron', hint: 'Agenda horaria y reservas online multirrubro' },
-  crm: { service: 'Postgres Trigram Indexes', hint: 'Fichas y búsqueda rápida de clientes' },
-  analytics: { service: 'Postgres Cómputo Analítico', hint: 'Agregaciones de ventas, márgenes y KPIs' },
-  webAnalytics: { service: 'Telemetría Edge', hint: 'Tracking anónimo de visitas y embudos' },
-  security: { service: 'Supabase Audit Logs & RLS', hint: 'Seguridad multi-tenant y auditoría' },
-  finances: { service: 'Postgres Ledger', hint: 'Asientos contables y rentabilidad del comercio' },
-  reports: { service: 'Node.js Serverless Stream', hint: 'Exportación CSV/Excel y PDFs' },
-  users: { service: 'Supabase Auth & JWT', hint: 'Roles, permisos y control de acceso' },
-  branches: { service: 'Postgres Multi-tenant', hint: 'Sucursales con inventario y caja propia' },
-  support: { service: 'SLA Prioritario', hint: 'Atención preferente y canal dedicado' },
+const categoryBadge: Record<ExpenseCategory, string> = {
+  infraestructura: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300',
+  herramientas: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300',
+  comisiones: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  marketing: 'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/30 dark:text-pink-300',
+  personal: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
+  legal: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  otros: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
 }
 
 export function PlatformFinanceCenter({
@@ -234,10 +211,10 @@ export function PlatformFinanceCenter({
   const [activeTab, setActiveTab] = useState<'gastos' | 'planes' | 'herramientas'>('gastos')
   const [selectedPlanTier, setSelectedPlanTier] = useState<string>('all')
 
-  // Filtros del catálogo de herramientas
+  // Filtros del catálogo de herramientas y software del sistema
   const [toolSearch, setToolSearch] = useState('')
-  const [toolGroupFilter, setToolGroupFilter] = useState<PlanFeatureGroup | 'all'>('all')
-  const [toolInclusionFilter, setToolInclusionFilter] = useState<'all' | 'included' | 'excluded'>('all')
+  const [toolCategoryFilter, setToolCategoryFilter] = useState<ExpenseCategory | 'all'>('all')
+  const [toolStatusFilter, setToolStatusFilter] = useState<'all' | 'registered' | 'pending'>('all')
 
   const activePlansList = useMemo(() => (plans && plans.length > 0 ? plans : DEFAULT_PLATFORM_PLANS), [plans])
 
@@ -249,15 +226,15 @@ export function PlatformFinanceCenter({
   // El último tipo de cambio cargado sirve de sugerencia para el próximo gasto en dólares.
   const lastUsdRate = useMemo(() => expenses.find((e) => e.currency === 'USD')?.fxRatePyg, [expenses])
 
-  const emptyForm = (): FormState => ({
+  const emptyForm = (preset?: Partial<FormState>): FormState => ({
     id: null,
-    provider: '',
-    category: 'infraestructura',
-    description: '',
-    amount: '',
-    currency: 'USD',
-    fxRatePyg: lastUsdRate ? String(lastUsdRate) : '',
-    recurrence: 'monthly',
+    provider: preset?.provider ?? '',
+    category: preset?.category ?? 'infraestructura',
+    description: preset?.description ?? '',
+    amount: preset?.amount ?? '',
+    currency: preset?.currency ?? 'USD',
+    fxRatePyg: preset?.fxRatePyg ?? (lastUsdRate ? String(lastUsdRate) : '7500'),
+    recurrence: preset?.recurrence ?? 'monthly',
     startsOn: today,
     endsOn: '',
     isActive: true,
@@ -328,31 +305,70 @@ export function PlatformFinanceCenter({
 
   const previewPyg = form && form.amount ? Number(form.amount) * (form.currency === 'PYG' ? 1 : Number(form.fxRatePyg) || 0) : 0
 
-  // Filtrado de herramientas
-  const filteredTools = useMemo(() => {
-    return PLAN_FEATURES.filter((tool) => {
-      if (toolGroupFilter !== 'all' && tool.group !== toolGroupFilter) return false
+  // Búsqueda de gasto asociado para una herramienta del stack
+  const findRegisteredExpense = (tool: PlatformSystemTool): PlatformExpense | undefined => {
+    const norm = (s: string) => s.toLowerCase().trim()
+    const toolName = norm(tool.name)
+    const toolProvider = norm(tool.provider)
+    return expenses.find((e) => {
+      const ep = norm(e.provider)
+      return (
+        ep === toolProvider ||
+        ep === toolName ||
+        ep.includes(toolProvider) ||
+        toolProvider.includes(ep) ||
+        (tool.id === 'dominio' && (ep.includes('dominio') || ep.includes('nic') || ep.includes('cloudflare'))) ||
+        (tool.id === 'gemini' && (ep.includes('gemini') || ep.includes('google ai') || ep.includes('vertex'))) ||
+        (tool.id === 'claude' && (ep.includes('anthropic') || ep.includes('claude'))) ||
+        (tool.id === 'app-stores' && (ep.includes('apple') || ep.includes('google play'))) ||
+        (tool.id === 'pagopar' && (ep.includes('pagopar') || ep.includes('bancard')))
+      )
+    })
+  }
 
-      if (selectedPlan && toolInclusionFilter !== 'all') {
-        const isIncluded = selectedPlan.includedFeatureKeys.includes(tool.key)
-        if (toolInclusionFilter === 'included' && !isIncluded) return false
-        if (toolInclusionFilter === 'excluded' && isIncluded) return false
-      }
+  const registerToolExpense = (tool: PlatformSystemTool) => {
+    setForm(
+      emptyForm({
+        provider: tool.provider,
+        category: tool.category,
+        amount: tool.defaultAmount > 0 ? String(tool.defaultAmount) : '',
+        currency: tool.defaultCurrency,
+        fxRatePyg: tool.defaultCurrency === 'USD' ? (lastUsdRate ? String(lastUsdRate) : '7500') : '1',
+        recurrence: tool.defaultRecurrence,
+        description: tool.role,
+      }),
+    )
+  }
+
+  // Filtrado de herramientas del stack
+  const filteredSystemTools = useMemo(() => {
+    return PLATFORM_SYSTEM_TOOLS.filter((tool) => {
+      if (toolCategoryFilter !== 'all' && tool.category !== toolCategoryFilter) return false
+
+      const registered = Boolean(findRegisteredExpense(tool))
+      if (toolStatusFilter === 'registered' && !registered) return false
+      if (toolStatusFilter === 'pending' && registered) return false
 
       if (toolSearch.trim()) {
         const query = toolSearch.toLowerCase().trim()
-        const label = tool.label.toLowerCase()
-        const hint = tool.hint.toLowerCase()
-        const module = (tool.module ?? '').toLowerCase()
-        const infra = (FEATURE_INFRASTRUCTURE[tool.key]?.service ?? '').toLowerCase()
-        if (!label.includes(query) && !hint.includes(query) && !module.includes(query) && !infra.includes(query)) {
+        const matchName = tool.name.toLowerCase().includes(query)
+        const matchProvider = tool.provider.toLowerCase().includes(query)
+        const matchRole = tool.role.toLowerCase().includes(query)
+        const matchDesc = tool.description.toLowerCase().includes(query)
+        const matchFeatures = tool.keyFeatures.some((f) => f.toLowerCase().includes(query))
+        if (!matchName && !matchProvider && !matchRole && !matchDesc && !matchFeatures) {
           return false
         }
       }
 
       return true
     })
-  }, [toolSearch, toolGroupFilter, toolInclusionFilter, selectedPlan])
+  }, [toolSearch, toolCategoryFilter, toolStatusFilter, expenses])
+
+  const registeredToolsCount = useMemo(
+    () => PLATFORM_SYSTEM_TOOLS.filter((t) => Boolean(findRegisteredExpense(t))).length,
+    [expenses],
+  )
 
   return (
     <div className="space-y-6">
@@ -375,7 +391,7 @@ export function PlatformFinanceCenter({
 
       {unavailableReason && <Notice tone="warning">{unavailableReason}</Notice>}
 
-      {/* Selector de Plan Activo para Inspección */}
+      {/* Selector de Plan Activo para Inspección y Amortización */}
       <Card className="rounded-xl border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/40">
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -411,10 +427,7 @@ export function PlatformFinanceCenter({
                   variant="ghost"
                   size="sm"
                   className="h-9 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400"
-                  onClick={() => {
-                    setSelectedPlanTier('all')
-                    setToolInclusionFilter('all')
-                  }}
+                  onClick={() => setSelectedPlanTier('all')}
                 >
                   <X className="mr-1 h-3.5 w-3.5" /> Ver todos
                 </Button>
@@ -466,36 +479,33 @@ export function PlatformFinanceCenter({
                 </div>
 
                 <div className="col-span-2 sm:col-span-4 lg:col-span-1">
-                  <p className="text-xs text-slate-500">Herramientas activas</p>
+                  <p className="text-xs text-slate-500">Stack y herramientas</p>
                   <p className="mt-1 font-bold tabular-nums text-primary">
-                    {selectedPlan.includedFeaturesCount} <span className="text-xs font-normal text-slate-500">/ {PLAN_FEATURES.length}</span>
+                    {selectedPlan.includedFeaturesCount} <span className="text-xs font-normal text-slate-500">módulos</span>
                   </p>
                   <Button
                     variant="link"
                     className="h-auto p-0 text-xs text-primary underline hover:text-primary/80"
-                    onClick={() => {
-                      setActiveTab('herramientas')
-                      setToolInclusionFilter('included')
-                    }}
+                    onClick={() => setActiveTab('herramientas')}
                   >
-                    Ver herramientas incluidas &rarr;
+                    Ver stack de software &rarr;
                   </Button>
                 </div>
               </div>
 
-              {/* Métricas de Amortización Unit Economics */}
+              {/* Cobertura de Costos del Stack de Desarrollo e Infraestructura */}
               {summary.recurringMonthlyCost > 0 && selectedPlan.price > 0 && (
                 <div className="mt-3.5 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        Cobertura operativa unitaria:
+                        Cobertura del stack operativo:
                       </span>{' '}
                       Se requieren{' '}
                       <span className="font-bold text-primary">
                         {Math.ceil(summary.recurringMonthlyCost / selectedPlan.price)} tiendas
                       </span>{' '}
-                      en el plan <span className="font-medium text-slate-900 dark:text-slate-100">{selectedPlan.name}</span> para amortizar el 100% del costo recurrente de la plataforma ({gs(summary.recurringMonthlyCost)}).
+                      en el plan <span className="font-medium text-slate-900 dark:text-slate-100">{selectedPlan.name}</span> para amortizar el 100% de los costos de infraestructura y herramientas ({gs(summary.recurringMonthlyCost)}).
                     </div>
                     <div>
                       {selectedPlan.activeCount >= Math.ceil(summary.recurringMonthlyCost / selectedPlan.price) ? (
@@ -528,7 +538,7 @@ export function PlatformFinanceCenter({
             Planes y Cobertura ({activePlansList.length})
           </TabsTrigger>
           <TabsTrigger value="herramientas" className="text-xs sm:text-sm">
-            Herramientas ({PLAN_FEATURES.length})
+            Herramientas del Sistema ({PLATFORM_SYSTEM_TOOLS.length})
           </TabsTrigger>
         </TabsList>
 
@@ -646,7 +656,7 @@ export function PlatformFinanceCenter({
                 Planes Comerciales y Cobertura Operativa
               </h3>
               <p className="text-xs text-slate-500">
-                Compará el volumen de suscriptores, ingresos generados y amortización de infraestructura por cada plan.
+                Compará el volumen de suscriptores, ingresos generados y amortización del stack de software por cada plan.
               </p>
             </div>
           </div>
@@ -724,13 +734,13 @@ export function PlatformFinanceCenter({
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Herramientas:</span>
+                          <span className="text-slate-500">Módulos del plan:</span>
                           <span className="font-semibold text-primary">
-                            {plan.includedFeaturesCount} de {PLAN_FEATURES.length}
+                            {plan.includedFeaturesCount} activos
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Cobertura de costos:</span>
+                          <span className="text-slate-500">Cobertura de infraestructura:</span>
                           <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-200">
                             {coveragePercent}%
                           </span>
@@ -752,11 +762,9 @@ export function PlatformFinanceCenter({
                           variant="secondary"
                           size="sm"
                           className="w-full text-xs font-semibold"
-                          onClick={() => {
-                            setActiveTab('herramientas')
-                          }}
+                          onClick={() => setActiveTab('herramientas')}
                         >
-                          <Check className="mr-1.5 h-3.5 w-3.5 text-primary" /> Inspeccionando (Ver herramientas)
+                          <Check className="mr-1.5 h-3.5 w-3.5 text-primary" /> Inspeccionando (Ver stack)
                         </Button>
                       ) : (
                         <Button
@@ -765,7 +773,7 @@ export function PlatformFinanceCenter({
                           className="w-full text-xs"
                           onClick={() => {
                             setSelectedPlanTier(plan.tier)
-                            toast.success(`Plan ${plan.name} seleccionado para inspección`)
+                            toast.success(`Plan ${plan.name} seleccionado para análisis`)
                           }}
                         >
                           Seleccionar plan
@@ -779,178 +787,215 @@ export function PlatformFinanceCenter({
           </div>
         </TabsContent>
 
-        {/* ── TAB 3: CATÁLOGO DE HERRAMIENTAS Y MÓDULOS ─────────────────────────────── */}
+        {/* ── TAB 3: HERRAMIENTAS Y SOFTWARE USADO PARA CREAR EL SISTEMA ───────────── */}
         <TabsContent value="herramientas" className="space-y-6 pt-2">
+          {/* Cabecera del Stack Tecnológico */}
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Herramientas del Sistema y Módulos Técnicos
+                Stack Tecnológico y Herramientas del Sistema
               </h3>
               <p className="text-xs text-slate-500">
-                Catálogo unificado ({PLAN_FEATURES.length} herramientas): funcionalidad, grupo, descripción operativa e infraestructura asociada.
+                Software, infraestructura, APIs y servicios utilizados para construir, alojar, compilar y operar MiTienda (Supabase, Vercel, Expo, Claude, Gemini, Dominios, etc.).
               </p>
             </div>
 
-            {/* Barra de Búsqueda y Filtros */}
+            {/* Buscador y Filtro de Registro */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                 <Input
                   type="text"
-                  placeholder="Buscar herramienta..."
+                  placeholder="Buscar servicio, proveedor..."
                   value={toolSearch}
                   onChange={(e) => setToolSearch(e.target.value)}
                   className="h-9 pl-8 text-xs"
                 />
               </div>
 
-              {selectedPlan && (
-                <Select
-                  value={toolInclusionFilter}
-                  onValueChange={(val) => setToolInclusionFilter(val as any)}
-                >
-                  <SelectTrigger className="h-9 w-44 text-xs">
-                    <SelectValue placeholder="Inclusión en plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas ({PLAN_FEATURES.length})</SelectItem>
-                    <SelectItem value="included">Solo en {selectedPlan.name}</SelectItem>
-                    <SelectItem value="excluded">Bloqueadas en {selectedPlan.name}</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              <Select
+                value={toolStatusFilter}
+                onValueChange={(val) => setToolStatusFilter(val as any)}
+              >
+                <SelectTrigger className="h-9 w-44 text-xs">
+                  <SelectValue placeholder="Estado en gastos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los servicios ({PLATFORM_SYSTEM_TOOLS.length})</SelectItem>
+                  <SelectItem value="registered">Registrados en gastos ({registeredToolsCount})</SelectItem>
+                  <SelectItem value="pending">Pendientes de registrar ({PLATFORM_SYSTEM_TOOLS.length - registeredToolsCount})</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {/* Filtros por Grupo */}
+          {/* Filtros por Categoría */}
           <div className="flex flex-wrap gap-1.5 border-b pb-3">
             <Button
-              variant={toolGroupFilter === 'all' ? 'default' : 'outline'}
+              variant={toolCategoryFilter === 'all' ? 'default' : 'outline'}
               size="sm"
               className="h-7 text-xs"
-              onClick={() => setToolGroupFilter('all')}
+              onClick={() => setToolCategoryFilter('all')}
             >
-              Todas las áreas ({PLAN_FEATURES.length})
+              Todos los servicios ({PLATFORM_SYSTEM_TOOLS.length})
             </Button>
-            {(['venta', 'operacion', 'gestion', 'servicio'] as PlanFeatureGroup[]).map((group) => {
-              const count = PLAN_FEATURES.filter((f) => f.group === group).length
+            {(['infraestructura', 'herramientas', 'comisiones', 'otros'] as ExpenseCategory[]).map((cat) => {
+              const count = PLATFORM_SYSTEM_TOOLS.filter((t) => t.category === cat).length
+              if (count === 0) return null
               return (
                 <Button
-                  key={group}
-                  variant={toolGroupFilter === group ? 'default' : 'outline'}
+                  key={cat}
+                  variant={toolCategoryFilter === cat ? 'default' : 'outline'}
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => setToolGroupFilter(group)}
+                  onClick={() => setToolCategoryFilter(cat)}
                 >
-                  {PLAN_FEATURE_GROUP_LABEL[group]} ({count})
+                  {EXPENSE_CATEGORY_LABEL[cat]} ({count})
                 </Button>
               )
             })}
           </div>
 
-          {/* Grid de Herramientas */}
-          {filteredTools.length === 0 ? (
+          {/* Grid de Herramientas del Sistema */}
+          {filteredSystemTools.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">
-              No se encontraron herramientas con los filtros actuales.
+              No se encontraron herramientas o servicios con los filtros actuales.
             </div>
           ) : (
-            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredTools.map((tool) => {
-                const IconComponent = PLAN_FEATURE_ICONS[tool.key] ?? Info
-                const infra = FEATURE_INFRASTRUCTURE[tool.key]
-                const isIncludedInSelected = selectedPlan ? selectedPlan.includedFeatureKeys.includes(tool.key) : null
-
-                // Planes que incluyen esta herramienta
-                const includingPlans = activePlansList.filter((p) => p.includedFeatureKeys.includes(tool.key))
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredSystemTools.map((tool) => {
+                const IconComponent = tool.icon
+                const registeredExpense = findRegisteredExpense(tool)
+                const isRegistered = Boolean(registeredExpense && registeredExpense.isActive)
+                const monthlyPyg = registeredExpense ? monthlyRecurringPyg(registeredExpense, today) : null
 
                 return (
                   <Card
-                    key={tool.key}
+                    key={tool.id}
                     className={cn(
                       'flex flex-col justify-between rounded-xl border p-4 transition-all',
-                      selectedPlan && isIncludedInSelected
-                        ? 'border-emerald-200/90 bg-emerald-50/20 dark:border-emerald-900/40 dark:bg-emerald-950/10'
-                        : selectedPlan && !isIncludedInSelected
-                          ? 'opacity-70 border-slate-200 bg-slate-50/30 dark:border-slate-800'
-                          : 'border-slate-200 hover:border-slate-300 dark:border-slate-800',
+                      isRegistered
+                        ? 'border-emerald-200/90 bg-emerald-50/10 dark:border-emerald-900/30'
+                        : 'border-slate-200 hover:border-slate-300 dark:border-slate-800',
                     )}
                   >
                     <div>
+                      {/* Cabecera de la Herramienta */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <IconComponent className="h-4 w-4" />
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <IconComponent className="h-5 w-5" />
                           </div>
                           <div>
                             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                              {tool.label}
+                              {tool.name}
                             </h4>
-                            <span className="text-[10px] font-mono text-slate-400">
-                              key: {tool.key}
-                            </span>
+                            <p className="text-[11px] font-medium text-slate-500">
+                              Proveedor: <span className="text-slate-700 dark:text-slate-300">{tool.provider}</span>
+                            </p>
                           </div>
                         </div>
 
-                        <Badge variant="outline" className={cn('text-[10px] uppercase font-semibold shrink-0', groupBadge[tool.group])}>
-                          {tool.group}
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] uppercase font-semibold shrink-0', categoryBadge[tool.category])}
+                        >
+                          {EXPENSE_CATEGORY_LABEL[tool.category]}
                         </Badge>
                       </div>
 
-                      <p className="mt-2.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {tool.hint}
-                      </p>
+                      {/* Rol y Descripción en MiTienda */}
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold text-primary">
+                          {tool.role}
+                        </p>
+                        <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {tool.description}
+                        </p>
+                      </div>
 
-                      {/* Información técnica y de Infraestructura */}
-                      <div className="mt-3 space-y-1.5 rounded-md bg-slate-50 p-2 text-[11px] dark:bg-slate-900/60">
-                        <div className="flex items-center justify-between text-slate-500">
-                          <span>Módulo de control:</span>
-                          <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
-                            {tool.module ? tool.module : 'Límites / Servicio'}
-                          </span>
-                        </div>
-                        {infra && (
-                          <div className="flex items-center justify-between text-slate-500">
-                            <span>Infraestructura:</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[170px]" title={`${infra.service}: ${infra.hint}`}>
-                              {infra.service}
-                            </span>
-                          </div>
-                        )}
+                      {/* Características clave en el sistema */}
+                      <div className="mt-3 space-y-1 rounded-md bg-slate-50 p-2.5 text-[11px] dark:bg-slate-900/60">
+                        <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Uso en el sistema:
+                        </p>
+                        <ul className="space-y-0.5 text-slate-600 dark:text-slate-400">
+                          {tool.keyFeatures.map((feat, idx) => (
+                            <li key={idx} className="flex items-center gap-1.5">
+                              <span className="h-1 w-1 rounded-full bg-primary shrink-0" />
+                              <span className="truncate">{feat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Costo habitual estimado */}
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Costo habitual estimado:</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                          {tool.typicalPricing}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Disponibilidad en Planes */}
-                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-                      {selectedPlan ? (
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500">En {selectedPlan.name}:</span>
-                          {isIncludedInSelected ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10px] border-emerald-200">
-                              <Check className="mr-1 h-3 w-3" /> Incluido
+                    {/* Estado en Gastos y Acciones */}
+                    <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+                      {isRegistered && registeredExpense ? (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10px]">
+                              <Check className="mr-1 h-3 w-3" /> Registrado en gastos
                             </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-slate-400 border-slate-200 bg-slate-50 text-[10px]">
-                              <X className="mr-1 h-3 w-3" /> Bloqueado
-                            </Badge>
-                          )}
+                            <span className="text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                              {formatCurrency(registeredExpense.amount, { currency: registeredExpense.currency })}
+                              {registeredExpense.currency !== 'PYG' && monthlyPyg !== null && (
+                                <span className="text-slate-400 text-[11px] font-normal ml-1">
+                                  ({gs(monthlyPyg)}/mes)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[11px] text-slate-500">
+                              {registeredExpense.provider} ({RECURRENCE_LABEL[registeredExpense.recurrence]})
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-primary"
+                              onClick={() => setForm(editForm(registeredExpense))}
+                            >
+                              <Pencil className="mr-1 h-3 w-3" /> Editar gasto
+                            </Button>
+                          </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500">Disponible en:</span>
-                          <div className="flex items-center gap-1">
-                            {includingPlans.map((p) => (
-                              <span
-                                key={p.id}
-                                className={cn(
-                                  'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
-                                  tierBadge[p.tier] ?? 'bg-slate-100 text-slate-700',
-                                )}
-                                title={`Incluido en plan ${p.name}`}
-                              >
-                                {p.name.slice(0, 3)}
-                              </span>
-                            ))}
-                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
+                            <AlertCircle className="mr-1 h-3 w-3" /> Pendiente de registrar
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/5"
+                            onClick={() => registerToolExpense(tool)}
+                          >
+                            <Plus className="mr-1 h-3 w-3" /> Registrar gasto
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Enlace al sitio o consola si existe */}
+                      {tool.websiteUrl && (
+                        <div className="mt-2 flex justify-end">
+                          <a
+                            href={tool.dashboardUrl || tool.websiteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          >
+                            Abrir consola / sitio <ExternalLink className="ml-1 h-3 w-3" />
+                          </a>
                         </div>
                       )}
                     </div>
@@ -975,7 +1020,7 @@ export function PlatformFinanceCenter({
               <div className="space-y-4 px-4 py-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="expense-provider">Proveedor</Label>
-                  <Input id="expense-provider" value={form.provider} maxLength={80} placeholder="Vercel, Supabase, dominio..." onChange={(e) => setForm({ ...form, provider: e.target.value })} />
+                  <Input id="expense-provider" value={form.provider} maxLength={80} placeholder="Vercel, Supabase, Expo, Dominio, Anthropic..." onChange={(e) => setForm({ ...form, provider: e.target.value })} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1048,7 +1093,7 @@ export function PlatformFinanceCenter({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="expense-description">Nota (opcional)</Label>
+                  <Label htmlFor="expense-description">Nota o rol (opcional)</Label>
                   <Textarea id="expense-description" rows={2} maxLength={500} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                 </div>
 
