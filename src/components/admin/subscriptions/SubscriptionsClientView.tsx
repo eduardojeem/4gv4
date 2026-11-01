@@ -410,7 +410,7 @@ export function SubscriptionsClientView({
           <TabsList className="bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-2xl h-auto flex flex-wrap sm:inline-flex border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
             <TabsTrigger
               value="overview"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-500/15 data-[state=active]:text-indigo-900 dark:data-[state=active]:text-indigo-100 data-[state=active]:ring-1 data-[state=active]:ring-indigo-200 dark:data-[state=active]:ring-indigo-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Layers className="h-4 w-4 text-indigo-500" />
               <span>Resumen</span>
@@ -420,7 +420,7 @@ export function SubscriptionsClientView({
             </TabsTrigger>
             <TabsTrigger
               value="plans"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-amber-50 dark:data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-900 dark:data-[state=active]:text-amber-100 data-[state=active]:ring-1 data-[state=active]:ring-amber-200 dark:data-[state=active]:ring-amber-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Sparkles className="h-4 w-4 text-amber-500" />
               <span>Planes</span>
@@ -428,7 +428,7 @@ export function SubscriptionsClientView({
             </TabsTrigger>
             <TabsTrigger
               value="payments"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-emerald-50 dark:data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-900 dark:data-[state=active]:text-emerald-100 data-[state=active]:ring-1 data-[state=active]:ring-emerald-200 dark:data-[state=active]:ring-emerald-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Receipt className="h-4 w-4 text-emerald-500" />
               <span>Pagos</span>
@@ -440,7 +440,7 @@ export function SubscriptionsClientView({
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/15 data-[state=active]:text-blue-900 dark:data-[state=active]:text-blue-100 data-[state=active]:ring-1 data-[state=active]:ring-blue-200 dark:data-[state=active]:ring-blue-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Building2 className="h-4 w-4 text-blue-500" />
               <span>Facturación</span>
@@ -500,7 +500,7 @@ export function SubscriptionsClientView({
         </div>
 
         {/* TAB 1: OVERVIEW & USAGE (REDISEÑADA & LIMPIA) */}
-        <TabsContent value="overview" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="overview" className="space-y-6 border-t-2 border-indigo-200 pt-5 focus-visible:outline-none dark:border-indigo-500/30">
           {/* Cupos del plan */}
           <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -694,7 +694,7 @@ export function SubscriptionsClientView({
         </TabsContent>
 
         {/* TAB 2: PLANS COMPARISON (INCLUYE GUÍA EXPLICATIVA CONTEXTUAL) */}
-        <TabsContent value="plans" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="plans" className="space-y-6 border-t-2 border-amber-200 pt-5 focus-visible:outline-none dark:border-amber-500/30">
           <PlansComparison
             canChangePlan={canChangePlan}
             currentPlanCode={currentPlan.code}
@@ -725,7 +725,7 @@ export function SubscriptionsClientView({
         </TabsContent>
 
         {/* TAB 3: PAYMENT & BILLING HISTORY */}
-        <TabsContent value="payments" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="payments" className="space-y-6 border-t-2 border-emerald-200 pt-5 focus-visible:outline-none dark:border-emerald-500/30">
           {/* El cupón es otra forma de pagar o extender el plan: va con los pagos. */}
           <PromoCodeRedeemer canRedeem={canRedeemCodes} />
 
@@ -966,7 +966,7 @@ export function SubscriptionsClientView({
         </TabsContent>
 
         {/* TAB 4: BILLING PROFILE */}
-        <TabsContent value="billing" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="billing" className="space-y-6 border-t-2 border-blue-200 pt-5 focus-visible:outline-none dark:border-blue-500/30">
           <Card id="billing-form" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <CardHeader className="border-b border-border pb-4">
               <div className="flex items-center gap-3">

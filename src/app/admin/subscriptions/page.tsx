@@ -144,12 +144,21 @@ function buildNotices({
   return notices.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'danger' ? -1 : 1))
 }
 
+/** Cada métrica con su color de ícono, para distinguirlas de un vistazo en claro y oscuro. */
+const METRIC_ACCENT = {
+  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  violet: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+} as const
+
 function MetricCard({
   label,
   value,
   hint,
   icon: Icon,
   tone = 'neutral',
+  accent,
   children,
 }: {
   label: string
@@ -157,12 +166,15 @@ function MetricCard({
   hint?: string
   icon: typeof Gauge
   tone?: SubscriptionTone
+  accent: keyof typeof METRIC_ACCENT
   children?: ReactNode
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+    <div className="rounded-2xl border border-border/80 bg-background/80 p-4 shadow-2xs dark:bg-background/40">
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="h-4 w-4 shrink-0" />
+        <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg', METRIC_ACCENT[accent])}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
         <p className="text-[11px] font-bold uppercase tracking-wider">{label}</p>
       </div>
       <p className={cn('mt-2 truncate text-xl font-extrabold tracking-tight', TONE_TEXT[tone])}>{value}</p>
@@ -228,7 +240,7 @@ export default async function AdminSubscriptionsPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* ── Encabezado ───────────────────────────────────────────────────── */}
-      <header className="rounded-3xl border border-border bg-card p-5 shadow-2xs sm:p-6">
+      <header className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card p-5 shadow-sm sm:p-6 dark:border-primary/30 dark:from-primary/[0.14]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -295,6 +307,7 @@ export default async function AdminSubscriptionsPage() {
                 : state.currentPlan.price_note || 'Sin costo mensual'
             }
             icon={CreditCard}
+            accent="blue"
           />
 
           <MetricCard
@@ -316,6 +329,7 @@ export default async function AdminSubscriptionsPage() {
                   : formatDate(periodEnd)
             }
             icon={CalendarClock}
+            accent="violet"
             tone={renewalTone}
           />
 
@@ -324,6 +338,7 @@ export default async function AdminSubscriptionsPage() {
             value={`${averageUsage}%`}
             hint="Promedio de los cupos con tope"
             icon={Gauge}
+            accent="amber"
             tone={quotaTone(averageUsage)}
           >
             <div
@@ -346,6 +361,7 @@ export default async function AdminSubscriptionsPage() {
             value={paymentProvider}
             hint={subscriptionStatusLabel(paymentStatus)}
             icon={CreditCard}
+            accent="emerald"
             tone={subscriptionStatusTone(paymentStatus)}
           />
         </div>
@@ -415,7 +431,7 @@ export default async function AdminSubscriptionsPage() {
           currentPlanName={state.currentPlan.name}
         />
       ) : state.currentPlan.price_monthly > 0 ? (
-        <section className="rounded-2xl border border-border bg-muted/30 p-4">
+        <section className="rounded-2xl border border-rose-200/70 bg-rose-50/40 p-4 dark:border-rose-900/40 dark:bg-rose-950/15">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
