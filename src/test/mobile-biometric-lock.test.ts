@@ -92,7 +92,7 @@ describe('desbloqueo con Face ID / huella en la app', () => {
     local.authenticateAsync.mockResolvedValueOnce({ success: true })
     expect(await authenticateWithBiometrics('Face ID')).toBe(true)
     expect(local.authenticateAsync).toHaveBeenLastCalledWith(
-      expect.objectContaining({ promptMessage: 'Desbloqueá Mi Tienda con Face ID', disableDeviceFallback: false })
+      expect.objectContaining({ promptMessage: 'Desbloqueá Mi TiendaPy con Face ID', disableDeviceFallback: false })
     )
   })
 })

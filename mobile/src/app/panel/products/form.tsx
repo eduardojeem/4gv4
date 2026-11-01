@@ -262,7 +262,7 @@ export default function ProductForm() {
     if (photos.length >= 6) return Alert.alert('Máximo 6 fotos', 'Quitá una para agregar otra.');
     if (source === 'camera') {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) return Alert.alert('Sin acceso a la cámara', 'Habilitá la cámara para Mi Tienda en los ajustes del teléfono.');
+      if (!permission.granted) return Alert.alert('Sin acceso a la cámara', 'Habilitá la cámara para Mi TiendaPy en los ajustes del teléfono.');
     }
     const result =
       source === 'camera'
