@@ -54,6 +54,10 @@ export function submitBankTransferReceipt(organizationId:string,actorId:string,r
  const parsed=submitBankTransferReceiptSchema.parse(input)
  return rpc<BankTransferRequest>('submit_subscription_bank_transfer_receipt',{p_organization_id:organizationId,p_actor_id:actorId,p_request_id:requestId,p_path:parsed.path,p_mime_type:parsed.mimeType,p_size:parsed.size,p_operation_reference:parsed.operationReference??null})
 }
+/** Solo mientras espera el comprobante; la base verifica actor y estado. */
+export function cancelBankTransferRequest(organizationId:string,actorId:string,requestId:string){
+ return rpc<BankTransferRequest>('cancel_subscription_bank_transfer',{p_organization_id:organizationId,p_actor_id:actorId,p_request_id:requestId})
+}
 export function reviewBankTransferRequest(actorId:string,requestId:string,input:BankTransferReviewInput){
  const parsed=reviewBankTransferSchema.parse(input)
  return rpc<{request:BankTransferRequest;applied:boolean}>('review_subscription_bank_transfer',{p_actor_id:actorId,p_request_id:requestId,p_decision:parsed.decision,p_reason:parsed.reason??null,p_bank_operation_reference:parsed.bankOperationReference??null})

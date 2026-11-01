@@ -21,8 +21,16 @@ it('creates only the server-selected plan and displays the returned amount, bank
  await screen.findByText('TR-TEST')
  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({planCode:'pro'})
  expect(screen.getByText('Banco de la solicitud')).toBeInTheDocument();expect(screen.queryByText('Banco de prueba')).not.toBeInTheDocument()
- expect(screen.getByText(/210[.\s]000/)).toBeInTheDocument();expect(screen.getByText(/todavía no registra un pago/i)).toBeInTheDocument()
+ expect(screen.getAllByText(/210[.\s]000/).length).toBeGreaterThan(0);expect(screen.getByText(/todavía no registra un pago/i)).toBeInTheDocument()
  expect(control.refresh).not.toHaveBeenCalled()
+})
+it('cancels an open request so another can be created',async()=>{
+ const fetch=vi.fn().mockResolvedValueOnce(response(payload([request]))).mockResolvedValueOnce(response({request:{...request,status:'cancelled'}}));vi.stubGlobal('fetch',fetch)
+ render(<BankTransferPayment canPay/>);await screen.findByText('TR-TEST')
+ fireEvent.click(screen.getByRole('button',{name:'Cancelar solicitud'}))
+ await screen.findByText('Cancelada')
+ expect(String(fetch.mock.calls[1][0]).endsWith('/cancel')).toBe(true)
+ expect(screen.getByText(/Solicitud cancelada/)).toBeInTheDocument()
 })
 it('rejects an invalid or oversized receipt and uploads a valid receipt for review',async()=>{
  const fetch=vi.fn().mockResolvedValueOnce(response(payload([request]))).mockResolvedValueOnce(response({request:{...request,status:'pending_review',receipt_path:'private/r1.pdf',operation_reference:'OP-123'}}));vi.stubGlobal('fetch',fetch)
