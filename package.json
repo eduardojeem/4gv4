@@ -44,6 +44,7 @@
     "mobile:dev:seed": "node scripts/seed-mobile-dev.mjs",
     "mobile:dev:smoke": "node scripts/smoke-mobile-dev.mjs",
     "audit:barcodes": "npx tsx scripts/audit-barcodes.ts",
+    "play-store:assets": "node scripts/generate-play-store-assets.mjs",
     "audit:browser": "node scripts/audit-public-browser.mjs",
     "setup:repairs": "node scripts/setup-repairs.js",
     "setup:segmentation": "node scripts/setup-segmentation.js",
