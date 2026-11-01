@@ -374,9 +374,11 @@ export function BookingSection({
     <section id="reservar" aria-labelledby="booking-title" className="scroll-mt-24 border-y bg-muted/30 py-14 sm:py-20">
       <div className="container mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <span className={STOREFRONT_EYEBROW_CLASS[style]}>Turnos online</span>
+          <span className={STOREFRONT_EYEBROW_CLASS[style]}>
+            {settings.badge || (style === 'tech' ? 'Cita técnica & Asesoramiento' : 'Turnos online')}
+          </span>
           <h2 id="booking-title" className={cn('mt-2 text-3xl sm:text-4xl', STOREFRONT_HEADING_CLASS[style])}>
-            {settings.title || 'Reservá tu turno'}
+            {settings.title || (style === 'tech' ? 'Agendá tu cita o diagnóstico' : 'Reservá tu turno')}
           </h2>
           {settings.subtitle && <p className="mx-auto mt-3 max-w-xl text-muted-foreground">{settings.subtitle}</p>}
           {nextSlot && !serviceId && <NextSlotBadge slot={nextSlot} bookingHref="#reservar" onBook={onBookNext} tone="light" />}

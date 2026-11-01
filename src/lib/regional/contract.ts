@@ -53,46 +53,55 @@ export interface FiscalBehaviorBoundary {
   pricesIncludeTax: boolean | null
 }
 
-export const REGIONAL_DEFAULT_COUNTRIES = ['PY', 'BR', 'AR', 'US'] as const
+export const REGIONAL_COUNTRY_CATALOG = [
+  { code: 'PY', label: 'Paraguay', defaultCurrency: 'PYG', defaultLocale: 'es-PY', timezoneStrategy: 'default', defaultTimezone: 'America/Asuncion', status: 'SUPPORTED' },
+  { code: 'BR', label: 'Brasil', defaultCurrency: 'BRL', defaultLocale: 'pt-BR', timezoneStrategy: 'default', defaultTimezone: 'America/Sao_Paulo', status: 'SUPPORTED' },
+  { code: 'AR', label: 'Argentina', defaultCurrency: 'ARS', defaultLocale: 'es-AR', timezoneStrategy: 'default', defaultTimezone: 'America/Argentina/Buenos_Aires', status: 'SUPPORTED' },
+  { code: 'US', label: 'Estados Unidos', defaultCurrency: 'USD', defaultLocale: 'en-US', timezoneStrategy: 'explicit', defaultTimezone: null, status: 'SUPPORTED' },
+] as const satisfies readonly {
+  code: string
+  label: string
+  defaultCurrency: CurrencyCode
+  defaultLocale: string
+  timezoneStrategy: 'default' | 'explicit'
+  defaultTimezone: string | null
+  status: 'SUPPORTED' | 'EXPERIMENTAL' | 'UNSUPPORTED'
+}[]
 
-const COUNTRY_DEFAULTS: Record<(typeof REGIONAL_DEFAULT_COUNTRIES)[number], Omit<RegionalDefaults, 'countryCode'>> = {
-  PY: {
-    baseCurrency: 'PYG',
-    timezone: 'America/Asuncion' as IanaTimeZone,
-    locale: 'es-PY' as LocaleCode,
-    timezoneSelectionRequired: false,
-  },
-  BR: {
-    baseCurrency: 'BRL',
-    timezone: 'America/Sao_Paulo' as IanaTimeZone,
-    locale: 'pt-BR' as LocaleCode,
-    timezoneSelectionRequired: false,
-  },
-  AR: {
-    baseCurrency: 'ARS',
-    timezone: 'America/Argentina/Buenos_Aires' as IanaTimeZone,
-    locale: 'es-AR' as LocaleCode,
-    timezoneSelectionRequired: false,
-  },
-  US: {
-    baseCurrency: 'USD',
-    timezone: null,
-    locale: 'en-US' as LocaleCode,
-    timezoneSelectionRequired: true,
-  },
+export type SupportedCountryCode = (typeof REGIONAL_COUNTRY_CATALOG)[number]['code']
+
+/** Backwards-compatible list derived from the canonical country catalog. */
+export const REGIONAL_DEFAULT_COUNTRIES = REGIONAL_COUNTRY_CATALOG.map(({ code }) => code) as readonly SupportedCountryCode[]
+
+export function getSupportedRegionalCountries() {
+  return REGIONAL_COUNTRY_CATALOG.filter(({ status }) => status === 'SUPPORTED')
 }
+
+const LEGACY_LANGUAGE_LOCALES: Readonly<Record<string, LocaleCode>> = {
+  es: 'es-PY' as LocaleCode,
+  en: 'en-US' as LocaleCode,
+  pt: 'pt-BR' as LocaleCode,
+}
+
+const DEFAULT_LEGACY_LOCALE = 'es-PY' as LocaleCode
 
 /** Normalizes an ISO 3166-1 alpha-2 code and rejects values unknown to the runtime's region catalog. */
 export function normalizeCountryCode(value: unknown): CountryCode | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toUpperCase()
   if (!/^[A-Z]{2}$/.test(normalized)) return null
+  if (REGIONAL_COUNTRY_CATALOG.some(({ code }) => code === normalized)) {
+    return normalized as CountryCode
+  }
   try {
-    const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized)
-    return name && name !== normalized && name !== 'Unknown Region' ? normalized as CountryCode : null
+    if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
+      const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized)
+      return name && name !== normalized && name !== 'Unknown Region' ? normalized as CountryCode : null
+    }
   } catch {
     return null
   }
+  return null
 }
 
 export function normalizeCurrencyCode(value: unknown): CurrencyCode | null {
@@ -103,12 +112,26 @@ export function normalizeCurrencyCode(value: unknown): CurrencyCode | null {
 
 export function normalizeLocaleCode(value: unknown): LocaleCode | null {
   if (typeof value !== 'string' || !value.trim()) return null
-  try {
-    const [locale] = Intl.getCanonicalLocales(value.trim())
-    return locale ? locale as LocaleCode : null
-  } catch {
-    return null
+  const trimmed = value.trim()
+  const knownLocales = ['es-PY', 'pt-BR', 'es-AR', 'en-US', 'es', 'pt', 'en']
+  const matched = knownLocales.find((k) => k.toLowerCase() === trimmed.toLowerCase())
+  if (matched) {
+    return matched as LocaleCode
   }
+  try {
+    if (typeof Intl !== 'undefined' && typeof Intl.getCanonicalLocales === 'function') {
+      const [locale] = Intl.getCanonicalLocales(trimmed)
+      return locale ? locale as LocaleCode : null
+    }
+  } catch {
+    // Fall back to well-formed language tag regex if Intl.getCanonicalLocales is not in runtime
+  }
+  if (/^[a-z]{2}(-[A-Z]{2})?$/i.test(trimmed)) {
+    const parts = trimmed.split('-')
+    const canonical = parts.length === 2 ? `${parts[0].toLowerCase()}-${parts[1].toUpperCase()}` : parts[0].toLowerCase()
+    return canonical as LocaleCode
+  }
+  return null
 }
 
 export function normalizeTimeZone(value: unknown): IanaTimeZone | null {
@@ -123,14 +146,37 @@ export function normalizeTimeZone(value: unknown): IanaTimeZone | null {
 
 export function getRegionalDefaults(countryCode: CountryCode | string): RegionalDefaults | null {
   const normalized = normalizeCountryCode(countryCode)
-  if (!normalized || !REGIONAL_DEFAULT_COUNTRIES.includes(normalized as (typeof REGIONAL_DEFAULT_COUNTRIES)[number])) {
-    return null
-  }
-
+  const country = REGIONAL_COUNTRY_CATALOG.find(({ code, status }) => code === normalized && status === 'SUPPORTED')
+  if (!normalized || !country) return null
   return {
     countryCode: normalized,
-    ...COUNTRY_DEFAULTS[normalized as (typeof REGIONAL_DEFAULT_COUNTRIES)[number]],
+    baseCurrency: country.defaultCurrency,
+    locale: country.defaultLocale as LocaleCode,
+    timezone: country.defaultTimezone as IanaTimeZone | null,
+    timezoneSelectionRequired: country.timezoneStrategy === 'explicit',
   }
+}
+
+/**
+ * Resolves presentation locale without changing the independently stored currency.
+ * `es-PY` remains the explicit legacy-safe fallback used by existing installs.
+ */
+export function resolveEffectiveLocale(input: {
+  locale?: string | null
+  countryCode?: string | null
+  language?: string | null
+  fallbackLocale?: string | null
+}): LocaleCode {
+  const explicitLocale = normalizeLocaleCode(input.locale)
+  if (explicitLocale) return explicitLocale
+
+  const countryDefaults = input.countryCode ? getRegionalDefaults(input.countryCode) : null
+  if (countryDefaults) return countryDefaults.locale
+
+  const language = input.language?.trim().toLowerCase().split(/[-_]/, 1)[0]
+  if (language && LEGACY_LANGUAGE_LOCALES[language]) return LEGACY_LANGUAGE_LOCALES[language]
+
+  return normalizeLocaleCode(input.fallbackLocale) ?? DEFAULT_LEGACY_LOCALE
 }
 
 export function getCurrencyFractionDigits(currencyCode: CurrencyCode | string): number {
@@ -140,12 +186,17 @@ export function getCurrencyFractionDigits(currencyCode: CurrencyCode | string): 
 }
 
 export function getRegionalCurrencySymbol(currencyCode: CurrencyCode, locale: LocaleCode | string): string {
-  const parts = new Intl.NumberFormat(locale, {
+  const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currencyCode,
     currencyDisplay: 'narrowSymbol',
-  }).formatToParts(0)
-  return parts.find((part) => part.type === 'currency')?.value ?? currencyCode
+  })
+  // Hermes on iOS (Expo Go) has no NumberFormat.formatToParts: fall back to
+  // stripping the number out of the formatted zero.
+  if (typeof formatter.formatToParts === 'function') {
+    return formatter.formatToParts(0).find((part) => part.type === 'currency')?.value ?? currencyCode
+  }
+  return formatter.format(0).replace(/[\d\s.,  -]/g, '') || currencyCode
 }
 
 export function formatCurrencyAmount(

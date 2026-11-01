@@ -541,7 +541,7 @@ export default function PromotionsPage() {
                       onClick={() => handleSelectPublicTab('banners')}
                     >
                       <GalleryHorizontalEnd className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">1. Banners de Campaña</span>
+                      <span className="truncate">1. Banners de /ofertas</span>
                       <Badge variant="outline" className={cn(
                         "ml-auto sm:ml-1 text-[10px] py-0 px-1.5 font-normal",
                         publicSectionTab === 'banners'
@@ -622,19 +622,24 @@ export default function PromotionsPage() {
                     <PublicBlockHeading
                       step={1}
                       icon={GalleryHorizontalEnd}
-                      title="Banners Publicitarios y Campañas"
-                      description="Carrusel superior con diapositivas destacadas, imágenes llamativas y botones directos de compra."
-                      badgeText="Banners Gráficos"
+                      title="Banners de la página /ofertas"
+                      description="Carrusel publicitario exclusivo para la cabecera de la página /ofertas con campañas visuales de rebajas."
+                      badgeText="Banners de Ofertas"
                       statusBadge={
                         <Badge variant="outline" className="text-xs font-semibold border-cyan-500/30 text-cyan-700 dark:text-cyan-300">
                           {bannerSlidesCount} / 6 banners configurados
                         </Badge>
                       }
                     />
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs text-cyan-950 dark:text-cyan-200">
+                      <p>
+                        <span className="font-semibold">Nota:</span> Estos banners se exhiben exclusivamente en la cabecera de la página de promociones (<code>/ofertas</code>). Para personalizar los banners principales de la portada de tu tienda, visitá <Link href="/admin/website" className="font-bold underline hover:opacity-80">Sitio Web &gt; Banners del inicio</Link>.
+                      </p>
+                    </div>
                     <OffersPromoCarouselEditor
                       settingKey="offers_carousel"
                       title="Banners de la página de ofertas"
-                      description="Publica campañas con imágenes llamativas y enlaces directos a colecciones o productos."
+                      description="Publica campañas con imágenes llamativas y enlaces directos a colecciones o productos en /ofertas."
                     />
                   </div>
                 )}

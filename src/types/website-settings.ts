@@ -16,7 +16,7 @@ export interface CompanyInfo {
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
-  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty'
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro'
   /** Variante específica dentro de la plantilla elegida */
   storefrontVariant?: string
   serviceWebsiteVariant?: 'barber' | 'salon' | 'studio' | 'professional'
@@ -158,6 +158,7 @@ export interface ServicesSectionSettings {
  */
 export interface BookingSectionSettings {
   enabled: boolean
+  badge?: string
   title: string
   subtitle: string
   /** Muestra al equipo (profesionales de la agenda) junto a la reserva. */

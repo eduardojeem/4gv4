@@ -1,11 +1,12 @@
 'use client'
 
 import { AppImage } from '@/components/ui/app-image'
+import Link from 'next/link'
 
 import { useEffect, useRef, useState } from 'react'
 import {
   AlignCenter, AlignLeft, AlignRight,
-  ArrowDown, ArrowUp, Check, GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
+  ArrowDown, ArrowRight, ArrowUp, Check, GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
   Monitor, MoonStar, Pencil, Plus, Save, Smartphone, SunMedium,
   Trash2, Type, Upload, X,
   ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, ExternalLink, Images
@@ -560,8 +561,10 @@ type PromotionalCarouselEditorProps = {
 
 export function PromotionalCarouselEditor({
   settingKey = 'promotional_carousel',
-  title = 'Carrusel de promociones',
-  description = 'Publicá campañas con imágenes y mensajes propios en la página de inicio',
+  title = settingKey === 'promotional_carousel' ? 'Banners del inicio' : 'Banners de ofertas',
+  description = settingKey === 'promotional_carousel'
+    ? 'Publicá campañas con imágenes y mensajes propios en la portada principal (/inicio)'
+    : 'Publicá campañas con imágenes y mensajes propios en la página de ofertas (/ofertas)',
   capabilities,
   storefrontStyle,
   onNavigate,
@@ -904,14 +907,34 @@ export function PromotionalCarouselEditor({
             <div className="flex-1">
               <PublicVisibilityCard
                 compact
-                title="Visualización del Carrusel de Promociones"
-                badgeLabel="Banners de Portada"
-                description="Activa o desactiva el carrusel en la página de inicio. Requiere al menos una diapositiva activa."
+                title={settingKey === 'promotional_carousel' ? 'Visualización de Banners en la Portada' : 'Visualización de Banners en /ofertas'}
+                badgeLabel={settingKey === 'promotional_carousel' ? 'Portada (/inicio)' : 'Página /ofertas'}
+                description={
+                  settingKey === 'promotional_carousel'
+                    ? 'Activa o desactiva el carrusel en la portada de tu tienda (/inicio). Requiere al menos una diapositiva activa.'
+                    : 'Activa o desactiva los banners publicitarios en la cabecera de la página /ofertas. Requiere al menos una diapositiva activa.'
+                }
                 enabled={current.enabled}
                 onToggle={(value) => patch('enabled', value)}
               />
             </div>
           </div>
+
+          {settingKey === 'promotional_carousel' && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 p-3.5 text-xs">
+              <div className="space-y-0.5">
+                <p className="font-medium text-foreground">¿Buscás configurar cupones o los banners de la página de ofertas?</p>
+                <p className="text-muted-foreground">Los banners de esta sección solo aparecen en la portada principal (<code className="text-[11px]">/inicio</code>). Para ofertas específicas de rebajas o códigos de descuento, gestioná tus campañas en Promociones.</p>
+              </div>
+              <Link
+                href="/dashboard/promotions?tab=publica"
+                className="inline-flex items-center gap-1.5 shrink-0 rounded-lg border border-border/80 bg-background px-3 py-1.5 font-semibold text-foreground hover:bg-muted/60 transition-colors"
+              >
+                <span>Ir a Promociones</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          )}
 
           {placement && (
             <div role="note" className={cn('flex flex-col gap-2 rounded-xl border p-3 text-xs sm:flex-row sm:items-center sm:justify-between', placement.replacesHero ? 'border-sky-500/30 bg-sky-500/10' : 'bg-muted/30')}>

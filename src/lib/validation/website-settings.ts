@@ -455,6 +455,7 @@ export const ServicesSectionSchema = z.object({
 
 export const BookingSectionSchema = z.object({
   enabled: z.boolean(),
+  badge: z.string().trim().max(60).optional(),
   title: z.string().trim().max(80),
   subtitle: z.string().trim().max(200),
   showTeam: z.boolean(),

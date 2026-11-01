@@ -364,6 +364,59 @@ export function CompanyInfoForm() {
       {/* Aviso si la cuota de imágenes llega al límite */}
       <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />
 
+      {/* Enlace y publicación de la tienda */}
+      <SectionCard
+        id="website-visibility"
+        icon={Globe}
+        title="Enlace y publicación de tu tienda"
+        description="Estado de publicación en vivo, dirección web pública y visibilidad en el Marketplace"
+      >
+        <div className="space-y-6">
+          <PublicVisibilityCard
+            title="Publicar tienda"
+            compact
+            description="Activa el enlace público de tu tienda. Al desactivarlo también se oculta del Marketplace, sin borrar datos del sistema. Los cambios se aplican al guardar."
+            enabled={formData.storefrontPublic === true}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
+          />
+
+          <div className="space-y-2">
+            <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
+            <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+              <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground whitespace-nowrap">
+                {typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/
+              </span>
+              <Input
+                id="slug"
+                value={formData.slug || ''}
+                onChange={(e) => handleChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="mi-empresa"
+                maxLength={50}
+                aria-invalid={!!errors.slug}
+                className="h-11 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+            {errors.slug ? (
+              <p className="text-xs text-destructive">{errors.slug}</p>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                ⚠️ Si cambiás esta ruta, los enlaces antiguos que hayas compartido dejarán de funcionar.
+              </p>
+            )}
+          </div>
+
+          <PublicVisibilityCard
+            title="Visibilidad en Marketplace General"
+            badgeLabel="Directorio Público"
+            compact
+            description="Permite descubrir tu empresa y sus productos en el Marketplace. Requiere la tienda publicada; podés publicar solo tu enlace y mantener esta opción desactivada."
+            disabled={formData.storefrontPublic !== true}
+            enabled={formData.storefrontPublic === true && formData.marketplacePublic === true}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+          />
+        </div>
+      </SectionCard>
+
       {/* Identidad */}
       <SectionCard id="website-identity" icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
@@ -474,105 +527,8 @@ export function CompanyInfoForm() {
         </div>
       </SectionCard>
 
-      {/* Historial de Logos e Imágenes — Sección Destacada debajo de Identidad */}
-      <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20">
-              <Images className="h-6 w-6" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-foreground">
-                  Historial de Logos e Imágenes
-                </h3>
-                <span className="rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-xs font-bold text-primary">
-                  Máx. 20 imágenes
-                </span>
-                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Espacio liberable
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                Visualizá, seleccioná y gestioná todas las imágenes subidas para tu sitio web (logos, banners del carrusel, carteles de aviso y marcas). Reutilizalas con un clic o eliminalas definitivamente para liberar espacio en tu cuenta.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0 self-start sm:self-center">
-            <Button
-              type="button"
-              size="lg"
-              onClick={() => setLogoMediaOpen(true)}
-              className="gap-2.5 font-bold text-sm bg-primary hover:bg-primary/90 text-primary-foreground shadow-md px-5 h-11 rounded-xl cursor-pointer"
-            >
-              <Images className="h-4 w-4" />
-              <span>Abrir Historial de Imágenes</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <WebsiteMediaLibraryDialog
-        open={logoMediaOpen}
-        onOpenChange={setLogoMediaOpen}
-        filterSection="logo"
-        title="Historial de Logos e Imágenes"
-        description="Seleccioná un logo o imagen previamente subida o eliminá archivos definitivamente para liberar espacio (máx. 20)."
-        onSelect={(url) => {
-          handleChange('logoUrl', url)
-          toast.success('Logo seleccionado del historial')
-        }}
-      />
-
-      <SectionCard id="website-visibility" icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
-            <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-              <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground whitespace-nowrap">
-                {typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/
-              </span>
-              <Input
-                id="slug"
-                value={formData.slug || ''}
-                onChange={(e) => handleChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="mi-empresa"
-                maxLength={50}
-                aria-invalid={!!errors.slug}
-                className="h-11 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-            </div>
-            {errors.slug ? (
-              <p className="text-xs text-destructive">{errors.slug}</p>
-            ) : (
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                ⚠️ Si cambiás esta ruta, los enlaces antiguos que hayas compartido dejarán de funcionar.
-              </p>
-            )}
-          </div>
-
-          <PublicVisibilityCard
-            title="Publicar tienda"
-            compact
-            description="Activa el enlace público de tu tienda. Al desactivarlo también se oculta del Marketplace, sin borrar datos del sistema. Los cambios se aplican al guardar."
-            enabled={formData.storefrontPublic === true}
-            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
-          />
-          <PublicVisibilityCard
-            title="Visibilidad en Marketplace General"
-            badgeLabel="Directorio Público"
-            compact
-            description="Permite descubrir tu empresa y sus productos en el Marketplace. Requiere la tienda publicada; podés publicar solo tu enlace y mantener esta opción desactivada."
-            disabled={formData.storefrontPublic !== true}
-            enabled={formData.storefrontPublic === true && formData.marketplacePublic === true}
-            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
-          />
-        </div>
-      </SectionCard>
-
-      {/* Personalización visual */}
-      <SectionCard id="website-appearance" collapsible icon={Sparkles} title="Personalización visual" description="Plantilla, color y encabezado de tu tienda.">
+      {/* Personalización visual y plantilla */}
+      <SectionCard id="website-appearance" icon={Sparkles} title="Personalización visual y plantilla" description="Plantilla de diseño, color de marca y encabezado de tu tienda.">
         <StorefrontAppearanceEditor
           value={formData}
           onChange={handleAppearanceChange}
@@ -771,6 +727,32 @@ export function CompanyInfoForm() {
         </div>
       </SectionCard>
 
+      {/* Redes sociales */}
+      <SectionCard collapsible icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
+        <div className="grid gap-8 md:grid-cols-3">
+          {[
+            { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
+            { id: 'facebook', label: 'Facebook', prefix: 'facebook.com/', value: formData.facebook, placeholder: 'tu_pagina' },
+            { id: 'tiktok', label: 'TikTok', prefix: 'tiktok.com/@', value: formData.tiktok, placeholder: 'tu_usuario' },
+          ].map((s) => (
+            <div key={s.id} className="space-y-2">
+              <Label htmlFor={s.id} className="text-sm font-medium">{s.label}</Label>
+              <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground">{s.prefix}</span>
+                <Input
+                  id={s.id}
+                  value={s.value || ''}
+                  onChange={(e) => handleChange(s.id, e.target.value)}
+                  placeholder={s.placeholder}
+                  maxLength={100}
+                  className="h-10 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
       {/* Horarios */}
       <SectionCard collapsible icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -814,31 +796,56 @@ export function CompanyInfoForm() {
         </div>
       </SectionCard>
 
-      {/* Redes sociales */}
-      <SectionCard collapsible icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
-        <div className="grid gap-8 md:grid-cols-3">
-          {[
-            { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
-            { id: 'facebook', label: 'Facebook', prefix: 'facebook.com/', value: formData.facebook, placeholder: 'tu_pagina' },
-            { id: 'tiktok', label: 'TikTok', prefix: 'tiktok.com/@', value: formData.tiktok, placeholder: 'tu_usuario' },
-          ].map((s) => (
-            <div key={s.id} className="space-y-2">
-              <Label htmlFor={s.id} className="text-sm font-medium">{s.label}</Label>
-              <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-                <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground">{s.prefix}</span>
-                <Input
-                  id={s.id}
-                  value={s.value || ''}
-                  onChange={(e) => handleChange(s.id, e.target.value)}
-                  placeholder={s.placeholder}
-                  maxLength={100}
-                  className="h-10 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
+      {/* Historial de Logos e Imágenes — Gestión y limpieza de espacio */}
+      <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20">
+              <Images className="h-6 w-6" />
             </div>
-          ))}
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-foreground">
+                  Historial de Logos e Imágenes
+                </h3>
+                <span className="rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-xs font-bold text-primary">
+                  Máx. 20 imágenes
+                </span>
+                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Espacio liberable
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                Visualizá, seleccioná y gestioná todas las imágenes subidas para tu sitio web (logos, banners del carrusel, carteles de aviso y marcas). Reutilizalas con un clic o eliminalas definitivamente para liberar espacio en tu cuenta.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-start sm:self-center">
+            <Button
+              type="button"
+              size="lg"
+              onClick={() => setLogoMediaOpen(true)}
+              className="gap-2.5 font-bold text-sm bg-primary hover:bg-primary/90 text-primary-foreground shadow-md px-5 h-11 rounded-xl cursor-pointer"
+            >
+              <Images className="h-4 w-4" />
+              <span>Abrir Historial de Imágenes</span>
+            </Button>
+          </div>
         </div>
-      </SectionCard>
+      </div>
+
+      <WebsiteMediaLibraryDialog
+        open={logoMediaOpen}
+        onOpenChange={setLogoMediaOpen}
+        filterSection="logo"
+        title="Historial de Logos e Imágenes"
+        description="Seleccioná un logo o imagen previamente subida o eliminá archivos definitivamente para liberar espacio (máx. 20)."
+        onSelect={(url) => {
+          handleChange('logoUrl', url)
+          toast.success('Logo seleccionado del historial')
+        }}
+      />
 
       {/* Save bar */}
       <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">

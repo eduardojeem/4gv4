@@ -326,7 +326,7 @@ export function StorefrontTemplatePreviewDialog({
                       Tu tienda todavía no está publicada
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Cuando la publiques en «Enlace y visibilidad», acá vas a ver tu tienda real con tus productos mientras la diseñás.
+                      Cuando la publiques en «Enlace y publicación», acá vas a ver tu tienda real con tus productos mientras la diseñás.
                     </p>
                   </div>
                 </div>

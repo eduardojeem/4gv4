@@ -1,5 +1,6 @@
 'use client'
 
+import { WholesaleHome } from '@/components/public/wholesale/WholesaleHome'
 import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -27,9 +28,9 @@ import { OrganizationReviews } from '@/components/public/inicio/OrganizationRevi
 import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
 import { StorefrontAudienceLinks } from '@/components/public/inicio/StorefrontAudienceLinks'
 import { FashionCampaignBanner } from '@/components/public/inicio/FashionCampaignBanner'
+import { TechRepairsBanner } from '@/components/public/inicio/TechRepairsBanner'
 import { HeroCampaign } from '@/components/public/inicio/HeroCampaign'
 import { CategoryCollections } from '@/components/public/inicio/CategoryCollections'
-import { BeautyRoutine } from '@/components/public/inicio/BeautyRoutine'
 import { SportHero } from '@/components/public/inicio/SportHero'
 import { MarketAisleRows, MarketAisles, MarketDeals, MarketHero } from '@/components/public/inicio/MarketSections'
 import { BookingSection, ServiceGallery, ServiceMenu, ServiceTeam, ServicesHero, ServicesLocation, buildServiceMenu, useNextFreeSlot, usePublicAgenda } from '@/components/public/inicio/ServicesHome'
@@ -129,6 +130,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   const isClassic = storefrontStyle === 'classic'
   const isServices = storefrontStyle === 'services'
   const isMarket = storefrontStyle === 'market'
+  const isBeauty = storefrontStyle === 'beauty'
   // Moda, Deportivo, Tecnología y Moderno comparten la vidriera de colecciones con foto.
   const isShowcase = !isClassic && !isServices && !isMarket
 
@@ -221,6 +223,8 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
     )
   }
 
+  if (storefrontStyle === 'wholesale-pro') return <WholesaleHome settings={settings} branches={branches} capabilities={capabilities} />
+
   return (
     <div className="flex flex-col min-h-screen">
       {!heroVisible && !promotionalCarouselVisible && (
@@ -252,13 +256,12 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
       {/* Supermercado: beneficios (envío, pagos) bien arriba, antes de los pasillos. */}
       {isMarket && trustBarVisible && <StoreTrustBar settings={settings.trust_bar} className="py-4 sm:py-5" />}
 
-      {Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnHome) && (
+      {!isBeauty && Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnHome) && (
         <StoreBrandTicker settings={settings.brands_section} />
       )}
 
       {isClassic && <CategoryShowcase />}
       {isShowcase && <CategoryCollections style={storefrontStyle} />}
-      {storefrontStyle === 'beauty' && <BeautyRoutine />}
 
       {isMarket && <MarketAisles />}
       {isMarket && <MarketDeals />}
@@ -287,7 +290,13 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
         />
       )}
 
-      {isShowcase && <FashionCampaignBanner phoneClean={phoneClean} />}
+      {isBeauty && Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnHome) && (
+        <StoreBrandTicker settings={settings.brands_section} />
+      )}
+
+      {isShowcase && !isBeauty && <FashionCampaignBanner phoneClean={phoneClean} />}
+
+      {hasRepairs && <TechRepairsBanner phoneClean={phoneClean} companyInfo={company_info} />}
 
       {(isShowcase || isServices) && trustBarVisible && (
         <StoreTrustBar settings={settings.trust_bar} className="py-4 sm:py-5" />

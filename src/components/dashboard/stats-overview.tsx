@@ -497,27 +497,42 @@ export function RecentActivity() {
       // reparaciones se ven al recargar la actividad.
       // El cliente es compartido y `.channel(nombre)` devuelve el canal vivo con
       // ese nombre: uno ya suscrito no acepta más `.on()`. Nombre único por montaje.
-      const channel = supabase
-        .channel(`dashboard-activity:${organization.id}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
-          const row = (payload as { new: CustomerRow }).new
-          const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
-          const item = {
-            id: `customer:${row.id}`,
-            type: 'customer' as const,
-            description: fullName ? `Nuevo cliente - ${fullName}` : 'Nuevo cliente registrado',
-            time: toTime(row.created_at),
-            createdAt: new Date(row.created_at).getTime(),
-            status: 'new' as const,
-            icon: <Users className="h-4 w-4" />
-          }
-          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
-        })
-        .subscribe()
+      let channel: ReturnType<typeof supabase.channel> | null = null
+      try {
+        if (typeof window !== 'undefined' && typeof WebSocket !== 'undefined') {
+          channel = supabase
+            .channel(`dashboard-activity:${organization.id}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
+              const row = (payload as { new: CustomerRow }).new
+              const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
+              const item = {
+                id: `customer:${row.id}`,
+                type: 'customer' as const,
+                description: fullName ? `Nuevo cliente - ${fullName}` : 'Nuevo cliente registrado',
+                time: toTime(row.created_at),
+                createdAt: new Date(row.created_at).getTime(),
+                status: 'new' as const,
+                icon: <Users className="h-4 w-4" />
+              }
+              setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
+            })
+
+          channel.subscribe((status) => {
+            if (status === 'CHANNEL_ERROR') {
+              console.warn('[dashboard-activity] Realtime channel error')
+            }
+          })
+        }
+      } catch (err) {
+        console.warn('[dashboard-activity] Realtime no disponible:', err)
+        channel = null
+      }
       
       return () => {
         // unsubscribe() deja el canal registrado en el cliente; removeChannel lo saca.
-        void supabase.removeChannel(channel)
+        if (channel) {
+          void supabase.removeChannel(channel)
+        }
       }
     }
     const cleanupPromise = subscribe()

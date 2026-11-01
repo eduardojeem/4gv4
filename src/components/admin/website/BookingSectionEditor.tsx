@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { AlertTriangle, CalendarCheck2, CheckCircle2, ExternalLink, Loader2, Save, Settings2 } from 'lucide-react'
+import { AlertTriangle, CalendarCheck2, CheckCircle2, ExternalLink, Loader2, PackageCheck, Save, Scissors, Settings2, ShoppingBag, Sparkles, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,7 +12,43 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { cn } from '@/lib/utils'
 import type { BookingSectionSettings } from '@/types/website-settings'
+
+const BOOKING_PRESETS = [
+  {
+    name: 'Servicio Técnico / Taller',
+    icon: Wrench,
+    badge: 'Atención en taller',
+    title: 'Agendá tu cita técnica o diagnóstico',
+    subtitle: 'Reservá un horario para revisar tu equipo, solicitar presupuesto o consultar con un técnico sin esperas.',
+    showTeam: false,
+  },
+  {
+    name: 'Asesoramiento / Compra VIP',
+    icon: ShoppingBag,
+    badge: 'Atención personalizada',
+    title: 'Agendá una cita de compra o demostración',
+    subtitle: 'Coordiná una atención exclusiva 1 a 1 —incluso fuera del horario habitual— para cotizaciones, ver equipos o armar tu configuración.',
+    showTeam: false,
+  },
+  {
+    name: 'Retiro o Entrega Programada',
+    icon: PackageCheck,
+    badge: 'Visita programada',
+    title: 'Coordiná tu visita o retiro',
+    subtitle: 'Elegí el día y horario que mejor te quede para retirar tus compras o dejar tu equipo en nuestro local sin esperas.',
+    showTeam: false,
+  },
+  {
+    name: 'Turnos & Servicios Personales',
+    icon: Scissors,
+    badge: 'Turnos online',
+    title: 'Reservá tu turno',
+    subtitle: 'Elegí el servicio, quién te atiende y el horario que te quede más cómodo.',
+    showTeam: true,
+  },
+] as const
 
 type AgendaStatus =
   | { state: 'loading' }
@@ -122,25 +158,78 @@ export function BookingSectionEditor({ orgSlug }: { orgSlug: string | null }) {
       <div className="space-y-5 rounded-xl border p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <Label htmlFor="bookingEnabled" className="text-sm font-semibold">Mostrar «Reservá tu turno» en el inicio</Label>
-            <p className="text-xs text-muted-foreground">El cliente elige servicio, profesional y horario sin salir de tu tienda.</p>
+            <Label htmlFor="bookingEnabled" className="text-sm font-semibold">Mostrar sección de reservas / citas en el inicio</Label>
+            <p className="text-xs text-muted-foreground">Tus clientes pueden agendar citas de servicio técnico, asesoramiento o turnos directamente en tu portada.</p>
           </div>
           <Switch id="bookingEnabled" checked={value.enabled} onCheckedChange={(enabled) => change({ enabled })} />
         </div>
 
+        {/* Plantillas rápidas por rubro */}
+        <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span>Plantillas sugeridas por tipo de negocio</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cargá en un clic los textos recomendados para tu tipo de atención (podés modificarlos libremente):
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {BOOKING_PRESETS.map((preset) => {
+              const Icon = preset.icon
+              const isMatch = value.title === preset.title && value.badge === preset.badge
+              return (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => change({
+                    badge: preset.badge,
+                    title: preset.title,
+                    subtitle: preset.subtitle,
+                    showTeam: preset.showTeam,
+                  })}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-lg border p-2.5 text-left text-xs transition-colors',
+                    isMatch
+                      ? 'border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary'
+                      : 'border-border/80 bg-card hover:border-primary/50 hover:bg-accent/40'
+                  )}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground truncate">{preset.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{preset.badge}: {preset.title}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="bookingBadge">Etiqueta superior (Badge / Eyebrow)</Label>
+            <Input
+              id="bookingBadge"
+              maxLength={60}
+              value={value.badge || ''}
+              onChange={(event) => change({ badge: event.target.value })}
+              placeholder="Ej: Atención en taller, Showroom VIP, Turnos online"
+            />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="bookingTitle">Título</Label>
             <Input id="bookingTitle" maxLength={80} value={value.title} onChange={(event) => change({ title: event.target.value })} placeholder="Reservá tu turno" />
           </div>
-          <div className="space-y-1.5 sm:row-span-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="bookingSubtitle">Texto de apoyo</Label>
-            <Textarea id="bookingSubtitle" rows={3} maxLength={200} value={value.subtitle} onChange={(event) => change({ subtitle: event.target.value })} placeholder="Elegí el servicio, el día y el horario que te quede cómodo." />
+            <Textarea id="bookingSubtitle" rows={2} maxLength={200} value={value.subtitle} onChange={(event) => change({ subtitle: event.target.value })} placeholder="Elegí el servicio, el día y el horario que te quede cómodo." />
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5 sm:col-span-2">
             <div>
-              <Label htmlFor="bookingShowTeam" className="text-sm">Mostrar al equipo</Label>
-              <p className="text-xs text-muted-foreground">Los profesionales de la agenda.</p>
+              <Label htmlFor="bookingShowTeam" className="text-sm">Mostrar quién atiende (equipo / profesionales)</Label>
+              <p className="text-xs text-muted-foreground">Recomendado para barberías y consultorios; podés apagarlo para servicio técnico o tienda general.</p>
             </div>
             <Switch id="bookingShowTeam" checked={value.showTeam} onCheckedChange={(showTeam) => change({ showTeam })} />
           </div>

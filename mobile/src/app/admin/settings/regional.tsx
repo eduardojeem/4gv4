@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -18,13 +19,15 @@ import {
   settingsIssues,
   type OrgSettings,
 } from '@/lib/settings-model';
-import { normalizeCountryCode } from '../../../../../src/lib/regional/contract';
+import { getSupportedRegionalCountries, normalizeCountryCode, normalizeLocaleCode } from '../../../../../src/lib/regional/contract';
+import { countryLabel, localeForRegion, regionalSuggestion } from '../../../../../src/lib/regional/country-labels';
 
 export default function RegionalSettingsScreen() {
-  return <SettingsGate title="Moneda e impuestos">{(settings) => <RegionalEditor saved={settings} />}</SettingsGate>;
+  return <SettingsGate title="País, impuestos y moneda">{(settings) => <RegionalEditor saved={settings} />}</SettingsGate>;
 }
 
 function RegionalEditor({ saved }: { saved: OrgSettings }) {
+  const colors = usePalette();
   const { applySaved } = useSettings();
   const [patch, setPatch] = useState<Partial<OrgSettings>>({});
   // El IVA se escribe como texto («10,5») y se convierte al guardar.
@@ -37,6 +40,34 @@ function RegionalEditor({ saved }: { saved: OrgSettings }) {
   const issues = settingsIssues(draft);
   const currencyChanged = draft.currency !== saved.currency;
   const set = (next: Partial<OrgSettings>) => setPatch((current) => ({ ...current, ...next }));
+
+  const onCountryChange = (value: string) => {
+    const country = normalizeCountryCode(value);
+    if (!country) return;
+    const newLocale = normalizeLocaleCode(localeForRegion(draft.language, country));
+    set({
+      countryCode: country,
+      locale: newLocale,
+    });
+    void Haptics.selectionAsync();
+  };
+
+  const suggestion = regionalSuggestion(draft.countryCode);
+  const suggestionDiffers = Boolean(
+    suggestion && (
+      (suggestion.currency && suggestion.currency !== draft.currency)
+      || (suggestion.timeZone && suggestion.timeZone !== draft.timeZone)
+    )
+  );
+
+  const applyRegionalSuggestion = () => {
+    if (!suggestion) return;
+    set({
+      currency: suggestion.currency ?? draft.currency,
+      timeZone: suggestion.timeZone ?? draft.timeZone,
+    });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
 
   const save = useCallback(async () => {
     if (issues.taxRate || issues.timeZone) {
@@ -72,12 +103,53 @@ function RegionalEditor({ saved }: { saved: OrgSettings }) {
   useUnsavedChangesGuard(dirty && !saving, save);
 
   return (
-    <WebsiteScreen title="Moneda e impuestos" subtitle="Cómo se cobra y se registra" footer={<SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />}>
+    <WebsiteScreen title="País, impuestos y moneda" subtitle="Cómo se cobra y se registra" footer={<SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />}>
       <SettingsOfflineNotice />
 
-      {saved.needsCountryConfirmation ? <Section title="País del negocio" icon="globe-outline" hint="Es una confirmación opcional para organizaciones creadas antes de guardar la región. No cambia precios ni datos existentes.">
-        <ChipGroup options={[{ value: 'PY', label: 'Paraguay' }, { value: 'BR', label: 'Brasil' }, { value: 'AR', label: 'Argentina' }, { value: 'US', label: 'Estados Unidos' }]} value={draft.countryCode ?? ''} onChange={(value) => set({ countryCode: normalizeCountryCode(value) })} />
-      </Section> : null}
+      <Section
+        title="País del negocio"
+        icon="globe-outline"
+        hint={
+          saved.needsCountryConfirmation && !draft.countryCode
+            ? 'Todavía no confirmaste el país. Elegilo para sugerir moneda, formato y zona horaria; no cambia nada de lo que ya cargaste.'
+            : 'Define lo que te sugerimos para moneda, formato y zona horaria. Cambiarlo no convierte precios ni modifica ventas.'
+        }>
+        {saved.needsCountryConfirmation && !draft.countryCode ? (
+          <Notice
+            tone="warning"
+            text="Confirmá el país de tu negocio para que el sistema ajuste formatos y sugerencias regionales. Esto no altera precios ni ventas ya registradas."
+          />
+        ) : null}
+        <ChipGroup
+          options={getSupportedRegionalCountries().map(({ code, label }) => ({ value: code, label }))}
+          value={draft.countryCode ?? ''}
+          onChange={onCountryChange}
+        />
+        <Text style={styles.selected}>
+          {draft.countryCode ? countryLabel(draft.countryCode) : 'Sin país confirmado'}
+        </Text>
+
+        {suggestion && suggestionDiffers ? (
+          <View style={[styles.suggestionCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <View style={styles.suggestionHeader}>
+              <Ionicons name="sparkles-outline" size={16} color={palette.primary} />
+              <Text style={[styles.suggestionText, { color: colors.text }]}>
+                En {countryLabel(draft.countryCode)} lo habitual es {suggestion.currency}
+                {suggestion.timeZone ? ` y la hora de ${suggestion.timeZone.replace('America/', '').replace('_', ' ')}` : ''}.
+              </Text>
+            </View>
+            <Pressable
+              onPress={applyRegionalSuggestion}
+              accessibilityRole="button"
+              accessibilityLabel="Aplicar sugerencias habituales"
+              style={[styles.suggestionButton, { borderColor: palette.primary }]}>
+              <Text style={[styles.suggestionButtonText, { color: palette.primary }]}>
+                Aplicar sugerencias habituales
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </Section>
 
       <Section title="Moneda del comercio" icon="cash-outline" hint="En la que se cargan los precios y se cobran las ventas.">
         <ChipGroup options={CURRENCIES.map((item) => ({ value: item.code, label: item.code, hint: item.name }))} value={draft.currency} onChange={(currency) => {
@@ -128,4 +200,9 @@ function ChipGroup({ options, value, onChange }: { options: { value: string; lab
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   selected: { fontSize: 12, color: palette.primary, fontWeight: '700' },
+  suggestionCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10, marginTop: 6 },
+  suggestionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  suggestionText: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  suggestionButton: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  suggestionButtonText: { fontSize: 12, fontWeight: '700' },
 });
