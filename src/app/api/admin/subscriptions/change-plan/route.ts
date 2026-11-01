@@ -1,19 +1,34 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import {
   assessPlanChange,
+  cancelSubscriptionAtPeriodEnd,
   changePlan,
   getChangePlanData,
+  getCurrentOrganizationSubscription,
   planRequiresPayment,
 } from '@/lib/saas/subscription-service'
 import {
   createSubscriptionPagoparCheckout,
+  getMissingBillingFields,
   SubscriptionCheckoutError,
 } from '@/lib/saas/pagopar-subscription-checkout'
 import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
-import { getBrowserRequestOrigin, isStripeConfigured } from '@/lib/payments/stripe'
+import { getBrowserRequestOrigin, isStripeCheckoutEnabled } from '@/lib/payments/stripe'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
+import { BankTransferError, createBankTransferRequest } from '@/lib/saas/bank-transfers'
+import { prorationForChange } from '@/lib/saas/subscription-proration'
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** Fin del período pago vigente, si lo hay: hasta ahí se conserva el plan actual. */
+function activePaidPeriodEnd(state: Awaited<ReturnType<typeof getCurrentOrganizationSubscription>>) {
+  const periodEnd = state.subscription?.current_period_ends_at
+  if (!periodEnd || state.currentPlan.price_monthly <= 0) return null
+  return new Date(periodEnd).getTime() > Date.now() ? periodEnd : null
+}
 
 export async function GET() {
   const auth = await resolveRequestAuthUser()
@@ -29,8 +44,25 @@ export async function GET() {
   }
 
   try {
-    const data = await getChangePlanData(organization.id)
-    return NextResponse.json({ ...data, stripeEnabled: isStripeConfigured() })
+    const [data, state] = await Promise.all([
+      getChangePlanData(organization.id),
+      getCurrentOrganizationSubscription(organization.id),
+    ])
+    return NextResponse.json({
+      ...data,
+      stripeEnabled: isStripeCheckoutEnabled(),
+      billingMissingFields: getMissingBillingFields(state.billingProfile),
+      paidPeriodEndsAt: activePaidPeriodEnd(state),
+      cancelScheduled: state.subscription?.cancel_at_period_end === true,
+      // Vista previa del prorrateo por plan (crédito, cobro y días extra).
+      prorations: Object.fromEntries(data.plans.map((plan) => [plan.code, prorationForChange({
+        currentPlanCode: state.currentPlan.code,
+        currentPrice: state.currentPlan.price_monthly,
+        targetPlanCode: plan.code,
+        targetPrice: plan.price_monthly,
+        subscription: state.subscription,
+      })])),
+    })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'No se pudieron cargar los planes.' },
@@ -40,6 +72,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const requestedCorrelationId = request.headers.get('x-correlation-id')
+  const correlationId = requestedCorrelationId && UUID_PATTERN.test(requestedCorrelationId)
+    ? requestedCorrelationId
+    : randomUUID()
   const auth = await resolveRequestAuthUser()
 
   if ('reason' in auth) {
@@ -56,7 +92,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const newPlan = typeof body.plan === 'string' ? body.plan.trim() : ''
   const useStripe = body.paymentMethod === 'stripe'
-  const paymentMethod = useStripe ? null : parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
+  const useTransfer = body.paymentMethod === 'transfer'
+  const paymentMethod = useStripe || useTransfer ? null : parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
 
   if (!newPlan) {
     return NextResponse.json({ error: 'Falta el campo plan.' }, { status: 400 })
@@ -72,6 +109,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (planRequiresPayment(assessment.targetPlan)) {
+      if (useTransfer) {
+        const transfer = await createBankTransferRequest(organization.id, auth.user.id, assessment.targetPlan.code)
+        return NextResponse.json({
+          success: true,
+          pendingPayment: true,
+          transferRequestId: transfer.id,
+          redirectTo: '/admin/subscriptions#pay-transfer',
+        })
+      }
+
       if (useStripe) {
         const checkout = await createSubscriptionStripeCheckout({
           organization,
@@ -79,12 +126,13 @@ export async function POST(request: NextRequest) {
           targetPlanCode: assessment.targetPlan.code,
           canChangePlan: true,
           requestOrigin: getBrowserRequestOrigin(request),
+          correlationId,
         })
         return NextResponse.json({ success: true, pendingPayment: true, ...checkout })
       }
 
       if (!paymentMethod) {
-        return NextResponse.json({ error: 'Forma de pago de Pagopar no válida.' }, { status: 400 })
+        return NextResponse.json({ error: 'Forma de pago no válida.' }, { status: 400 })
       }
 
       const checkout = await createSubscriptionPagoparCheckout({
@@ -93,8 +141,28 @@ export async function POST(request: NextRequest) {
         targetPlanCode: assessment.targetPlan.code,
         canChangePlan: true,
         paymentMethod,
+        correlationId,
       })
       return NextResponse.json({ success: true, pendingPayment: true, ...checkout })
+    }
+
+    // Bajar al plan gratuito con un mes ya pagado no corta ese mes: se programa
+    // la baja para el vencimiento, igual que «Cancelar suscripción».
+    const state = await getCurrentOrganizationSubscription(organization.id)
+    if (activePaidPeriodEnd(state)) {
+      const scheduled = await cancelSubscriptionAtPeriodEnd(organization.id)
+      if (scheduled.success === false) {
+        return NextResponse.json(
+          { error: scheduled.error, conflictingResources: scheduled.conflictingResources },
+          { status: scheduled.conflictingResources ? 409 : 400 },
+        )
+      }
+      return NextResponse.json({
+        success: true,
+        pendingPayment: false,
+        scheduled: true,
+        effectiveUntil: scheduled.effectiveUntil,
+      })
     }
 
     const result = await changePlan(organization.id, assessment.targetPlan.code)
@@ -109,13 +177,20 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof SubscriptionCheckoutError) {
       return NextResponse.json(
-        { error: error.message, conflictingResources: error.conflictingResources },
+        {
+          error: error.message,
+          conflictingResources: error.conflictingResources,
+          correlationId: error.correlationId || correlationId,
+        },
         { status: error.status },
       )
     }
+    if (error instanceof BankTransferError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'No se pudo cambiar el plan.' },
+      { error: `No se pudo cambiar el plan. Código: ${correlationId}`, correlationId },
       { status: 503 },
     )
   }

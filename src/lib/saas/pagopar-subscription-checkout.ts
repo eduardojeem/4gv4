@@ -8,6 +8,12 @@ import {
 } from '@/lib/payments/pagopar'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
+  applySubscriptionDiscount,
+  findAvailableSubscriptionDiscount,
+  reserveSubscriptionDiscount,
+} from '@/lib/saas/subscription-discount'
+import { prorationForChange } from '@/lib/saas/subscription-proration'
+import {
   assessPlanChange,
   getCurrentOrganizationSubscription,
   normalizePlanCode,
@@ -29,7 +35,7 @@ export class SubscriptionCheckoutError extends Error {
   }
 }
 
-function getMissingBillingFields(
+export function getMissingBillingFields(
   profile: Awaited<ReturnType<typeof getCurrentOrganizationSubscription>>['billingProfile']
 ) {
   const missing: string[] = []
@@ -64,6 +70,23 @@ export async function createSubscriptionPagoparCheckout(params: {
     canChangePlan,
   })
 
+  // Cupón de descuento canjeado: se cobra el monto con descuento y el cupón
+  // queda reservado para este pago.
+  const discount = await findAvailableSubscriptionDiscount(organization.id, targetPlan.code)
+  // Prorrateo al cambiar entre planes pagos: al subir se descuenta lo que
+  // quedaba del plan actual; al bajar se suma como días extra.
+  const proration = prorationForChange({
+    currentPlanCode: state.currentPlan.code,
+    currentPrice: state.currentPlan.price_monthly,
+    targetPlanCode: targetPlan.code,
+    targetPrice: amountPyg,
+    subscription: state.subscription,
+  })
+  const discountedAmount = applySubscriptionDiscount(amountPyg, discount)
+  const chargedAmount = proration?.kind === 'upgrade'
+    ? Math.max(1, discountedAmount - proration.credit)
+    : discountedAmount
+
   const admin = createAdminSupabase()
   const pendingPaymentMethod = paymentMethod === 'qr' ? 'Pagopar QR' : 'Pagopar Tarjeta'
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
@@ -75,6 +98,7 @@ export async function createSubscriptionPagoparCheckout(params: {
     .eq('provider', 'pagopar')
     .eq('status', 'pending')
     .eq('payment_method', pendingPaymentMethod)
+    .eq('amount', chargedAmount)
     .gte('created_at', fifteenMinutesAgo)
     .not('receipt_url', 'is', null)
     .order('created_at', { ascending: false })
@@ -98,12 +122,14 @@ export async function createSubscriptionPagoparCheckout(params: {
       organization_id: organization.id,
       subscription_id: state.subscription?.id || null,
       plan_id: targetPlan.code,
-      amount: amountPyg,
+      amount: chargedAmount,
       currency: 'PYG',
       status: 'pending',
       payment_method: pendingPaymentMethod,
       provider: 'pagopar',
       external_reference: externalReference,
+      proration_credit: proration?.credit ?? 0,
+      proration_extra_days: proration?.extraDays ?? 0,
     })
     .select('id')
     .single()
@@ -112,9 +138,11 @@ export async function createSubscriptionPagoparCheckout(params: {
     throw new SubscriptionCheckoutError(paymentError?.message || 'No se pudo crear el pago.', 500)
   }
 
+  if (discount) await reserveSubscriptionDiscount(discount, payment.id)
+
   try {
     const order = await createPagoparOrder({
-      amountPyg,
+      amountPyg: chargedAmount,
       buyer: {
         businessName: state.billingProfile?.business_name || organization.name,
         document: state.billingProfile?.ruc || null,
@@ -128,6 +156,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       externalReference,
       itemId: Number.parseInt(payment.id.replace(/[^\d]/g, '').slice(0, 9), 10) || 1,
       paymentMethod,
+      correlationId,
     })
 
     const { error: updateError } = await admin
@@ -155,9 +184,11 @@ export async function createSubscriptionPagoparCheckout(params: {
       .update({ status: 'failed' })
       .eq('id', payment.id)
 
+    // 424 y no 502: Cloudflare, delante del sitio, reemplaza las respuestas
+    // 502 por su propia página y el usuario perdería el motivo del rechazo.
     throw new SubscriptionCheckoutError(
       error instanceof Error ? error.message : 'No se pudo iniciar el pago con Pagopar.',
-      502,
+      424,
       undefined,
       error instanceof PagoparOrderCreationError ? error.correlationId : correlationId,
     )

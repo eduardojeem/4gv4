@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPagoparCheckoutErrorMessage } from '@/components/admin/subscriptions/PagoparPaymentButton'
+import { getPagoparCheckoutErrorMessage } from '@/components/admin/subscriptions/SubscriptionPaymentPanel'
 
 describe('getPagoparCheckoutErrorMessage', () => {
   it('keeps a safe backend message', () => {

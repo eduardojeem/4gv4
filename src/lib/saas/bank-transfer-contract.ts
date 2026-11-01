@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const BANK_TRANSFER_RECEIPT_BUCKET = 'subscription-transfer-receipts'
 export const BANK_TRANSFER_RECEIPT_MAX_BYTES = 3 * 1024 * 1024
 export const BANK_TRANSFER_RECEIPT_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const
-export const bankTransferStatusSchema = z.enum(['awaiting_receipt', 'pending_review', 'approved', 'rejected'])
+export const bankTransferStatusSchema = z.enum(['awaiting_receipt', 'pending_review', 'approved', 'rejected', 'cancelled'])
 export type BankTransferStatus = z.infer<typeof bankTransferStatusSchema>
 export const bankTransferSettingsSchema = z.object({
   enabled: z.boolean(), bankName: z.string().trim().max(160), accountHolder: z.string().trim().max(200),
@@ -24,7 +24,7 @@ export interface BankTransferRequest {
   amount:number; currency:'PYG'; period_months:1; bank_snapshot:BankTransferSettings; status:BankTransferStatus;
   receipt_path:string|null; receipt_mime_type:string|null; receipt_size:number|null; operation_reference:string|null;
   bank_operation_reference:string|null; rejection_reason:string|null; created_by:string; reviewed_by:string|null; payment_id:string|null;
-  period_starts_at:string|null; period_ends_at:string|null; created_at:string; updated_at:string; submitted_at:string|null; reviewed_at:string|null;
+  period_starts_at:string|null; period_ends_at:string|null; created_at:string; updated_at:string; submitted_at:string|null; reviewed_at:string|null; cancelled_at?:string|null;
 }
 export interface BankTransferSettingsRecord extends BankTransferSettings { updatedAt:string|null }
 

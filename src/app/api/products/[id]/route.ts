@@ -9,6 +9,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
 import { logger } from '@/lib/logger'
+import { canCreateResource } from '@/lib/saas/subscription-service'
 import {
   type AppRole,
 } from '@/lib/auth/role-utils'
@@ -303,6 +304,42 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       const value = validated[key]
       if (value !== undefined) {
         updatePayload[key] = value
+      }
+    }
+
+    // Reactivar un producto ocupa un lugar del cupo del plan, igual que crearlo.
+    // Sin esto, apagar y volver a prender (o prender uno que apagó la baja de
+    // plan) dejaba pasar por encima del límite.
+    if (updatePayload.is_active === true) {
+      const { data: current } = await createAdminSupabase()
+        .from('products')
+        .select('is_active, deactivated_by_plan, unit_measure')
+        .eq('id', id)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
+      const row = current as { is_active?: boolean | null; deactivated_by_plan?: boolean | null; unit_measure?: string | null } | null
+      if (row && row.is_active !== true) {
+        const resourceType = (updatePayload.unit_measure ?? row.unit_measure) === 'servicio' ? 'services' : 'products'
+        const quota = await canCreateResource(organization.id, resourceType, 1)
+        if (!quota.allowed) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: quota.blocked
+                ? 'La suscripción está suspendida o cancelada. Reactivala para volver a activar productos.'
+                : `No hay cupo para reactivarlo: el plan permite ${quota.limit} y ya tenés ${quota.current} activos. Desactivá otro o ampliá el plan.`,
+              code: quota.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
+              resource: resourceType,
+              current: quota.current,
+              limit: quota.limit,
+            },
+            { status: 403 },
+          )
+        }
+        if (row.deactivated_by_plan) {
+          updatePayload.deactivated_by_plan = false
+          updatePayload.archived_by_plan_at = null
+        }
       }
     }
 

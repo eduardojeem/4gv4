@@ -290,3 +290,136 @@ export function renderAutopayFailedEmail(params: {
     footerNote: 'Tus datos y tu historial se conservan siempre.',
   })
 }
+
+// ---------------------------------------------------------------------------
+// Pago de la suscripción por transferencia bancaria
+// ---------------------------------------------------------------------------
+
+function formatPyg(amount: number) {
+  return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(amount)
+}
+
+/** Aviso al superadmin: llegó un comprobante para revisar. */
+export function renderTransferReceiptSubmittedEmail(params: {
+  companyName: string
+  planName: string
+  amountPyg: number
+  reference: string
+  operationReference: string | null
+  reviewUrl: string
+}) {
+  const { companyName, planName, amountPyg, reference, operationReference, reviewUrl } = params
+  return renderBrandedEmail({
+    title: 'Comprobante de transferencia para revisar',
+    preview: `${companyName} envió el comprobante del plan ${planName}.`,
+    intro: `"${companyName}" envió el comprobante de la transferencia de ${formatPyg(amountPyg)} por el plan ${planName}.`,
+    bodyHtml: `
+      <p>Referencia de la solicitud: <strong>${escapeText(reference)}</strong></p>
+      ${operationReference ? `<p>Operación bancaria informada: <strong>${escapeText(operationReference)}</strong></p>` : ''}
+      <p>El plan se activa recién cuando apruebes la transferencia.</p>
+    `,
+    cta: { label: 'Revisar transferencia', url: reviewUrl },
+    brand: { name: 'MiTiendaPY', color: BRAND_COLOR_HEX.blue || '#2563eb' },
+  })
+}
+
+/** Aviso al comercio: su transferencia se aprobó o se rechazó. */
+export function renderTransferReviewedEmail(params: {
+  companyName: string
+  planName: string
+  amountPyg: number
+  approved: boolean
+  periodEndsAt: string | null
+  reason: string | null
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, planName, amountPyg, approved, periodEndsAt, reason, manageUrl, brand } = params
+  const periodEnd = periodEndsAt
+    ? new Intl.DateTimeFormat('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' }).format(new Date(periodEndsAt))
+    : null
+
+  return renderBrandedEmail({
+    title: approved ? 'Aprobamos tu transferencia' : 'No pudimos aprobar tu transferencia',
+    preview: approved
+      ? `Tu plan ${planName} está activo${periodEnd ? ` hasta el ${periodEnd}` : ''}.`
+      : 'Revisá el motivo y generá una nueva solicitud.',
+    intro: approved
+      ? `Hola, confirmamos la transferencia de ${formatPyg(amountPyg)} de "${companyName}". El plan ${planName} ya está activo.`
+      : `Hola, revisamos la transferencia de ${formatPyg(amountPyg)} de "${companyName}" por el plan ${planName} y no pudimos aprobarla.`,
+    bodyHtml: approved
+      ? (periodEnd ? `<p>El período pagado vence el <strong>${escapeText(periodEnd)}</strong>.</p>` : '')
+      : `<p>Motivo: <strong>${escapeText(reason || 'sin detalle')}</strong></p>
+         <p>Podés generar una nueva solicitud y adjuntar el comprobante correcto desde el panel.</p>`,
+    cta: { label: approved ? 'Ver mi suscripción' : 'Generar nueva solicitud', url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiTiendaPY',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Ciclo de la suscripción: recordatorios, recibo y reversión
+// ---------------------------------------------------------------------------
+
+/** Aviso del ciclo: vencimiento cercano, pago pendiente o baja a Gratuito. */
+export function renderSubscriptionNoticeEmail(params: {
+  title: string
+  preview: string
+  intro: string
+  detail: string
+  ctaLabel: string
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { title, preview, intro, detail, ctaLabel, manageUrl, brand } = params
+  return renderBrandedEmail({
+    title,
+    preview,
+    intro,
+    bodyHtml: `<p>${escapeText(detail)}</p>`,
+    cta: { label: ctaLabel, url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiTiendaPY',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: 'Tus datos y tu historial se conservan siempre.',
+  })
+}
+
+/** Recibo de un pago de la suscripción (no es una factura legal). */
+export function renderSubscriptionReceiptEmail(params: {
+  companyName: string
+  planName: string
+  amountPyg: number
+  method: string
+  paidAt: string
+  periodEndsAt: string | null
+  reference: string
+  manageUrl: string
+  brand?: BrandInfo
+}) {
+  const { companyName, planName, amountPyg, method, paidAt, periodEndsAt, reference, manageUrl, brand } = params
+  const date = (value: string) => new Intl.DateTimeFormat('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' }).format(new Date(value))
+  return renderBrandedEmail({
+    title: 'Recibimos tu pago',
+    preview: `${formatPyg(amountPyg)} por el plan ${planName}.`,
+    intro: `Hola, registramos el pago de "${companyName}". Gracias.`,
+    bodyHtml: `
+      <p>Plan: <strong>${escapeText(planName)}</strong></p>
+      <p>Monto: <strong>${escapeText(formatPyg(amountPyg))}</strong> · ${escapeText(method)}</p>
+      <p>Fecha del pago: ${escapeText(date(paidAt))}</p>
+      ${periodEndsAt ? `<p>Tu plan está pago hasta el <strong>${escapeText(date(periodEndsAt))}</strong>.</p>` : ''}
+      <p style="color:#64748b;font-size:12px">Referencia: ${escapeText(reference)}. Este correo es un comprobante de pago, no una factura legal.</p>
+    `,
+    cta: { label: 'Ver mi suscripción', url: manageUrl },
+    brand: {
+      name: brand?.name || 'MiTiendaPY',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+  })
+}

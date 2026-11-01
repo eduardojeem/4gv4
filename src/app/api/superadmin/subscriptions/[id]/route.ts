@@ -64,6 +64,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'Invalid date value' }, { status: 400 })
   }
 
+  // Un plan pago activo sin fecha de fin no vence nunca, y si la cuenta venía
+  // marcada como impaga el sistema la trataba como vencida (límites Gratuito).
+  if (status === 'active' && plan !== 'FREE' && !periodEndsAt) {
+    return NextResponse.json({ error: 'Indicá la fecha de fin del período para activar un plan pago.' }, { status: 400 })
+  }
+
   if (periodStartsAt && periodEndsAt && new Date(periodStartsAt) > new Date(periodEndsAt)) {
     return NextResponse.json({ error: 'Period start must be before period end' }, { status: 400 })
   }
@@ -116,6 +122,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (!subscription) {
     return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+  }
+
+  // Activarla a mano deja de ser una baja por impago.
+  if (status === 'active') {
+    await admin
+      .from('subscriptions')
+      .update({ payment_status: 'manual', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('payment_status', 'unpaid')
   }
 
   if (storefrontPublic !== undefined || marketplacePublic !== undefined) {

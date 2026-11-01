@@ -41,6 +41,11 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
   }
   if (subscriptionError) return { success: false, error: subscriptionError.message, status: 500 }
   if (!subscription) return { success: false, error: 'La organización no tiene una suscripción.', status: 409 }
+  // Extender una prueba sobre una cuenta que ya paga la pasaba a 'trialing' y
+  // pisaba su período pago.
+  if (promo.benefit_type === 'extend_trial' && subscription.status !== 'trialing') {
+    return { success: false, error: 'Este código extiende una prueba gratis y tu cuenta no está en prueba.', status: 409 }
+  }
 
   const application = buildPromoApplication(promo as PromoBenefit, subscription as SubscriptionSnapshot, now)
   let resultingSubscription = subscription
@@ -73,6 +78,22 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
       success: false,
       error: redemptionError.code === '23505' ? 'Esta organización ya utilizó el código.' : redemptionError.message,
       status: redemptionError.code === '23505' ? 409 : 500,
+    }
+  }
+
+  // Dos canjes simultáneos pueden pasar el control de arriba: se vuelve a contar
+  // con el canje ya guardado y, si se excedió el máximo, se deshace este.
+  if (promo.max_redemptions) {
+    const { data: redemptions } = await admin
+      .from('subscription_promo_redemptions')
+      .select('id')
+      .eq('promo_code_id', promo.id)
+      .order('redeemed_at', { ascending: true })
+      .order('id', { ascending: true })
+    const position = (redemptions ?? []).findIndex((row) => row.id === redemption.id)
+    if (position >= promo.max_redemptions) {
+      await admin.from('subscription_promo_redemptions').delete().eq('id', redemption.id)
+      return { success: false, error: 'El código alcanzó el máximo de usos.', status: 409 }
     }
   }
 
@@ -110,22 +131,20 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
     }
   }
 
-  // Activación de plan = venta: registrar un pago como ingreso real (best-effort,
-  // no se revierte la activación si falla el registro contable).
+  // Activación de plan: queda en el historial de pagos del comercio (best-effort,
+  // no se revierte la activación si falla el registro).
   if (promo.benefit_type === 'activate_plan') {
     try {
       const planCode = (resultingSubscription as { plan?: string | null }).plan ?? application.subscriptionPatch.plan ?? null
-      const { data: planRow } = await admin
-        .from('subscription_plans')
-        .select('price')
-        .eq('tier', String(promo.target_plan ?? '').toLowerCase())
-        .maybeSingle()
 
       await admin.from('subscription_payments').insert({
         organization_id: organization.id,
         subscription_id: subscription.id,
         plan_id: planCode,
-        amount: Number(planRow?.price ?? 0),
+        // Un código no es un cobro: se registra con monto 0 para que no infle lo
+        // cobrado ni el MRR. Si el código se vendió, el superadmin registra ese
+        // cobro como pago manual.
+        amount: 0,
         currency: 'PYG',
         status: 'paid',
         payment_method: 'activation_code',

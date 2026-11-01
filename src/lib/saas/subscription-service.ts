@@ -1015,7 +1015,9 @@ export async function assessPlanChange(
     repairs: 'Reparaciones',
     services: 'Servicios',
   }
-  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories', 'repairs', 'services']
+  // Los productos no bloquean: si sobran, al aplicarse el plan se abre el plazo
+  // de 7 días para regularizar (disparador subscriptions_sync_downgrade_grace).
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories', 'repairs', 'services']
   const conflictingResources: PlanChangeConflict[] = []
 
   for (const key of countResources) {
@@ -1104,13 +1106,14 @@ export async function cancelSubscriptionAtPeriodEnd(
     return { success: false, error: 'Ya estás en el plan Gratuito; no hay una suscripción paga para cancelar.' }
   }
 
-  // Validar uso contra los límites de Gratuito (bloquear si excede).
+  // Validar uso contra los límites de Gratuito (bloquear si excede). Los
+  // productos quedan afuera: al bajar se abre el plazo para regularizarlos.
   const freePlan = await getPlanLimits(normalizePlanCode('free') as PlanCode)
   const usage = await getOrganizationUsage(organizationId)
   const resourceLabels: Record<string, string> = {
     users: 'Usuarios', branches: 'Sucursales', cashRegisters: 'Cajas', products: 'Productos',
   }
-  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories']
   const conflictingResources: Array<{ resource: string; current: number; limit: number }> = []
   for (const key of countResources) {
     const limit = getPlanLimit(freePlan, key)

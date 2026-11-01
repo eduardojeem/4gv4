@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BankTransferPayment } from '@/components/admin/subscriptions/BankTransferPayment'
 import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProfileForm'
 import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
 import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
@@ -71,7 +70,6 @@ export type SubscriptionsClientViewProps = {
   billingProfile: BillingProfile | null
   subscriptionStatus: string
   canChangePlan: boolean
-  canPayByTransfer?: boolean
   canRedeemCodes: boolean
   averageUsage: number
 }
@@ -290,7 +288,7 @@ function HowItWorksContent() {
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Pagos & Facturación</h4>
         </div>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          Los pagos con Pagopar o códigos de activación renuevan el ciclo mensual. Las facturas legales se generan de forma automática con tus datos tributarios fiscales.
+          Pagás con tarjeta, QR o transferencia, o activás con un código; cada pago renueva el ciclo mensual. Si no pagás al vencer, la cuenta queda 7 días como pago pendiente y después pasa al plan Gratuito.
         </p>
       </div>
 
@@ -302,7 +300,7 @@ function HowItWorksContent() {
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cambios de Plan</h4>
         </div>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          Puedes ascender de plan en cualquier momento. Para pasar a un plan menor, el uso actual de tu organización debe adecuarse a los límites del nuevo plan.
+          Podés subir de plan en cualquier momento. Al bajar, conservás el plan pago hasta el vencimiento; si te sobran productos tenés 7 días para ajustarlos y, si volvés a subir, se reactivan solos.
         </p>
       </div>
     </div>
@@ -319,7 +317,6 @@ export function SubscriptionsClientView({
   subscriptionStatus,
   canChangePlan,
   canRedeemCodes,
-  canPayByTransfer = false,
   averageUsage,
 }: SubscriptionsClientViewProps) {
   const [activeTab, setActiveTab] = useState<string>('overview')
@@ -413,28 +410,28 @@ export function SubscriptionsClientView({
           <TabsList className="bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-2xl h-auto flex flex-wrap sm:inline-flex border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
             <TabsTrigger
               value="overview"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-500/15 data-[state=active]:text-indigo-900 dark:data-[state=active]:text-indigo-100 data-[state=active]:ring-1 data-[state=active]:ring-indigo-200 dark:data-[state=active]:ring-indigo-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Layers className="h-4 w-4 text-indigo-500" />
-              <span>Resumen & Cupos</span>
+              <span>Resumen</span>
               <Badge variant="secondary" className="hidden md:inline-flex text-[10px] px-1.5 py-0 h-4 font-mono font-bold rounded-md">
                 {averageUsage}%
               </Badge>
             </TabsTrigger>
             <TabsTrigger
               value="plans"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-amber-50 dark:data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-900 dark:data-[state=active]:text-amber-100 data-[state=active]:ring-1 data-[state=active]:ring-amber-200 dark:data-[state=active]:ring-amber-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Sparkles className="h-4 w-4 text-amber-500" />
-              <span>Planes Disponibles</span>
+              <span>Planes</span>
               <span className="hidden sm:inline text-[11px] text-muted-foreground font-normal">({plans.length})</span>
             </TabsTrigger>
             <TabsTrigger
               value="payments"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-emerald-50 dark:data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-900 dark:data-[state=active]:text-emerald-100 data-[state=active]:ring-1 data-[state=active]:ring-emerald-200 dark:data-[state=active]:ring-emerald-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Receipt className="h-4 w-4 text-emerald-500" />
-              <span>Historial de Pagos</span>
+              <span>Pagos</span>
               {payments.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold rounded-md">
                   {payments.length}
@@ -443,10 +440,10 @@ export function SubscriptionsClientView({
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
+              className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/15 data-[state=active]:text-blue-900 dark:data-[state=active]:text-blue-100 data-[state=active]:ring-1 data-[state=active]:ring-blue-200 dark:data-[state=active]:ring-blue-500/30 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Building2 className="h-4 w-4 text-blue-500" />
-              <span>Datos Fiscales</span>
+              <span>Facturación</span>
             </TabsTrigger>
           </TabsList>
 
@@ -503,7 +500,7 @@ export function SubscriptionsClientView({
         </div>
 
         {/* TAB 1: OVERVIEW & USAGE (REDISEÑADA & LIMPIA) */}
-        <TabsContent value="overview" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="overview" className="space-y-6 border-t-2 border-indigo-200 pt-5 focus-visible:outline-none dark:border-indigo-500/30">
           {/* Cupos del plan */}
           <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -694,16 +691,10 @@ export function SubscriptionsClientView({
               </Card>
             </div>
           </div>
-
-          {/* 3. PROMO CODE & ACTIVATION VOUCHER SECTION */}
-          <div className="pt-1">
-            <PromoCodeRedeemer canRedeem={canRedeemCodes} />
-          </div>
         </TabsContent>
 
         {/* TAB 2: PLANS COMPARISON (INCLUYE GUÍA EXPLICATIVA CONTEXTUAL) */}
-        <TabsContent value="plans" className="space-y-6 focus-visible:outline-none">
-          {canPayByTransfer && <Button variant="outline" asChild><a href="#bank-transfer">Pagar por transferencia bancaria</a></Button>}
+        <TabsContent value="plans" className="space-y-6 border-t-2 border-amber-200 pt-5 focus-visible:outline-none dark:border-amber-500/30">
           <PlansComparison
             canChangePlan={canChangePlan}
             currentPlanCode={currentPlan.code}
@@ -722,7 +713,7 @@ export function SubscriptionsClientView({
                     ¿Cómo funciona tu suscripción y facturación?
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
-                    Información clave sobre ciclos de facturación, emisión legal y migración de planes
+                    Cómo se cobra, qué pasa si no pagás y cómo cambiar de plan
                   </CardDescription>
                 </div>
               </div>
@@ -734,7 +725,10 @@ export function SubscriptionsClientView({
         </TabsContent>
 
         {/* TAB 3: PAYMENT & BILLING HISTORY */}
-        <TabsContent value="payments" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="payments" className="space-y-6 border-t-2 border-emerald-200 pt-5 focus-visible:outline-none dark:border-emerald-500/30">
+          {/* El cupón es otra forma de pagar o extender el plan: va con los pagos. */}
+          <PromoCodeRedeemer canRedeem={canRedeemCodes} />
+
           <Card id="payment-history" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <CardHeader className="border-b border-border pb-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -871,7 +865,7 @@ export function SubscriptionsClientView({
                         <TableHead className="font-bold text-xs">Monto</TableHead>
                         <TableHead className="font-bold text-xs">Estado</TableHead>
                         <TableHead className="font-bold text-xs">Referencia / Voucher</TableHead>
-                        <TableHead className="font-bold text-xs text-right">Comprobante</TableHead>
+                        <TableHead className="font-bold text-xs text-right">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -942,11 +936,20 @@ export function SubscriptionsClientView({
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              {payment.receipt_url ? (
+                              {/* receipt_url es la página de pago de Pagopar, no un recibo:
+                                  sirve para terminar un pago pendiente. Un pago cobrado
+                                  muestra el detalle verificado contra Pagopar. */}
+                              {payment.status === 'pending' && payment.receipt_url ? (
                                 <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
                                   <a href={payment.receipt_url} target="_blank" rel="noreferrer">
                                     <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                                    Ver recibo
+                                    Continuar pago
+                                  </a>
+                                </Button>
+                              ) : payment.status === 'paid' && payment.provider === 'pagopar' && payment.external_reference ? (
+                                <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
+                                  <a href={`/admin/subscriptions/payments?hash=${encodeURIComponent(payment.external_reference)}`}>
+                                    Ver detalle
                                   </a>
                                 </Button>
                               ) : (
@@ -972,7 +975,7 @@ export function SubscriptionsClientView({
         </TabsContent>
 
         {/* TAB 4: BILLING PROFILE */}
-        <TabsContent value="billing" className="space-y-6 focus-visible:outline-none">
+        <TabsContent value="billing" className="space-y-6 border-t-2 border-blue-200 pt-5 focus-visible:outline-none dark:border-blue-500/30">
           <Card id="billing-form" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <CardHeader className="border-b border-border pb-4">
               <div className="flex items-center gap-3">
@@ -984,7 +987,7 @@ export function SubscriptionsClientView({
                     Datos para tus facturas
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs">
-                    Con estos datos se emiten y timbran las facturas legales de tu suscripción
+                    Con estos datos se identifica al comprador en cada pago de la suscripción
                   </CardDescription>
                 </div>
               </div>
@@ -995,7 +998,6 @@ export function SubscriptionsClientView({
           </Card>
         </TabsContent>
       </Tabs>
-      <BankTransferPayment canPay={canPayByTransfer} />
     </div>
   )
 }

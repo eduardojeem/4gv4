@@ -25,6 +25,16 @@ describe('subscription status evaluation', () => {
     expect(status.isExpired).toBe(false)
   })
 
+  it('una prueba gratis con la fecha pasada cuenta como vencida', () => {
+    const ended = evaluateSubscriptionStatus({ status: 'trialing', trialEndsAt: '2026-07-30T12:00:00.000Z' }, now)
+    expect(ended.isExpired).toBe(true)
+    expect(ended.trialDaysLeft).toBe(0)
+
+    const running = evaluateSubscriptionStatus({ status: 'trialing', trialEndsAt: '2026-08-05T12:00:00.000Z' }, now)
+    expect(running.isExpired).toBe(false)
+    expect(running.trialDaysLeft).toBe(5)
+  })
+
   it('blocks suspended and canceled subscriptions', () => {
     expect(evaluateSubscriptionStatus({ status: 'suspended' }, now).isBlocked).toBe(true)
     expect(evaluateSubscriptionStatus({ status: 'canceled' }, now).isBlocked).toBe(true)

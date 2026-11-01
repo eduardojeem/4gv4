@@ -10,6 +10,7 @@ import {
   Gauge,
   Info,
   RefreshCw,
+  Wallet,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -35,8 +36,13 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
-import { isStripeConfigured } from '@/lib/payments/stripe'
+import { SubscriptionPaymentPanel } from '@/components/admin/subscriptions/SubscriptionPaymentPanel'
+import { isStripeCheckoutEnabled } from '@/lib/payments/stripe'
+import {
+  applySubscriptionDiscount,
+  describeSubscriptionDiscount,
+  findAvailableSubscriptionDiscount,
+} from '@/lib/saas/subscription-discount'
 import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
@@ -143,12 +149,21 @@ function buildNotices({
   return notices.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'danger' ? -1 : 1))
 }
 
+/** Cada métrica con su color de ícono, para distinguirlas de un vistazo en claro y oscuro. */
+const METRIC_ACCENT = {
+  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  violet: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+} as const
+
 function MetricCard({
   label,
   value,
   hint,
   icon: Icon,
   tone = 'neutral',
+  accent,
   children,
 }: {
   label: string
@@ -156,12 +171,15 @@ function MetricCard({
   hint?: string
   icon: typeof Gauge
   tone?: SubscriptionTone
+  accent: keyof typeof METRIC_ACCENT
   children?: ReactNode
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+    <div className="rounded-2xl border border-border/80 bg-background/80 p-4 shadow-2xs dark:bg-background/40">
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="h-4 w-4 shrink-0" />
+        <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg', METRIC_ACCENT[accent])}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
         <p className="text-[11px] font-bold uppercase tracking-wider">{label}</p>
       </div>
       <p className={cn('mt-2 truncate text-xl font-extrabold tracking-tight', TONE_TEXT[tone])}>{value}</p>
@@ -189,6 +207,10 @@ export default async function AdminSubscriptionsPage() {
   const periodEnd = subscription?.current_period_ends_at || subscription?.trial_ends_at || null
   const daysLeft = daysUntil(periodEnd)
   const canChangePlan = organization.role === 'owner'
+  const isPaidPlan = state.currentPlan.price_monthly > 0
+  // Cupón de descuento canjeado: se muestra el mismo monto que se va a cobrar.
+  const discount = isPaidPlan ? await findAvailableSubscriptionDiscount(organization.id, state.currentPlan.code) : null
+  const regularAmount = money(state.currentPlan.price_monthly, state.currentPlan.currency)
   const averageUsage = averageUsagePercent(state.currentPlan, state.usage)
 
   const paymentProvider = subscription?.provider === 'pagopar'
@@ -226,7 +248,7 @@ export default async function AdminSubscriptionsPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* ── Encabezado ───────────────────────────────────────────────────── */}
-      <header className="rounded-3xl border border-border bg-card p-5 shadow-2xs sm:p-6">
+      <header className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card p-5 shadow-sm sm:p-6 dark:border-primary/30 dark:from-primary/[0.14]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -252,27 +274,30 @@ export default async function AdminSubscriptionsPage() {
             </p>
           </div>
 
-          <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:min-w-[18rem]">
-            <PagoparPaymentButton
-              missingFields={billingMissingFields}
-              isPaidPlan={state.currentPlan.price_monthly > 0}
-              planName={state.currentPlan.name}
-              planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
-              stripeEnabled={isStripeConfigured()}
-            />
-            {canChangePlan && isPagoparRecurringEnabled() && (
-              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
-                <Link href="/admin/subscriptions/autopay">
-                  <RefreshCw className="h-4 w-4 text-primary" />
-                  Débito automático
-                </Link>
+          {/* Solo acciones cortas: pagar tiene su propio bloque debajo de los
+              avisos, y antes estiraba esta columna dejando un hueco a la izquierda. */}
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+            {isPaidPlan && (
+              <Button asChild className="h-10 gap-2 rounded-xl font-semibold">
+                <a href="#pay">
+                  <Wallet className="h-4 w-4" />
+                  Pagar
+                </a>
               </Button>
             )}
             {canChangePlan && (
-              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
+              <Button asChild variant="outline" className="h-10 gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/change-plan">
                   <ArrowUpRight className="h-4 w-4 text-primary" />
                   Cambiar de plan
+                </Link>
+              </Button>
+            )}
+            {canChangePlan && isPagoparRecurringEnabled() && (
+              <Button asChild variant="outline" className="h-10 gap-2 rounded-xl font-semibold">
+                <Link href="/admin/subscriptions/autopay">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  Débito automático
                 </Link>
               </Button>
             )}
@@ -290,6 +315,7 @@ export default async function AdminSubscriptionsPage() {
                 : state.currentPlan.price_note || 'Sin costo mensual'
             }
             icon={CreditCard}
+            accent="blue"
           />
 
           <MetricCard
@@ -311,6 +337,7 @@ export default async function AdminSubscriptionsPage() {
                   : formatDate(periodEnd)
             }
             icon={CalendarClock}
+            accent="violet"
             tone={renewalTone}
           />
 
@@ -319,6 +346,7 @@ export default async function AdminSubscriptionsPage() {
             value={`${averageUsage}%`}
             hint="Promedio de los cupos con tope"
             icon={Gauge}
+            accent="amber"
             tone={quotaTone(averageUsage)}
           >
             <div
@@ -341,6 +369,7 @@ export default async function AdminSubscriptionsPage() {
             value={paymentProvider}
             hint={subscriptionStatusLabel(paymentStatus)}
             icon={CreditCard}
+            accent="emerald"
             tone={subscriptionStatusTone(paymentStatus)}
           />
         </div>
@@ -375,6 +404,17 @@ export default async function AdminSubscriptionsPage() {
         </section>
       )}
 
+      {/* ── Pagar: tarjeta, QR y transferencia en un solo lugar ──────────── */}
+      <SubscriptionPaymentPanel
+        missingFields={billingMissingFields}
+        isPaidPlan={isPaidPlan}
+        planName={state.currentPlan.name}
+        planAmount={discount ? money(applySubscriptionDiscount(state.currentPlan.price_monthly, discount), state.currentPlan.currency) : regularAmount}
+        discountNote={discount ? `${describeSubscriptionDiscount(discount)} con tarjeta o QR · precio normal ${regularAmount}` : undefined}
+        stripeEnabled={isStripeCheckoutEnabled()}
+        canPayByTransfer
+      />
+
       {/* ── Cupos, planes, pagos y datos fiscales ────────────────────────── */}
       <SubscriptionsClientView
         currentPlan={state.currentPlan}
@@ -386,7 +426,6 @@ export default async function AdminSubscriptionsPage() {
         subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
         canRedeemCodes={['owner', 'admin'].includes(organization.role)}
-        canPayByTransfer={['owner', 'admin'].includes(organization.role)}
         averageUsage={averageUsage}
       />
 
@@ -401,7 +440,7 @@ export default async function AdminSubscriptionsPage() {
           currentPlanName={state.currentPlan.name}
         />
       ) : state.currentPlan.price_monthly > 0 ? (
-        <section className="rounded-2xl border border-border bg-muted/30 p-4">
+        <section className="rounded-2xl border border-rose-200/70 bg-rose-50/40 p-4 dark:border-rose-900/40 dark:bg-rose-950/15">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />

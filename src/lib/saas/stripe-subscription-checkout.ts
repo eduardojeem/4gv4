@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getStripe, getStripeReturnOrigin, isStripeConfigured, toStripeUnitAmount } from '@/lib/payments/stripe'
+import { getStripe, getStripeReturnOrigin, isStripeCheckoutEnabled, toStripeUnitAmount } from '@/lib/payments/stripe'
 import {
   resolveSubscriptionCheckoutTarget,
   SubscriptionCheckoutError,
@@ -27,8 +27,8 @@ export async function createSubscriptionStripeCheckout(params: {
 }) {
   const { organization, userEmail, targetPlanCode, canChangePlan, requestOrigin, correlationId } = params
 
-  if (!isStripeConfigured()) {
-    throw new SubscriptionCheckoutError('Stripe no está configurado.', 501)
+  if (!isStripeCheckoutEnabled()) {
+    throw new SubscriptionCheckoutError('El pago con Stripe no está disponible por ahora.', 501)
   }
 
   const { state, targetPlan, amountPyg } = await resolveSubscriptionCheckoutTarget({
@@ -155,9 +155,10 @@ export async function createSubscriptionStripeCheckout(params: {
       .update({ status: 'failed' })
       .eq('id', payment.id)
 
+    // 424 y no 502: Cloudflare reemplaza las respuestas 502 por su propia página.
     throw new SubscriptionCheckoutError(
       error instanceof Error ? error.message : 'No se pudo iniciar el pago con Stripe.',
-      502,
+      424,
       undefined,
       correlationId,
     )

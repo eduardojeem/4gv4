@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'crypto'
+import { formatParaguayTaxId, parseParaguayTaxId } from '@/lib/billing/paraguay-tax-id'
 
 const PAGOPAR_API_BASE_URL = 'https://api.pagopar.com/api'
 const PAGOPAR_CHECKOUT_BASE_URL = 'https://www.pagopar.com/pagos'
@@ -132,9 +133,21 @@ function normalizePhone(value?: string | null) {
   return digits
 }
 
+/**
+ * Documento para Pagopar: el número sin el dígito verificador. Antes se
+ * quitaban todos los caracteres no numéricos y "80000000-1" llegaba como
+ * "800000001", otro número.
+ */
 function normalizeDocument(value?: string | null) {
-  const normalized = value?.replace(/[^\d]/g, '') || ''
-  return normalized
+  const parsed = parseParaguayTaxId(value)
+  if (parsed) return parsed.number
+  return value?.replace(/[^\d]/g, '') || ''
+}
+
+/** RUC con su dígito verificador, solo si se cargó así. */
+function normalizeRuc(value?: string | null) {
+  const parsed = parseParaguayTaxId(value)
+  return parsed?.checkDigit != null ? formatParaguayTaxId(parsed) : ''
 }
 
 function maxPaymentDate() {
@@ -260,7 +273,7 @@ export async function queryPagoparOrder(hash: string): Promise<PagoparOrderStatu
 
 function normalizePagoparError(message: string) {
   if (message.includes('servicios o productos virtuales')) {
-    return 'Pagopar rechazo el pago porque el comercio no esta habilitado para cobrar servicios o productos virtuales. Solicita a Pagopar que habilite productos virtuales para esta cuenta.'
+    return 'Pagopar rechazo el pago porque el comercio no esta habilitado para cobrar servicios o productos virtuales. Solicita a Pagopar (soporte@upay.com.py) que habilite productos virtuales para esta cuenta.'
   }
 
   return message
@@ -344,7 +357,7 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
   const body = {
     token,
     comprador: {
-      ruc: input.buyer.ruc || '',
+      ruc: normalizeRuc(input.buyer.ruc),
       email: input.buyer.email || '',
       ciudad: '1',
       nombre: buyerName,
@@ -467,5 +480,7 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
 
 export function validatePagoparNotificationToken(hash: string, token: string) {
   const privateKey = requiredEnv('PAGOPAR_PRIVATE_KEY')
-  return sha1(`${privateKey}${hash}`) === token
+  const expected = Buffer.from(sha1(`${privateKey}${hash}`))
+  const received = Buffer.from(token)
+  return expected.length === received.length && timingSafeEqual(expected, received)
 }

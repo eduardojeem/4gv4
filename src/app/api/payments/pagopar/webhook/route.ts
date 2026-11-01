@@ -1,8 +1,10 @@
 import { NextResponse, after } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { recordWebhookEvent } from '@/lib/health/webhook-log'
+import { notifySubscriptionChargeback, sendSubscriptionPaymentReceipt } from '@/lib/saas/subscription-notifications'
 import {
   parsePagoparNotificationAmount,
+  queryPagoparOrder,
   validatePagoparNotificationToken,
 } from '@/lib/payments/pagopar'
 
@@ -45,9 +47,9 @@ export async function POST(request: Request) {
 
 async function handleNotification(request: Request) {
   const payload = await request.json().catch(() => null) as PagoparNotification | null
-  const item = payload?.resultado?.[0]
+  const item = Array.isArray(payload?.resultado) ? payload.resultado[0] : undefined
 
-  if (!item?.hash_pedido || !item?.token) {
+  if (!payload || !item?.hash_pedido || !item?.token) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
@@ -81,33 +83,81 @@ async function handleNotification(request: Request) {
     if (!result) {
       return NextResponse.json({ error: 'Payment was not applied' }, { status: 500 })
     }
+    if (result.applied === true && result.payment_id) {
+      after(() => sendSubscriptionPaymentReceipt(result.payment_id))
+    }
 
-    return NextResponse.json({
-      success: true,
-      applied: result.applied === true,
-      plan: result.plan_id,
-    })
+    return acknowledge(payload)
   }
 
-  const status = item.cancelado === true ? 'failed' : 'pending'
-  const { data: payment, error } = await admin
+  const { data: payment, error: lookupError } = await admin
     .from('subscription_payments')
-    .update({
-      status,
-      payment_method: paymentMethod,
-      provider_payment_id: providerPaymentId || null,
-    })
+    .select('id, status')
     .eq('provider', 'pagopar')
     .eq('external_reference', item.hash_pedido)
-    .select('id')
     .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (lookupError) {
+    return NextResponse.json({ error: lookupError.message }, { status: 500 })
   }
   if (!payment) {
     return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ success: true, applied: false, status })
+  // Un pago ya aplicado no vuelve atrás por una notificación: si Pagopar
+  // reversó el cobro, la suscripción se corrige a mano.
+  // Un pago ya aplicado que Pagopar notifica como no pagado es una reversión o
+  // un contracargo. No se confía solo en la notificación: se confirma
+  // consultando el pedido y recién ahí se registra y se quita el período.
+  if (payment.status === 'paid') {
+    after(() => handlePagoparReversal(payment.id, item.hash_pedido as string))
+    return acknowledge(payload)
+  }
+
+  const { error } = await admin
+    .from('subscription_payments')
+    .update({
+      status: item.cancelado === true ? 'failed' : 'pending',
+      payment_method: paymentMethod,
+      provider_payment_id: providerPaymentId || null,
+    })
+    .eq('id', payment.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return acknowledge(payload)
+}
+
+async function handlePagoparReversal(paymentId: string, hash: string) {
+  try {
+    const order = await queryPagoparOrder(hash)
+    if (order.status === 'approved') {
+      console.warn('[pagopar-webhook] Notificación sin pago, pero Pagopar confirma el cobro.', { paymentId })
+      return
+    }
+    const { data, error } = await createAdminSupabase().rpc('refund_subscription_payment', {
+      p_actor_id: null,
+      p_payment_id: paymentId,
+      p_reason: 'Reversión o contracargo informado por Pagopar',
+      p_revoke_access: true,
+      p_chargeback: true,
+    })
+    if (error) {
+      console.error('[pagopar-webhook] No se pudo registrar la reversión.', { paymentId, code: error.code })
+      return
+    }
+    await notifySubscriptionChargeback(data as { id: string; organization_id: string; amount: number })
+  } catch (error) {
+    console.error('[pagopar-webhook] No se pudo verificar la reversión.', { paymentId, error })
+  }
+}
+
+/**
+ * Pagopar da la notificación por recibida solo si se le devuelve el mismo
+ * `resultado` que envió; con cualquier otra respuesta la sigue reintentando.
+ */
+function acknowledge(payload: PagoparNotification) {
+  return NextResponse.json(payload.resultado)
 }

@@ -1,4 +1,6 @@
+import { after } from 'next/server'
 import { z } from 'zod'
+import { notifyTransferReviewed } from '@/lib/saas/bank-transfer-notifications'
 import { readTransferJson, requireTransferSuperAdmin, transferError, transferIdSchema, transferJson } from '@/lib/saas/bank-transfer-api'
 import { reviewBankTransferRequest } from '@/lib/saas/bank-transfers'
 
@@ -12,6 +14,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const id = transferIdSchema.parse((await context.params).id)
     const body = reviewSchema.parse(await readTransferJson(request))
     const result = await reviewBankTransferRequest(actor.id, id, { ...body, decision: body.decision === 'approve' ? 'approved' : 'rejected' })
+    after(() => notifyTransferReviewed(result.request))
     return transferJson(result)
   } catch (error) { return transferError(error) }
 }

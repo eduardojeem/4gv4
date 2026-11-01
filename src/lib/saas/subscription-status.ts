@@ -28,10 +28,14 @@ export function evaluateSubscriptionStatus(
   const hasActivePaidPeriod = status === 'active'
     && periodEndsAt !== null
     && periodEndsAt > nowTime
+  // Una prueba con la fecha pasada ya terminó, aunque la tarea diaria todavía
+  // no la haya pasado a pago pendiente: desde ese momento rigen los límites Free.
+  const trialEnded = isTrialing && trialEndsAt !== null && trialEndsAt <= nowTime
   const isExpired = Boolean(
     (status && EXPIRED_STATUSES.has(status))
     || (paymentStatus === 'unpaid' && !hasActivePaidPeriod)
     || (status === 'active' && periodEndsAt !== null && periodEndsAt <= nowTime)
+    || trialEnded
   )
 
   const daysLeft = (target: number | null) => target === null

@@ -112,6 +112,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const admin = createAdminSupabase()
 
+  // Un plan con clientes no se apaga: esos comercios quedarían con los límites
+  // de Gratuito y los módulos del plan pago a la vez. Primero hay que moverlos.
+  if (patch.is_active === false) {
+    const { data: plan } = await admin.from('subscription_plans').select('tier').eq('id', id).maybeSingle()
+    const tier = typeof plan?.tier === 'string' ? plan.tier.toUpperCase() : null
+    if (tier) {
+      const { count, error: countError } = await admin
+        .from('subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('plan', tier)
+        .in('status', ['active', 'trialing', 'past_due'])
+      if (countError) {
+        return NextResponse.json({ error: 'No se pudo verificar si el plan tiene clientes.' }, { status: 500 })
+      }
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          { error: `No se puede desactivar: ${count} ${count === 1 ? 'comercio usa' : 'comercios usan'} este plan. Cambialos de plan primero.`, subscribers: count },
+          { status: 409 },
+        )
+      }
+    }
+  }
+
   // Los límites se validan como números: el texto de venta se genera de ahí y
   // los mismos números se copian al plan técnico, que es el que se hace cumplir.
   let technicalLimits: NormalizedPlanLimits['technical'] | null = null
@@ -189,6 +212,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       },
       { status: 500 }
     )
+  }
+
+  // Con un cupo de productos nuevo, cada tienda del plan se reevalúa: a la que
+  // le sobran productos se le abre el plazo de 7 días, igual que al bajar de
+  // plan, y la que vuelve a entrar recupera lo que se le había apagado.
+  if (technicalLimits && 'products' in technicalLimits) {
+    const { data: stores } = await admin.from('subscriptions').select('organization_id').eq('plan', technicalCode)
+    for (const store of stores ?? []) {
+      const { error: syncError } = await admin.rpc('sync_plan_downgrade_grace', {
+        p_organization_id: store.organization_id,
+        p_plan_code: technicalCode,
+      })
+      if (syncError) {
+        console.error('[superadmin/plans] No se pudo reevaluar el cupo de productos', { organizationId: store.organization_id, code: syncError.code })
+      }
+    }
   }
 
   await admin.from('tenant_audit_log').insert({

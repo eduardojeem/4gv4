@@ -143,6 +143,9 @@ export async function POST(request: Request) {
     // El tier real sale de la fila, no de lo que llego: si vino por slug publico,
     // lo que se guarda tiene que ser el tier.
     const resolvedPlanTier = String(subscriptionPlan.tier).toUpperCase()
+    // Los mismos días que muestra la tarjeta de precios: sin días cargados no
+    // hay prueba (antes se regalaban 14 que la pantalla no prometía).
+    const trialDays = Math.max(0, Math.floor(Number(subscriptionPlan.trial_days) || 0))
 
     const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -327,7 +330,7 @@ export async function POST(request: Request) {
           plan: resolvedPlanTier,
           status: 'trialing',
           trial_ends_at: new Date(
-            Date.now() + (subscriptionPlan.trial_days ?? 14) * 24 * 60 * 60 * 1000
+            Date.now() + trialDays * 24 * 60 * 60 * 1000
           ).toISOString(),
           cancel_at_period_end: false,
         },

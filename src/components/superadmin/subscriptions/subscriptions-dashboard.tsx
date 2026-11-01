@@ -539,6 +539,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         onEditFormChange={setEditForm}
         onSave={saveSubscription}
         onCopyValue={copyValue}
+        onPaymentRecorded={() => { closeDetail(); router.refresh() }}
       />
     </div>
   )

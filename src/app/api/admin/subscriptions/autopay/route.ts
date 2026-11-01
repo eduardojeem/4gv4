@@ -40,7 +40,8 @@ function errorResponse(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: error.status })
   }
   if (error instanceof PagoparRecurringError) {
-    return NextResponse.json({ error: error.message }, { status: 502 })
+    // 424 y no 502: Cloudflare reemplaza las respuestas 502 por su propia página.
+    return NextResponse.json({ error: error.message }, { status: 424 })
   }
   return NextResponse.json({ error: 'No se pudo completar la operación.' }, { status: 500 })
 }

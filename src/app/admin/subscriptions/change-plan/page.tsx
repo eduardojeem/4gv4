@@ -17,17 +17,43 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { formatDate } from '@/lib/saas/subscription-ui'
+import {
   PagoparPaymentMethodSelector,
   type SubscriptionPaymentMethod,
 } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 import { cn } from '@/lib/utils'
 import type { CommercialPlan, OrganizationUsage } from '@/lib/saas/subscription-service'
+import type { Proration } from '@/lib/saas/subscription-proration'
 
 type PageData = {
   currentPlan: CommercialPlan
   usage: OrganizationUsage
   plans: CommercialPlan[]
   stripeEnabled?: boolean
+  billingMissingFields?: string[]
+  /** Vencimiento del mes ya pagado, si sigue vigente. */
+  paidPeriodEndsAt?: string | null
+  cancelScheduled?: boolean
+  /** Prorrateo por código de plan: crédito, cobro y días extra. */
+  prorations?: Record<string, Proration | null>
+}
+
+type ChangeResult = {
+  checkoutUrl?: string
+  redirectTo?: string
+  scheduled?: boolean
+  effectiveUntil?: string | null
+  error?: string
+  correlationId?: string
+  conflictingResources?: ConflictResource[]
 }
 
 type ConflictResource = { resource: string; current: number; limit: number }
@@ -159,7 +185,7 @@ function PlanCard({
             ) : (
               <CreditCard className="mr-2 h-4 w-4" />
             )}
-            {plan.price_monthly === 0 ? 'Cambiar a gratuito' : `Pagar y cambiar a ${plan.name}`}
+            {plan.price_monthly === 0 ? 'Cambiar a gratuito' : `Elegir ${plan.name}`}
           </Button>
         )}
       </div>
@@ -167,15 +193,154 @@ function PlanCard({
   )
 }
 
+/** Las formas que redirigen a una pasarela piden los datos de facturación. */
+const CHECKOUT_METHODS: SubscriptionPaymentMethod[] = ['card', 'qr', 'stripe']
+
+function confirmLabel(target: CommercialPlan, method: SubscriptionPaymentMethod, scheduled: boolean) {
+  if (target.price_monthly <= 0) return scheduled ? 'Programar el cambio' : 'Cambiar a gratuito'
+  if (method === 'transfer') return 'Generar solicitud de transferencia'
+  if (method === 'qr') return 'Pagar con QR'
+  if (method === 'stripe') return 'Pagar con Stripe'
+  return 'Pagar con tarjeta'
+}
+
+function PlanChangeDialog({
+  data,
+  target,
+  onClose,
+  onConfirm,
+  busy,
+  error,
+  conflicts,
+}: {
+  data: PageData
+  target: CommercialPlan | null
+  onClose: () => void
+  onConfirm: (method: SubscriptionPaymentMethod) => void
+  busy: boolean
+  error: string | null
+  conflicts: ConflictResource[]
+}) {
+  const missing = data.billingMissingFields ?? []
+  // La base acepta transferencias para renovar el plan actual o para salir de
+  // Gratuito; entre planes pagos el cambio va por tarjeta o QR.
+  const transferAllowed = data.currentPlan.price_monthly <= 0
+  const [method, setMethod] = useState<SubscriptionPaymentMethod>(
+    missing.length > 0 && transferAllowed ? 'transfer' : 'card',
+  )
+
+  if (!target) return null
+
+  const current = data.currentPlan
+  const isPaidTarget = target.price_monthly > 0
+  const difference = target.price_monthly - current.price_monthly
+  const paidUntil = data.paidPeriodEndsAt ?? null
+  const scheduledDowngrade = !isPaidTarget && Boolean(paidUntil)
+  const proration = data.prorations?.[target.code] ?? null
+  const checkoutBlocked = isPaidTarget && missing.length > 0 && CHECKOUT_METHODS.includes(method)
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Cambiar a {target.name}</DialogTitle>
+          <DialogDescription>Revisá el cambio antes de confirmarlo.</DialogDescription>
+        </DialogHeader>
+
+        <dl className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/30 p-4 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Plan actual</dt>
+            <dd className="font-semibold">{current.name}</dd>
+            <dd className="text-xs text-muted-foreground">{money(current.price_monthly, current.currency)}{current.price_monthly > 0 ? '/mes' : ''}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Plan nuevo</dt>
+            <dd className="font-semibold">{target.name}</dd>
+            <dd className="text-xs text-muted-foreground">{money(target.price_monthly, target.currency)}{isPaidTarget ? '/mes' : ''}</dd>
+          </div>
+          <div className="col-span-2 border-t pt-3">
+            <dt className="text-xs text-muted-foreground">Diferencia por mes</dt>
+            <dd className={cn('font-semibold', difference > 0 ? 'text-foreground' : 'text-emerald-600 dark:text-emerald-400')}>
+              {difference === 0
+                ? 'Mismo precio'
+                : `${difference > 0 ? '+' : '−'}${money(Math.abs(difference), target.currency)}`}
+            </dd>
+          </div>
+        </dl>
+
+        <p className="text-sm text-muted-foreground">
+          {!isPaidTarget
+            ? scheduledDowngrade
+              ? `Seguís con ${current.name} hasta el ${formatDate(paidUntil)}, que ya está pagado. Ese día pasás a ${target.name}.`
+              : `El cambio a ${target.name} es inmediato.`
+            : `${target.name} se activa cuando se confirma el pago${method === 'transfer' ? ' (al aprobarse el comprobante)' : ''}.`}
+        </p>
+
+        {isPaidTarget && proration && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+            {proration.kind === 'upgrade'
+              ? <>Te descontamos <strong>{money(proration.credit, target.currency)}</strong> por lo que queda de {current.name}: pagás <strong>{money(proration.chargeAmount, target.currency)}</strong> y el nuevo mes empieza al confirmarse el pago.</>
+              : <>Lo que queda de {current.name} ({money(proration.credit, target.currency)}) se suma como <strong>{proration.extraDays} {proration.extraDays === 1 ? 'día extra' : 'días extra'}</strong> de {target.name}.</>}
+          </div>
+        )}
+
+        {isPaidTarget && (
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">Forma de pago</p>
+            <PagoparPaymentMethodSelector
+              value={method}
+              onChange={setMethod}
+              disabled={busy}
+              disabledMethods={missing.length > 0 ? CHECKOUT_METHODS : []}
+              includeStripe={data.stripeEnabled === true}
+              includeTransfer={transferAllowed}
+            />
+            {missing.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Para pagar con tarjeta o QR completá tus datos de facturación (falta: {missing.join(', ')}).{' '}
+                <Link href="/admin/subscriptions#billing-form" className="font-semibold underline underline-offset-2">
+                  Completar datos
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div role="alert" className="space-y-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <p>{error}</p>
+            {conflicts.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                {conflicts.map((c) => (
+                  <li key={c.resource}>{c.resource}: {c.current} en uso, el plan nuevo permite {c.limit}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Volver</Button>
+          <Button type="button" onClick={() => onConfirm(method)} disabled={busy || checkoutBlocked}>
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {confirmLabel(target, method, scheduledDowngrade)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function ChangePlanPage() {
   const router = useRouter()
   const [data, setData] = useState<PageData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [changingPlanCode, setChangingPlanCode] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<ConflictResource[]>([])
-  const [success, setSuccess] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>('card')
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   // La comparativa manda el plan en la URL. Se resalta y se lleva a la vista,
   // pero no se cambia nada solo: el cobro lo confirma la persona.
   const [targetPlan, setTargetPlan] = useState<string | null>(null)
@@ -199,27 +364,35 @@ export default function ChangePlanPage() {
       .then((r) => r.json())
       .then((payload) => {
         if (payload?.plans) setData(payload)
-        else setError('No se pudo cargar los planes.')
+        else setLoadError(payload?.error || 'No se pudieron cargar los planes.')
       })
-      .catch(() => setError('No se pudo cargar los planes.'))
+      .catch(() => setLoadError('No se pudieron cargar los planes.'))
       .finally(() => setIsLoading(false))
   }, [])
 
-  async function handleSelect(planCode: string) {
-    setChangingPlanCode(planCode)
+  function openConfirmation(planCode: string) {
+    setError(null)
+    setConflicts([])
+    setPendingPlanCode(planCode)
+  }
+
+  async function confirmChange(method: SubscriptionPaymentMethod) {
+    if (!pendingPlanCode) return
+    const correlationId = crypto.randomUUID()
+    setIsSubmitting(true)
     setError(null)
     setConflicts([])
 
     try {
       const response = await fetch('/api/admin/subscriptions/change-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planCode, paymentMethod }),
+        headers: { 'Content-Type': 'application/json', 'X-Correlation-ID': correlationId },
+        body: JSON.stringify({ plan: pendingPlanCode, paymentMethod: method }),
       })
-      const payload = await response.json().catch(() => ({}))
+      const payload = await response.json().catch(() => null) as ChangeResult | null
 
       if (!response.ok) {
-        setError(payload?.error || 'No se pudo cambiar el plan.')
+        setError(payload?.error || `No se pudo cambiar el plan. Código: ${payload?.correlationId || correlationId}`)
         if (payload?.conflictingResources) setConflicts(payload.conflictingResources)
         return
       }
@@ -228,13 +401,22 @@ export default function ChangePlanPage() {
         window.location.assign(payload.checkoutUrl)
         return
       }
+      if (payload?.redirectTo) {
+        router.push(payload.redirectTo)
+        return
+      }
 
-      setSuccess(true)
-      setTimeout(() => router.push('/admin/subscriptions'), 1800)
+      setPendingPlanCode(null)
+      setSuccessMessage(
+        payload?.scheduled
+          ? `Listo: el cambio quedó programado para el ${formatDate(payload.effectiveUntil)}. Hasta entonces seguís con tu plan actual.`
+          : 'Plan actualizado correctamente. Redirigiendo…',
+      )
+      setTimeout(() => router.push('/admin/subscriptions'), payload?.scheduled ? 3500 : 1800)
     } catch {
-      setError('No se pudo conectar para cambiar el plan.')
+      setError(`No se pudo conectar para cambiar el plan. Código: ${correlationId}`)
     } finally {
-      setChangingPlanCode(null)
+      setIsSubmitting(false)
     }
   }
 
@@ -246,7 +428,7 @@ export default function ChangePlanPage() {
     )
   }
 
-  if (error && !data) {
+  if (loadError || !data) {
     return (
       <div className="space-y-4">
         <Button asChild variant="ghost" size="sm">
@@ -254,11 +436,13 @@ export default function ChangePlanPage() {
         </Button>
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{loadError || 'No se pudieron cargar los planes.'}</AlertDescription>
         </Alert>
       </div>
     )
   }
+
+  const pendingPlan = data.plans.find((plan) => plan.code === pendingPlanCode) ?? null
 
   return (
     <div className="space-y-6">
@@ -269,87 +453,65 @@ export default function ChangePlanPage() {
         <div>
           <h1 className="text-2xl font-bold">Cambiar plan</h1>
           <p className="text-sm text-muted-foreground">
-            Plan actual: <span className="font-medium">{data?.currentPlan.name}</span>
+            Plan actual: <span className="font-medium">{data.currentPlan.name}</span>
+            {data.paidPeriodEndsAt ? ` · pago hasta el ${formatDate(data.paidPeriodEndsAt)}` : ''}
           </p>
         </div>
       </div>
 
-      {success && (
+      {successMessage && (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300">
           <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>Plan actualizado correctamente. Redirigiendo...</AlertDescription>
+          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
-      <Alert>
-        <CreditCard className="h-4 w-4" />
-        <AlertDescription>
-          Los planes pagos se activan únicamente después de que {data?.stripeEnabled ? 'Pagopar o Stripe' : 'Pagopar'} confirme el cobro.
-        </AlertDescription>
-      </Alert>
-
-      <section className="max-w-md space-y-2" aria-labelledby="pagopar-method-title">
-        <div>
-          <h2 id="pagopar-method-title" className="text-sm font-semibold">
-            Forma de pago para el nuevo plan
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Esta selección se aplicará únicamente a los planes pagos.
-          </p>
-        </div>
-        <PagoparPaymentMethodSelector
-          value={paymentMethod}
-          onChange={setPaymentMethod}
-          disabled={changingPlanCode !== null}
-          includeStripe={data?.stripeEnabled === true}
-        />
-      </section>
-
-      {error && (
-        <div className="space-y-3">
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-          {conflicts.length > 0 && (
-            <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/60 dark:bg-orange-950/20">
-              <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                Reducí el uso antes de bajar de plan:
-              </p>
-              <ul className="mt-2 space-y-1">
-                {conflicts.map((c) => (
-                  <li key={c.resource} className="text-sm text-orange-700 dark:text-orange-400">
-                    {c.resource}: {c.current} en uso, límite del plan destino: {c.limit}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+      {data.cancelScheduled && (
+        <Alert>
+          <CreditCard className="h-4 w-4" />
+          <AlertDescription>
+            Ya tenés programado el paso al plan Gratuito al vencimiento. Si elegís un plan pago, se activa al confirmarse el pago.
+          </AlertDescription>
+        </Alert>
       )}
+
+      <p className="text-sm text-muted-foreground">
+        Elegí un plan para ver el detalle del cambio. Nada se cobra ni se aplica hasta que lo confirmes.
+      </p>
 
       <div
         className={cn(
           'grid gap-6',
-          (data?.plans.length ?? 0) >= 4
+          data.plans.length >= 4
             ? 'sm:grid-cols-2 xl:grid-cols-4'
-            : (data?.plans.length ?? 0) === 3
+            : data.plans.length === 3
               ? 'sm:grid-cols-2 lg:grid-cols-3'
               : 'sm:grid-cols-2',
         )}
       >
-        {data?.plans.map((plan) => (
+        {data.plans.map((plan) => (
           <PlanCard
             key={plan.code}
             plan={plan}
             isCurrent={plan.code === data.currentPlan.code}
             isTarget={plan.code === targetPlan}
-            onSelect={handleSelect}
-            isChanging={changingPlanCode === plan.code}
-            isBusy={changingPlanCode !== null}
+            onSelect={openConfirmation}
+            isChanging={isSubmitting && pendingPlanCode === plan.code}
+            isBusy={isSubmitting}
           />
         ))}
       </div>
+
+      <PlanChangeDialog
+        key={pendingPlanCode ?? 'none'}
+        data={data}
+        target={pendingPlan}
+        onClose={() => setPendingPlanCode(null)}
+        onConfirm={confirmChange}
+        busy={isSubmitting}
+        error={error}
+        conflicts={conflicts}
+      />
     </div>
   )
 }

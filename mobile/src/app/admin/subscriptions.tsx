@@ -10,9 +10,34 @@ import {
   View,
 } from 'react-native';
 
+import { SubscriptionTransferCard } from '@/components/subscription/transfer-card';
 import { fetchSubscription, type SubscriptionDetails } from '@/lib/admin';
 import { openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
+
+type StatusInfo = { label: string; color: string; background: string };
+
+/** Mismos estados que muestra la web, con color propio para claro y oscuro. */
+function statusInfo(status: string): StatusInfo {
+  if (status === 'active') return { label: 'Activo', color: palette.success, background: 'rgba(22,163,74,0.12)' };
+  if (status === 'trial' || status === 'trialing') return { label: 'Prueba gratis', color: palette.primary, background: 'rgba(37,99,235,0.12)' };
+  if (['past_due', 'unpaid', 'suspended', 'expired'].includes(status)) {
+    return { label: 'Pago pendiente', color: palette.danger, background: 'rgba(220,38,38,0.12)' };
+  }
+  if (status === 'cancelled' || status === 'canceled') return { label: 'Cancelada', color: '#64748B', background: 'rgba(100,116,139,0.12)' };
+  return { label: 'Pago pendiente', color: '#D97706', background: 'rgba(217,119,6,0.12)' };
+}
+
+/** Lo mismo que exige la web para pagar con tarjeta o QR. */
+function billingMissingFields(profile: SubscriptionDetails['billingProfile']): string[] {
+  const missing: string[] = [];
+  if (!profile?.business_name?.trim()) missing.push('Razón social');
+  if (!profile?.ruc?.replace(/[^\d]/g, '')) missing.push('RUC o CI');
+  if (!profile?.billing_email?.trim()) missing.push('Correo de facturación');
+  if (!profile?.phone?.trim()) missing.push('Teléfono');
+  if (!profile?.fiscal_address?.trim()) missing.push('Dirección fiscal');
+  return missing;
+}
 
 export default function SubscriptionsAdminScreen() {
   const colors = usePalette();
@@ -20,6 +45,8 @@ export default function SubscriptionsAdminScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Momento de la última carga: los días que faltan se cuentan desde ahí, no en cada render.
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -27,6 +54,7 @@ export default function SubscriptionsAdminScreen() {
       .then((res) => {
         if (!active) return;
         setData(res);
+        setLoadedAt(Date.now());
         setError(null);
       })
       .catch((err) => active && setError(err instanceof Error ? err.message : 'No se pudo cargar la suscripción.'))
@@ -42,9 +70,11 @@ export default function SubscriptionsAdminScreen() {
   }, []);
 
   const planName = data?.plan?.name || data?.subscription?.plan || 'Plan Activo';
-  const status = data?.subscription?.status || 'active';
-  const isActive = status === 'active';
-  const isTrial = status === 'trial';
+  const status = statusInfo(data?.subscription?.status || 'active');
+  const periodEnd = data?.subscription?.current_period_ends_at || data?.subscription?.trial_ends_at || null;
+  const daysLeft = periodEnd && loadedAt ? Math.ceil((new Date(periodEnd).getTime() - loadedAt) / 86_400_000) : null;
+  const cancelScheduled = data?.subscription?.cancel_at_period_end === true;
+  const missingBilling = billingMissingFields(data?.billingProfile ?? null);
 
   const limits = data?.plan?.limits || {};
   const usage = data?.usage || { branches: 0, users: 0, products: 0, registers: 0 };
@@ -104,45 +134,65 @@ export default function SubscriptionsAdminScreen() {
           )
         ) : (
           <>
-            {/* Tarjeta Plan Actual */}
-            <View style={[styles.heroCard, { backgroundColor: '#1E1B4B' }]}>
+            {/* Tarjeta Plan Actual: sigue el tema claro u oscuro del teléfono */}
+            <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: palette.primary }]}>
               <View style={styles.heroTop}>
-                <View>
-                  <Text style={styles.heroSub}>Tu plan vigente</Text>
-                  <Text style={styles.heroTitle}>{planName}</Text>
+                <View style={styles.flexShrink}>
+                  <Text style={[styles.heroSub, { color: colors.muted }]}>Tu plan vigente</Text>
+                  <Text style={[styles.heroTitle, { color: colors.text }]}>{planName}</Text>
                 </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor: isActive ? 'rgba(22,163,74,0.2)' : 'rgba(217,119,6,0.2)',
-                      borderColor: isActive ? '#16A34A' : '#D97706',
-                    },
-                  ]}>
-                  <Text style={[styles.statusText, { color: isActive ? '#4ADE80' : '#FBBF24' }]}>
-                    {isActive ? 'Activo' : isTrial ? 'Prueba gratis' : 'Pago pendiente'}
-                  </Text>
+                <View style={[styles.statusBadge, { backgroundColor: status.background, borderColor: status.color }]}>
+                  <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
                 </View>
               </View>
 
-              {data.subscription?.current_period_ends_at && (
-                <Text style={styles.renewalText}>
-                  Próxima renovación:{' '}
-                  {new Date(data.subscription.current_period_ends_at).toLocaleDateString('es-PY', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
+              {periodEnd && (
+                <Text style={[styles.renewalText, { color: colors.muted }]}>
+                  {cancelScheduled ? 'Pasa a Gratuito el ' : 'Próxima renovación: '}
+                  {new Date(periodEnd).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' })}
                 </Text>
               )}
+            </View>
 
+            {/* Avisos: renovación cercana o datos de facturación incompletos */}
+            {daysLeft !== null && daysLeft <= 7 && !cancelScheduled && (
+              <View style={[styles.notice, { borderColor: daysLeft < 0 ? palette.danger : '#D97706' }]}>
+                <Ionicons name="alert-circle" size={18} color={daysLeft < 0 ? palette.danger : '#D97706'} />
+                <Text style={[styles.small, styles.flexShrink, { color: colors.text }]}>
+                  {daysLeft < 0
+                    ? `Tu plan venció hace ${Math.abs(daysLeft)} ${Math.abs(daysLeft) === 1 ? 'día' : 'días'}. Pagá para conservarlo.`
+                    : daysLeft === 0
+                      ? 'Tu plan se renueva hoy.'
+                      : `Tu plan se renueva en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}.`}
+                </Text>
+              </View>
+            )}
+
+            {/* Pagar: tarjeta o QR en la web, transferencia acá mismo */}
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: palette.success }]}>
+              <View style={styles.cardHeaderRow}>
+                <Ionicons name="wallet-outline" size={18} color={palette.success} />
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Pagar la suscripción</Text>
+              </View>
+              {missingBilling.length > 0 && (
+                <Text style={[styles.small, { color: '#B45309' }]}>
+                  Para pagar con tarjeta o QR completá tus datos de facturación (falta: {missingBilling.join(', ')}).
+                </Text>
+              )}
               <Pressable
-                onPress={() => void openWeb('/admin/subscriptions')}
-                style={styles.changePlanBtn}>
-                <Ionicons name="sparkles" size={16} color="#1E1B4B" />
-                <Text style={styles.changePlanText}>Gestionar plan en la web</Text>
+                onPress={() => void openWeb('/admin/subscriptions#pay')}
+                style={[styles.primaryBtn, { backgroundColor: palette.success }]}>
+                <Ionicons name="card-outline" size={16} color="#fff" />
+                <Text style={styles.primaryText}>Pagar con tarjeta o QR</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void openWeb('/admin/subscriptions/change-plan')}
+                style={[styles.outlineBtn, styles.centered, { borderColor: colors.border }]}>
+                <Text style={[styles.bold, { color: colors.text }]}>Cambiar de plan</Text>
               </Pressable>
             </View>
+
+            <SubscriptionTransferCard onChanged={reload} />
 
             {/* Cuotas de Uso del Plan */}
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -240,16 +290,22 @@ const styles = StyleSheet.create({
   outlineBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, marginTop: 8 },
   heroCard: {
     borderRadius: 18,
+    borderWidth: 1.5,
     padding: 18,
-    gap: 12,
+    gap: 10,
   },
+  flexShrink: { flexShrink: 1 },
+  centered: { alignItems: 'center' },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, padding: 12 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingVertical: 11 },
+  primaryText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   heroTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  heroSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
-  heroTitle: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: -0.4, marginTop: 2 },
+  heroSub: { fontSize: 12, fontWeight: '600' },
+  heroTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.4, marginTop: 2 },
   statusBadge: {
     borderWidth: 1,
     borderRadius: 12,
@@ -257,18 +313,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusText: { fontSize: 11, fontWeight: '800' },
-  renewalText: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
-  changePlanBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 10,
-    marginTop: 4,
-  },
-  changePlanText: { color: '#1E1B4B', fontSize: 13, fontWeight: '800' },
+  renewalText: { fontSize: 12 },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 12 },
   cardTitle: { fontSize: 15, fontWeight: '800' },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

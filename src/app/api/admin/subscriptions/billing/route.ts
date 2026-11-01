@@ -3,11 +3,15 @@ import { z } from 'zod'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { upsertBillingProfile } from '@/lib/saas/subscription-service'
+import { validateParaguayTaxId } from '@/lib/billing/paraguay-tax-id'
 
 const billingProfileSchema = z.object({
   business_name: z.string().trim().min(1, 'Ingresa la razón social.').max(200),
   ruc: z.string().trim().min(1, 'Ingresa el RUC o CI.').max(30)
-    .refine((value) => /\d/.test(value), 'El RUC o CI no es válido.'),
+    .superRefine((value, context) => {
+      const problem = validateParaguayTaxId(value)
+      if (problem) context.addIssue({ code: 'custom', message: problem })
+    }),
   billing_email: z.string().trim().email('El correo de facturación no es válido.').max(254),
   fiscal_address: z.string().trim().min(1, 'Ingresa la dirección fiscal.').max(500),
   phone: z.string().trim().min(1, 'Ingresa el teléfono.').max(50),

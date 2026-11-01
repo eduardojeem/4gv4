@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
+import { ManualPaymentForm } from './manual-payment-form'
 import type { EditForm, SuperAdminSubscription } from './types'
 import { PlanBadge, StatusBadge } from './subscription-badges'
 import {
@@ -52,6 +53,8 @@ type Props = {
   onEditFormChange: (form: EditForm) => void
   onSave: () => void
   onCopyValue: (value: string | null) => void
+  /** Se llama después de registrar un pago manual, para recargar los datos. */
+  onPaymentRecorded?: () => void
 }
 
 type DetailIcon = ComponentType<{ className?: string }>
@@ -127,8 +130,9 @@ export function SubscriptionDetailDialog({
   onEditFormChange,
   onSave,
   onCopyValue,
+  onPaymentRecorded,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'edit' | 'details'>('edit')
+  const [activeTab, setActiveTab] = useState<'edit' | 'details' | 'payment'>('edit')
 
   if (!sub) return null
 
@@ -269,6 +273,18 @@ export function SubscriptionDetailDialog({
             >
               <Building2 className="h-3.5 w-3.5 text-cyan-500" />
               Ficha del Tenant & Límites
+            </button>
+            <button
+              onClick={() => setActiveTab('payment')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
+                activeTab === 'payment'
+                  ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+              )}
+            >
+              <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+              Registrar pago
             </button>
           </div>
         </div>
@@ -512,6 +528,15 @@ export function SubscriptionDetailDialog({
             </div>
           )}
 
+          {activeTab === 'payment' && (
+            <ManualPaymentForm
+              subscriptionId={sub.id}
+              currentPlan={sub.plan}
+              suggestedAmount={sub.plan_details?.price_monthly ?? null}
+              onRecorded={() => onPaymentRecorded?.()}
+            />
+          )}
+
           {activeTab === 'details' && (
             <div className="space-y-6">
 
@@ -675,10 +700,13 @@ export function SubscriptionDetailDialog({
             <Button variant="ghost" size="sm" onClick={onClose} className="h-8 rounded-xl text-xs font-bold cursor-pointer">
               Cerrar
             </Button>
-            <Button size="sm" className="h-8 gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer" onClick={onSave} disabled={isSaving || !editForm}>
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {isSaving ? 'Guardando...' : 'Guardar Cambios'}
-            </Button>
+            {/* El pago manual tiene su propio botón: guardar acá no lo registra. */}
+            {activeTab !== 'payment' && (
+              <Button size="sm" className="h-8 gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer" onClick={onSave} disabled={isSaving || !editForm}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            )}
           </div>
         </DialogFooter>
 
