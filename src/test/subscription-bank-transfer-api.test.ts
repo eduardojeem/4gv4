@@ -5,18 +5,23 @@ const state = vi.hoisted(() => ({
   authenticated: true, role: 'admin', organizationRole: 'owner', superAdmin: false,
   record: { id: '00000000-0000-4000-8000-000000000001', organization_id: 'org-one', status: 'awaiting_receipt', receipt_path: null as string | null },
   create: vi.fn(), submit: vi.fn(), review: vi.fn(), lookup: vi.fn(), upload: vi.fn(), remove: vi.fn(), sign: vi.fn(), list: vi.fn(), settings: vi.fn(), plans: vi.fn(), updateSettings: vi.fn(),
+  // after() corre el callback en el acto para poder verificar el aviso.
+  after: vi.fn((callback: () => unknown) => { void callback() }), notifySubmitted: vi.fn(), notifyReviewed: vi.fn(), cancel: vi.fn(),
 }))
 vi.mock('@/lib/auth/request-auth', () => ({ resolveRequestAuthUser: async () => state.authenticated ? { authenticated: true, user: { id: 'actor', role: state.role } } : { authenticated: false, reason: 'unauthenticated' } }))
 vi.mock('@/lib/saas/context', () => ({ getCurrentOrganizationContext: async () => ({ id: 'org-one', role: state.organizationRole }) }))
 vi.mock('@/lib/superadmin/auth', () => ({ getSuperAdminUser: async () => state.superAdmin ? { id: 'actor', role: 'super_admin' } : null }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ storage: { from: () => ({ upload: state.upload, remove: state.remove, createSignedUrl: state.sign }) } }) }))
+vi.mock('next/server', async (importOriginal) => ({ ...await importOriginal<typeof import('next/server')>(), after: state.after }))
+vi.mock('@/lib/saas/bank-transfer-notifications', () => ({ notifyTransferReceiptSubmitted: state.notifySubmitted, notifyTransferReviewed: state.notifyReviewed }))
 vi.mock('@/lib/saas/bank-transfers', () => ({
   BankTransferError: class extends Error { constructor(readonly code: string, message: string, readonly status: number) { super(message) } },
-  createBankTransferRequest: state.create, submitBankTransferReceipt: state.submit, reviewBankTransferRequest: state.review,
+  createBankTransferRequest: state.create, submitBankTransferReceipt: state.submit, cancelBankTransferRequest: state.cancel, reviewBankTransferRequest: state.review,
   getBankTransferRequest: state.lookup, listBankTransferRequests: state.list, getBankTransferSettings: state.settings, getEligibleBankTransferPlans: state.plans, updateBankTransferSettings: state.updateSettings,
 }))
 import { BankTransferError } from '@/lib/saas/bank-transfers'
 import { GET as listTenant, POST as create } from '@/app/api/admin/subscriptions/transfers/route'
+import { POST as cancel } from '@/app/api/admin/subscriptions/transfers/[id]/cancel/route'
 import { GET as receipt, POST as submit } from '@/app/api/admin/subscriptions/transfers/[id]/receipt/route'
 import { POST as review } from '@/app/api/superadmin/subscription-transfers/[id]/review/route'
 import { GET as superReceipt } from '@/app/api/superadmin/subscription-transfers/[id]/receipt/route'
@@ -42,6 +47,19 @@ beforeEach(() => {
 })
 
 describe('límites de confianza de pagos por transferencia', () => {
+  it('cancela una solicitud propia y respeta el rol y el origen', async () => {
+    state.cancel.mockResolvedValue({ ...state.record, status: 'cancelled' })
+    expect((await cancel(json({}, 'https://evil.test'), context())).status).toBe(403)
+    state.organizationRole = 'cashier'
+    expect((await cancel(json({}), context())).status).toBe(403)
+    expect(state.cancel).not.toHaveBeenCalled()
+    state.organizationRole = 'owner'
+    const response = await cancel(json({}), context())
+    expect(response.status).toBe(200)
+    expect(state.cancel).toHaveBeenCalledWith('org-one', 'actor', state.record.id)
+    state.cancel.mockRejectedValue(new BankTransferError('TRANSFER_INVALID_STATE', 'Ya procesada', 409))
+    expect((await cancel(json({}), context())).status).toBe(409)
+  })
   it('rechaza usuarios sin sesión o sin rol de facturación antes de crear', async () => {
     state.authenticated = false; expect((await create(json({ planCode: 'PRO' }))).status).toBe(401)
     state.authenticated = true; state.organizationRole = 'cashier'; expect((await create(json({ planCode: 'PRO' }))).status).toBe(403)
@@ -75,6 +93,7 @@ describe('límites de confianza de pagos por transferencia', () => {
     expect(state.upload).not.toHaveBeenCalled()
     expect((await submit(multipart(), context())).status).toBe(200)
     expect(state.submit).toHaveBeenCalledWith('org-one', 'actor', state.record.id, expect.objectContaining({ mimeType: 'application/pdf' }))
+    expect(state.notifySubmitted).toHaveBeenCalledTimes(1)
     expect(state.review).not.toHaveBeenCalled()
   })
   it('no borra el comprobante confirmado si se pierde la respuesta tras commit', async () => {
@@ -104,6 +123,7 @@ describe('límites de confianza de pagos por transferencia', () => {
     expect((await review(json({ decision: 'reject', reason: '' }), context())).status).toBe(400)
     expect((await review(json({ decision: 'approve', bankOperationReference: 'BANK-1' }), context())).status).toBe(200)
     expect(state.review).toHaveBeenCalledWith('actor', state.record.id, expect.objectContaining({ decision: 'approved', bankOperationReference: 'BANK-1' }))
+    expect(state.notifyReviewed).toHaveBeenCalledTimes(1)
   })
   it('protege configuración bancaria y valida los datos antes de guardarlos', async () => {
     const settings = { enabled: true, bankName: 'Banco', accountHolder: 'Titular', accountNumber: '123', accountAlias: '', currency: 'PYG', instructions: '' }

@@ -76,7 +76,7 @@ const extensionFor = (mime: string) => (mime === 'image/png' ? 'png' : mime === 
  * expo-file-system (fetch no abre las rutas file:// con caracteres codificados).
  * En web, la imagen elegida ya es un blob: del navegador.
  */
-async function formDataFile(uri: string, name: string, type: string): Promise<Blob> {
+export async function formDataFile(uri: string, name: string, type: string): Promise<Blob> {
   if (Platform.OS === 'web') return (await fetch(uri)).blob();
   const file = new File(uri);
   return { name, type, size: file.size, bytes: () => file.bytes() } as unknown as Blob;

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { after } from 'next/server'
+import { notifyTransferReceiptSubmitted } from '@/lib/saas/bank-transfer-notifications'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { BANK_TRANSFER_RECEIPT_BUCKET } from '@/lib/saas/bank-transfer-contract'
@@ -54,6 +56,7 @@ export async function POST(request: Request, context: Context) {
     uploadedRequestId = id
     const updated = await submitBankTransferReceipt(organization.id, user.id, id, { path, mimeType: format.mimeType as 'image/jpeg' | 'image/png' | 'application/pdf', size: file.size, operationReference })
     uploadedPath = null
+    after(() => notifyTransferReceiptSubmitted(updated))
     return transferJson({ request: updated })
   } catch (error) {
     if (uploadedPath && uploadedOrganizationId && uploadedRequestId && error instanceof BankTransferError && error.code !== 'TRANSFER_UNAVAILABLE') {

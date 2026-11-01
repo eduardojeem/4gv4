@@ -12,7 +12,7 @@ import { bankTransferSettingsSchema, type BankTransferRequest, type BankTransfer
 
 type RequestRow = BankTransferRequest & { organization_name?: string }
 const STATUS_LABELS: Record<BankTransferStatus, string> = {
-  awaiting_receipt: 'Esperando comprobante', pending_review: 'Pendiente de revisión', approved: 'Aprobada', rejected: 'Rechazada',
+  awaiting_receipt: 'Esperando comprobante', pending_review: 'Pendiente de revisión', approved: 'Aprobada', rejected: 'Rechazada', cancelled: 'Cancelada',
 }
 const EMPTY_SETTINGS: BankTransferSettings = { enabled: false, bankName: '', accountHolder: '', accountNumber: '', accountAlias: '', currency: 'PYG', instructions: '' }
 const money = (amount: number) => new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(amount)

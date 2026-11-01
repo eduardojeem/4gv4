@@ -29,7 +29,7 @@ export class SubscriptionCheckoutError extends Error {
   }
 }
 
-function getMissingBillingFields(
+export function getMissingBillingFields(
   profile: Awaited<ReturnType<typeof getCurrentOrganizationSubscription>>['billingProfile']
 ) {
   const missing: string[] = []
