@@ -1,4 +1,5 @@
 import 'server-only'
+import { completeDueAccountDeletions } from '@/lib/account/account-deletion'
 import { reconcilePendingPagoparPayments } from '@/lib/saas/pagopar-reconciliation'
 import { sendPlanGraceNotifications } from '@/lib/saas/plan-grace-notifications'
 import { runSubscriptionAutopay } from '@/lib/saas/subscription-autopay'
@@ -17,6 +18,7 @@ export const DAILY_BILLING_TASKS: Record<string, () => Promise<unknown>> = {
   subscriptionAutopay: () => runSubscriptionAutopay(),
   planGraceNotifications: () => sendPlanGraceNotifications(),
   subscriptionReminders: () => sendSubscriptionReminders(),
+  accountDeletions: () => completeDueAccountDeletions(),
 }
 
 export async function runDailyBillingTasks(
