@@ -7,7 +7,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { mapOrganizationRoleToDashboardRole } from '@/lib/auth/section-access'
 import { getDashboardPermissionsForOrganizationRole } from '@/lib/auth/organization-dashboard-permissions'
-import { filterDashboardNavGroups, getMobileDashboardItems } from '@/config/dashboard-navigation'
+import { filterDashboardNavGroups, getBusinessFocusSection, getMobileDashboardItems } from '@/config/dashboard-navigation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 
@@ -46,7 +46,7 @@ export async function GET() {
       hasPermission: (permission) => role === 'super_admin' || permissions.has(permission),
       businessVertical: planInfo.businessVertical,
     })
-    const tabs = getMobileDashboardItems(groups, 4)
+    const tabs = getMobileDashboardItems(groups, 4, planInfo.businessVertical)
 
     const profileRow = profile.data as { full_name?: string | null; avatar_url?: string | null } | null
 
@@ -79,6 +79,8 @@ export async function GET() {
         items: group.items.map(({ key, label, mobileLabel, href, description }) => ({ key, label, mobileLabel: mobileLabel ?? null, href, description })),
       })),
       tabs: tabs.map((item) => item.key),
+      // Ordena los accesos rápidos del inicio según el rubro.
+      businessFocus: getBusinessFocusSection(groups, planInfo.businessVertical),
     })
   } catch (error) {
     logger.error('[mobile-dashboard] No se pudo armar el menú', error)

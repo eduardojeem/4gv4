@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FirstStepsCard } from '@/components/first-steps-card';
@@ -28,6 +28,17 @@ type Summary = {
 };
 
 const ACTIVITY_ICONS = { sale: 'cart-outline', repair: 'construct-outline', customer: 'person-add-outline' } as const;
+
+type QuickLink = { key: string; label: string; icon: ComponentProps<typeof Ionicons>['name']; route: string };
+
+/** Qué secciones van primero en los accesos rápidos según el rubro. */
+const QUICK_ORDER: Record<'repairs' | 'agenda' | 'default', string[]> = {
+  repairs: ['repairs', 'technician', 'customers', 'pos', 'cash-register', 'products'],
+  agenda: ['agenda', 'customers', 'pos', 'cash-register', 'products'],
+  default: ['pos', 'products', 'orders', 'inventory-count', 'customers', 'cash-register'],
+};
+// Presupuestos e inventario del taller ya tienen su tarjeta en «Taller».
+const QUICK_HIDDEN = new Set(['overview', 'quotes', 'repair-inventory']);
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? 'Buen día' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -49,7 +60,7 @@ function timeAgo(iso: string) {
 
 export default function PanelOverview() {
   const colors = usePalette();
-  const { data: panel, error: panelError, reload: reloadPanel, findItem } = usePanel();
+  const { data: panel, error: panelError, reload: reloadPanel, findItem, can } = usePanel();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [scopedError, setScopedError] = useState<{ scope: string; message: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +134,26 @@ export default function PanelOverview() {
   }, [reloadPanel]);
 
   const firstName = (panel?.user.name ?? '').split(' ')[0];
-  const quick = (panel?.groups.flatMap((group) => group.items) ?? []).filter((item) => !['overview', 'quotes', 'repair-inventory'].includes(item.key)).slice(0, 8);
+  const focus = panel?.businessFocus ?? null;
+  // Primero lo que se crea a diario en el rubro, después sus secciones y el resto.
+  const createLinks: QuickLink[] = focus === 'repairs'
+    ? (can('repairs.orders.create') ? [{ key: 'new-repair', label: 'Nueva reparación', icon: 'add-circle-outline', route: '/panel/repairs/new' }] : [])
+    : focus === 'agenda'
+      ? [{ key: 'new-appointment', label: 'Nuevo turno', icon: 'add-circle-outline', route: '/panel/agenda/form' }]
+      : can('products.create') ? [{ key: 'new-product', label: 'Nuevo producto', icon: 'add-circle-outline', route: '/panel/products/form' }] : [];
+  const order = QUICK_ORDER[focus ?? 'default'];
+  const rank = (key: string) => (order.includes(key) ? order.indexOf(key) : order.length);
+  const sectionLinks: QuickLink[] = (panel?.groups.flatMap((group) => group.items) ?? [])
+    .filter((item) => !QUICK_HIDDEN.has(item.key))
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => rank(a.item.key) - rank(b.item.key) || a.index - b.index)
+    .map(({ item }) => ({
+      key: item.key,
+      label: `${item.mobileLabel ?? item.label}${!hasNativePanelSection(item.key) ? ' · Web' : ''}`,
+      icon: iconFor(item.key),
+      route: panelRoute(item.key),
+    }));
+  const quick = [...createLinks, ...sectionLinks].slice(0, 8);
   const visibleSummary = summary?.organizationId === organizationId && summary.branchId === branchId ? summary : null;
   const visibleWorkshopMetrics = workshopMetrics.scope === scopeKey ? workshopMetrics : null;
   const showWorkshopSection = has('quotes') || has('repair-inventory');
@@ -263,12 +293,13 @@ export default function PanelOverview() {
             {quick.map((item) => (
               <Pressable
                 key={item.key}
-                onPress={() => router.navigate(panelRoute(item.key) as never)}
+                onPress={() => router.navigate(item.route as never)}
+                accessibilityRole="button"
                 style={({ pressed }) => [styles.quick, { opacity: pressed ? 0.7 : 1 }]}>
                 <View style={[styles.quickIcon, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Ionicons name={iconFor(item.key)} size={22} color={palette.primary} />
+                  <Ionicons name={item.icon} size={22} color={palette.primary} />
                 </View>
-                <Text numberOfLines={2} style={[styles.quickLabel, { color: colors.text }]}>{item.mobileLabel ?? item.label}{!hasNativePanelSection(item.key) ? ' · Web' : ''}</Text>
+                <Text numberOfLines={2} style={[styles.quickLabel, { color: colors.text }]}>{item.label}</Text>
               </Pressable>
             ))}
           </View>

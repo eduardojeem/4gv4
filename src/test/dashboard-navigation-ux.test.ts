@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import {
   dashboardNavGroups,
   filterDashboardNavGroups,
+  getBusinessFocusSection,
   getDashboardNavItemByPath,
   getMobileDashboardItems,
 } from '@/config/dashboard-navigation'
@@ -86,17 +87,30 @@ describe('dashboard navigation information architecture', () => {
     expect(getMobileDashboardItems(groups, 5).map((item) => item.key)).toEqual([
       'overview',
       'pos',
-      'products',
       'repairs',
+      'products',
       'customers',
     ])
+  })
+
+  it('puts the business focus section in the bottom bar instead of products', () => {
+    const allModules = ['pos', 'orders', 'inventory', 'repairs', 'services', 'crm']
+    const tabsFor = (vertical: string, modules = allModules) => {
+      const groups = filterDashboardNavGroups({ role: 'admin', effectiveModules: modules, hasPermission: () => true, businessVertical: vertical })
+      return { tabs: getMobileDashboardItems(groups, 4, vertical).map((item) => item.key), focus: getBusinessFocusSection(groups, vertical) }
+    }
+
+    expect(tabsFor('electronics')).toEqual({ tabs: ['overview', 'pos', 'repairs', 'orders'], focus: 'repairs' })
+    expect(tabsFor('barbershop')).toEqual({ tabs: ['overview', 'pos', 'agenda', 'orders'], focus: 'agenda' })
+    expect(tabsFor('clothing', ['pos', 'orders', 'inventory', 'crm'])).toEqual({ tabs: ['overview', 'pos', 'orders', 'products'], focus: null })
+    expect(findItem('agenda')).toMatchObject({ mobileLabel: 'Reservas' })
   })
 
   it('keeps the bottom bar readable on 320px screens', () => {
     expect(findItem('pos')).toMatchObject({ mobileLabel: 'POS' })
 
     const mobile = read('src/components/dashboard/mobile-nav.tsx')
-    expect(mobile).toContain('getMobileDashboardItems(groups, 4)')
+    expect(mobile).toContain('getMobileDashboardItems(groups, 4, businessVertical)')
     expect(mobile).toContain('item.mobileLabel ?? item.label')
   })
 
