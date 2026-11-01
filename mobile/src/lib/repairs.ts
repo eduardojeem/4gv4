@@ -533,6 +533,8 @@ export type RepairEdit = {
   deviceType: NewRepairInput['device_type'];
   brand: string;
   model: string;
+  imei?: string | null;
+  serialNumber?: string | null;
   issue: string;
   description: string;
   priority: 'low' | 'medium' | 'high';
@@ -548,6 +550,9 @@ export async function updateRepair(id: string, edit: RepairEdit) {
       deviceType: edit.deviceType,
       brand: edit.brand.trim(),
       model: edit.model.trim(),
+      imei: edit.imei?.trim() || null,
+      serial_number: (edit.serialNumber ?? edit.imei)?.trim() || null,
+      serialNumber: (edit.serialNumber ?? edit.imei)?.trim() || null,
       issue: edit.issue.trim(),
       description: edit.description.trim() || null,
       priority: edit.priority,
