@@ -214,6 +214,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     )
   }
 
+  // Con un cupo de productos nuevo, cada tienda del plan se reevalúa: a la que
+  // le sobran productos se le abre el plazo de 7 días, igual que al bajar de
+  // plan, y la que vuelve a entrar recupera lo que se le había apagado.
+  if (technicalLimits && 'products' in technicalLimits) {
+    const { data: stores } = await admin.from('subscriptions').select('organization_id').eq('plan', technicalCode)
+    for (const store of stores ?? []) {
+      const { error: syncError } = await admin.rpc('sync_plan_downgrade_grace', {
+        p_organization_id: store.organization_id,
+        p_plan_code: technicalCode,
+      })
+      if (syncError) {
+        console.error('[superadmin/plans] No se pudo reevaluar el cupo de productos', { organizationId: store.organization_id, code: syncError.code })
+      }
+    }
+  }
+
   await admin.from('tenant_audit_log').insert({
     user_id: user.id,
     action: 'subscription_plan.updated',

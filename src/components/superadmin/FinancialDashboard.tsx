@@ -27,6 +27,12 @@ export type FinancialData = {
   billingSubscriptions: number
   /** De esas, cuántas no tienen precio de plan: el MRR está incompleto. */
   unpricedSubscriptions: number
+  /** Facturan sin un pago registrado en el último mes (activación manual o por código). */
+  uncollectedSubscriptions: number
+  /** Comercios que pagaron el mes anterior y ya no están en un plan pago. */
+  churnedOrganizations: number
+  /** Comprobantes de transferencia esperando revisión. */
+  pendingTransfers: number
   potentialMrr: number
   churnedMrr: number
   churnRate: number
@@ -97,7 +103,7 @@ function Metric({
     </>
   )
   return (
-    <Card className="rounded-xl">
+    <Card className="gap-0 rounded-xl py-0">
       <CardContent className="p-4">
         {href ? (
           <Link href={href} className="group block">
@@ -118,6 +124,15 @@ function AttentionList({ data }: { data: FinancialData }) {
   const { counts } = data
   const items: Array<{ icon: typeof AlertTriangle; tone: string; title: string; desc: string; href?: string }> = []
 
+  if (data.pendingTransfers > 0) {
+    items.push({
+      icon: Clock,
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300',
+      title: `${data.pendingTransfers} ${data.pendingTransfers === 1 ? 'transferencia' : 'transferencias'} por revisar`,
+      desc: 'El plan se activa recién cuando aprobás el comprobante',
+      href: '/superadmin/billing/transfers',
+    })
+  }
   if (data.unpricedSubscriptions > 0) {
     items.push({
       icon: AlertTriangle,
@@ -168,7 +183,7 @@ function AttentionList({ data }: { data: FinancialData }) {
       icon: TrendingDown,
       tone: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300',
       title: `${gs(data.churnedMrr)} de MRR perdido en 30 días`,
-      desc: 'Por cancelaciones y suspensiones',
+      desc: `${data.churnedOrganizations} ${data.churnedOrganizations === 1 ? 'comercio que pagaba dejó' : 'comercios que pagaban dejaron'} de hacerlo`,
     })
   }
 
@@ -261,12 +276,22 @@ export function FinancialDashboard({ data }: { data: FinancialData }) {
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
       <PageHeader
         icon={Banknote}
-        title="Resumen"
-        description="Lo que factura la plataforma, lo que cuesta operarla y lo que necesita atención. El detalle de cada tema está en su sección."
+        title="Facturación"
+        description="Cuánto factura la plataforma, cuánto cuesta operarla y qué necesita atención."
         actions={
-          <Button variant="outline" size="sm" onClick={() => router.refresh()}>
-            <RefreshCw className="h-3.5 w-3.5" /> Actualizar
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/superadmin/billing/transfers">
+                Transferencias
+                {data.pendingTransfers > 0 && (
+                  <Badge className="ml-1 rounded-full bg-emerald-600 px-1.5 text-[10px] text-white">{data.pendingTransfers}</Badge>
+                )}
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
+            </Button>
+          </div>
         }
       />
 
@@ -277,10 +302,15 @@ export function FinancialDashboard({ data }: { data: FinancialData }) {
           tone={data.unpricedSubscriptions > 0 ? 'warn' : undefined}
           detail={
             <>
-              {data.billingSubscriptions} suscripciones que facturan · ARR {gs(data.arr)}
+              {data.billingSubscriptions} {data.billingSubscriptions === 1 ? 'suscripción factura' : 'suscripciones facturan'} · ARR {gs(data.arr)}
               {data.unpricedSubscriptions > 0 && (
                 <span className="block font-semibold text-amber-700 dark:text-amber-300">
                   Incompleto: {data.unpricedSubscriptions} con plan sin precio
+                </span>
+              )}
+              {data.uncollectedSubscriptions > 0 && (
+                <span className="block text-muted-foreground">
+                  {data.uncollectedSubscriptions} sin cobro este mes (manual o por código), a precio de lista
                 </span>
               )}
             </>
@@ -307,14 +337,14 @@ export function FinancialDashboard({ data }: { data: FinancialData }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric size="sm" label="MRR potencial" value={gs(data.potentialMrr)} detail={`${counts.trialing} trials por convertir`} />
-        <Metric size="sm" label="MRR perdido (30 días)" value={gs(data.churnedMrr)} tone={data.churnedMrr > 0 ? 'bad' : undefined} detail="Cancelaciones y suspensiones" />
+        <Metric size="sm" label="MRR potencial" value={gs(data.potentialMrr)} detail={`${counts.trialing} en prueba por convertir`} />
+        <Metric size="sm" label="MRR perdido (30 días)" value={gs(data.churnedMrr)} tone={data.churnedMrr > 0 ? 'bad' : undefined} detail={`${data.churnedOrganizations} ${data.churnedOrganizations === 1 ? 'comercio dejó' : 'comercios dejaron'} de pagar`} />
         <Metric
           size="sm"
-          label="Churn (30 días)"
+          label="Bajas (30 días)"
           value={`${data.churnRate.toLocaleString('es-PY')}%`}
           tone={data.churnRate > 5 ? 'bad' : data.churnRate > 2 ? 'warn' : 'good'}
-          detail="Bajas sobre activas del período"
+          detail="De los comercios que pagaron el mes anterior"
         />
         <Metric
           size="sm"

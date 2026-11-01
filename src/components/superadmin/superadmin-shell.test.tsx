@@ -36,7 +36,7 @@ describe('SuperAdminShell', () => {
     navigationState.pathname = '/superadmin/billing'
     const user = userEvent.setup()
     render(<SuperAdminShell userEmail="admin@example.com"><p>Contenido</p></SuperAdminShell>)
-    const group = screen.getByRole('button', { name: 'Facturacion' })
+    const group = screen.getByRole('button', { name: 'Facturación' })
     expect(group).toHaveAttribute('aria-expanded', 'true')
     await user.click(group)
     expect(group).toHaveAttribute('aria-expanded', 'false')
@@ -101,7 +101,7 @@ describe('SuperAdminShell', () => {
     expect(screen.getAllByRole('link', { name: /Organizaciones/ }).some((link) => link.getAttribute('href') === '/superadmin/organizations')).toBe(true)
     expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'true')
     const billingGroup = screen
-      .getAllByRole('button', { name: 'Facturacion' })
+      .getAllByRole('button', { name: 'Facturación' })
       .find((button) => button.getAttribute('aria-expanded') === 'false')
 
     expect(billingGroup).toBeDefined()
@@ -117,7 +117,7 @@ describe('SuperAdminShell', () => {
       </SuperAdminShell>
     )
 
-    expect(screen.getAllByRole('button', { name: 'Facturacion' }).find(
+    expect(screen.getAllByRole('button', { name: 'Facturación' }).find(
       (button) => button.getAttribute('aria-expanded') === 'false'
     )).toBeDefined()
     expect(screen.getByRole('button', { name: /Monitoreo/ })).toHaveAttribute('aria-expanded', 'true')

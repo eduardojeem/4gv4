@@ -713,7 +713,7 @@ export function SubscriptionsClientView({
                     ¿Cómo funciona tu suscripción y facturación?
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
-                    Información clave sobre ciclos de facturación, emisión legal y migración de planes
+                    Cómo se cobra, qué pasa si no pagás y cómo cambiar de plan
                   </CardDescription>
                 </div>
               </div>
@@ -865,7 +865,7 @@ export function SubscriptionsClientView({
                         <TableHead className="font-bold text-xs">Monto</TableHead>
                         <TableHead className="font-bold text-xs">Estado</TableHead>
                         <TableHead className="font-bold text-xs">Referencia / Voucher</TableHead>
-                        <TableHead className="font-bold text-xs text-right">Comprobante</TableHead>
+                        <TableHead className="font-bold text-xs text-right">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -936,11 +936,20 @@ export function SubscriptionsClientView({
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              {payment.receipt_url ? (
+                              {/* receipt_url es la página de pago de Pagopar, no un recibo:
+                                  sirve para terminar un pago pendiente. Un pago cobrado
+                                  muestra el detalle verificado contra Pagopar. */}
+                              {payment.status === 'pending' && payment.receipt_url ? (
                                 <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
                                   <a href={payment.receipt_url} target="_blank" rel="noreferrer">
                                     <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                                    Ver recibo
+                                    Continuar pago
+                                  </a>
+                                </Button>
+                              ) : payment.status === 'paid' && payment.provider === 'pagopar' && payment.external_reference ? (
+                                <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
+                                  <a href={`/admin/subscriptions/payments?hash=${encodeURIComponent(payment.external_reference)}`}>
+                                    Ver detalle
                                   </a>
                                 </Button>
                               ) : (
@@ -978,7 +987,7 @@ export function SubscriptionsClientView({
                     Datos para tus facturas
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs">
-                    Con estos datos se emiten y timbran las facturas legales de tu suscripción
+                    Con estos datos se identifica al comprador en cada pago de la suscripción
                   </CardDescription>
                 </div>
               </div>

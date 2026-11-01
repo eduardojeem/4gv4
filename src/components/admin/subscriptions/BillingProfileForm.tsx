@@ -9,16 +9,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { BillingProfile } from '@/lib/saas/subscription-service'
+import { validateParaguayTaxId } from '@/lib/billing/paraguay-tax-id'
 
 type EditableProfile = Pick<BillingProfile, 'business_name' | 'ruc' | 'billing_email' | 'fiscal_address' | 'phone'>
 type ProfileErrors = Partial<Record<keyof EditableProfile, string>>
 
 function validateProfile(values: EditableProfile) {
   const errors: ProfileErrors = {}
-  const ruc = values.ruc?.replace(/[^\d]/g, '') || ''
 
   if (!values.business_name?.trim()) errors.business_name = 'Ingresá la razón social.'
-  if (!ruc) errors.ruc = 'Ingresá el RUC o la cédula.'
+  const rucError = validateParaguayTaxId(values.ruc)
+  if (rucError) errors.ruc = rucError
   if (!values.billing_email?.trim()) errors.billing_email = 'Ingresá el correo de facturación.'
   if (values.billing_email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.billing_email.trim())) {
     errors.billing_email = 'Ese correo no parece válido.'

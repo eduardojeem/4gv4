@@ -83,7 +83,7 @@ describe('SubscriptionsClientView component', () => {
     billingProfile: {
       organization_id: 'org-1',
       business_name: 'Comercial Mi Tienda S.A.',
-      ruc: '80012345-6',
+      ruc: '80012345-0',
       billing_email: 'contabilidad@mitienda.com',
       fiscal_address: 'Avda. Principal 123',
       phone: '0981123456',
@@ -238,7 +238,7 @@ describe('SubscriptionsClientView component', () => {
 
     expect(screen.getByText('Datos para tus facturas')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Comercial Mi Tienda S.A.')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('80012345-6')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('80012345-0')).toBeInTheDocument()
     window.location.hash = ''
   })
 })
@@ -382,7 +382,7 @@ describe('las otras tres pestañas', () => {
         billingProfile={{
           organization_id: 'org-1',
           business_name: 'Mi Empresa S.A.',
-          ruc: '80012345-6',
+          ruc: '80012345-0',
           billing_email: 'facturas@empresa.com',
           fiscal_address: 'Avda. Principal 123',
           phone: '0981123456',

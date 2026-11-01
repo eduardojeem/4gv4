@@ -463,6 +463,17 @@ export function PlansPageContent() {
   }
 
   async function handleToggleActive(plan: SubscriptionPlan) {
+    const stores = stats?.orgsByPlan?.[plan.tier.toUpperCase()] ?? 0
+    if (plan.is_active && stores > 0) {
+      toast.error(`${plan.name} tiene ${stores === 1 ? '1 tienda' : `${stores} tiendas`}: pasalas a otro plan antes de desactivarlo.`)
+      return
+    }
+    const ok = window.confirm(
+      plan.is_active
+        ? `¿Desactivar ${plan.name}? Deja de aparecer en la página de precios y no se puede contratar.`
+        : `¿Activar ${plan.name}? Aparece en la página de precios y se puede contratar.`,
+    )
+    if (!ok) return
     setTogglingId(plan.id)
     try {
       await updateSubscriptionPlan(plan.id, { is_active: !plan.is_active })
@@ -577,7 +588,7 @@ export function PlansPageContent() {
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Actualizar
             </Button>
             <Button variant="outline" size="sm" onClick={exportJson} disabled={loading || plans.length === 0}>
-              <Download className="h-3.5 w-3.5" /> Exportar JSON
+              <Download className="h-3.5 w-3.5" /> Exportar
             </Button>
             <Button
               size="sm"
@@ -612,7 +623,7 @@ export function PlansPageContent() {
             )}
           >
             <CreditCard className="h-3.5 w-3.5 text-violet-500" />
-            Pricing Cards
+            Tarjetas
           </button>
           <button
             onClick={() => setActiveTab('table')}
@@ -624,7 +635,7 @@ export function PlansPageContent() {
             )}
           >
             <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-            Comparativa & Features
+            Comparativa
           </button>
         </div>
 
@@ -688,15 +699,15 @@ export function PlansPageContent() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h2 className="text-base sm:text-lg font-black text-slate-950 dark:text-slate-50 tracking-tight">
-                  Matriz Comparativa de Features y Módulos
+                  Funciones y límites por plan
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Hacé clic directamente en ✓ o — para activar o desactivar una función en un plan en tiempo real.
+                  Tocá ✓ o — para activar o quitar una función. El cambio se aplica al instante a las tiendas del plan.
                 </p>
               </div>
               <Badge variant="outline" className="gap-1.5 rounded-full text-xs font-bold w-fit bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Edición en Vivo
+                Se aplica al instante
               </Badge>
             </div>
           </CardHeader>

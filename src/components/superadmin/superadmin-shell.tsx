@@ -148,7 +148,7 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    title: 'Facturacion',
+    title: 'Facturación',
     href: '/superadmin/billing',
     icon: Banknote,
     description: 'Ingresos, costos, planes y suscripciones',

@@ -9,7 +9,7 @@ type RevenueSubscription = {
   paymentStatus?: string | null
 }
 
-type PlanPrices = Record<string, number>
+export type PlanPrices = Record<string, number>
 
 /**
  * Código de plan para ingresos. Los alias históricos se unifican; un código
