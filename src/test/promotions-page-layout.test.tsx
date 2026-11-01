@@ -134,7 +134,7 @@ describe('/dashboard/promotions — reparto en pestañas', () => {
     // Los titulos cambiaron de redaccion; lo que importa es que sigan siendo
     // dos nombres distintos: el automatico por descuento y el de banners.
     expect(screen.getByText('Carrusel de Productos Rebajados')).toBeInTheDocument()
-    expect(screen.getByText('Banners Publicitarios y Campañas')).toBeInTheDocument()
+    expect(screen.getByText('Banners de la página /ofertas')).toBeInTheDocument()
   })
 
   it('deja las alertas fuera de las pestañas, para que no se pierdan', async () => {

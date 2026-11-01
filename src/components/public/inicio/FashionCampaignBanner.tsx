@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
@@ -38,6 +39,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const { settings } = useWebsiteSettings()
+  const storefrontStyle = useStorefrontStyle()
 
   const { data: products } = useSWR(
     newestProductsKey(tenantSlug),
@@ -275,7 +277,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
                   {currentProduct?.has_variants && (
                     <span className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10 backdrop-blur-xs">
                       <ShoppingBag className="h-3 w-3 text-amber-300" />
-                      Varios talles y colores
+                      {storefrontStyle === 'tech' ? 'Modelos y capacidades' : 'Varios talles y colores'}
                     </span>
                   )}
 

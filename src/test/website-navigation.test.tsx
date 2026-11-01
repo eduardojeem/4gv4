@@ -14,7 +14,7 @@ describe('website navigation', () => {
     fireEvent.change(screen.getByLabelText('Editar sección'), { target: { value: 'services' } })
     expect(change).toHaveBeenCalledWith('services')
     expect(screen.getByLabelText('Editar sección')).toHaveValue('company')
-    fireEvent.click(screen.getByRole('button', { name: 'Banners promocionales' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Banners del inicio' }))
     expect(change).toHaveBeenCalledWith('carousel')
   })
 })

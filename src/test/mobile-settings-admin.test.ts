@@ -31,6 +31,7 @@ import {
   toBusinessProfile,
   type OrgSettings,
 } from '../../mobile/src/lib/settings-model'
+import { normalizeCountryCode, normalizeLocaleCode } from '../lib/regional/contract'
 
 const row = {
   company_name: 'Mi Tienda', company_ruc: '80000000-1', company_email: 'hola@tienda.test', company_phone: '0981123456',
@@ -94,6 +95,27 @@ describe('guardado parcial: solo viaja lo que cambió', () => {
 
   it('números y moneda se comparan por valor', () => {
     expect(changedSettings(saved, { ...saved, taxRate: 5, currency: 'USD' })).toEqual({ taxRate: 5, currency: 'USD' })
+  })
+
+  it('el país y locale confirmados viajan como cambios para que el servidor los persista', () => {
+    expect(changedSettings(saved, { ...saved, countryCode: 'PY' as any, locale: 'es-PY' as any })).toEqual({ countryCode: 'PY', locale: 'es-PY' })
+  })
+})
+
+describe('normalización regional resistente a entornos móviles', () => {
+  it('normaliza países soportados sin depender de Intl.DisplayNames', () => {
+    expect(normalizeCountryCode('py')).toBe('PY')
+    expect(normalizeCountryCode('BR')).toBe('BR')
+    expect(normalizeCountryCode('ar')).toBe('AR')
+    expect(normalizeCountryCode('US')).toBe('US')
+    expect(normalizeCountryCode('invalid')).toBeNull()
+  })
+
+  it('normaliza locales conocidos sin depender de Intl.getCanonicalLocales', () => {
+    expect(normalizeLocaleCode('es-py')).toBe('es-PY')
+    expect(normalizeLocaleCode('pt-br')).toBe('pt-BR')
+    expect(normalizeLocaleCode('es-ar')).toBe('es-AR')
+    expect(normalizeLocaleCode('en-us')).toBe('en-US')
   })
 })
 

@@ -204,16 +204,32 @@ export default function WebsiteAdminPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold">Sitio web</h1>
               {settings && (
-                <span
-                  role="status"
+                <button
+                  type="button"
+                  onClick={() => !isPublic && navigateTo('company', 'website-visibility')}
+                  disabled={isPublic}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs',
-                    isPublic ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                    'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs transition-colors',
+                    isPublic
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-default'
+                      : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300 cursor-pointer',
                   )}
+                  title={isPublic ? 'Tu tienda está publicada' : 'Hacé clic para publicar tu tienda'}
                 >
                   <span className={cn('h-1.5 w-1.5 rounded-full', isPublic ? 'bg-emerald-500' : 'bg-amber-500')} />
                   {isPublic ? 'Publicada' : 'Sin publicar'}
-                </span>
+                </button>
+              )}
+              {!isPublic && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigateTo('company', 'website-visibility')}
+                  className="h-6 rounded-full border-amber-500/40 bg-amber-500/10 px-2.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+                >
+                  Publicar tienda →
+                </Button>
               )}
             </div>
             <p className="text-sm text-muted-foreground">Armá y personalizá la tienda online de tu negocio</p>
@@ -257,6 +273,21 @@ export default function WebsiteAdminPage() {
               Ver mi tienda
             </Button>
           )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setMediaDialogOpen(true)}
+            title="Historial y cuota de imágenes del sitio"
+          >
+            <Images className="h-4 w-4 text-primary" />
+            <span className="hidden sm:inline font-medium">Imágenes</span>
+            <span className={cn('tabular-nums font-semibold', isMediaAtLimit ? 'text-destructive' : 'text-foreground')}>
+              {mediaCount}/{mediaLimit}
+            </span>
+          </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -337,13 +368,14 @@ export default function WebsiteAdminPage() {
                 hasServices: hasServicesModule,
                 hasRepairs: hasRepairsModule,
               }}
+              storefrontStyle={storefrontStyle}
             />
           ) : (
             <div className="h-64 animate-pulse rounded-2xl border bg-muted/30" aria-label="Cargando resumen" />
           )
         )}
         {show('company') && <section aria-label="Editor de sección">{intro('company')}<CompanyInfoForm /></section>}
-        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}
+        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target, anchor) => navigateTo(target, anchor)} /></section>}
         {show('trust_bar') && <section aria-label="Editor de sección">{intro('trust_bar')}<TrustBarEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
         {show('brands') && <section aria-label="Editor de sección">{intro('brands')}<BrandsSectionEditor /></section>}
         {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}

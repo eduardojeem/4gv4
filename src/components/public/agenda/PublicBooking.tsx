@@ -176,7 +176,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
                 <p className="font-medium">{item.name}</p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" /> {item.duration} min
-                  {item.price === null ? ' · Precio a consultar' : <> · {formatCurrency(item.price, { currency: info.currency })}{info.professionalBookingAvailable && ' (tarifa base)'}</>}
+                  {item.price === null ? ' · Precio a consultar' : item.price === 0 ? ' · Sin costo (Asesoramiento gratuito)' : <> · {formatCurrency(item.price, { currency: info.currency })}{info.professionalBookingAvailable && ' (tarifa base)'}</>}
                 </p>
               </button>
             ))}
@@ -259,8 +259,8 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
             </div>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="booking-notes">Algo que debamos saber (opcional)</Label>
-            <Textarea id="booking-notes" rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Label htmlFor="booking-notes">Detalles o motivo de la visita (opcional)</Label>
+            <Textarea id="booking-notes" rows={2} placeholder="Ej: consulta sobre equipos, falla a revisar, compra o visita especial..." value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
           {/* Trampa para bots: invisible para las personas. */}
           <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" value={website} onChange={(event) => setWebsite(event.target.value)} />
