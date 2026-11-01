@@ -41,6 +41,21 @@ describe('ciclo de vida de los planes', () => {
     expect(service).toContain("const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories']")
   })
 
+  it('las pruebas gratis vencen solas y el registro usa los días que muestra la tarjeta', () => {
+    const trials = read('supabase/migrations/20261101010000_subscription_trials_and_discounts.sql')
+    expect(trials).toContain("cron.schedule('subscriptions_expire_trials'")
+    expect(read('src/app/api/auth/register-company/route.ts')).not.toContain('trial_days ?? 14')
+  })
+
+  it('el cupón de extender prueba no pisa una cuenta que ya paga', () => {
+    expect(read('src/lib/saas/redeem-subscription-promo.ts')).toContain("promo.benefit_type === 'extend_trial' && subscription.status !== 'trialing'")
+  })
+
+  it('el superadmin no apaga un plan con clientes ni activa uno pago sin fecha de fin', () => {
+    expect(read('src/app/api/superadmin/subscription-plans/[id]/route.ts')).toContain('No se puede desactivar')
+    expect(read('src/app/api/superadmin/subscriptions/[id]/route.ts')).toContain('Indicá la fecha de fin del período')
+  })
+
   it('reactivar un producto respeta el cupo del plan', () => {
     expect(productItem).toContain('if (updatePayload.is_active === true)')
     expect(productItem).toContain('await canCreateResource(organization.id, resourceType, 1)')

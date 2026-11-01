@@ -38,6 +38,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SubscriptionPaymentPanel } from '@/components/admin/subscriptions/SubscriptionPaymentPanel'
 import { isStripeCheckoutEnabled } from '@/lib/payments/stripe'
+import {
+  applySubscriptionDiscount,
+  describeSubscriptionDiscount,
+  findAvailableSubscriptionDiscount,
+} from '@/lib/saas/subscription-discount'
 import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
@@ -203,6 +208,9 @@ export default async function AdminSubscriptionsPage() {
   const daysLeft = daysUntil(periodEnd)
   const canChangePlan = organization.role === 'owner'
   const isPaidPlan = state.currentPlan.price_monthly > 0
+  // Cupón de descuento canjeado: se muestra el mismo monto que se va a cobrar.
+  const discount = isPaidPlan ? await findAvailableSubscriptionDiscount(organization.id, state.currentPlan.code) : null
+  const regularAmount = money(state.currentPlan.price_monthly, state.currentPlan.currency)
   const averageUsage = averageUsagePercent(state.currentPlan, state.usage)
 
   const paymentProvider = subscription?.provider === 'pagopar'
@@ -401,7 +409,8 @@ export default async function AdminSubscriptionsPage() {
         missingFields={billingMissingFields}
         isPaidPlan={isPaidPlan}
         planName={state.currentPlan.name}
-        planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
+        planAmount={discount ? money(applySubscriptionDiscount(state.currentPlan.price_monthly, discount), state.currentPlan.currency) : regularAmount}
+        discountNote={discount ? `${describeSubscriptionDiscount(discount)} con tarjeta o QR · precio normal ${regularAmount}` : undefined}
         stripeEnabled={isStripeCheckoutEnabled()}
         canPayByTransfer
       />

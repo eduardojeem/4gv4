@@ -288,7 +288,7 @@ function HowItWorksContent() {
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Pagos & Facturación</h4>
         </div>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          Los pagos con Pagopar o códigos de activación renuevan el ciclo mensual. Las facturas legales se generan de forma automática con tus datos tributarios fiscales.
+          Pagás con tarjeta, QR o transferencia, o activás con un código; cada pago renueva el ciclo mensual. Si no pagás al vencer, la cuenta queda 7 días como pago pendiente y después pasa al plan Gratuito.
         </p>
       </div>
 
@@ -300,7 +300,7 @@ function HowItWorksContent() {
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cambios de Plan</h4>
         </div>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          Puedes ascender de plan en cualquier momento. Para pasar a un plan menor, el uso actual de tu organización debe adecuarse a los límites del nuevo plan.
+          Podés subir de plan en cualquier momento. Al bajar, conservás el plan pago hasta el vencimiento; si te sobran productos tenés 7 días para ajustarlos y, si volvés a subir, se reactivan solos.
         </p>
       </div>
     </div>

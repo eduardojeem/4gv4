@@ -8,6 +8,11 @@ import {
 } from '@/lib/payments/pagopar'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
+  applySubscriptionDiscount,
+  findAvailableSubscriptionDiscount,
+  reserveSubscriptionDiscount,
+} from '@/lib/saas/subscription-discount'
+import {
   assessPlanChange,
   getCurrentOrganizationSubscription,
   normalizePlanCode,
@@ -64,6 +69,11 @@ export async function createSubscriptionPagoparCheckout(params: {
     canChangePlan,
   })
 
+  // Cupón de descuento canjeado: se cobra el monto con descuento y el cupón
+  // queda reservado para este pago.
+  const discount = await findAvailableSubscriptionDiscount(organization.id, targetPlan.code)
+  const chargedAmount = applySubscriptionDiscount(amountPyg, discount)
+
   const admin = createAdminSupabase()
   const pendingPaymentMethod = paymentMethod === 'qr' ? 'Pagopar QR' : 'Pagopar Tarjeta'
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
@@ -75,6 +85,7 @@ export async function createSubscriptionPagoparCheckout(params: {
     .eq('provider', 'pagopar')
     .eq('status', 'pending')
     .eq('payment_method', pendingPaymentMethod)
+    .eq('amount', chargedAmount)
     .gte('created_at', fifteenMinutesAgo)
     .not('receipt_url', 'is', null)
     .order('created_at', { ascending: false })
@@ -98,7 +109,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       organization_id: organization.id,
       subscription_id: state.subscription?.id || null,
       plan_id: targetPlan.code,
-      amount: amountPyg,
+      amount: chargedAmount,
       currency: 'PYG',
       status: 'pending',
       payment_method: pendingPaymentMethod,
@@ -112,9 +123,11 @@ export async function createSubscriptionPagoparCheckout(params: {
     throw new SubscriptionCheckoutError(paymentError?.message || 'No se pudo crear el pago.', 500)
   }
 
+  if (discount) await reserveSubscriptionDiscount(discount, payment.id)
+
   try {
     const order = await createPagoparOrder({
-      amountPyg,
+      amountPyg: chargedAmount,
       buyer: {
         businessName: state.billingProfile?.business_name || organization.name,
         document: state.billingProfile?.ruc || null,

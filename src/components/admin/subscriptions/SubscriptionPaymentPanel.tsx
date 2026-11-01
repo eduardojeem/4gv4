@@ -14,6 +14,8 @@ type SubscriptionPaymentPanelProps = {
   isPaidPlan: boolean
   planName: string
   planAmount: string
+  /** Cupón de descuento aplicado al monto (solo tarjeta o QR). */
+  discountNote?: string
   stripeEnabled?: boolean
   canPayByTransfer?: boolean
 }
@@ -39,6 +41,7 @@ export function SubscriptionPaymentPanel({
   isPaidPlan,
   planName,
   planAmount,
+  discountNote,
   stripeEnabled = false,
   canPayByTransfer = false,
 }: SubscriptionPaymentPanelProps) {
@@ -141,6 +144,7 @@ export function SubscriptionPaymentPanel({
         </div>
         <p className="text-sm text-muted-foreground">
           {planName} · <strong className="font-semibold text-foreground">{planAmount}</strong>/mes
+          {discountNote && <span className="block text-xs text-emerald-700 dark:text-emerald-300">{discountNote}</span>}
         </p>
       </div>
 
