@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Mi Tienda",
+    "name": "Mi TiendaPy",
     "slug": "mitiendapy",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -50,15 +50,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Mi Tienda usa tus fotos para cargar imágenes de productos.",
-          "cameraPermission": "Mi Tienda usa la cámara para sacar fotos de productos.",
+          "photosPermission": "Mi TiendaPy usa tus fotos para cargar imágenes de productos.",
+          "cameraPermission": "Mi TiendaPy usa la cámara para sacar fotos de productos.",
           "microphonePermission": false
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Mi Tienda usa la cámara para escanear códigos de barras.",
+          "cameraPermission": "Mi TiendaPy usa la cámara para escanear códigos de barras.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -67,7 +67,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Mi Tienda usa Face ID para desbloquear la app sin escribir la contraseña."
+          "faceIDPermission": "Mi TiendaPy usa Face ID para desbloquear la app sin escribir la contraseña."
         }
       ],
       [
