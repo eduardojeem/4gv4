@@ -113,8 +113,9 @@ export function BankTransferPayment({ canPay, embedded = false }: { canPay: bool
      data.plans.length===0 ? <p className="text-sm text-muted-foreground">No hay planes elegibles para pagar por transferencia en este momento.</p> :
      <div className="space-y-3 rounded-xl border p-4">
       <label htmlFor="transfer-plan" className="text-sm font-medium">Plan para un período mensual</label>
-      <select id="transfer-plan" className="flex min-h-10 w-full rounded-md border bg-background px-3 text-sm" value={selected} disabled={busy||loading||active} onChange={event=>setSelected(event.target.value)}>
-       <option value="">Seleccioná un plan</option>{data.plans.map(plan=><option key={plan.code} value={plan.code}>{plan.name} — {money(plan.price,plan.currency)} / mes</option>)}
+      {/* El texto y la lista desplegable siguen el tema: sin esto, en modo oscuro la lista nativa salía con fondo claro y letras claras. */}
+      <select id="transfer-plan" className="flex min-h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground dark:[color-scheme:dark] disabled:opacity-60" value={selected} disabled={busy||loading||active} onChange={event=>setSelected(event.target.value)}>
+       <option value="" className="bg-background text-foreground">Seleccioná un plan</option>{data.plans.map(plan=><option key={plan.code} value={plan.code} className="bg-background text-foreground">{plan.name} — {money(plan.price,plan.currency)} / mes</option>)}
       </select>
       <Button type="button" disabled={!selected||busy||loading||active} onClick={()=>void create()}>{busy ? 'Procesando…' : 'Generar solicitud de transferencia'}</Button>
       {active&&<p className="text-sm text-muted-foreground">Ya tenés una solicitud abierta. Usá su referencia y comprobante antes de iniciar otra.</p>}
