@@ -150,6 +150,22 @@ const cache = new Map<string, Repair>();
 subscribePrivateCacheContext(() => cache.clear());
 export const rememberRepairs = (repairs: Repair[]) => repairs.forEach((repair) => cache.set(repair.id, repair));
 export const cachedRepair = (id: string) => cache.get(id);
+
+export async function fetchRepair(id: string): Promise<Repair> {
+  const cached = cache.get(id);
+  try {
+    const result = await apiFetch<{ repair?: Repair; error?: string }>(`/api/repairs/${encodeURIComponent(id)}`);
+    if (result.repair) {
+      updateCachedRepair(result.repair);
+      return result.repair;
+    }
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
+  }
+  if (cached) return cached;
+  throw new Error('No se encontró la reparación.');
+}
 const listeners = new Set<(repair: Repair) => void>();
 export function updateCachedRepair(repair: Repair) {
   cache.set(repair.id, repair);

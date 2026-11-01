@@ -1,3 +1,4 @@
+import { BarcodeScanner } from '@/components/barcode-scanner';
 import { PanelAccessState } from '@/components/panel-access-state';
 import { useListRequestScope } from '@/lib/use-list-request-scope';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +43,7 @@ export default function RepairsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [scanning, setScanning] = useState(false);
 
   // Busca medio segundo después de dejar de escribir.
   const requestScope = useListRequestScope(JSON.stringify([panelData?.organization.id, panelData?.organization.role, panelData?.user.email,search,filter,attempt]));
@@ -139,7 +141,7 @@ export default function RepairsScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Ticket, cliente, teléfono o equipo"
+            placeholder="Ticket, cliente, teléfono o IMEI"
             placeholderTextColor={colors.muted}
             autoCorrect={false}
             returnKeyType="search"
@@ -148,10 +150,17 @@ export default function RepairsScreen() {
             style={[styles.searchInput, { color: colors.text }]}
           />
           {query ? (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Borrar búsqueda">
+            <Pressable onPress={() => { setQuery(''); setSearch(''); }} hitSlop={8} accessibilityLabel="Borrar búsqueda">
               <Ionicons name="close-circle" size={17} color={colors.muted} />
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={() => setScanning(true)}
+            hitSlop={8}
+            accessibilityLabel="Escanear ticket o IMEI con cámara"
+            style={{ paddingLeft: 4 }}>
+            <Ionicons name="barcode-outline" size={21} color={palette.primary} />
+          </Pressable>
         </View>
       </View>
 
@@ -215,6 +224,16 @@ export default function RepairsScreen() {
           renderItem={({ item }) => <RepairCard repair={item} colors={colors} />}
         />
       )}
+      <BarcodeScanner
+        visible={scanning}
+        onClose={() => setScanning(false)}
+        onScanned={(code: string) => {
+          setScanning(false);
+          const cleaned = code.trim().replace(/^#+/, '');
+          setQuery(cleaned);
+          setSearch(cleaned);
+        }}
+      />
     </View>
   );
 }

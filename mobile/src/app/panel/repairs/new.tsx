@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 
+import { BarcodeScanner } from '@/components/barcode-scanner';
 import { CustomerPicker } from '@/components/customer-picker';
 import { BudgetLines, budgetProblem, fromBudgetLine, linesTotal, QuickAmounts, type BudgetLine } from '@/components/budget-editor';
 import { formatGs } from '@/lib/marketplace';
@@ -44,11 +45,19 @@ type Colors = ReturnType<typeof usePalette>;
 /** Solo dígitos: el presupuesto se escribe como «150000» o «150.000». */
 const parseAmount = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 /** Suma un problema frecuente al texto (sin repetirlo) respetando el máximo de 200 caracteres. */
-const addIssue = (current: string, issue: string) => {
+const toggleIssue = (current: string, issue: string) => {
   const text = current.trim();
   if (!text) return issue;
-  if (text.includes(issue)) return text;
-  return `${text.replace(/[.,]$/, '')}. ${issue}`.slice(0, 200);
+  if (text.includes(issue)) {
+    const escaped = issue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const cleaned = text
+      .replace(new RegExp("\\.?\\s*" + escaped + "\\.?", "g"), "")
+      .replace(/^\s*\.\s*/, "")
+      .replace(/\.\s*\./g, ".")
+      .trim();
+    return cleaned;
+  }
+  return `${text.replace(/[.,]$/, "")}. ${issue}`.slice(0, 500);
 };
 
 const formatAmount = (value: string) => {
@@ -82,6 +91,7 @@ export default function NewRepairScreen() {
   const [saving, setSaving] = useState(false);
   const [idempotencyKey] = useState(newIdempotencyKey);
   const [touched, setTouched] = useState(false);
+  const [scanningImei, setScanningImei] = useState(false);
 
   useEffect(() => {
     fetchTechnicians().then(setTechnicians).catch(() => setTechnicians([]));
@@ -198,7 +208,36 @@ export default function NewRepairScreen() {
                 ))}
               </ScrollView>
             )}
-            <Input label={serialLabel} value={imei} onChangeText={setImei} colors={colors} autoCapitalize="characters" />
+            {/* Input con escáner de código de barras y contador de 15 dígitos */}
+            <View style={styles.field}>
+              <View style={styles.labelRow}>
+                <Text style={[styles.label, { color: colors.text }]}>{serialLabel}</Text>
+                {(deviceType === 'smartphone' || deviceType === 'tablet') && imei.trim().length > 0 && (
+                  <Text style={[styles.small, { color: imei.replace(/\D/g, '').length === 15 ? palette.success : colors.muted, fontWeight: '700' }]}>
+                    {imei.replace(/\D/g, '').length === 15 ? '✓ 15 dígitos (IMEI válido)' : `${imei.replace(/\D/g, '').length}/15 dígitos`}
+                  </Text>
+                )}
+              </View>
+              <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                <TextInput
+                  value={imei}
+                  onChangeText={(v) => setImei(deviceType === 'smartphone' || deviceType === 'tablet' ? v.replace(/[^\d\s-]/g, '') : v.toUpperCase())}
+                  placeholder={deviceType === 'smartphone' || deviceType === 'tablet' ? '352091081234567' : 'S/N de equipo'}
+                  placeholderTextColor={colors.muted}
+                  keyboardType={deviceType === 'smartphone' || deviceType === 'tablet' ? 'number-pad' : 'default'}
+                  autoCapitalize="characters"
+                  accessibilityLabel={serialLabel}
+                  style={[styles.input, { color: colors.text }]}
+                />
+                <Pressable
+                  onPress={() => setScanningImei(true)}
+                  hitSlop={8}
+                  style={{ padding: 6 }}
+                  accessibilityLabel="Escanear código de barras o IMEI">
+                  <Ionicons name="barcode-outline" size={22} color={palette.primary} />
+                </Pressable>
+              </View>
+            </View>
           </Section>
 
           {/* 3. Problema */}
@@ -210,7 +249,7 @@ export default function NewRepairScreen() {
                   label={item.label}
                   icon={item.icon}
                   selected={problem.includes(item.issue)}
-                  onPress={() => setProblem((current) => addIssue(current, item.issue))}
+                  onPress={() => setProblem((current) => toggleIssue(current, item.issue))}
                   colors={colors}
                 />
               ))}
@@ -222,7 +261,7 @@ export default function NewRepairScreen() {
               placeholder="No carga, pantalla rota, se moja…"
               colors={colors}
               multiline
-              maxLength={200}
+              maxLength={500}
               counter
             />
             <Input label="Diagnóstico inicial (opcional)" value={diagnosis} onChangeText={setDiagnosis} colors={colors} multiline maxLength={1000} />
@@ -309,6 +348,16 @@ export default function NewRepairScreen() {
             <Text style={styles.submitText}>{saving ? 'Creando…' : 'Crear orden de reparación'}</Text>
           </Pressable>
         </View>
+        <BarcodeScanner
+          visible={scanningImei}
+          onClose={() => setScanningImei(false)}
+          onScanned={(code: string) => {
+            setScanningImei(false);
+            const cleaned = deviceType === 'smartphone' || deviceType === 'tablet' ? code.replace(/\D/g, '').slice(0, 15) : code.trim();
+            setImei(cleaned);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }}
+        />
       </KeyboardAvoidingView>
     </View>
   );
