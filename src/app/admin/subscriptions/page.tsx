@@ -10,6 +10,7 @@ import {
   Gauge,
   Info,
   RefreshCw,
+  Wallet,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -35,8 +36,8 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
-import { isStripeConfigured } from '@/lib/payments/stripe'
+import { SubscriptionPaymentPanel } from '@/components/admin/subscriptions/SubscriptionPaymentPanel'
+import { isStripeCheckoutEnabled } from '@/lib/payments/stripe'
 import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
@@ -189,6 +190,7 @@ export default async function AdminSubscriptionsPage() {
   const periodEnd = subscription?.current_period_ends_at || subscription?.trial_ends_at || null
   const daysLeft = daysUntil(periodEnd)
   const canChangePlan = organization.role === 'owner'
+  const isPaidPlan = state.currentPlan.price_monthly > 0
   const averageUsage = averageUsagePercent(state.currentPlan, state.usage)
 
   const paymentProvider = subscription?.provider === 'pagopar'
@@ -252,27 +254,30 @@ export default async function AdminSubscriptionsPage() {
             </p>
           </div>
 
-          <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:min-w-[18rem]">
-            <PagoparPaymentButton
-              missingFields={billingMissingFields}
-              isPaidPlan={state.currentPlan.price_monthly > 0}
-              planName={state.currentPlan.name}
-              planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
-              stripeEnabled={isStripeConfigured()}
-            />
-            {canChangePlan && isPagoparRecurringEnabled() && (
-              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
-                <Link href="/admin/subscriptions/autopay">
-                  <RefreshCw className="h-4 w-4 text-primary" />
-                  Débito automático
-                </Link>
+          {/* Solo acciones cortas: pagar tiene su propio bloque debajo de los
+              avisos, y antes estiraba esta columna dejando un hueco a la izquierda. */}
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+            {isPaidPlan && (
+              <Button asChild className="h-10 gap-2 rounded-xl font-semibold">
+                <a href="#pay">
+                  <Wallet className="h-4 w-4" />
+                  Pagar
+                </a>
               </Button>
             )}
             {canChangePlan && (
-              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
+              <Button asChild variant="outline" className="h-10 gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/change-plan">
                   <ArrowUpRight className="h-4 w-4 text-primary" />
                   Cambiar de plan
+                </Link>
+              </Button>
+            )}
+            {canChangePlan && isPagoparRecurringEnabled() && (
+              <Button asChild variant="outline" className="h-10 gap-2 rounded-xl font-semibold">
+                <Link href="/admin/subscriptions/autopay">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  Débito automático
                 </Link>
               </Button>
             )}
@@ -375,6 +380,16 @@ export default async function AdminSubscriptionsPage() {
         </section>
       )}
 
+      {/* ── Pagar: tarjeta, QR y transferencia en un solo lugar ──────────── */}
+      <SubscriptionPaymentPanel
+        missingFields={billingMissingFields}
+        isPaidPlan={isPaidPlan}
+        planName={state.currentPlan.name}
+        planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
+        stripeEnabled={isStripeCheckoutEnabled()}
+        canPayByTransfer
+      />
+
       {/* ── Cupos, planes, pagos y datos fiscales ────────────────────────── */}
       <SubscriptionsClientView
         currentPlan={state.currentPlan}
@@ -386,7 +401,6 @@ export default async function AdminSubscriptionsPage() {
         subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
         canRedeemCodes={['owner', 'admin'].includes(organization.role)}
-        canPayByTransfer={['owner', 'admin'].includes(organization.role)}
         averageUsage={averageUsage}
       />
 

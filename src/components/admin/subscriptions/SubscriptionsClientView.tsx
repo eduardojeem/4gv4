@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BankTransferPayment } from '@/components/admin/subscriptions/BankTransferPayment'
 import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProfileForm'
 import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
 import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
@@ -71,7 +70,6 @@ export type SubscriptionsClientViewProps = {
   billingProfile: BillingProfile | null
   subscriptionStatus: string
   canChangePlan: boolean
-  canPayByTransfer?: boolean
   canRedeemCodes: boolean
   averageUsage: number
 }
@@ -319,7 +317,6 @@ export function SubscriptionsClientView({
   subscriptionStatus,
   canChangePlan,
   canRedeemCodes,
-  canPayByTransfer = false,
   averageUsage,
 }: SubscriptionsClientViewProps) {
   const [activeTab, setActiveTab] = useState<string>('overview')
@@ -416,7 +413,7 @@ export function SubscriptionsClientView({
               className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Layers className="h-4 w-4 text-indigo-500" />
-              <span>Resumen & Cupos</span>
+              <span>Resumen</span>
               <Badge variant="secondary" className="hidden md:inline-flex text-[10px] px-1.5 py-0 h-4 font-mono font-bold rounded-md">
                 {averageUsage}%
               </Badge>
@@ -426,7 +423,7 @@ export function SubscriptionsClientView({
               className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Sparkles className="h-4 w-4 text-amber-500" />
-              <span>Planes Disponibles</span>
+              <span>Planes</span>
               <span className="hidden sm:inline text-[11px] text-muted-foreground font-normal">({plans.length})</span>
             </TabsTrigger>
             <TabsTrigger
@@ -434,7 +431,7 @@ export function SubscriptionsClientView({
               className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Receipt className="h-4 w-4 text-emerald-500" />
-              <span>Historial de Pagos</span>
+              <span>Pagos</span>
               {payments.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold rounded-md">
                   {payments.length}
@@ -446,7 +443,7 @@ export function SubscriptionsClientView({
               className="rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-50 data-[state=active]:shadow-sm transition-all gap-2"
             >
               <Building2 className="h-4 w-4 text-blue-500" />
-              <span>Datos Fiscales</span>
+              <span>Facturación</span>
             </TabsTrigger>
           </TabsList>
 
@@ -694,16 +691,10 @@ export function SubscriptionsClientView({
               </Card>
             </div>
           </div>
-
-          {/* 3. PROMO CODE & ACTIVATION VOUCHER SECTION */}
-          <div className="pt-1">
-            <PromoCodeRedeemer canRedeem={canRedeemCodes} />
-          </div>
         </TabsContent>
 
         {/* TAB 2: PLANS COMPARISON (INCLUYE GUÍA EXPLICATIVA CONTEXTUAL) */}
         <TabsContent value="plans" className="space-y-6 focus-visible:outline-none">
-          {canPayByTransfer && <Button variant="outline" asChild><a href="#bank-transfer">Pagar por transferencia bancaria</a></Button>}
           <PlansComparison
             canChangePlan={canChangePlan}
             currentPlanCode={currentPlan.code}
@@ -735,6 +726,9 @@ export function SubscriptionsClientView({
 
         {/* TAB 3: PAYMENT & BILLING HISTORY */}
         <TabsContent value="payments" className="space-y-6 focus-visible:outline-none">
+          {/* El cupón es otra forma de pagar o extender el plan: va con los pagos. */}
+          <PromoCodeRedeemer canRedeem={canRedeemCodes} />
+
           <Card id="payment-history" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <CardHeader className="border-b border-border pb-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -995,7 +989,6 @@ export function SubscriptionsClientView({
           </Card>
         </TabsContent>
       </Tabs>
-      <BankTransferPayment canPay={canPayByTransfer} />
     </div>
   )
 }

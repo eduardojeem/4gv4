@@ -1,18 +1,24 @@
 'use client'
 
-import { CreditCard, Globe, QrCode } from 'lucide-react'
+import { Building2, CreditCard, Globe, QrCode } from 'lucide-react'
 import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
 import { cn } from '@/lib/utils'
 
-/** Tarjeta y QR van por Pagopar; 'stripe' abre Stripe Checkout. */
-export type SubscriptionPaymentMethod = PagoparPaymentMethod | 'stripe'
+/**
+ * Tarjeta y QR van por Pagopar; 'stripe' abre Stripe Checkout y 'transfer'
+ * muestra la solicitud de transferencia bancaria.
+ */
+export type SubscriptionPaymentMethod = PagoparPaymentMethod | 'stripe' | 'transfer'
 
 type PagoparPaymentMethodSelectorProps = {
   value: SubscriptionPaymentMethod
   onChange: (method: SubscriptionPaymentMethod) => void
   disabled?: boolean
+  /** Formas de pago visibles pero no elegibles (por ejemplo, faltan datos). */
+  disabledMethods?: SubscriptionPaymentMethod[]
   className?: string
   includeStripe?: boolean
+  includeTransfer?: boolean
 }
 
 const options: Array<{
@@ -34,6 +40,12 @@ const options: Array<{
     icon: QrCode,
   },
   {
+    value: 'transfer',
+    label: 'Transferencia',
+    description: 'Con comprobante',
+    icon: Building2,
+  },
+  {
     value: 'stripe',
     label: 'Stripe',
     description: 'Tarjeta internacional',
@@ -41,31 +53,43 @@ const options: Array<{
   },
 ]
 
+const GRID_COLUMNS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-1 sm:grid-cols-3',
+  4: 'grid-cols-2 sm:grid-cols-4',
+}
+
 export function PagoparPaymentMethodSelector({
   value,
   onChange,
   disabled = false,
+  disabledMethods = [],
   className,
   includeStripe = false,
+  includeTransfer = false,
 }: PagoparPaymentMethodSelectorProps) {
-  const visibleOptions = includeStripe ? options : options.filter((option) => option.value !== 'stripe')
+  const visibleOptions = options.filter((option) =>
+    (option.value !== 'stripe' || includeStripe) && (option.value !== 'transfer' || includeTransfer),
+  )
+  const onlyPagopar = !includeStripe && !includeTransfer
 
   return (
     <div
-      className={cn('grid gap-1 rounded-md border bg-muted/40 p-1', includeStripe ? 'grid-cols-3' : 'grid-cols-2', className)}
+      className={cn('grid gap-1 rounded-md border bg-muted/40 p-1', GRID_COLUMNS[visibleOptions.length], className)}
       role="group"
-      aria-label={includeStripe ? 'Forma de pago' : 'Forma de pago con Pagopar'}
+      aria-label={onlyPagopar ? 'Forma de pago con Pagopar' : 'Forma de pago'}
     >
       {visibleOptions.map((option) => {
         const Icon = option.icon
         const selected = value === option.value
+        const optionDisabled = disabled || disabledMethods.includes(option.value)
 
         return (
           <button
             key={option.value}
             type="button"
             aria-pressed={selected}
-            disabled={disabled}
+            disabled={optionDisabled}
             onClick={() => onChange(option.value)}
             className={cn(
               'flex min-h-12 items-center justify-center gap-2 rounded-sm px-3 py-2 text-left transition-colors',
@@ -73,7 +97,7 @@ export function PagoparPaymentMethodSelector({
               selected
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
-              disabled && 'cursor-not-allowed opacity-60',
+              optionDisabled && 'cursor-not-allowed opacity-60 hover:bg-transparent hover:text-muted-foreground',
             )}
           >
             <Icon className="h-4 w-4 flex-none" />

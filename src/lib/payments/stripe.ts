@@ -6,6 +6,15 @@ export function isStripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET)
 }
 
+/**
+ * Stripe como forma de pago de la suscripción queda apagado mientras no se
+ * active a propósito: tener las claves no alcanza. El webhook sigue andando
+ * con solo las claves, para no perder la confirmación de pagos ya iniciados.
+ */
+export function isStripeCheckoutEnabled() {
+  return isStripeConfigured() && process.env.STRIPE_SUBSCRIPTIONS_ENABLED === 'true'
+}
+
 export function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY
   if (!secretKey) throw new Error('STRIPE_SECRET_KEY no está configurada.')
