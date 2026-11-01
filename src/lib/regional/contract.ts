@@ -90,12 +90,18 @@ export function normalizeCountryCode(value: unknown): CountryCode | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toUpperCase()
   if (!/^[A-Z]{2}$/.test(normalized)) return null
+  if (REGIONAL_COUNTRY_CATALOG.some(({ code }) => code === normalized)) {
+    return normalized as CountryCode
+  }
   try {
-    const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized)
-    return name && name !== normalized && name !== 'Unknown Region' ? normalized as CountryCode : null
+    if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
+      const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized)
+      return name && name !== normalized && name !== 'Unknown Region' ? normalized as CountryCode : null
+    }
   } catch {
     return null
   }
+  return null
 }
 
 export function normalizeCurrencyCode(value: unknown): CurrencyCode | null {
@@ -106,12 +112,26 @@ export function normalizeCurrencyCode(value: unknown): CurrencyCode | null {
 
 export function normalizeLocaleCode(value: unknown): LocaleCode | null {
   if (typeof value !== 'string' || !value.trim()) return null
-  try {
-    const [locale] = Intl.getCanonicalLocales(value.trim())
-    return locale ? locale as LocaleCode : null
-  } catch {
-    return null
+  const trimmed = value.trim()
+  const knownLocales = ['es-PY', 'pt-BR', 'es-AR', 'en-US', 'es', 'pt', 'en']
+  const matched = knownLocales.find((k) => k.toLowerCase() === trimmed.toLowerCase())
+  if (matched) {
+    return matched as LocaleCode
   }
+  try {
+    if (typeof Intl !== 'undefined' && typeof Intl.getCanonicalLocales === 'function') {
+      const [locale] = Intl.getCanonicalLocales(trimmed)
+      return locale ? locale as LocaleCode : null
+    }
+  } catch {
+    // Fall back to well-formed language tag regex if Intl.getCanonicalLocales is not in runtime
+  }
+  if (/^[a-z]{2}(-[A-Z]{2})?$/i.test(trimmed)) {
+    const parts = trimmed.split('-')
+    const canonical = parts.length === 2 ? `${parts[0].toLowerCase()}-${parts[1].toUpperCase()}` : parts[0].toLowerCase()
+    return canonical as LocaleCode
+  }
+  return null
 }
 
 export function normalizeTimeZone(value: unknown): IanaTimeZone | null {

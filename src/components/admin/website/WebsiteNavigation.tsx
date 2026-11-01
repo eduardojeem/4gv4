@@ -46,7 +46,7 @@ const GROUPS: NavigationGroup[] = [
         id: 'company',
         label: 'Empresa y publicación',
         short: 'Empresa',
-        description: 'Identidad, visibilidad y dominio',
+        description: 'Publicación, plantilla, logo y contacto',
         icon: Building2,
       },
       {
@@ -69,6 +69,13 @@ const GROUPS: NavigationGroup[] = [
         icon: Sparkles,
       },
       {
+        id: 'carousel',
+        label: 'Banners del inicio',
+        short: 'Banners',
+        description: 'Campañas visuales en la portada (/inicio)',
+        icon: GalleryHorizontalEnd,
+      },
+      {
         id: 'trust_bar',
         label: 'Beneficios',
         short: 'Beneficios',
@@ -76,17 +83,10 @@ const GROUPS: NavigationGroup[] = [
         icon: ShieldCheck,
       },
       {
-        id: 'carousel',
-        label: 'Banners promocionales',
-        short: 'Banners',
-        description: 'Campañas visuales rotativas',
-        icon: GalleryHorizontalEnd,
-      },
-      {
         id: 'offers',
         label: 'Ofertas',
         short: 'Ofertas',
-        description: 'Promociones y descuentos clave',
+        description: 'Productos en rebaja en portada y /ofertas',
         icon: Tag,
       },
       {
@@ -109,18 +109,18 @@ const GROUPS: NavigationGroup[] = [
     title: 'Servicios y turnos',
     items: [
       {
-        id: 'booking',
-        label: 'Reservas online',
-        short: 'Reservas',
-        description: 'Turnos desde el inicio de tu tienda',
-        icon: CalendarCheck2,
-      },
-      {
         id: 'services',
         label: 'Catálogo de servicios',
         short: 'Servicios',
         description: 'Qué ofrecés, precio y duración',
         icon: Briefcase,
+      },
+      {
+        id: 'booking',
+        label: 'Reservas online',
+        short: 'Reservas',
+        description: 'Turnos desde el inicio de tu tienda',
+        icon: CalendarCheck2,
       },
       {
         id: 'gallery',

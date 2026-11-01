@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WebsiteSectionAnchor, WebsiteSectionId, WebsiteSetupChecklist, WebsiteSetupStep } from '@/lib/website/setup-checklist'
 import type { SectionAvailability, WebsiteEditableSection } from '@/lib/website/section-availability'
+import { STOREFRONT_STYLE_LABELS, STOREFRONT_TEMPLATES_METADATA, type StorefrontStyle } from '@/lib/website/storefront-style'
 
 type Navigate = (section: Exclude<WebsiteSectionId, 'overview'>, anchor?: WebsiteSectionAnchor) => void
 
@@ -21,7 +22,7 @@ const SECTION_LABELS: Record<WebsiteEditableSection, string> = {
   hero: 'Portada',
   trust_bar: 'Beneficios',
   brands: 'Marcas destacadas',
-  carousel: 'Banners promocionales',
+  carousel: 'Banners del inicio',
   offers: 'Ofertas',
   announcement: 'Aviso emergente',
   booking: 'Reservas online',
@@ -138,6 +139,7 @@ export function WebsiteOverview({
   onNavigate,
   account,
   availability,
+  storefrontStyle = 'classic',
 }: {
   checklist: WebsiteSetupChecklist
   businessLabel: string
@@ -147,6 +149,7 @@ export function WebsiteOverview({
   onNavigate: Navigate
   account: AccountModules
   availability: Record<WebsiteEditableSection, SectionAvailability>
+  storefrontStyle?: StorefrontStyle
 }) {
   const percent = Math.round((checklist.done / Math.max(1, checklist.total)) * 100)
   const next = checklist.next
@@ -207,6 +210,37 @@ export function WebsiteOverview({
             </div>
           )}
         </div>
+      </section>
+
+      {/* Plantilla y diseño activo */}
+      <section aria-labelledby="active-template-title" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-2xs">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-xs">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span id="active-template-title" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Plantilla activa</span>
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                {STOREFRONT_STYLE_LABELS[storefrontStyle] ?? storefrontStyle}
+              </span>
+            </div>
+            <p className="mt-1 text-sm font-semibold text-foreground truncate">
+              {STOREFRONT_TEMPLATES_METADATA[storefrontStyle]?.tagline ?? 'Elegí el estilo y colores que mejor representan tu negocio'}
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5 font-semibold rounded-xl text-xs h-9 border-border/80 hover:bg-muted/60"
+          onClick={() => onNavigate('company', 'website-appearance')}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span>Cambiar plantilla y colores</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-2">

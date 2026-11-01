@@ -20,6 +20,9 @@ const withBundleAnalyzer = process.env.ANALYZE === 'true'
 const nextConfig: NextConfig = {
   // Next 16 no debe escribir archivos de instrucciones de agentes al iniciar.
   agentRules: false,
+  // El navegador de smoke local puede abrir la app por 127.0.0.1 para tener
+  // un origen limpio separado de las cookies/sesión de localhost.
+  allowedDevOrigins: ['127.0.0.1'],
   typescript: {
     ignoreBuildErrors: false,
   },

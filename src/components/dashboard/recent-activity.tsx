@@ -124,10 +124,21 @@ export function RecentActivity() {
       // publicada hace fallar el canal completo. El cliente es compartido y
       // `.channel(nombre)` reusa un canal vivo con ese nombre (ya suscrito no
       // acepta `.on()`): nombre único por montaje.
-      removeChannel = (ch) => supabase.removeChannel(ch)
-      channel = supabase.channel(`profile-activity:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, () => load())
-        .subscribe()
+      if (typeof window !== 'undefined' && typeof WebSocket !== 'undefined') {
+        try {
+          removeChannel = (ch) => supabase.removeChannel(ch)
+          channel = supabase.channel(`profile-activity:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, () => load())
+          channel.subscribe((status) => {
+            if (status === 'CHANNEL_ERROR') {
+              console.warn('[profile-activity] Realtime channel error')
+            }
+          })
+        } catch (err) {
+          console.warn('[profile-activity] Realtime no disponible:', err)
+          channel = null
+        }
+      }
     }
 
     setupRealtime()

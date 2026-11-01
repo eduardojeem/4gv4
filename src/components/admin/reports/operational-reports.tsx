@@ -391,26 +391,38 @@ export default function OperationalReports() {
     ]
     const childTablesWithoutOrganizationId = new Set(['sale_items', 'credit_installments', 'credit_payments'])
     
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return
+
     tables.forEach(table => {
-      const channel = supabase
-        .channel(`realtime-reports-${table}`)
-        .on(
-          'postgres_changes',
-          childTablesWithoutOrganizationId.has(table)
-            ? { event: '*', schema: 'public', table }
-            : { event: '*', schema: 'public', table, filter: `organization_id=eq.${organization?.id ?? '__none__'}` },
-          () => {
-            logger.info(`[Reports] Cambio detectado en ${table}`)
-            handleUpdate()
-          }
-        )
-        .subscribe()
-      channels.push(channel)
+      try {
+        const channel = supabase
+          .channel(`realtime-reports-${table}`)
+          .on(
+            'postgres_changes',
+            childTablesWithoutOrganizationId.has(table)
+              ? { event: '*', schema: 'public', table }
+              : { event: '*', schema: 'public', table, filter: `organization_id=eq.${organization?.id ?? '__none__'}` },
+            () => {
+              logger.info(`[Reports] Cambio detectado en ${table}`)
+              handleUpdate()
+            }
+          )
+        channel.subscribe()
+        channels.push(channel)
+      } catch (err) {
+        logger.warn(`[Reports] Realtime no disponible para ${table}:`, err)
+      }
     })
 
     return () => {
       if (timeout) clearTimeout(timeout)
-      channels.forEach(channel => supabase.removeChannel(channel))
+      channels.forEach(channel => {
+        try {
+          supabase.removeChannel(channel)
+        } catch {
+          // Limpieza segura
+        }
+      })
     }
   }, [activeTab, hasCredits, organization?.id])
 

@@ -69,10 +69,63 @@ export type PromotionalCarousel = {
   [key: string]: unknown;
 };
 
+export type BookingSection = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  badge?: string;
+  showTeam?: boolean;
+  [key: string]: unknown;
+};
+
+export const DEFAULT_BOOKING_SECTION: BookingSection = {
+  enabled: false,
+  title: 'Reservá tu turno',
+  subtitle: 'Elegí el servicio, el día y el horario que te quede cómodo.',
+  badge: 'Turnos online',
+  showTeam: true,
+};
+
+export const BOOKING_PRESETS = [
+  {
+    id: 'tech',
+    name: 'Taller / Soporte Técnico',
+    icon: 'hammer-outline' as const,
+    badge: 'Atención en taller',
+    title: 'Agendá tu cita técnica o diagnóstico',
+    subtitle: 'Reservá un horario para revisar tu equipo, solicitar presupuesto o consultar con un técnico sin esperas.',
+  },
+  {
+    id: 'vip',
+    name: 'Asesoramiento / Compra VIP',
+    icon: 'bag-handle-outline' as const,
+    badge: 'Atención personalizada',
+    title: 'Agendá una cita de compra o demostración',
+    subtitle: 'Coordiná una atención exclusiva 1 a 1 para cotizaciones, ver equipos o armar tu configuración.',
+  },
+  {
+    id: 'pickup',
+    name: 'Retiro o Entrega Programada',
+    icon: 'cube-outline' as const,
+    badge: 'Visita programada',
+    title: 'Coordiná tu visita o retiro',
+    subtitle: 'Elegí el día y horario que mejor te quede para retirar tus compras o dejar tu equipo sin esperas.',
+  },
+  {
+    id: 'personal',
+    name: 'Turnos & Servicios Personales',
+    icon: 'cut-outline' as const,
+    badge: 'Turnos online',
+    title: 'Reservá tu turno',
+    subtitle: 'Elegí el servicio, quién te atiende y el horario que te quede más cómodo.',
+  },
+] as const;
+
 export type WebsiteSettings = {
   company_info: CompanyInfo;
   hero_content?: HeroContent;
   promotional_carousel?: PromotionalCarousel;
+  booking_section?: BookingSection;
   checkout?: { commerceMode?: 'cart' | 'whatsapp' | 'catalog'; [key: string]: unknown };
   [key: string]: unknown;
 };
@@ -275,6 +328,17 @@ export function slideIssues(slide: CarouselSlide): Record<string, string> {
   return issues;
 }
 
+export function bookingIssues(booking: Partial<BookingSection>): Record<string, string> {
+  const issues: Record<string, string> = {};
+  if (booking.enabled !== false) {
+    if (!booking.title || booking.title.trim().length < 2) issues.title = 'El título debe tener al menos 2 caracteres.';
+    if (booking.title && booking.title.length > 100) issues.title = 'El título no puede superar los 100 caracteres.';
+    if (booking.subtitle && booking.subtitle.length > 300) issues.subtitle = 'La descripción no puede superar los 300 caracteres.';
+    if (booking.badge && booking.badge.length > 60) issues.badge = 'La etiqueta no puede superar los 60 caracteres.';
+  }
+  return issues;
+}
+
 // ─── Listas ────────────────────────────────────────────────────────────────
 
 /** Mueve un elemento una posición (Subir/Bajar). Fuera de rango, no cambia nada. */
@@ -391,6 +455,8 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: 'carousel', label: 'Banners promocionales', hint: 'Campañas rotativas', setting: 'promotional_carousel', field: 'enabled', defaultOn: false },
   { id: 'offers', label: 'Ofertas', hint: 'Productos con descuento', setting: 'offers_section', field: 'enabled', defaultOn: false },
   { id: 'brands', label: 'Marcas destacadas', hint: 'Marquesina de marcas', setting: 'brands_section', field: 'enabled', defaultOn: false },
+  { id: 'booking', label: 'Reservas y citas online', hint: 'Turnos, citas técnicas o asesoramiento en el inicio', setting: 'booking_section', field: 'enabled', defaultOn: false },
+  { id: 'gallery', label: 'Galería de fotos', hint: 'Imágenes destacadas de trabajos o local', setting: 'gallery_section', field: 'enabled', defaultOn: false },
   { id: 'process', label: 'Cómo comprar', hint: 'Pasos de atención', setting: 'company_info', field: 'processSectionEnabled', defaultOn: true },
 ];
 

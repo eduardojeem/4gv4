@@ -682,60 +682,71 @@ export function useCashMonitor() {
 
     // El nombre incluye la organizacion: un canal compartido entre tiendas
     // mezcla suscriptores que no tienen nada que ver entre si.
-    const channel = supabase
-      .channel(`cash-admin-monitor:${organization.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'cash_closures',
-        filter: deLaTienda,
-      }, () => {
-        // Refresh sessions on any change
-        fetchSessions()
-      })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'cash_movements',
-        filter: deLaTienda,
-      }, () => {
-        // Refresh sessions to update movement counts
-        fetchSessions()
-      })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'cash_alerts',
-        filter: deLaTienda,
-      }, (payload) => {
-        const newAlert = payload.new as CashAlert
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return
 
-        // La sucursal no se puede filtrar en el servidor junto con la tienda, asi
-        // que se descarta aca: la lista debe contener lo mismo que devolveria un
-        // refresco con el filtro puesto.
-        if (selectedBranchId && newAlert.branch_id && newAlert.branch_id !== selectedBranchId) return
-
-        setAlerts(prev => {
-          if (prev.some(a => a.id === newAlert.id)) return prev
-          // El contador vive aparte de la lista: sin esto el globito no se movia
-          // hasta el siguiente refresco.
-          setAlertCounts(counts => ({
-            unresolved: counts.unresolved + 1,
-            critical: counts.critical + (newAlert.severity === 'critical' ? 1 : 0),
-          }))
-          return [newAlert, ...prev]
+    try {
+      const channel = supabase
+        .channel(`cash-admin-monitor:${organization.id}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'cash_closures',
+          filter: deLaTienda,
+        }, () => {
+          // Refresh sessions on any change
+          fetchSessions()
         })
-        toast.warning(`Nueva alerta: ${newAlert.title}`, {
-          duration: 8000
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'cash_movements',
+          filter: deLaTienda,
+        }, () => {
+          // Refresh sessions to update movement counts
+          fetchSessions()
         })
-      })
-      .subscribe()
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'cash_alerts',
+          filter: deLaTienda,
+        }, (payload) => {
+          const newAlert = payload.new as CashAlert
 
-    channelRef.current = channel
+          // La sucursal no se puede filtrar en el servidor junto con la tienda, asi
+          // que se descarta aca: la lista debe contener lo mismo que devolveria un
+          // refresco con el filtro puesto.
+          if (selectedBranchId && newAlert.branch_id && newAlert.branch_id !== selectedBranchId) return
+
+          setAlerts(prev => {
+            if (prev.some(a => a.id === newAlert.id)) return prev
+            // El contador vive aparte de la lista: sin esto el globito no se movia
+            // hasta el siguiente refresco.
+            setAlertCounts(counts => ({
+              unresolved: counts.unresolved + 1,
+              critical: counts.critical + (newAlert.severity === 'critical' ? 1 : 0),
+            }))
+            return [newAlert, ...prev]
+          })
+          toast.warning(`Nueva alerta: ${newAlert.title}`, {
+            duration: 8000
+          })
+        })
+
+      channel.subscribe()
+      channelRef.current = channel
+    } catch (err) {
+      console.warn('[useCashMonitor] Realtime no disponible:', err)
+      channelRef.current = null
+    }
 
     return () => {
       if (channelRef.current) {
-        supabase!.removeChannel(channelRef.current)
+        try {
+          supabase!.removeChannel(channelRef.current)
+        } catch {
+          // Limpieza segura
+        }
       }
     }
   }, [supabase, fetchSessions, organization?.id, selectedBranchId])

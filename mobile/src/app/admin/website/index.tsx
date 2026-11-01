@@ -24,6 +24,7 @@ export default function WebsiteHome() {
         const url = storeUrl(company);
         const visibleSections = HOME_SECTIONS.filter((section) => sectionEnabled(settings, section)).length;
         const slides = settings.promotional_carousel?.slides?.length ?? 0;
+        const bookingActive = settings.booking_section?.enabled === true;
 
         const preview = async () => {
           if (!url) {
@@ -74,6 +75,7 @@ export default function WebsiteHome() {
 
             <SettingsCard icon="color-palette-outline" title="Apariencia" hint="Logo, colores y estilo" onPress={() => go('appearance')} />
             <SettingsCard icon="home-outline" title="Página de inicio" hint="Portada y secciones visibles" badge={`${visibleSections} activas`} onPress={() => go('home')} />
+            <SettingsCard icon="calendar-outline" title="Reservas y citas" hint="Turnos, citas técnicas o asesoramiento" badge={bookingActive ? 'Activa' : undefined} onPress={() => go('booking')} />
             <SettingsCard icon="images-outline" title="Banners" hint="Campañas rotativas del inicio" badge={slides ? `${slides}` : undefined} onPress={() => go('banners')} />
             <SettingsCard icon="pricetags-outline" title="Catálogo y destacados" hint="Productos destacados en tu tienda" onPress={() => go('catalog')} />
             <SettingsCard icon="storefront-outline" title="Negocio y redes" hint="Contacto, horarios, WhatsApp e Instagram" onPress={() => go('business')} />
@@ -84,7 +86,7 @@ export default function WebsiteHome() {
               <Ionicons name="open-outline" size={17} color={colors.text} />
               <Text style={[websiteStyles.secondaryText, { color: colors.text }]}>Vista previa del sitio</Text>
             </Pressable>
-            <Text style={[styles.foot, { color: colors.muted }]}>Pagos y entregas, servicios, galería y avisos se siguen editando desde la web.</Text>
+            <Text style={[styles.foot, { color: colors.muted }]}>Pagos y entregas, servicios y avisos se siguen editando desde la web.</Text>
           </WebsiteScreen>
         );
       }}

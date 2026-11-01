@@ -6,6 +6,7 @@ import { Notice, SettingsCard, WebsiteScreen } from '@/components/website/websit
 import { usePalette } from '@/lib/palette';
 import { useSettings } from '@/lib/settings-context';
 import { formatNumber, timeZoneName } from '@/lib/settings-model';
+import { countryLabel } from '../../../../../src/lib/regional/country-labels';
 
 const go = (path: string) => router.push(`/admin/settings/${path}` as never);
 
@@ -17,13 +18,14 @@ export default function SettingsHome() {
     <SettingsGate title="Configuración">
       {(settings) => {
         const identity = [settings.companyName, settings.companyRuc && `RUC ${settings.companyRuc}`].filter(Boolean).join(' · ');
-        const regional = `${settings.currency} · IVA ${formatNumber(settings.taxRate, 2)} % · ${timeZoneName(settings.timeZone).split(',')[0]}`;
+        const countryPart = settings.countryCode ? countryLabel(settings.countryCode) : null;
+        const regional = [countryPart, `${settings.currency} · IVA ${formatNumber(settings.taxRate, 2)} %`].filter(Boolean).join(' · ');
         return (
           <WebsiteScreen title="Configuración" subtitle={organizationName ?? undefined} refreshing={refreshing} onRefresh={() => void reload()}>
             <SettingsOfflineNotice />
             <Notice text="Es la misma configuración que editás desde la web: los cambios se aplican apenas los guardás." />
             <SettingsCard icon="business-outline" title="Datos de la empresa" hint={identity || 'Nombre, RUC y contacto'} onPress={() => go('company')} />
-            <SettingsCard icon="cash-outline" title="Moneda e impuestos" hint={regional} onPress={() => go('regional')} />
+            <SettingsCard icon="cash-outline" title="País, impuestos y moneda" hint={regional} badge={settings.needsCountryConfirmation ? 'Confirmar país' : undefined} onPress={() => go('regional')} />
             <SettingsCard icon="swap-horizontal-outline" title="Tipos de cambio" hint="Precios cargados en otra moneda" onPress={() => go('exchange-rates')} />
             <SettingsCard icon="briefcase-outline" title="Perfil del negocio" hint="Rubro, forma de trabajo y herramientas" onPress={() => go('profile')} />
             <SettingsCard icon="globe-outline" title="Sitio web" hint="Tienda online, logo, banners y publicación" onPress={() => router.push('/admin/website' as never)} />

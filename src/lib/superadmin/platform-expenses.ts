@@ -5,6 +5,8 @@ import {
   type ExpenseInput,
   type PlatformExpense,
 } from '@/lib/superadmin/platform-finance'
+import { normalizeRevenuePlan } from '@/lib/superadmin/metrics-calculations'
+import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
 
 /** Lectura y escritura de /superadmin/finanzas. Siempre con service role, detrás de getSuperAdminUser. */
 
@@ -98,6 +100,157 @@ export async function loadPlatformRevenue() {
       paymentStatus: s.payment_status,
     })),
   )
+}
+
+export type PlatformPlanMetric = {
+  id: string
+  tier: string
+  name: string
+  price: number
+  description: string | null
+  isActive: boolean
+  isPopular: boolean
+  features: Array<{ label?: string; value?: boolean | string }>
+  subscribersCount: number
+  activeCount: number
+  monthlyRevenue: number
+  includedFeaturesCount: number
+  includedFeatureKeys: string[]
+}
+
+export const DEFAULT_PLATFORM_PLANS: PlatformPlanMetric[] = [
+  {
+    id: 'default-free',
+    tier: 'free',
+    name: 'Gratis',
+    price: 0,
+    description: 'Para probar la plataforma y comenzar a vender en mostrador',
+    isActive: true,
+    isPopular: false,
+    features: [],
+    subscribersCount: 0,
+    activeCount: 0,
+    monthlyRevenue: 0,
+    includedFeaturesCount: 5,
+    includedFeatureKeys: ['pos', 'inventory', 'crm', 'repairs', 'services'],
+  },
+  {
+    id: 'default-basic',
+    tier: 'basic',
+    name: 'Pro',
+    price: 150_000,
+    description: 'Para negocios en crecimiento: ecommerce, delivery y pedidos',
+    isActive: true,
+    isPopular: true,
+    features: [],
+    subscribersCount: 0,
+    activeCount: 0,
+    monthlyRevenue: 0,
+    includedFeaturesCount: 12,
+    includedFeatureKeys: ['inventory', 'inventoryAdmin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery', 'webAnalytics', 'finances', 'reports'],
+  },
+  {
+    id: 'default-pro',
+    tier: 'pro',
+    name: 'Pro Max',
+    price: 250_000,
+    description: 'Para empresas consolidadas: analytics avanzado y promociones',
+    isActive: true,
+    isPopular: false,
+    features: [],
+    subscribersCount: 0,
+    activeCount: 0,
+    monthlyRevenue: 0,
+    includedFeaturesCount: 15,
+    includedFeatureKeys: ['inventory', 'inventoryAdmin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'webAnalytics', 'promotions', 'security', 'finances', 'reports'],
+  },
+  {
+    id: 'default-enterprise',
+    tier: 'enterprise',
+    name: 'Enterprise / Ultra',
+    price: 450_000,
+    description: 'Capacidad total, financiamiento en cuotas y soporte prioritario',
+    isActive: true,
+    isPopular: false,
+    features: [],
+    subscribersCount: 0,
+    activeCount: 0,
+    monthlyRevenue: 0,
+    includedFeaturesCount: 19,
+    includedFeatureKeys: ['pos', 'ecommerce', 'orders', 'delivery', 'promotions', 'credits', 'inventory', 'inventoryAdmin', 'repairs', 'services', 'crm', 'analytics', 'webAnalytics', 'security', 'finances', 'reports', 'users', 'branches', 'support'],
+  },
+]
+
+export async function loadPlatformPlansWithMetrics(): Promise<PlatformPlanMetric[]> {
+  try {
+    const admin = createAdminSupabase()
+    const [{ data: plansData, error: plansError }, { data: subsData, error: subsError }] = await Promise.all([
+      admin.from('subscription_plans').select('id, tier, name, price, description, is_active, is_popular, features').order('price', { ascending: true }),
+      admin.from('subscriptions').select('plan, status, payment_status'),
+    ])
+
+    if (plansError) {
+      console.error('Error fetching subscription_plans for finanzas:', plansError)
+      return DEFAULT_PLATFORM_PLANS
+    }
+
+    const rawPlans = (plansData ?? []) as Array<{
+      id: string
+      tier: string
+      name: string | null
+      price: number | string | null
+      description: string | null
+      is_active: boolean | null
+      is_popular: boolean | null
+      features: unknown
+    }>
+
+    if (rawPlans.length === 0) {
+      return DEFAULT_PLATFORM_PLANS
+    }
+
+    const subs = (subsData ?? []) as Array<{
+      plan: string | null
+      status: string | null
+      payment_status: string | null
+    }>
+
+    return rawPlans.map((p) => {
+      const tier = String(p.tier ?? 'free').toLowerCase()
+      const rawFeatures = Array.isArray(p.features) ? (p.features as Array<{ label?: string; value?: boolean | string }>) : []
+      const effective = effectivePlanFeatures(tier, rawFeatures)
+      const includedFeatureKeys = Object.entries(effective)
+        .filter(([_, included]) => Boolean(included))
+        .map(([key]) => key)
+
+      const normalizedTier = normalizeRevenuePlan(tier)
+      const matchingSubs = subs.filter((s) => normalizeRevenuePlan(s.plan) === normalizedTier)
+      const activeSubs = matchingSubs.filter(
+        (s) => s.status === 'active' && !['failed', 'refunded', 'unpaid'].includes(s.payment_status?.toLowerCase() ?? '')
+      )
+      const priceNum = Number(p.price) || 0
+      const monthlyRevenue = activeSubs.length * priceNum
+
+      return {
+        id: p.id,
+        tier,
+        name: p.name?.trim() || tier.toUpperCase(),
+        price: priceNum,
+        description: p.description ?? null,
+        isActive: p.is_active ?? true,
+        isPopular: p.is_popular ?? false,
+        features: rawFeatures,
+        subscribersCount: matchingSubs.length,
+        activeCount: activeSubs.length,
+        monthlyRevenue,
+        includedFeaturesCount: includedFeatureKeys.length,
+        includedFeatureKeys,
+      }
+    })
+  } catch (err) {
+    console.error('Unexpected error loading platform plans for finanzas:', err)
+    return DEFAULT_PLATFORM_PLANS
+  }
 }
 
 export async function insertPlatformExpense(input: ExpenseInput, createdBy: string): Promise<PlatformExpense> {

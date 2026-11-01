@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { WhatsAppIcon } from '@/components/public/SocialIcons'
 
@@ -40,7 +40,7 @@ interface HeroCampaignProps {
 const DEFAULT_HERO_COPY: Partial<Record<StorefrontStyle, { badge: string; title: string; subtitle: string; cta: string }>> = {
   tech: { badge: 'Tecnología', title: 'Lo último en tecnología', subtitle: 'Equipos, accesorios y servicio técnico con garantía y envíos a todo el país.', cta: 'Ver productos' },
   modern: { badge: 'Nuevo', title: 'Diseño que se nota', subtitle: 'Productos elegidos con cuidado para tu día a día.', cta: 'Ver productos' },
-  beauty: { badge: 'Belleza & cuidado', title: 'Tu rutina de belleza, en un solo lugar', subtitle: 'Maquillaje, skincare y fragancias para cuidarte todos los días.', cta: 'Ver productos' },
+  beauty: { badge: 'Belleza & cuidado', title: 'Descubrí productos para vos', subtitle: 'Explorá el catálogo y encontrá tus favoritos.', cta: 'Ver productos' },
 }
 const FASHION_HERO_COPY = { badge: 'Nueva colección & Tendencias', title: 'Tu estilo, tu mejor versión', subtitle: 'Prendas de alta calidad, envíos a todo el país y las mejores marcas para toda la familia.', cta: 'Ver la colección' }
 
@@ -94,6 +94,7 @@ export function HeroCampaign({
   const isSport = style === 'sport'
   // Cosmética se fotografía sobre blanco: las fotos van enteras, no recortadas.
   const isBeauty = style === 'beauty'
+  const isTech = style === 'tech'
   const defaults = DEFAULT_HERO_COPY[style] ?? FASHION_HERO_COPY
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -106,7 +107,7 @@ export function HeroCampaign({
     <section className="relative border-b border-border/80 bg-background overflow-hidden" data-storefront-hero={style}>
       {/* Fondo atmosférico sutil */}
       <div className={cn('pointer-events-none absolute inset-0', isBeauty
-        ? 'bg-gradient-to-br from-pink-50 via-rose-50/50 to-fuchsia-50/40 dark:from-pink-950/20 dark:via-transparent dark:to-fuchsia-950/10'
+        ? 'bg-gradient-to-br from-stone-50 via-background to-muted/40 dark:from-stone-950/35 dark:via-background dark:to-muted/10'
         : 'bg-gradient-to-b from-primary/5 via-transparent to-transparent')} />
 
       <div className="container relative mx-auto px-4 sm:px-6 lg:px-8">
@@ -170,7 +171,7 @@ export function HeroCampaign({
             </div>
 
             {/* Buscador píldora minimalista */}
-            {(capabilities?.hasCatalog ?? true) && <form
+            {!isBeauty && (capabilities?.hasCatalog ?? true) && <form
               role="search"
               onSubmit={handleSearchSubmit}
               className="mt-8 flex w-full max-w-md items-center gap-3 rounded-full border border-border/80 bg-card px-4 py-1.5 shadow-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
@@ -181,7 +182,7 @@ export function HeroCampaign({
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 aria-label="Buscar productos"
-                placeholder="¿Qué estás buscando hoy?"
+                placeholder={isTech ? '¿Qué equipo, falla o repuesto buscás?...' : '¿Qué estás buscando hoy?'}
                 className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
               />
               <button
@@ -192,21 +193,44 @@ export function HeroCampaign({
               </button>
             </form>}
 
-            {tracking.kind !== 'none' && tracking.href && <Link
-              href={`${tenantPrefix}${tracking.href}`}
-              className="mt-5 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {tracking.kind === 'repairs' ? (
-                <Wrench aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
-              ) : (
-                <Truck aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
-              )}
-              <span>
-                {tracking.kind === 'repairs'
-                  ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'
-                  : '¿Hiciste una compra? Seguí tu pedido'}
-              </span>
-            </Link>}
+            {/* Micro-badges de valor para tecnología */}
+            {isTech && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+                  ✓ Garantía oficial
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  ✓ Envíos en 24h
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  ✓ Taller especializado
+                </span>
+              </div>
+            )}
+
+            {tracking.kind !== 'none' && tracking.href && (
+              <Link
+                href={`${tenantPrefix}${tracking.href}`}
+                className={cn(
+                  'mt-5 inline-flex items-center gap-2 rounded-xl text-xs font-semibold transition-all',
+                  isTech
+                    ? 'border border-primary/30 bg-primary/5 px-3.5 py-1.5 text-foreground hover:border-primary/60 hover:bg-primary/10 hover:shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tracking.kind === 'repairs' ? (
+                  <Wrench aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <Truck aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
+                )}
+                <span>
+                  {tracking.kind === 'repairs'
+                    ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo en vivo'
+                    : '¿Hiciste una compra? Seguí tu pedido'}
+                </span>
+                <ArrowRight aria-hidden="true" className="h-3 w-3 text-primary opacity-80 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            )}
           </div>
 
           {/* Lado derecho: Mosaico editorial de fotos de productos */}
@@ -227,7 +251,11 @@ export function HeroCampaign({
                         href={`${tenantPrefix}/productos/${product.id}`}
                         className={cn(
                           'group absolute inset-0 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                          isBeauty ? 'rounded-3xl border border-pink-100 bg-white dark:border-pink-900/40' : 'rounded-2xl bg-muted'
+                          isBeauty
+                            ? 'rounded-3xl border border-stone-200/80 bg-card dark:border-stone-800'
+                            : isTech
+                            ? 'rounded-3xl border border-border/80 bg-card/90 backdrop-blur-xs hover:border-primary/50 shadow-md'
+                            : 'rounded-2xl bg-muted'
                         )}
                       >
                         <Image
@@ -236,13 +264,18 @@ export function HeroCampaign({
                           fill
                           priority={index === 0}
                           sizes="(max-width: 1024px) 50vw, 30vw"
-                          className={cn('transition-transform duration-700 group-hover:scale-105', isBeauty ? 'object-contain p-6' : 'object-cover')}
+                          className={cn(
+                            'transition-transform duration-700 group-hover:scale-105',
+                            isBeauty || isTech ? 'object-contain p-5' : 'object-cover'
+                          )}
                           onError={() => setFailedImageIds((ids) => [...ids, product.id])}
                         />
                         <span className={cn('absolute inset-x-0 bottom-0 px-4 pb-4 text-xs font-semibold sm:text-sm', isBeauty
-                          ? 'bg-gradient-to-t from-white via-white/80 to-transparent pt-10 text-foreground dark:from-black/70 dark:via-black/30 dark:text-white'
+                          ? 'bg-gradient-to-t from-background via-background/90 to-transparent pt-10 text-foreground'
+                          : isTech
+                          ? 'bg-gradient-to-t from-card via-card/90 to-transparent pt-14 text-foreground border-t border-border/20'
                           : 'bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-16 text-white')}>
-                          <span className="line-clamp-1 group-hover:text-primary-foreground transition-colors">
+                          <span className="line-clamp-1 group-hover:text-primary transition-colors font-bold">
                             {product.name}
                           </span>
                         </span>
@@ -252,9 +285,9 @@ export function HeroCampaign({
                 })}
               </ul>
             ) : (
-              <div className={cn('flex h-56 items-end p-6 text-primary-foreground shadow-lg sm:h-[30rem] sm:p-10 lg:h-[34rem]', isBeauty ? 'rounded-3xl bg-gradient-to-br from-pink-400 via-rose-400 to-fuchsia-500' : 'rounded-2xl bg-gradient-to-tr from-primary to-primary/80')}>
+              <div className={cn('flex h-56 items-end p-6 sm:h-[30rem] sm:p-10 lg:h-[34rem]', isBeauty ? 'rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-100 via-background to-muted text-foreground dark:border-stone-800 dark:from-stone-900 dark:via-background dark:to-muted' : 'rounded-2xl bg-gradient-to-tr from-primary to-primary/80 text-primary-foreground shadow-lg')}>
                 <p className={cn('text-balance text-4xl leading-none sm:text-6xl font-extrabold', STOREFRONT_HEADING_CLASS[style])}>
-                  {companyInfo.name || 'Nueva colección'}
+                  {companyInfo.name || (isBeauty ? 'Belleza y cuidado' : 'Nueva colección')}
                 </p>
               </div>
             )}

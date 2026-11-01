@@ -56,4 +56,43 @@ describe('PlatformFinanceCenter', () => {
     expect(screen.getByRole('button', { name: /Registrar gasto/ })).toBeDisabled()
     expect(screen.getByText(/Todavía no hay gastos/)).toBeInTheDocument()
   })
+
+  it('permite alternar entre pestañas y ver el catálogo de herramientas y planes', async () => {
+    const summary = summarizePlatformFinance([vercel], { mrr: 400_000, payingOrgs: 2 }, HOY)
+    const mockPlans = [
+      {
+        id: 'plan-pro',
+        tier: 'pro',
+        name: 'Pro Max',
+        price: 250_000,
+        description: 'Para empresas consolidadas',
+        isActive: true,
+        isPopular: true,
+        features: [],
+        subscribersCount: 5,
+        activeCount: 4,
+        monthlyRevenue: 1_000_000,
+        includedFeaturesCount: 15,
+        includedFeatureKeys: ['pos', 'ecommerce', 'inventory', 'repairs', 'services'],
+      },
+    ]
+
+    render(
+      <PlatformFinanceCenter
+        expenses={[vercel]}
+        summary={summary}
+        today={HOY}
+        unavailableReason={null}
+        plans={mockPlans}
+      />,
+    )
+
+    // Pestañas visibles
+    expect(screen.getByRole('tab', { name: /Gastos y Rentabilidad/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Planes y Cobertura/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Herramientas/i })).toBeInTheDocument()
+
+    // Selector de plan presente
+    expect(screen.getByText('Inspección de Plan')).toBeInTheDocument()
+  })
 })
