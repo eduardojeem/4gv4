@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useState } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { palette, usePalette } from '@/lib/palette';
@@ -79,9 +81,15 @@ export function PanelHeader() {
   );
 }
 
-/** Barra inferior: las mismas cuatro secciones que la web en celular, más «Más». */
+/**
+ * Barra inferior al estilo de Android actual (Material 3): fondo tonal sin
+ * línea de corte, píldora detrás del ícono activo que aparece con animación,
+ * ripple y una vibración corta al cambiar de pestaña. Las mismas cuatro
+ * secciones que la web en celular, más «Más».
+ */
 export function PanelTabBar() {
   const colors = usePalette();
+  const dark = useColorScheme() === 'dark';
   const pathname = usePathname();
   const { data, findItem } = usePanel();
   const { openSections } = usePanelMenus();
@@ -90,21 +98,24 @@ export function PanelTabBar() {
   const isActive = (route: string) => (route === '/panel' ? pathname === '/panel' : pathname.startsWith(route));
   // «Más» queda marcado cuando estás en una sección que no tiene pestaña propia.
   const moreActive = !tabs.some((tab) => isActive(panelRoute(tab.key))) && pathname !== '/panel';
+  // Superficie tonal: un poco del color de la marca sobre la tarjeta, como «surface container» de Material 3.
+  const surface = dark ? '#151E30' : '#F3F6FC';
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.tabBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <SafeAreaView edges={['bottom']} accessibilityRole="tablist" style={[styles.tabBar, { backgroundColor: surface, shadowColor: dark ? '#000' : '#0F172A' }]}>
       <View style={styles.tabRow}>
         {tabs.map((item) => (
           <TabButton
             key={item.key}
             colors={colors}
+            dark={dark}
             route={panelRoute(item.key)}
             icon={iconFor(item.key)}
             label={`${item.mobileLabel ?? item.label}${hasNativePanelSection(item.key) ? '' : ' · Web'}`}
             active={isActive(panelRoute(item.key))}
           />
         ))}
-        <TabButton colors={colors} onPress={openSections} icon="menu-outline" label="Más" active={moreActive} />
+        <TabButton colors={colors} dark={dark} onPress={openSections} icon="grid-outline" label="Más" active={moreActive} />
       </View>
     </SafeAreaView>
   );
@@ -116,23 +127,44 @@ type TabButtonProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   active: boolean;
+  dark: boolean;
   colors: ReturnType<typeof usePalette>;
 };
 
-function TabButton({ route, onPress, icon, label, active, colors }: TabButtonProps) {
+function TabButton({ route, onPress, icon, label, active, dark, colors }: TabButtonProps) {
   // El ícono activo va relleno, como en la barra de la web.
   const name = active ? (icon.replace('-outline', '') as typeof icon) : icon;
+  const [progress] = useState(() => new Animated.Value(active ? 1 : 0));
+
+  useEffect(() => {
+    Animated.spring(progress, { toValue: active ? 1 : 0, useNativeDriver: true, speed: 18, bounciness: 6 }).start();
+  }, [active, progress]);
+
+  const press = () => {
+    if (!active) void Haptics.selectionAsync().catch(() => undefined);
+    if (onPress) onPress();
+    else if (route && !active) router.navigate(route as never);
+  };
+
+  const indicator = dark ? 'rgba(96,165,250,0.22)' : 'rgba(37,99,235,0.14)';
+  const activeColor = dark ? '#93C5FD' : palette.primary;
+
   return (
     <Pressable
-      onPress={onPress ?? (() => route && router.navigate(route as never))}
+      onPress={press}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       accessibilityLabel={label}
+      android_ripple={Platform.OS === 'android' ? { color: indicator, borderless: true, radius: 36 } : undefined}
       style={styles.tab}>
-      <View style={[styles.tabIcon, active && { backgroundColor: 'rgba(37,99,235,0.12)' }]}>
-        <Ionicons name={name} size={22} color={active ? palette.primary : colors.muted} />
+      <View style={styles.tabIcon}>
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.tabIndicator, { backgroundColor: indicator, opacity: progress, transform: [{ scaleX: progress.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}
+        />
+        <Ionicons name={name} size={22} color={active ? activeColor : colors.muted} />
       </View>
-      <Text numberOfLines={1} style={[styles.tabLabel, { color: active ? palette.primary : colors.muted }, active && styles.tabLabelActive]}>
+      <Text numberOfLines={1} style={[styles.tabLabel, { color: active ? colors.text : colors.muted }, active && styles.tabLabelActive]}>
         {label}
       </Text>
     </Pressable>
@@ -154,10 +186,11 @@ const styles = StyleSheet.create({
   avatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontSize: 15, fontWeight: '800' },
-  tabBar: { borderTopWidth: StyleSheet.hairlineWidth },
-  tabRow: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 6, paddingBottom: 4 },
-  tab: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 2 },
-  tabIcon: { width: 48, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  tabLabel: { fontSize: 11, fontWeight: '600' },
-  tabLabelActive: { fontWeight: '800' },
+  tabBar: { elevation: 8, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: -2 } },
+  tabRow: { flexDirection: 'row', justifyContent: 'space-around', minHeight: 72, paddingTop: 10, paddingBottom: 8 },
+  tab: { flex: 1, alignItems: 'center', gap: 4 },
+  tabIcon: { width: 64, height: 32, alignItems: 'center', justifyContent: 'center' },
+  tabIndicator: { borderRadius: 16 },
+  tabLabel: { fontSize: 12, fontWeight: '500', letterSpacing: 0.2 },
+  tabLabelActive: { fontWeight: '700' },
 });
