@@ -124,6 +124,17 @@ describe('contracargo informado por Pagopar', () => {
     expect(mocks.rpc).not.toHaveBeenCalled()
     expect(mocks.chargeback).not.toHaveBeenCalled()
   })
+  it('si Pagopar todavía lo está procesando, tampoco se revierte', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.from.mockReturnValue(lookup('paid'))
+    mocks.queryOrder.mockResolvedValue({ status: 'processing' })
+
+    await post()
+    await vi.waitFor(() => expect(mocks.queryOrder).toHaveBeenCalled())
+
+    expect(mocks.rpc).not.toHaveBeenCalled()
+    expect(mocks.chargeback).not.toHaveBeenCalled()
+  })
 })
 
 describe('migración de reembolsos y prorrateo', () => {
@@ -134,5 +145,16 @@ describe('migración de reembolsos y prorrateo', () => {
     expect(migration).toContain("if p_actor_id is null and not p_chargeback then")
     expect(migration).toContain('revoke all on function public.refund_subscription_payment(uuid, uuid, text, boolean, boolean) from public, anon, authenticated')
     expect(migration).toContain('alter table public.subscription_reminders_sent enable row level security')
+  })
+})
+
+describe('migración de cupo y pagos reembolsados', () => {
+  const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261101050000_plan_quota_and_refunded_payments.sql'), 'utf8')
+
+  it('no reaplica un pago reembolsado y controla el cupo solo para el cliente', () => {
+    expect(migration).toContain("if v_payment.status in ('paid', 'refunded') then")
+    expect(migration).toContain("returns trigger language plpgsql security invoker")
+    expect(migration).toContain("if current_user not in ('authenticated', 'anon') then")
+    expect(migration).toContain('before insert or update of is_active, archived_by_plan_at, unit_measure, organization_id on public.products')
   })
 })

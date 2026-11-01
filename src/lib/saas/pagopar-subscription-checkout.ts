@@ -138,7 +138,10 @@ export async function createSubscriptionPagoparCheckout(params: {
     throw new SubscriptionCheckoutError(paymentError?.message || 'No se pudo crear el pago.', 500)
   }
 
-  if (discount) await reserveSubscriptionDiscount(discount, payment.id)
+  if (discount && !await reserveSubscriptionDiscount(discount, payment.id)) {
+    await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
+    throw new SubscriptionCheckoutError('El cupón de descuento se está usando en otro pago. Volvé a intentar en unos segundos.', 409)
+  }
 
   try {
     const order = await createPagoparOrder({

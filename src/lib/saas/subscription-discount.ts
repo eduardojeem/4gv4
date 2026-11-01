@@ -16,6 +16,8 @@ export type SubscriptionDiscount = {
   redemptionId: string
   percent: number | null
   amount: number | null
+  /** Pago al que estaba atado el cupón cuando se leyó (fallido o vencido), o null. */
+  previousPaymentId: string | null
 }
 
 type RedemptionRow = {
@@ -79,21 +81,31 @@ export async function findAvailableSubscriptionDiscount(
     const percent = type === 'discount_percent' ? readNumber(benefit.discount_percent) : null
     const amount = type === 'discount_fixed' ? readNumber(benefit.discount_amount) : null
     if (percent === null && amount === null) continue
-    return { redemptionId: row.id, percent, amount }
+    return { redemptionId: row.id, percent, amount, previousPaymentId: row.applied_payment_id }
   }
 
   return null
 }
 
-/** Reserva el cupón para el pago que se acaba de crear. */
+/**
+ * Reserva el cupón para el pago que se acaba de crear. Solo lo toma si sigue
+ * atado al mismo pago que cuando se leyó: si otro cobro lo reservó en el medio,
+ * devuelve false y ese cobro no puede llevar el descuento.
+ */
 export async function reserveSubscriptionDiscount(discount: SubscriptionDiscount, paymentId: string) {
-  const { error } = await createAdminSupabase()
+  const update = createAdminSupabase()
     .from('subscription_promo_redemptions')
     .update({ applied_payment_id: paymentId })
     .eq('id', discount.redemptionId)
+  const { data, error } = await (discount.previousPaymentId
+    ? update.eq('applied_payment_id', discount.previousPaymentId)
+    : update.is('applied_payment_id', null)
+  ).select('id')
   if (error) {
     console.error('[subscription-discount] No se pudo reservar el cupón', { redemptionId: discount.redemptionId, code: error.code })
+    return false
   }
+  return (data ?? []).length === 1
 }
 
 export function describeSubscriptionDiscount(discount: SubscriptionDiscount) {
