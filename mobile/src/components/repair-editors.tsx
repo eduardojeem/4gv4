@@ -16,13 +16,17 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeScanner } from '@/components/barcode-scanner';
+import { PatternPicker } from '@/components/pattern-picker';
 import { BudgetLines, budgetProblem, fromBudgetLine, linesTotal, QuickAmounts, toBudgetLine, type BudgetLine } from '@/components/budget-editor';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { usePanel } from '@/lib/panel';
 import {
+  ACCESS_TYPES,
   DEVICE_ICONS,
   DEVICE_TYPES,
+  validateRepairAccess,
+  type AccessType,
   fetchCostHistory,
   FREQUENT_ISSUES,
   fetchTechnicians,
@@ -135,6 +139,8 @@ const toEdit = (repair: Repair): RepairEdit => ({
   model: repair.device_model ?? '',
   imei: repair.imei ?? repair.serial_number ?? '',
   serialNumber: repair.serial_number ?? repair.imei ?? '',
+  accessType: (repair.access_type as AccessType) || 'none',
+  accessPassword: repair.access_password ?? '',
   issue: repair.problem_description ?? '',
   description: repair.diagnosis ?? '',
   priority: (repair.priority as RepairEdit['priority']) || 'medium',
@@ -149,6 +155,7 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scanningImei, setScanningImei] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -162,8 +169,15 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
   }, [visible]);
 
   const set = <K extends keyof RepairEdit>(key: K, value: RepairEdit[K]) => setEdit((current) => ({ ...current, [key]: value }));
+  const accessError = validateRepairAccess(edit.accessType || 'none', edit.accessPassword);
   const problem =
-    edit.brand.trim().length < 2 ? 'Escribí la marca.' : !edit.model.trim() ? 'Escribí el modelo.' : !edit.issue.trim() ? 'Escribí el problema.' : null;
+    edit.brand.trim().length < 2
+      ? 'Escribí la marca.'
+      : !edit.model.trim()
+        ? 'Escribí el modelo.'
+        : !edit.issue.trim()
+          ? 'Escribí el problema.'
+          : accessError;
 
   const close = () => {
     if (saving) return;
@@ -303,6 +317,131 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
           style={[styles.input, styles.multiline, { color: colors.text }]}
         />
       </Field>
+
+      <Text style={[styles.label, { color: colors.text }]}>Desbloqueo del equipo</Text>
+      <View style={styles.chips}>
+        {ACCESS_TYPES.map((type) => {
+          const isSelected = (edit.accessType || 'none') === type.key;
+          return (
+            <Chip
+              key={type.key}
+              label={type.label}
+              icon={type.icon}
+              selected={isSelected}
+              onPress={() => {
+                set('accessType', type.key);
+                if (type.key === 'none' || type.key === 'biometric') {
+                  set('accessPassword', '');
+                } else if (type.key === 'pin') {
+                  set('accessPassword', (edit.accessPassword ?? '').replace(/[^\d\s,/-]/g, ''));
+                }
+              }}
+              colors={colors}
+              tone={isSelected ? type.color : undefined}
+            />
+          );
+        })}
+      </View>
+
+      {edit.accessType === 'none' && (
+        <View style={[styles.tipBox, { backgroundColor: '#16A34A12', borderColor: '#16A34A44' }]}>
+          <Ionicons name="checkmark-circle-outline" size={18} color="#16A34A" />
+          <Text style={[styles.tipText, { color: colors.text }]}>
+            El equipo no tiene bloqueo y se puede acceder libremente para pruebas.
+          </Text>
+        </View>
+      )}
+
+      {edit.accessType === 'biometric' && (
+        <View style={[styles.tipBox, { backgroundColor: '#D9770612', borderColor: '#D9770644' }]}>
+          <Ionicons name="finger-print-outline" size={18} color="#D97706" />
+          <Text style={[styles.tipText, { color: colors.text }]}>
+            Acceso biométrico: El cliente deberá estar presente para desbloquear o deshabilitar temporalmente la protección.
+          </Text>
+        </View>
+      )}
+
+      {edit.accessType === 'pin' && (
+        <View style={styles.field}>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, { color: colors.text }]}>PIN numérico</Text>
+            {(edit.accessPassword ?? '').trim().length > 0 && (
+              <Text
+                style={[
+                  styles.small,
+                  {
+                    color: /^[\d\s,/-]+$/.test((edit.accessPassword ?? '').trim()) ? palette.success : palette.danger,
+                    fontWeight: '700',
+                  },
+                ]}>
+                {/^[\d\s,/-]+$/.test((edit.accessPassword ?? '').trim()) ? '✓ PIN válido' : 'Solo números'}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <TextInput
+              value={edit.accessPassword ?? ''}
+              onChangeText={(v) => set('accessPassword', v)}
+              placeholder="Ej: 1234, 0000"
+              placeholderTextColor={colors.muted}
+              keyboardType="numbers-and-punctuation"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.input, { color: colors.text }]}
+            />
+            <Pressable onPress={() => setShowPassword((prev) => !prev)} hitSlop={8} style={{ padding: 6 }}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {edit.accessType === 'password' && (
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Contraseña alfanumérica</Text>
+          <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <TextInput
+              value={edit.accessPassword ?? ''}
+              onChangeText={(v) => set('accessPassword', v)}
+              placeholder="Ej: MiClave123"
+              placeholderTextColor={colors.muted}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.input, { color: colors.text }]}
+            />
+            <Pressable onPress={() => setShowPassword((prev) => !prev)} hitSlop={8} style={{ padding: 6 }}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {edit.accessType === 'pattern' && (
+        <PatternPicker
+          value={edit.accessPassword ?? ''}
+          onChange={(val) => set('accessPassword', val)}
+          error={accessError}
+        />
+      )}
+
+      {edit.accessType === 'other' && (
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Descripción de acceso</Text>
+          <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <TextInput
+              value={edit.accessPassword ?? ''}
+              onChangeText={(v) => set('accessPassword', v)}
+              placeholder="Ej: Presionar botón 2 veces o clave en etiqueta"
+              placeholderTextColor={colors.muted}
+              multiline
+              maxLength={200}
+              style={[styles.input, styles.multiline, { color: colors.text }]}
+            />
+          </View>
+        </View>
+      )}
 
       <Text style={[styles.label, { color: colors.text }]}>Prioridad</Text>
       <View style={styles.chips}>

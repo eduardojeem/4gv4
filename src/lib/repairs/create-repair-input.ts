@@ -32,7 +32,7 @@ const createRepairInputSchema = z.object({
   serial_number: optionalText(100),
   imei: optionalText(100),
   device_type: z.enum(['smartphone', 'laptop', 'tablet', 'desktop', 'accessory', 'other']),
-  problem_description: z.string().trim().min(1).max(200),
+  problem_description: z.string().trim().min(1).max(500),
   diagnosis: optionalText(1_000),
   access_type: z.enum(['none', 'pin', 'password', 'pattern', 'biometric', 'other']).default('none'),
   access_password: optionalText(100),

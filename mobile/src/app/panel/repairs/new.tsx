@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 
 import { BarcodeScanner } from '@/components/barcode-scanner';
+import { PatternPicker } from '@/components/pattern-picker';
 import { CustomerPicker } from '@/components/customer-picker';
 import { BudgetLines, budgetProblem, fromBudgetLine, linesTotal, QuickAmounts, type BudgetLine } from '@/components/budget-editor';
 import { formatGs } from '@/lib/marketplace';
@@ -23,6 +24,8 @@ import { palette, usePalette } from '@/lib/palette';
 import { usePanel } from '@/lib/panel';
 import {
   ACCESS_TYPES,
+  validateRepairAccess,
+  type AccessType,
   createRepair,
   DEVICE_ICONS,
   DEVICE_TYPES,
@@ -78,8 +81,9 @@ export default function NewRepairScreen() {
   const [imei, setImei] = useState('');
   const [problem, setProblem] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
-  const [accessType, setAccessType] = useState<NewRepairInput['access_type']>('none');
+  const [accessType, setAccessType] = useState<AccessType>('none');
   const [accessPassword, setAccessPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [priority, setPriority] = useState<NewRepairInput['priority']>('medium');
   const [labor, setLabor] = useState('');
   const [lines, setLines] = useState<BudgetLine[]>([]);
@@ -98,13 +102,13 @@ export default function NewRepairScreen() {
     fetchDeviceOptions().then(setDevices).catch(() => undefined);
   }, []);
 
-  const needsPassword = accessType !== 'none';
+  const accessError = validateRepairAccess(accessType, accessPassword);
   const problems = {
     customer: !customer ? 'Elegí o creá el cliente.' : null,
     brand: brand.trim().length < 2 ? 'Escribí la marca (mínimo 2 letras).' : null,
     model: !model.trim() ? 'Escribí el modelo.' : null,
     problem: !problem.trim() ? 'Contá qué le pasa al equipo.' : null,
-    access: needsPassword && !accessPassword.trim() ? 'Anotá el dato de desbloqueo.' : null,
+    access: accessError,
   };
   const budgetTotal = parseAmount(labor) + linesTotal(lines);
   const firstProblem = Object.values(problems).find(Boolean) ?? budgetProblem(lines);
@@ -137,7 +141,7 @@ export default function NewRepairScreen() {
           problem_description: problem,
           diagnosis,
           access_type: accessType,
-          access_password: accessPassword,
+          access_password: accessType === 'none' ? undefined : accessPassword.trim() || undefined,
           priority,
           // El presupuesto es la mano de obra más los repuestos que se cobran.
           estimated_cost: budgetTotal,
@@ -287,22 +291,156 @@ export default function NewRepairScreen() {
             <Input label="Diagnóstico inicial (opcional)" value={diagnosis} onChangeText={setDiagnosis} colors={colors} multiline maxLength={1000} />
           </Section>
 
-          {/* 4. Desbloqueo */}
+          {/* 4. Desbloqueo del equipo */}
           <Section number={4} title="Desbloqueo del equipo" colors={colors} error={show('access')}>
             <View style={styles.chips}>
-              {ACCESS_TYPES.map((type) => (
-                <Chip key={type.key} label={type.label} selected={accessType === type.key} onPress={() => setAccessType(type.key)} colors={colors} />
-              ))}
+              {ACCESS_TYPES.map((type) => {
+                const isSelected = accessType === type.key;
+                return (
+                  <Chip
+                    key={type.key}
+                    label={type.label}
+                    icon={type.icon}
+                    selected={isSelected}
+                    onPress={() => {
+                      setAccessType(type.key);
+                      if (type.key === 'none' || type.key === 'biometric') {
+                        setAccessPassword('');
+                      } else if (type.key === 'pin') {
+                        setAccessPassword((prev) => prev.replace(/[^\d\s,/-]/g, ''));
+                      }
+                    }}
+                    colors={colors}
+                    tone={isSelected ? type.color : undefined}
+                  />
+                );
+              })}
             </View>
-            {needsPassword && (
-              <Input
-                label={accessType === 'pattern' ? 'Patrón (ej. 1-4-7-8-9)' : accessType === 'pin' ? 'PIN' : 'Contraseña'}
+
+            {accessType === 'none' && (
+              <View style={[styles.unlockInfoBox, { backgroundColor: '#16A34A12', borderColor: '#16A34A44' }]}>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#16A34A" />
+                <View style={styles.flex}>
+                  <Text style={[styles.unlockInfoTitle, { color: '#16A34A' }]}>Sin bloqueo de pantalla</Text>
+                  <Text style={[styles.unlockInfoText, { color: colors.text }]}>
+                    El equipo se puede acceder libremente para realizar pruebas y reparaciones.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {accessType === 'biometric' && (
+              <View style={[styles.unlockInfoBox, { backgroundColor: '#D9770612', borderColor: '#D9770644' }]}>
+                <Ionicons name="finger-print-outline" size={20} color="#D97706" />
+                <View style={styles.flex}>
+                  <Text style={[styles.unlockInfoTitle, { color: '#D97706' }]}>Acceso biométrico (Huella / Rostro)</Text>
+                  <Text style={[styles.unlockInfoText, { color: colors.text }]}>
+                    El cliente deberá estar presente para desbloquear o deshabilitar temporalmente la protección para pruebas.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {accessType === 'pin' && (
+              <View style={styles.stack}>
+                <View style={styles.field}>
+                  <View style={styles.labelRow}>
+                    <Text style={[styles.label, { color: colors.text }]}>PIN numérico del equipo</Text>
+                    {accessPassword.trim().length > 0 && (
+                      <Text
+                        style={[
+                          styles.small,
+                          {
+                            color: /^[\d\s,/-]+$/.test(accessPassword.trim()) ? palette.success : palette.danger,
+                            fontWeight: '700',
+                          },
+                        ]}>
+                        {/^[\d\s,/-]+$/.test(accessPassword.trim()) ? '✓ PIN válido' : 'Solo números'}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={[styles.inputWrap, { borderColor: show('access') ? palette.danger : colors.border, backgroundColor: colors.background }]}>
+                    <TextInput
+                      value={accessPassword}
+                      onChangeText={setAccessPassword}
+                      placeholder="Ej: 1234, 0000"
+                      placeholderTextColor={colors.muted}
+                      keyboardType="numbers-and-punctuation"
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      accessibilityLabel="PIN del equipo"
+                      style={[styles.input, { color: colors.text }]}
+                    />
+                    <Pressable
+                      onPress={() => setShowPassword((prev) => !prev)}
+                      hitSlop={8}
+                      style={{ padding: 6 }}
+                      accessibilityLabel={showPassword ? 'Ocultar PIN' : 'Mostrar PIN'}>
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.small, { color: colors.muted }]}>
+                    Podés escribir varios PIN separados por comas si tiene SIM o doble clave (ej. 1234, 5678).
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {accessType === 'password' && (
+              <View style={styles.stack}>
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>Contraseña alfanumérica</Text>
+                  <View style={[styles.inputWrap, { borderColor: show('access') ? palette.danger : colors.border, backgroundColor: colors.background }]}>
+                    <TextInput
+                      value={accessPassword}
+                      onChangeText={setAccessPassword}
+                      placeholder="Ej: MiClave2024"
+                      placeholderTextColor={colors.muted}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      accessibilityLabel="Contraseña del equipo"
+                      style={[styles.input, { color: colors.text }]}
+                    />
+                    <Pressable
+                      onPress={() => setShowPassword((prev) => !prev)}
+                      hitSlop={8}
+                      style={{ padding: 6 }}
+                      accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {accessType === 'pattern' && (
+              <PatternPicker
                 value={accessPassword}
-                onChangeText={setAccessPassword}
-                colors={colors}
-                keyboardType={accessType === 'password' ? 'default' : 'number-pad'}
-                autoCapitalize="none"
+                onChange={setAccessPassword}
+                error={show('access')}
               />
+            )}
+
+            {accessType === 'other' && (
+              <View style={styles.stack}>
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>Descripción del método de acceso</Text>
+                  <View style={[styles.inputWrap, { borderColor: show('access') ? palette.danger : colors.border, backgroundColor: colors.background }]}>
+                    <TextInput
+                      value={accessPassword}
+                      onChangeText={setAccessPassword}
+                      placeholder="Ej: Presionar botón encendido 2 veces o clave anotada en la tapa"
+                      placeholderTextColor={colors.muted}
+                      multiline
+                      maxLength={200}
+                      accessibilityLabel="Método de acceso"
+                      style={[styles.input, styles.multiline, { color: colors.text }]}
+                    />
+                  </View>
+                </View>
+              </View>
             )}
           </Section>
 
@@ -515,5 +653,23 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 16,
+  },
+  unlockInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 2,
+  },
+  unlockInfoTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  unlockInfoText: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 });
