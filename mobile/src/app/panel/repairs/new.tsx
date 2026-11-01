@@ -233,9 +233,29 @@ export default function NewRepairScreen() {
                   onPress={() => setScanningImei(true)}
                   hitSlop={8}
                   style={{ padding: 6 }}
-                  accessibilityLabel="Escanear código de barras o IMEI">
-                  <Ionicons name="barcode-outline" size={22} color={palette.primary} />
+                  accessibilityLabel="Escanear código de barras o IMEI con cámara">
+                  <Ionicons name="camera-outline" size={22} color={palette.primary} />
                 </Pressable>
+              </View>
+
+              <Pressable
+                onPress={() => setScanningImei(true)}
+                style={[styles.cameraActionBtn, { borderColor: palette.primary, backgroundColor: `${palette.primary}12` }]}
+                accessibilityLabel="Abrir cámara para escanear IMEI">
+                <Ionicons name="camera" size={17} color={palette.primary} />
+                <Ionicons name="barcode-outline" size={17} color={palette.primary} />
+                <Text style={[styles.cameraActionText, { color: palette.primary }]}>
+                  {deviceType === 'smartphone' || deviceType === 'tablet' ? 'Escanear IMEI con la cámara' : 'Escanear número de serie'}
+                </Text>
+              </Pressable>
+
+              <View style={[styles.tipBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
+                <Text style={[styles.tipText, { color: colors.muted }]}>
+                  {deviceType === 'smartphone' || deviceType === 'tablet'
+                    ? 'Podés escanear la caja, la bandeja SIM, la etiqueta trasera o marcar *#06# en el celular para escanear el código de barras en pantalla.'
+                    : 'Podés escanear el código de barras o código QR que figura en la etiqueta o chasis del equipo.'}
+                </Text>
               </View>
             </View>
           </Section>
@@ -351,6 +371,8 @@ export default function NewRepairScreen() {
         <BarcodeScanner
           visible={scanningImei}
           onClose={() => setScanningImei(false)}
+          title={deviceType === 'smartphone' || deviceType === 'tablet' ? 'Escanear IMEI del equipo' : 'Escanear número de serie'}
+          hint="Apuntá la cámara a la caja, etiqueta trasera o pantalla (*#06#)"
           onScanned={(code: string) => {
             setScanningImei(false);
             const cleaned = deviceType === 'smartphone' || deviceType === 'tablet' ? code.replace(/\D/g, '').slice(0, 15) : code.trim();
@@ -465,4 +487,33 @@ const styles = StyleSheet.create({
   footer: { padding: 12, borderTopWidth: StyleSheet.hairlineWidth },
   submit: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: palette.primary, borderRadius: 14, minHeight: 54 },
   submitText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  cameraActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 2,
+  },
+  cameraActionText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  tipBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 2,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });

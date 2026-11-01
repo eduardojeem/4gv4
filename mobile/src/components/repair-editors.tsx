@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BarcodeScanner } from '@/components/barcode-scanner';
 import { BudgetLines, budgetProblem, fromBudgetLine, linesTotal, QuickAmounts, toBudgetLine, type BudgetLine } from '@/components/budget-editor';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
@@ -132,6 +133,8 @@ const toEdit = (repair: Repair): RepairEdit => ({
   deviceType: (repair.device_type as RepairEdit['deviceType']) || 'smartphone',
   brand: repair.device_brand ?? '',
   model: repair.device_model ?? '',
+  imei: repair.imei ?? repair.serial_number ?? '',
+  serialNumber: repair.serial_number ?? repair.imei ?? '',
   issue: repair.problem_description ?? '',
   description: repair.diagnosis ?? '',
   priority: (repair.priority as RepairEdit['priority']) || 'medium',
@@ -145,6 +148,7 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanningImei, setScanningImei] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -207,6 +211,56 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
           <Field label="Modelo" colors={colors}>
             <TextInput value={edit.model} onChangeText={(v) => set('model', v)} style={[styles.input, { color: colors.text }]} />
           </Field>
+        </View>
+      </View>
+
+      <View style={styles.field}>
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {edit.deviceType === 'smartphone' || edit.deviceType === 'tablet' ? 'IMEI' : 'N.º de serie'}
+          </Text>
+          {(edit.deviceType === 'smartphone' || edit.deviceType === 'tablet') && (edit.imei ?? '').trim().length > 0 && (
+            <Text style={[styles.small, { color: (edit.imei ?? '').replace(/\D/g, '').length === 15 ? palette.success : colors.muted, fontWeight: '700' }]}>
+              {(edit.imei ?? '').replace(/\D/g, '').length === 15 ? '✓ 15 dígitos (IMEI válido)' : `${(edit.imei ?? '').replace(/\D/g, '').length}/15 dígitos`}
+            </Text>
+          )}
+        </View>
+        <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
+          <TextInput
+            value={edit.imei ?? ''}
+            onChangeText={(v) => {
+              const isPhoneOrTablet = edit.deviceType === 'smartphone' || edit.deviceType === 'tablet';
+              const cleaned = isPhoneOrTablet ? v.replace(/[^\d\s-]/g, '') : v.toUpperCase();
+              set('imei', cleaned);
+              set('serialNumber', cleaned);
+            }}
+            placeholder={edit.deviceType === 'smartphone' || edit.deviceType === 'tablet' ? '352091081234567' : 'S/N de equipo'}
+            placeholderTextColor={colors.muted}
+            keyboardType={edit.deviceType === 'smartphone' || edit.deviceType === 'tablet' ? 'number-pad' : 'default'}
+            autoCapitalize="characters"
+            style={[styles.input, { color: colors.text }]}
+          />
+          <Pressable onPress={() => setScanningImei(true)} hitSlop={8} style={{ padding: 6 }}>
+            <Ionicons name="camera-outline" size={20} color={palette.primary} />
+          </Pressable>
+        </View>
+        <Pressable
+          onPress={() => setScanningImei(true)}
+          style={[styles.cameraActionBtn, { borderColor: palette.primary, backgroundColor: `${palette.primary}12` }]}
+          accessibilityLabel="Abrir cámara para escanear IMEI">
+          <Ionicons name="camera" size={17} color={palette.primary} />
+          <Ionicons name="barcode-outline" size={17} color={palette.primary} />
+          <Text style={[styles.cameraActionText, { color: palette.primary }]}>
+            {edit.deviceType === 'smartphone' || edit.deviceType === 'tablet' ? 'Escanear IMEI con la cámara' : 'Escanear número de serie'}
+          </Text>
+        </Pressable>
+        <View style={[styles.tipBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
+          <Text style={[styles.tipText, { color: colors.muted }]}>
+            {edit.deviceType === 'smartphone' || edit.deviceType === 'tablet'
+              ? 'Podés escanear la caja, la bandeja SIM, la etiqueta trasera o marcar *#06# en el celular para escanear el código de barras en pantalla.'
+              : 'Podés escanear el código de barras o código QR que figura en la etiqueta o chasis del equipo.'}
+          </Text>
         </View>
       </View>
       <Text style={[styles.label, { color: colors.text }]}>Problemas frecuentes</Text>
@@ -282,6 +336,20 @@ export function EditRepairSheet({ repair, visible, onClose, onSaved }: { repair:
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
+      <BarcodeScanner
+        visible={scanningImei}
+        onClose={() => setScanningImei(false)}
+        title={edit.deviceType === 'smartphone' || edit.deviceType === 'tablet' ? 'Escanear IMEI del equipo' : 'Escanear número de serie'}
+        hint="Apuntá la cámara a la caja, etiqueta trasera o pantalla (*#06#)"
+        onScanned={(code: string) => {
+          setScanningImei(false);
+          const isPhoneOrTablet = edit.deviceType === 'smartphone' || edit.deviceType === 'tablet';
+          const cleaned = isPhoneOrTablet ? code.replace(/\D/g, '').slice(0, 15) : code.trim();
+          set('imei', cleaned);
+          set('serialNumber', cleaned);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }}
+      />
     </Sheet>
   );
 }
@@ -725,4 +793,34 @@ const styles = StyleSheet.create({
   error: { color: palette.danger, fontSize: 13, fontWeight: '600' },
   submit: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, minHeight: 52, marginTop: 4 },
   submitText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cameraActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 2,
+  },
+  cameraActionText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  tipBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 2,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });
