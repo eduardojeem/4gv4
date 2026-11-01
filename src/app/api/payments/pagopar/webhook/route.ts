@@ -133,8 +133,10 @@ async function handleNotification(request: Request) {
 async function handlePagoparReversal(paymentId: string, hash: string) {
   try {
     const order = await queryPagoparOrder(hash)
-    if (order.status === 'approved') {
-      console.warn('[pagopar-webhook] Notificación sin pago, pero Pagopar confirma el cobro.', { paymentId })
+    // Solo un pedido cancelado o rechazado es una reversión. Si Pagopar lo
+    // sigue dando por pagado, o todavía lo está procesando, no se toca nada.
+    if (order.status !== 'cancelled' && order.status !== 'rejected') {
+      console.warn('[pagopar-webhook] Notificación sin pago, pero Pagopar no confirma la reversión.', { paymentId, status: order.status })
       return
     }
     const { data, error } = await createAdminSupabase().rpc('refund_subscription_payment', {

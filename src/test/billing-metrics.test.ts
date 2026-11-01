@@ -43,4 +43,19 @@ describe('computeBillingMetrics', () => {
     expect(metrics.churnedMrr).toBe(100000)
     expect(metrics.churnRate).toBe(50)
   })
+
+  it('no cuenta en el MRR un período pago que ya venció', () => {
+    const metrics = computeBillingMetrics(
+      [
+        { organization_id: 'vencida', plan: 'PRO', status: 'active', payment_status: 'paid', current_period_ends_at: daysAgo(2) },
+        { organization_id: 'vigente', plan: 'BASIC', status: 'active', payment_status: 'paid', current_period_ends_at: new Date(NOW + 86_400_000).toISOString() },
+      ],
+      [],
+      prices,
+      NOW,
+    )
+
+    expect(metrics.mrr).toBe(100000)
+    expect(metrics.billingSubscriptions).toBe(1)
+  })
 })

@@ -145,6 +145,17 @@ async function recordOnce(organizationId: string, kind: string, periodKey: strin
   throw new Error(`No se pudo registrar el aviso: ${error.message}`)
 }
 
+/** Si el envío falló, borra el registro para que el próximo cron lo reintente. */
+async function releaseRecord(organizationId: string, kind: string, periodKey: string) {
+  const { error } = await createAdminSupabase()
+    .from('subscription_reminders_sent')
+    .delete()
+    .eq('organization_id', organizationId)
+    .eq('kind', kind)
+    .eq('period_key', periodKey)
+  if (error) console.error('[subscription-notices] No se pudo liberar el aviso para reintentarlo', { organizationId, kind, code: error.code })
+}
+
 async function deliver(params: {
   organizationId: string
   kind: string
@@ -193,16 +204,19 @@ export async function sendSubscriptionReminders(now = Date.now()): Promise<Remin
   for (const row of (data ?? []) as SubscriptionRow[]) {
     const reminder = reminderFor(row, now)
     if (!reminder) continue
+    let recorded = false
     try {
       if (!(await recordOnce(row.organization_id, reminder.kind, reminder.periodKey))) {
         result.skipped += 1
         continue
       }
+      recorded = true
       const copy = NOTICE_COPY[reminder.kind](reminder.date)
       await deliver({ organizationId: row.organization_id, kind: reminder.kind, periodKey: reminder.periodKey, title: copy.title, detail: copy.detail, cta: copy.cta, type: copy.type })
       result.sent += 1
     } catch (sendError) {
       console.error('[subscription-notices] Falló un aviso', { organizationId: row.organization_id, kind: reminder.kind, sendError })
+      if (recorded) await releaseRecord(row.organization_id, reminder.kind, reminder.periodKey)
       result.failed += 1
     }
   }
@@ -228,7 +242,7 @@ export async function sendSubscriptionPaymentReceipt(paymentId: string) {
     ])
     const planName = plan?.name || payment.plan_id || 'tu plan'
     if (contact.email) {
-      await sendEmail({
+      const sent = await sendEmail({
         to: contact.email,
         subject: `Recibimos tu pago del plan ${planName}`,
         html: renderSubscriptionReceiptEmail({
@@ -244,6 +258,10 @@ export async function sendSubscriptionPaymentReceipt(paymentId: string) {
         }),
         log: { organizationId: payment.organization_id },
       })
+      if (!sent.ok && !sent.skipped) {
+        await releaseRecord(payment.organization_id, 'receipt', payment.id)
+        throw new Error(sent.error || 'No se pudo enviar el recibo.')
+      }
     }
     await dispatchNotificationEvent({
       organizationId: payment.organization_id,

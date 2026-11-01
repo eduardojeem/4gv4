@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const supabase = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => supabase }))
 
-const { applySubscriptionDiscount, findAvailableSubscriptionDiscount } = await import('@/lib/saas/subscription-discount')
+const { applySubscriptionDiscount, findAvailableSubscriptionDiscount, reserveSubscriptionDiscount } = await import('@/lib/saas/subscription-discount')
 
 function query(result: unknown) {
   const chain: Record<string, unknown> = {}
-  for (const method of ['select', 'eq', 'order', 'limit', 'update']) chain[method] = vi.fn(() => chain)
+  for (const method of ['select', 'eq', 'is', 'order', 'limit', 'update']) chain[method] = vi.fn(() => chain)
   chain.maybeSingle = vi.fn(async () => result)
   chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve)
   return chain
@@ -39,7 +39,7 @@ describe('findAvailableSubscriptionDiscount', () => {
       error: null,
     }))
 
-    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toEqual({ redemptionId: 'libre', percent: 20, amount: null })
+    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toEqual({ redemptionId: 'libre', percent: 20, amount: null, previousPaymentId: null })
   })
 
   it('no reutiliza un cupón ya usado en un pago cobrado, pero sí uno cuyo pago falló', async () => {
@@ -54,7 +54,7 @@ describe('findAvailableSubscriptionDiscount', () => {
       .mockReturnValueOnce(query({ data: { status: 'paid', created_at: '2026-10-31T12:00:00Z' } }))
       .mockReturnValueOnce(query({ data: { status: 'failed', created_at: '2026-10-31T12:00:00Z' } }))
 
-    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toEqual({ redemptionId: 'fallido', percent: null, amount: 20000 })
+    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toEqual({ redemptionId: 'fallido', percent: null, amount: 20000, previousPaymentId: 'pago-fallido' })
   })
 
   it('libera el cupón de un pago que quedó pendiente más de 72 horas', async () => {
@@ -65,6 +65,21 @@ describe('findAvailableSubscriptionDiscount', () => {
       }))
       .mockReturnValueOnce(query({ data: { status: 'pending', created_at: '2026-10-28T12:00:00Z' } }))
 
-    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toMatchObject({ redemptionId: 'viejo' })
+    await expect(findAvailableSubscriptionDiscount('org', 'BASIC', NOW)).resolves.toMatchObject({ redemptionId: 'viejo', previousPaymentId: 'pendiente' })
+  })
+})
+
+describe('reserveSubscriptionDiscount', () => {
+  it('solo toma el cupón si sigue atado al mismo pago que cuando se leyó', async () => {
+    const free = query({ data: [{ id: 'libre' }], error: null })
+    supabase.from.mockReturnValueOnce(free)
+    await expect(reserveSubscriptionDiscount({ redemptionId: 'libre', percent: 20, amount: null, previousPaymentId: null }, 'pago-nuevo')).resolves.toBe(true)
+    expect(free.update).toHaveBeenCalledWith({ applied_payment_id: 'pago-nuevo' })
+    expect(free.is).toHaveBeenCalledWith('applied_payment_id', null)
+
+    const taken = query({ data: [], error: null })
+    supabase.from.mockReturnValueOnce(taken)
+    await expect(reserveSubscriptionDiscount({ redemptionId: 'fallido', percent: null, amount: 1, previousPaymentId: 'pago-fallido' }, 'pago-nuevo')).resolves.toBe(false)
+    expect(taken.eq).toHaveBeenCalledWith('applied_payment_id', 'pago-fallido')
   })
 })

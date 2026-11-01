@@ -18,6 +18,7 @@ export type BillingSubscription = {
   plan: string | null
   status: string | null
   payment_status: string | null
+  current_period_ends_at?: string | null
 }
 
 export type BillingPayment = {
@@ -39,10 +40,13 @@ export type BillingMetrics = {
   mrrByPlan: Record<string, number>
 }
 
-function isBillable(subscription: BillingSubscription) {
+function isBillable(subscription: BillingSubscription, now: number) {
+  // Un período vencido no factura aunque la baja a Gratuito todavía no corrió.
+  const endsAt = subscription.current_period_ends_at ? Date.parse(subscription.current_period_ends_at) : NaN
   return subscription.status === 'active'
     && normalizeRevenuePlan(subscription.plan) !== 'FREE'
     && !['failed', 'refunded', 'unpaid'].includes(subscription.payment_status?.toLowerCase() ?? '')
+    && !(Number.isFinite(endsAt) && endsAt <= now)
 }
 
 export function computeBillingMetrics(
@@ -76,7 +80,7 @@ export function computeBillingMetrics(
   const billingOrganizations = new Set<string>()
 
   for (const subscription of subscriptions) {
-    if (!isBillable(subscription)) continue
+    if (!isBillable(subscription, now)) continue
     billingSubscriptions += 1
     billingOrganizations.add(subscription.organization_id)
     const tier = normalizeRevenuePlan(subscription.plan)
