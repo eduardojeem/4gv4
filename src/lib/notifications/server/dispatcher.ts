@@ -20,6 +20,8 @@ export interface DispatchNotificationEventParams {
   resourceId?: string | null
   data?: Record<string, unknown>
   targetUserIds?: string[]
+  /** Quien hizo la acción no necesita que le avisen (el cajero que cobró, quien cargó la reparación). */
+  excludeUserIds?: string[]
   idempotencyKey?: string | null
 }
 
@@ -56,6 +58,7 @@ export async function dispatchNotificationEvent(
     resourceId,
     data,
     targetUserIds,
+    excludeUserIds,
     idempotencyKey,
   } = params
 
@@ -95,12 +98,15 @@ export async function dispatchNotificationEvent(
   }
 
   // 3. Resolución de Destinatarios Elegibles
-  const { candidates, eligible, skippedByBranch, skippedByPermission } = await resolveRecipients({
+  const resolved = await resolveRecipients({
     organizationId,
     branchId,
     type,
     targetUserIds,
   })
+  const { candidates, skippedByBranch, skippedByPermission } = resolved
+  const excluded = new Set(excludeUserIds ?? [])
+  const eligible = resolved.eligible.filter((member) => !excluded.has(member.userId))
 
   if (eligible.length === 0) {
     return {
@@ -163,6 +169,8 @@ export async function dispatchNotificationEvent(
   let createdNotifications = 0
   let duplicates = 0
   const notificationIds: string[] = []
+  // Un reintento del mismo evento (clave de idempotencia repetida) no vuelve a sonar en el celular.
+  const duplicateUserIds = new Set<string>()
 
   for (const recipient of recipientsToDeliver) {
     // Generar clave de idempotencia única y determinista para este destinatario
@@ -201,6 +209,7 @@ export async function dispatchNotificationEvent(
       // Código de PostgreSQL 23505: Unique violation (idempotency_key duplicada)
       if (insertError.code === '23505' || insertError.message?.includes('duplicate key') || insertError.message?.includes('unique constraint')) {
         duplicates++
+        duplicateUserIds.add(recipient.userId)
       } else {
         console.error(`[notifications] Error inserting notification for user ${recipient.userId}:`, insertError)
       }
@@ -211,13 +220,14 @@ export async function dispatchNotificationEvent(
   }
 
   // 7. Entrega de Notificaciones Push Móviles (Expo Push)
-  // Se evalúa para todos los destinatarios elegibles cuya preferencia pushEnabled sea verdadera.
+  // Se evalúa para los destinatarios elegibles con pushEnabled, salvo los que ya tenían este evento (reintento).
   // La persistencia in-app ya concluyó exitosamente y cualquier contingencia push es no fatal.
   let pushAttempted = 0
   let pushDelivered = 0
   let pushFailed = 0
 
   const pushEligibleUserIds = eligible
+    .filter((m) => !duplicateUserIds.has(m.userId))
     .filter((m) => {
       const pref = preferencesMap.get(m.userId)
       return pref ? pref.pushEnabled === true : true

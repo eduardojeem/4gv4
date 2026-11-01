@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
+import { notifyOrderCreated } from '@/lib/notifications/server/business-events'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
@@ -423,6 +424,16 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', modu
         }).catch((err) => logger.error('Failed to send order confirmation email', { error: err }))
     }
 
+    after(() => notifyOrderCreated({
+      organizationId: organization.id,
+      branchId: typeof fullOrder.branch_id === 'string' ? fullOrder.branch_id : branchScope.branchId,
+      orderId: createdOrderId,
+      online: false,
+      actorUserId: user.id,
+      orderNumber: fullOrder.order_number,
+      customerName: fullOrder.customer_name,
+      total: Number(fullOrder.total || 0),
+    }))
     return NextResponse.json({ success: true, data: normalizeOrder(fullOrder) }, { status: 201 })
   } catch (error) {
     logger.error('Orders API POST error', { error })
