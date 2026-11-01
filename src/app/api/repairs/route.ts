@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse, after } from 'next/server'
-import { notifyRepairCreated } from '@/lib/notifications/server/business-events'
+import { NextRequest, NextResponse } from 'next/server'
+import { afterResponse, notifyRepairCreated } from '@/lib/notifications/server/business-events'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
 import { logger } from '@/lib/logger'
 import { parseCreateRepairInput, type CreateRepairInput } from '@/lib/repairs/create-repair-input'
@@ -453,7 +453,7 @@ export async function POST(request: NextRequest) {
     }
 
     const signedRepair = await prepareRepairResponse(ctx, await signRepairRecordImages(ctx.supabase, fullRepair))
-    after(() => notifyRepairCreated({
+    afterResponse(() => notifyRepairCreated({
       organizationId: ctx.organizationId,
       branchId: ctx.branchId,
       repairId,

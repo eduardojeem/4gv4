@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse, after } from 'next/server'
-import { notifyOrderCreated } from '@/lib/notifications/server/business-events'
+import { NextRequest, NextResponse } from 'next/server'
+import { afterResponse, notifyOrderCreated } from '@/lib/notifications/server/business-events'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
 
     if (!fullOrder) throw new Error('No se pudo recuperar el pedido creado.')
     // Aviso al comercio: la clave por pedido evita repetirlo si el checkout se reintenta.
-    after(() => notifyOrderCreated({
+    afterResponse(() => notifyOrderCreated({
       organizationId: organization.id,
       branchId: typeof fullOrder.branch_id === 'string' ? fullOrder.branch_id : null,
       orderId: created.order_id as string,

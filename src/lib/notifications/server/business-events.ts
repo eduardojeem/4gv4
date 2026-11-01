@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { config } from '@/lib/config'
 import { logger } from '@/lib/logger'
 import { dispatchNotificationEvent } from './dispatcher'
@@ -17,6 +18,18 @@ export function formatNotificationAmount(amount: number, currency = config.curre
     return new Intl.NumberFormat('es-PY', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount)
   } catch {
     return `${currency} ${Math.round(amount).toLocaleString('es-PY')}`
+  }
+}
+
+/**
+ * Corre el aviso después de responder. Fuera de una petición de Next (tests,
+ * scripts) `after` no existe: ahí se lanza igual, sin esperarlo.
+ */
+export function afterResponse(task: () => Promise<unknown>) {
+  try {
+    after(task)
+  } catch {
+    void task()
   }
 }
 

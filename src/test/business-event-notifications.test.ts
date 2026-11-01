@@ -47,10 +47,10 @@ describe('avisos de ventas, pedidos y reparaciones', () => {
   })
 
   it('las rutas que crean ventas, pedidos y reparaciones disparan el aviso después de responder', () => {
-    expect(read('src/app/api/pos/process-sale/route.ts')).toMatch(/after\(\(\) => notifySaleCreated/)
-    expect(read('src/app/api/orders/route.ts')).toMatch(/after\(\(\) => notifyOrderCreated/)
-    expect(read('src/app/api/public/orders/route.ts')).toMatch(/after\(\(\) => notifyOrderCreated/)
-    expect(read('src/app/api/repairs/route.ts')).toMatch(/after\(\(\) => notifyRepairCreated/)
+    expect(read('src/app/api/pos/process-sale/route.ts')).toMatch(/afterResponse\(\(\) => notifySaleCreated/)
+    expect(read('src/app/api/orders/route.ts')).toMatch(/afterResponse\(\(\) => notifyOrderCreated/)
+    expect(read('src/app/api/public/orders/route.ts')).toMatch(/afterResponse\(\(\) => notifyOrderCreated/)
+    expect(read('src/app/api/repairs/route.ts')).toMatch(/afterResponse\(\(\) => notifyRepairCreated/)
   })
 
   it('un reintento con la misma clave no vuelve a mandar push', () => {

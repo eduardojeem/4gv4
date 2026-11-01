@@ -1,5 +1,5 @@
-import { NextResponse, after, type NextRequest } from 'next/server'
-import { notifySaleCreated } from '@/lib/notifications/server/business-events'
+import { NextResponse, type NextRequest } from 'next/server'
+import { afterResponse, notifySaleCreated } from '@/lib/notifications/server/business-events'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
@@ -599,7 +599,7 @@ export const POST = withTenantAuth(
     // reintento idempotente no vuelve a avisar.
     if (result.idempotent !== true) {
       const branchId = branchScope.branchId
-      after(() => notifySaleCreated({
+      afterResponse(() => notifySaleCreated({
         organizationId: organization.id,
         branchId,
         saleId,
