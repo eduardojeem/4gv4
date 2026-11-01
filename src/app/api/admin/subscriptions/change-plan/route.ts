@@ -12,7 +12,7 @@ import {
   SubscriptionCheckoutError,
 } from '@/lib/saas/pagopar-subscription-checkout'
 import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
-import { getBrowserRequestOrigin, isStripeConfigured } from '@/lib/payments/stripe'
+import { getBrowserRequestOrigin, isStripeCheckoutEnabled } from '@/lib/payments/stripe'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 
 export async function GET() {
@@ -30,7 +30,7 @@ export async function GET() {
 
   try {
     const data = await getChangePlanData(organization.id)
-    return NextResponse.json({ ...data, stripeEnabled: isStripeConfigured() })
+    return NextResponse.json({ ...data, stripeEnabled: isStripeCheckoutEnabled() })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'No se pudieron cargar los planes.' },

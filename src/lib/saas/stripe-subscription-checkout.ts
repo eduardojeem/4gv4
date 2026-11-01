@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getStripe, getStripeReturnOrigin, isStripeConfigured, toStripeUnitAmount } from '@/lib/payments/stripe'
+import { getStripe, getStripeReturnOrigin, isStripeCheckoutEnabled, toStripeUnitAmount } from '@/lib/payments/stripe'
 import {
   resolveSubscriptionCheckoutTarget,
   SubscriptionCheckoutError,
@@ -27,8 +27,8 @@ export async function createSubscriptionStripeCheckout(params: {
 }) {
   const { organization, userEmail, targetPlanCode, canChangePlan, requestOrigin, correlationId } = params
 
-  if (!isStripeConfigured()) {
-    throw new SubscriptionCheckoutError('Stripe no está configurado.', 501)
+  if (!isStripeCheckoutEnabled()) {
+    throw new SubscriptionCheckoutError('El pago con Stripe no está disponible por ahora.', 501)
   }
 
   const { state, targetPlan, amountPyg } = await resolveSubscriptionCheckoutTarget({

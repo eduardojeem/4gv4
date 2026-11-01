@@ -97,10 +97,10 @@ describe('SubscriptionsClientView component', () => {
   it('renders all 4 navigation tabs and the quota header', () => {
     render(<SubscriptionsClientView {...defaultProps} />)
 
-    expect(screen.getByRole('tab', { name: /Resumen & Cupos/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Planes Disponibles/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Historial de Pagos/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Datos Fiscales/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Resumen/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Planes/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Pagos/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Facturación/i })).toBeInTheDocument()
 
     // El banner de capacidad repetia el plan y el promedio que ya muestra el
     // encabezado de la pagina; quedo solo lo suyo: como estan los cupos.
@@ -184,7 +184,7 @@ describe('SubscriptionsClientView component', () => {
     expect(screen.getByText('Cambios de Plan')).toBeInTheDocument()
   })
 
-  it('switches to Historial de Pagos tab via hash and filters payments', () => {
+  it('switches to Pagos tab via hash and filters payments', () => {
     window.location.hash = '#payment-history'
     render(<SubscriptionsClientView {...defaultProps} />)
 
@@ -232,7 +232,7 @@ describe('SubscriptionsClientView component', () => {
     window.location.hash = ''
   })
 
-  it('switches to Datos Fiscales tab via hash and displays the billing profile', () => {
+  it('switches to Facturación tab via hash and displays the billing profile', () => {
     window.location.hash = '#billing-form'
     render(<SubscriptionsClientView {...defaultProps} />)
 
