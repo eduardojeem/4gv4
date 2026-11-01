@@ -12,6 +12,8 @@ export type PanelData = {
   organization: { id: string; name: string; slug: string; logoUrl: string | null; role: string; plan: string };
   groups: PanelGroup[];
   tabs: string[];
+  /** Sección principal del rubro (taller o agenda); null en comercios de productos. */
+  businessFocus?: 'repairs' | 'agenda' | null;
   capabilities?: Record<string, boolean>;
 };
 

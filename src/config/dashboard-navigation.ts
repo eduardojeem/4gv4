@@ -60,7 +60,7 @@ const rawDashboardNavGroups: DashboardNavGroup[] = [
     items: [
       { key: 'overview', label: 'Resumen', href: '/dashboard', icon: Gauge, description: 'Estado general del negocio', mobilePriority: 10 },
       { key: 'pos', label: 'Punto de venta', mobileLabel: 'POS', href: '/dashboard/pos', icon: ShoppingCart, description: 'Registrar una venta', permission: 'pos.read', mobilePriority: 20 },
-      { key: 'agenda', label: 'Agenda', href: '/dashboard/agenda', icon: CalendarClock, description: 'Turnos por profesional y reservas online', permission: 'pos.read', mobilePriority: 25 },
+      { key: 'agenda', label: 'Agenda', mobileLabel: 'Reservas', href: '/dashboard/agenda', icon: CalendarClock, description: 'Turnos por profesional y reservas online', permission: 'pos.read', mobilePriority: 25 },
       { key: 'cash-register', label: 'Caja', href: '/dashboard/pos/caja', icon: Banknote, description: 'Apertura, movimientos y cierre', permission: 'pos.read', mobilePriority: 70 },
     ],
   },
@@ -158,13 +158,40 @@ export function filterDashboardNavGroups({
     .filter((group) => group.items.length > 0)
 }
 
+const SERVICE_VERTICALS = new Set(['barbershop', 'beauty_services'])
+
+/**
+ * La sección que define el día a día del rubro: Reparaciones para tecnología o
+ * si el taller está habilitado, Agenda para barberías y estéticas. null si el
+ * negocio vende productos y nada más.
+ */
+export function getBusinessFocusSection(
+  groups: DashboardNavGroup[],
+  businessVertical?: string | null,
+): 'repairs' | 'agenda' | null {
+  const keys = new Set(groups.flatMap((group) => group.items.map((item) => item.key)))
+  const preferred = businessVertical && SERVICE_VERTICALS.has(businessVertical)
+    ? (['agenda', 'repairs'] as const)
+    : (['repairs', 'agenda'] as const)
+  return preferred.find((key) => keys.has(key)) ?? null
+}
+
 export function getMobileDashboardItems(
   groups: DashboardNavGroup[],
   limit = 5,
+  businessVertical?: string | null,
 ): DashboardNavItem[] {
+  // La sección del rubro entra a la barra en lugar de Productos; la otra
+  // (Agenda en un taller, por ejemplo) queda después de Productos.
+  const focus = getBusinessFocusSection(groups, businessVertical)
+  const priority = (item: DashboardNavItem) => {
+    if (item.key === focus) return 25
+    if (item.key === 'agenda') return 45
+    return item.mobilePriority ?? Number.MAX_SAFE_INTEGER
+  }
   return groups
     .flatMap((group) => group.items)
     .filter((item) => item.mobilePriority !== undefined)
-    .sort((a, b) => (a.mobilePriority ?? Number.MAX_SAFE_INTEGER) - (b.mobilePriority ?? Number.MAX_SAFE_INTEGER))
+    .sort((a, b) => priority(a) - priority(b))
     .slice(0, limit)
 }

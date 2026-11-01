@@ -31,7 +31,7 @@ export const MobileNav = memo(function MobileNav() {
       hasPermission,
       businessVertical,
     })
-    return getMobileDashboardItems(groups, 4)
+    return getMobileDashboardItems(groups, 4, businessVertical)
   }, [userRole, effectiveModules, hasPermission, businessVertical])
   const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
 
