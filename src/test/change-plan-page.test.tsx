@@ -18,6 +18,7 @@ function mockData(overrides: Record<string, unknown> = {}) {
     plans: [plan('FREE', 'Gratuito', 0), plan('PRO', 'Pro', 100000), plan('PRO_MAX', 'Pro Max', 200000)],
     billingMissingFields: [],
     paidPeriodEndsAt: '2026-11-19T12:00:00.000Z',
+    prorations: { PRO: { kind: 'downgrade', credit: 100000, chargeAmount: 100000, extraDays: 30 }, FREE: null, PRO_MAX: null },
     ...overrides,
   })))
   vi.stubGlobal('fetch', fetchMock)
@@ -37,7 +38,7 @@ describe('Cambiar plan', () => {
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Cambiar a Pro')
     expect(screen.getByText('−Gs. 100.000', { exact: false })).toBeInTheDocument()
-    expect(screen.getByText(/los días que quedan de Pro Max no se descuentan/)).toBeInTheDocument()
+    expect(screen.getByText(/30 días extra/)).toBeInTheDocument()
     // Solo la carga inicial: todavía no se pidió el cambio.
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })

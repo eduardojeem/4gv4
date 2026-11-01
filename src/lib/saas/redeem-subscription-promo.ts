@@ -131,22 +131,20 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
     }
   }
 
-  // Activación de plan = venta: registrar un pago como ingreso real (best-effort,
-  // no se revierte la activación si falla el registro contable).
+  // Activación de plan: queda en el historial de pagos del comercio (best-effort,
+  // no se revierte la activación si falla el registro).
   if (promo.benefit_type === 'activate_plan') {
     try {
       const planCode = (resultingSubscription as { plan?: string | null }).plan ?? application.subscriptionPatch.plan ?? null
-      const { data: planRow } = await admin
-        .from('subscription_plans')
-        .select('price')
-        .eq('tier', String(promo.target_plan ?? '').toLowerCase())
-        .maybeSingle()
 
       await admin.from('subscription_payments').insert({
         organization_id: organization.id,
         subscription_id: subscription.id,
         plan_id: planCode,
-        amount: Number(planRow?.price ?? 0),
+        // Un código no es un cobro: se registra con monto 0 para que no infle lo
+        // cobrado ni el MRR. Si el código se vendió, el superadmin registra ese
+        // cobro como pago manual.
+        amount: 0,
         currency: 'PYG',
         status: 'paid',
         payment_method: 'activation_code',

@@ -12,6 +12,7 @@ import {
   findAvailableSubscriptionDiscount,
   reserveSubscriptionDiscount,
 } from '@/lib/saas/subscription-discount'
+import { prorationForChange } from '@/lib/saas/subscription-proration'
 import {
   assessPlanChange,
   getCurrentOrganizationSubscription,
@@ -72,7 +73,19 @@ export async function createSubscriptionPagoparCheckout(params: {
   // Cupón de descuento canjeado: se cobra el monto con descuento y el cupón
   // queda reservado para este pago.
   const discount = await findAvailableSubscriptionDiscount(organization.id, targetPlan.code)
-  const chargedAmount = applySubscriptionDiscount(amountPyg, discount)
+  // Prorrateo al cambiar entre planes pagos: al subir se descuenta lo que
+  // quedaba del plan actual; al bajar se suma como días extra.
+  const proration = prorationForChange({
+    currentPlanCode: state.currentPlan.code,
+    currentPrice: state.currentPlan.price_monthly,
+    targetPlanCode: targetPlan.code,
+    targetPrice: amountPyg,
+    subscription: state.subscription,
+  })
+  const discountedAmount = applySubscriptionDiscount(amountPyg, discount)
+  const chargedAmount = proration?.kind === 'upgrade'
+    ? Math.max(1, discountedAmount - proration.credit)
+    : discountedAmount
 
   const admin = createAdminSupabase()
   const pendingPaymentMethod = paymentMethod === 'qr' ? 'Pagopar QR' : 'Pagopar Tarjeta'
@@ -115,6 +128,8 @@ export async function createSubscriptionPagoparCheckout(params: {
       payment_method: pendingPaymentMethod,
       provider: 'pagopar',
       external_reference: externalReference,
+      proration_credit: proration?.credit ?? 0,
+      proration_extra_days: proration?.extraDays ?? 0,
     })
     .select('id')
     .single()

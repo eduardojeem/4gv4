@@ -7,6 +7,8 @@ const queryPagoparOrder = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => supabase }))
 vi.mock('@/lib/saas/subscription-autopay', () => ({ AUTOPAY_PAYMENT_METHOD: 'Pagopar Débito automático' }))
+const sendReceipt = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/saas/subscription-notifications', () => ({ sendSubscriptionPaymentReceipt: sendReceipt }))
 vi.mock('@/lib/payments/pagopar', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/payments/pagopar')>(),
   queryPagoparOrder,
@@ -63,6 +65,7 @@ describe('syncPagoparPaymentStatus', () => {
     supabase.rpc.mockResolvedValue({ data: [{ applied: true }], error: null })
 
     await expect(syncPagoparPaymentStatus(localPayment(), providerOrder())).resolves.toBe('applied')
+    expect(sendReceipt).toHaveBeenCalledWith('pay-1')
     expect(supabase.rpc).toHaveBeenCalledWith('apply_paid_subscription_payment', expect.objectContaining({
       p_external_reference: HASH,
       p_provider_payment_id: '1234',

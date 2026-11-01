@@ -32,6 +32,7 @@ import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagin
 import { sumMoneyByCurrency, type CurrencyTotal } from '@/lib/superadmin/money-totals'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
 import { PageHeader } from '@/components/superadmin/ui/page-header'
+import { RefundPaymentButton } from '@/components/superadmin/refund-payment-button'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -517,7 +518,7 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
                   </th>
                   <th className={thClass}>Proveedor</th>
                   <th className={thClass}>Referencia</th>
-                  <th className={cn(thClass, 'pr-4 text-right')}>Comprobante</th>
+                  <th className={cn(thClass, 'pr-4 text-right')}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -614,13 +615,20 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
                         </div>
                       </td>
 
-                      {/* Comprobante */}
+                      {/* Acciones: reembolsar un pago cobrado; ver la página de pago si sigue pendiente */}
                       <td className="py-3 pl-3 pr-4 text-right">
-                        {r.receiptUrl ? (
+                        {r.status === 'paid' ? (
+                          <RefundPaymentButton
+                            paymentId={r.id}
+                            organizationName={r.organizationName ?? 'Comercio'}
+                            amountLabel={formatMoney(r.amount, r.currency)}
+                            onRefunded={() => router.refresh()}
+                          />
+                        ) : r.status === 'pending' && r.receiptUrl ? (
                           <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 text-xs">
                             <a href={r.receiptUrl} target="_blank" rel="noreferrer">
                               <ExternalLink className="h-3.5 w-3.5" />
-                              Ver
+                              Ver pago
                             </a>
                           </Button>
                         ) : (

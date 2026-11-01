@@ -21,7 +21,9 @@ export const STATUS_STYLES: Record<string, string> = {
 
 export function formatDate(value: string | null) {
   if (!value) return 'Sin fecha'
-  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium' }).format(new Date(value))
+  // Siempre en hora de Paraguay: renderizado en el servidor (UTC) un
+  // vencimiento de la noche aparecía como el día siguiente.
+  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium', timeZone: 'America/Asuncion' }).format(new Date(value))
 }
 
 export function formatMoney(value: number, currency = 'PYG') {

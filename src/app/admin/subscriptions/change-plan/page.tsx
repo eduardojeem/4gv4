@@ -31,6 +31,7 @@ import {
 } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 import { cn } from '@/lib/utils'
 import type { CommercialPlan, OrganizationUsage } from '@/lib/saas/subscription-service'
+import type { Proration } from '@/lib/saas/subscription-proration'
 
 type PageData = {
   currentPlan: CommercialPlan
@@ -41,6 +42,8 @@ type PageData = {
   /** Vencimiento del mes ya pagado, si sigue vigente. */
   paidPeriodEndsAt?: string | null
   cancelScheduled?: boolean
+  /** Prorrateo por código de plan: crédito, cobro y días extra. */
+  prorations?: Record<string, Proration | null>
 }
 
 type ChangeResult = {
@@ -233,6 +236,7 @@ function PlanChangeDialog({
   const difference = target.price_monthly - current.price_monthly
   const paidUntil = data.paidPeriodEndsAt ?? null
   const scheduledDowngrade = !isPaidTarget && Boolean(paidUntil)
+  const proration = data.prorations?.[target.code] ?? null
   const checkoutBlocked = isPaidTarget && missing.length > 0 && CHECKOUT_METHODS.includes(method)
 
   return (
@@ -272,9 +276,11 @@ function PlanChangeDialog({
             : `${target.name} se activa cuando se confirma el pago${method === 'transfer' ? ' (al aprobarse el comprobante)' : ''}.`}
         </p>
 
-        {isPaidTarget && paidUntil && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-            Tu plan actual está pago hasta el {formatDate(paidUntil)}. El nuevo período empieza el día que se confirme el pago y los días que quedan de {current.name} no se descuentan.
+        {isPaidTarget && proration && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+            {proration.kind === 'upgrade'
+              ? <>Te descontamos <strong>{money(proration.credit, target.currency)}</strong> por lo que queda de {current.name}: pagás <strong>{money(proration.chargeAmount, target.currency)}</strong> y el nuevo mes empieza al confirmarse el pago.</>
+              : <>Lo que queda de {current.name} ({money(proration.credit, target.currency)}) se suma como <strong>{proration.extraDays} {proration.extraDays === 1 ? 'día extra' : 'días extra'}</strong> de {target.name}.</>}
           </div>
         )}
 

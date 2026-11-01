@@ -149,7 +149,7 @@ export default function SubscriptionsAdminScreen() {
               {periodEnd && (
                 <Text style={[styles.renewalText, { color: colors.muted }]}>
                   {cancelScheduled ? 'Pasa a Gratuito el ' : 'Próxima renovación: '}
-                  {new Date(periodEnd).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {new Date(periodEnd).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' })}
                 </Text>
               )}
             </View>

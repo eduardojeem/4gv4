@@ -19,6 +19,7 @@ import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
 import { getBrowserRequestOrigin, isStripeCheckoutEnabled } from '@/lib/payments/stripe'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 import { BankTransferError, createBankTransferRequest } from '@/lib/saas/bank-transfers'
+import { prorationForChange } from '@/lib/saas/subscription-proration'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -53,6 +54,14 @@ export async function GET() {
       billingMissingFields: getMissingBillingFields(state.billingProfile),
       paidPeriodEndsAt: activePaidPeriodEnd(state),
       cancelScheduled: state.subscription?.cancel_at_period_end === true,
+      // Vista previa del prorrateo por plan (crédito, cobro y días extra).
+      prorations: Object.fromEntries(data.plans.map((plan) => [plan.code, prorationForChange({
+        currentPlanCode: state.currentPlan.code,
+        currentPrice: state.currentPlan.price_monthly,
+        targetPlanCode: plan.code,
+        targetPrice: plan.price_monthly,
+        subscription: state.subscription,
+      })])),
     })
   } catch (error) {
     return NextResponse.json(

@@ -52,8 +52,9 @@ export const promoCodeCreateSchema = z.object({
   expiresAt: z.iso.datetime().nullable().optional(),
   isActive: z.boolean().optional().default(true),
 }).superRefine((value, context) => {
-  if (value.benefitType === 'discount_percent' && (!value.discountPercent || value.discountPercent > 100)) {
-    context.addIssue({ code: 'custom', path: ['discountPercent'], message: 'El porcentaje debe estar entre 1 y 100.' })
+  // 100% no es un descuento: para regalar el mes se usa "Activar plan".
+  if (value.benefitType === 'discount_percent' && (!value.discountPercent || value.discountPercent >= 100)) {
+    context.addIssue({ code: 'custom', path: ['discountPercent'], message: 'El porcentaje debe estar entre 1 y 99. Para regalar el mes usá Activar plan.' })
   }
   if (value.benefitType === 'discount_fixed' && !value.discountAmount) {
     context.addIssue({ code: 'custom', path: ['discountAmount'], message: 'El monto de descuento es obligatorio.' })

@@ -272,16 +272,22 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Suscripción por vencer',
     defaultBody: 'Tu plan de MiTiendaPy está próximo a su fecha de renovación.',
     defaultResourceType: 'subscription',
+    // Los avisos de cobro mandan el texto concreto (fecha, plan, monto).
+    formatBody: (data) => (typeof data?.message === 'string' && data.message.trim() ? data.message : 'Tu plan de MiTiendaPy está próximo a su fecha de renovación.'),
   },
   SUBSCRIPTION_PAYMENT_FAILED: {
     title: 'Problema con el pago del plan',
     defaultBody: 'No se pudo procesar el pago de renovación de tu suscripción.',
     defaultResourceType: 'subscription',
+    // Los avisos de cobro mandan el texto concreto (fecha, plan, monto).
+    formatBody: (data) => (typeof data?.message === 'string' && data.message.trim() ? data.message : 'No se pudo procesar el pago de renovación de tu suscripción.'),
   },
   PLAN_CHANGED: {
     title: 'Plan actualizado',
     defaultBody: 'Se actualizó el plan de suscripción de tu negocio.',
     defaultResourceType: 'subscription',
+    // Los avisos de cobro mandan el texto concreto (fecha, plan, monto).
+    formatBody: (data) => (typeof data?.message === 'string' && data.message.trim() ? data.message : 'Se actualizó el plan de suscripción de tu negocio.'),
   },
   IMPORTANT_SYSTEM_MESSAGE: {
     title: 'Comunicado del sistema',
