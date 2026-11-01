@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getRequestBearerToken } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
   dashboardProfilePatchSchema,
   toDashboardProfile,
@@ -65,7 +66,15 @@ export async function PATCH(request: Request) {
   }
 
   if (Object.keys(authMetadata).length > 0) {
-    const { error: authError } = await db.auth.updateUser({ data: authMetadata })
+    // La app manda el token en el header y no hay sesión de cookies: ahí
+    // updateUser no tiene sesión, así que los metadatos se copian como admin
+    // sobre el mismo usuario ya verificado.
+    const fromApp = Boolean(await getRequestBearerToken())
+    const { error: authError } = fromApp
+      ? await createAdminSupabase().auth.admin.updateUserById(user.id, {
+        user_metadata: { ...(user.user_metadata ?? {}), ...authMetadata },
+      })
+      : await db.auth.updateUser({ data: authMetadata })
     if (authError) {
       return NextResponse.json({
         error: 'El perfil se guardó, pero la sesión no terminó de sincronizarse',

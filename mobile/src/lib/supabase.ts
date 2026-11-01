@@ -24,3 +24,17 @@ AppState.addEventListener('change', (state) => {
   if (state === 'active') supabase.auth.startAutoRefresh();
   else supabase.auth.stopAutoRefresh();
 });
+
+/**
+ * Confirma la contraseña actual sin tocar la sesión guardada: un cliente aparte,
+ * sin persistencia, que se cierra apenas responde.
+ */
+export async function verifyCurrentPassword(email: string, password: string): Promise<boolean> {
+  const probe = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data, error } = await probe.auth.signInWithPassword({ email, password });
+  if (error || !data.session) return false;
+  await probe.auth.signOut({ scope: 'local' }).catch(() => undefined);
+  return true;
+}
