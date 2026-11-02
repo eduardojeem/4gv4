@@ -79,10 +79,10 @@ export async function clearBiometricUnlock(): Promise<void> {
   ]).catch(() => undefined);
 }
 
-export async function authenticateWithBiometrics(label: string): Promise<boolean> {
+export async function authenticateWithBiometrics(label: string, promptMessage = `Desbloqueá Mi TiendaPy con ${label}`): Promise<boolean> {
   try {
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: `Desbloqueá Mi TiendaPy con ${label}`,
+      promptMessage,
       cancelLabel: 'Cancelar',
       // En iOS deja usar el código del teléfono si Face ID no reconoce.
       fallbackLabel: 'Usar código',

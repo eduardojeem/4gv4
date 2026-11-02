@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { afterResponse, notifySaleCreated } from '@/lib/notifications/server/business-events'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
@@ -592,6 +593,20 @@ export const POST = withTenantAuth(
     if (result.idempotent === true) {
       const { data: savedSale } = await supabase.from('sales').select('code').eq('id', saleId).eq('organization_id', organization.id).maybeSingle()
       savedCode = typeof savedSale?.code === 'string' ? savedSale.code : null
+    }
+
+    // Aviso a la campanita y al celular del resto del equipo (no al cajero). Un
+    // reintento idempotente no vuelve a avisar.
+    if (result.idempotent !== true) {
+      const branchId = branchScope.branchId
+      afterResponse(() => notifySaleCreated({
+        organizationId: organization.id,
+        branchId,
+        saleId,
+        actorUserId: user.id,
+        total: finiteNumber(result.total),
+        code: savedCode,
+      }))
     }
 
     return NextResponse.json({

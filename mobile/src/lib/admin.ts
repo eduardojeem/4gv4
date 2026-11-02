@@ -1,4 +1,5 @@
 import { apiFetch, ApiError } from './api';
+import { normalizeSubscription, type BillingProfile, type SubscriptionDetails } from './subscription-model';
 
 /**
  * Administración en la app: resumen, monitor de cajas, equipo y reseñas, con
@@ -304,43 +305,27 @@ export async function fetchFinanceSummary(params?: { startDate?: string; endDate
 
 // ─── Suscripción ───────────────────────────────────────────────────────────
 
-export type SubscriptionDetails = {
-  subscription: {
-    id: string;
-    plan: string;
-    status: string;
-    trial_ends_at: string | null;
-    current_period_starts_at: string | null;
-    current_period_ends_at: string | null;
-    cancel_at_period_end: boolean;
-  } | null;
-  plan: {
-    code: string;
-    name: string;
-    limits?: Record<string, number | null>;
-    modules?: string[];
-  } | null;
-  usage: {
-    branches: number;
-    users: number;
-    products: number;
-    registers: number;
-  };
-  billingProfile: {
-    business_name: string | null;
-    ruc: string | null;
-    billing_email: string | null;
-    fiscal_address: string | null;
-    phone: string | null;
-  } | null;
-};
+export type { SubscriptionDetails } from './subscription-model';
 
-export async function fetchSubscription() {
+export async function fetchSubscription(): Promise<SubscriptionDetails> {
   try {
-    const res = await apiFetch<{ success: boolean; data: SubscriptionDetails }>('/api/admin/subscriptions');
-    return res.data;
+    const res = await apiFetch<{ success: boolean; data: Parameters<typeof normalizeSubscription>[0] }>('/api/admin/subscriptions');
+    return normalizeSubscription(res.data);
   } catch (error) {
     return fail(error, 'No se pudo cargar la información de suscripción.');
+  }
+}
+
+/** Mismo PUT que la web: el servidor valida RUC/CI paraguayo y el formato del correo. */
+export async function saveBillingProfile(profile: BillingProfile): Promise<BillingProfile> {
+  try {
+    const res = await apiFetch<{ billingProfile: BillingProfile }>('/api/admin/subscriptions/billing', {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    });
+    return res.billingProfile;
+  } catch (error) {
+    return fail(error, 'No se pudieron guardar los datos de facturación.');
   }
 }
 

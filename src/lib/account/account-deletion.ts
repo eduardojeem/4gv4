@@ -32,6 +32,8 @@ export type AccountDeletionImpact = {
   email: string | null
   pending: { scheduledFor: string } | null
   closesOrganizations: Array<{ id: string; name: string }>
+  /** A quién escribir antes de eliminar (la app lo ofrece como alternativa). */
+  supportEmail: string
 }
 
 type DeletionRequestRow = {
@@ -67,6 +69,7 @@ export async function getAccountDeletionImpact(userId: string, email: string | n
     email,
     pending: pending ? { scheduledFor: pending.scheduled_for as string } : null,
     closesOrganizations,
+    supportEmail: accountSupportEmail(),
   }
 }
 

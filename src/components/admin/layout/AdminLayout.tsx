@@ -2,8 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { FeedbackButton } from '@/components/feedback/FeedbackButton'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronDown, ChevronRight, Crown, HelpCircle, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, User } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Crown, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, User } from 'lucide-react'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -303,13 +304,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Search className="h-5 w-5" />
               </Button>
 
-              {/* La guia no tenia como abrirse desde el panel: el unico boton
-                  de ayuda global vivia en el header del dashboard. */}
-              <Button asChild variant="ghost" size="icon" className="h-9 w-9">
-                <Link href="/admin/guia" aria-label="Abrir la guía del sistema" title="Guía del sistema">
-                  <HelpCircle className="h-5 w-5" />
-                </Link>
-              </Button>
+              <FeedbackButton />
 
               {user?.role === 'super_admin' && (
                 <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20 sm:inline-flex">

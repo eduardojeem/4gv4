@@ -3,8 +3,8 @@
  * (`route`); lo que no, abre la web (`web`). Mismos permisos que la web.
  */
 export type ProfileMenuEntry = {
-  key: 'profile' | 'admin' | 'settings' | 'superadmin' | 'marketplace';
-  icon: 'person-circle-outline' | 'shield-checkmark-outline' | 'settings-outline' | 'planet-outline' | 'storefront-outline';
+  key: 'profile' | 'admin' | 'settings' | 'superadmin' | 'feedback' | 'marketplace';
+  icon: 'person-circle-outline' | 'shield-checkmark-outline' | 'settings-outline' | 'planet-outline' | 'chatbox-ellipses-outline' | 'storefront-outline';
   title: string;
   subtitle: string;
   route?: string;
@@ -41,7 +41,10 @@ export function profileMenuSections(access: Access): ProfileMenuSection[] {
   sections.push({
     key: 'more',
     label: 'Más',
-    entries: [{ key: 'marketplace', icon: 'storefront-outline', title: 'Ver el marketplace', subtitle: 'Volver a la vitrina pública', route: '/' }],
+    entries: [
+      { key: 'feedback', icon: 'chatbox-ellipses-outline', title: 'Enviar comentarios', subtitle: 'Un error, una idea o algo que funciona bien', route: '/feedback' },
+      { key: 'marketplace', icon: 'storefront-outline', title: 'Ver el marketplace', subtitle: 'Volver a la vitrina pública', route: '/' },
+    ],
   });
   return sections;
 }

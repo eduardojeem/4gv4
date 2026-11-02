@@ -17,6 +17,17 @@ type ContentGenerator = {
  * Catálogo centralizado de presentación y redacción de notificaciones operativas.
  * Genera textos seguros para pantallas de bloqueo sin exponer datos sensibles de clientes.
  */
+/** «Pedido #A12 de Ana · Gs. 150.000»: lo que sirve leer en la pantalla bloqueada. */
+function orderBody(data: Record<string, unknown> | undefined, fallback: string) {
+  const parts = [
+    typeof data?.orderNumber === 'string' && data.orderNumber ? `Pedido #${data.orderNumber}` : null,
+    typeof data?.customerName === 'string' && data.customerName ? `de ${data.customerName}` : null,
+  ].filter(Boolean).join(' ')
+  const total = typeof data?.totalFormatted === 'string' ? data.totalFormatted : null
+  if (!parts) return total ? `${fallback.replace(/\.$/, '')} por ${total}.` : fallback
+  return total ? `${parts} · ${total}` : parts
+}
+
 const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> = {
   // Ventas (POS)
   SALE_CREATED: {
@@ -57,6 +68,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Nuevo pedido',
     defaultBody: 'Se ingresó un nuevo pedido.',
     defaultResourceType: 'order',
+    formatBody: (data) => orderBody(data, 'Se ingresó un nuevo pedido.'),
   },
   ORDER_CONFIRMED: {
     title: 'Pedido confirmado',
@@ -82,6 +94,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Nuevo pedido online',
     defaultBody: 'Se recibió un pedido desde la tienda online.',
     defaultResourceType: 'order',
+    formatBody: (data) => orderBody(data, 'Se recibió un pedido desde la tienda online.'),
   },
 
   // Taller y Reparaciones
@@ -89,6 +102,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Nueva orden de reparación',
     defaultBody: 'Se ingresó un nuevo equipo al taller.',
     defaultResourceType: 'repair',
+    formatBody: (data) => (typeof data?.device === 'string' && data.device ? `Ingresó ${data.device} al taller.` : 'Se ingresó un nuevo equipo al taller.'),
   },
   REPAIR_ASSIGNED: {
     title: 'Reparación asignada',

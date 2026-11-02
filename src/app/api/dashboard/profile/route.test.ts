@@ -7,9 +7,16 @@ const mocks = vi.hoisted(() => ({
   updatedSingle: vi.fn(),
   update: vi.fn(),
   eq: vi.fn(),
+  bearer: vi.fn(),
+  adminUpdateUserById: vi.fn(),
+}))
+
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminSupabase: () => ({ auth: { admin: { updateUserById: mocks.adminUpdateUserById } } }),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
+  getRequestBearerToken: mocks.bearer,
   createClient: vi.fn(async () => ({
     auth: { getUser: mocks.getUser, updateUser: mocks.updateUser },
     from: vi.fn(() => ({
@@ -31,6 +38,19 @@ describe('/api/dashboard/profile', () => {
     mocks.updateUser.mockResolvedValue({ data: { user }, error: null })
     mocks.eq.mockReturnValue({ select: vi.fn(() => ({ maybeSingle: mocks.updatedSingle })) })
     mocks.update.mockImplementation(() => ({ eq: mocks.eq }))
+    mocks.bearer.mockResolvedValue(null)
+    mocks.adminUpdateUserById.mockResolvedValue({ data: { user }, error: null })
+  })
+
+  it('desde la app (token en el header) sincroniza los metadatos como admin, sin pedir sesión de cookies', async () => {
+    mocks.bearer.mockResolvedValue('app-token')
+    const { PATCH } = await import('./route')
+    const response = await PATCH(new Request('http://localhost/api/dashboard/profile', {
+      method: 'PATCH', body: JSON.stringify({ fullName: 'Ana Pérez', phone: '' }),
+    }))
+    expect(response.status).toBe(200)
+    expect(mocks.updateUser).not.toHaveBeenCalled()
+    expect(mocks.adminUpdateUserById).toHaveBeenCalledWith('user-1', { user_metadata: { full_name: 'Ana Pérez', phone: '' } })
   })
 
   it('rejects unauthenticated GET and PATCH requests', async () => {
