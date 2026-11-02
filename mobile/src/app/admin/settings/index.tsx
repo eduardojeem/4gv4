@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 
+import { BiometricSettingCard } from '@/components/settings/biometric-setting';
 import { SettingsGate, SettingsOfflineNotice } from '@/components/settings/settings-gate';
 import { Notice, SettingsCard, WebsiteScreen } from '@/components/website/website-ui';
 import { usePalette } from '@/lib/palette';
@@ -29,6 +30,8 @@ export default function SettingsHome() {
             <SettingsCard icon="swap-horizontal-outline" title="Tipos de cambio" hint="Precios cargados en otra moneda" onPress={() => go('exchange-rates')} />
             <SettingsCard icon="briefcase-outline" title="Perfil del negocio" hint="Rubro, forma de trabajo y herramientas" onPress={() => go('profile')} />
             <SettingsCard icon="globe-outline" title="Sitio web" hint="Tienda online, logo, banners y publicación" onPress={() => router.push('/admin/website' as never)} />
+            <Text style={[styles.group, { color: colors.muted }]}>Este teléfono</Text>
+            <BiometricSettingCard />
             <Text style={[styles.foot, { color: colors.muted }]}>El tema y el color del panel web se eligen en cada navegador; la app sigue el modo claro u oscuro del teléfono.</Text>
           </WebsiteScreen>
         );
@@ -39,4 +42,5 @@ export default function SettingsHome() {
 
 const styles = StyleSheet.create({
   foot: { fontSize: 12, textAlign: 'center' },
+  group: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 6 },
 });

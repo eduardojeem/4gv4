@@ -62,3 +62,21 @@ export function describeMfaError(error: unknown): string {
   }
   return 'No se pudo verificar el código. Probá de nuevo.';
 }
+
+export const TOTP_ISSUER = 'MiTiendaPY';
+
+/** La clave como la escriben las apps: grupos de 4 para cargarla a mano sin errores. */
+export function formatTotpSecret(secret: string): string {
+  return secret.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+}
+
+/**
+ * Enlace `otpauth://` para abrir la app autenticadora del mismo teléfono (el QR
+ * no sirve: no se puede escanear la pantalla que lo muestra). Supabase ya lo
+ * devuelve; si faltara, se arma con la clave.
+ */
+export function totpSetupUri(input: { uri?: string | null; secret: string; account: string }): string {
+  if (input.uri && input.uri.startsWith('otpauth://')) return input.uri;
+  const label = encodeURIComponent(`${TOTP_ISSUER}:${input.account}`);
+  return `otpauth://totp/${label}?secret=${encodeURIComponent(input.secret)}&issuer=${encodeURIComponent(TOTP_ISSUER)}`;
+}

@@ -446,6 +446,14 @@ export default function MobileUserProfileScreen() {
               />
             )}
             <Row
+              icon="shield-checkmark-outline"
+              title="Verificación en dos pasos"
+              subtitle="Pedir un código de tu app autenticadora al entrar"
+              colors={colors}
+              onPress={() => confirmLeave(() => router.push('/panel/two-factor' as never))}
+              trailing={<Ionicons name="chevron-forward" size={18} color={colors.muted} />}
+            />
+            <Row
               icon="key-outline"
               title="Cambiar contraseña"
               subtitle="Te pedimos la actual para confirmar que sos vos"
