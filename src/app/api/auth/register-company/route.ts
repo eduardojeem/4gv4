@@ -428,6 +428,7 @@ export async function POST(request: Request) {
         companyName: input.companyName,
         plan: subscriptionPlan.name || resolvedPlanTier,
         loginUrl: `${appUrl}/login`,
+        trialDays,
       }),
       log: { organizationId: organization.id, customerName: input.fullName },
     }).catch((err) => {
