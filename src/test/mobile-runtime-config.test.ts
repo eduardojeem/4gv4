@@ -83,3 +83,16 @@ describe('mobile runtime environment separation', () => {
     })).toThrow(/PREVIEW/i);
   });
 });
+
+describe('explicit real-data local testing', () => {
+ const real = { ...localConfig, supabaseUrl: 'https://cswtugmwazxdktntndpy.supabase.co', runtimeEnvironment: 'real-data', allowRealData: true };
+ it('requires explicit opt-in and a development runtime', () => {
+  expect(resolveMobileRuntimeConfig(real).environment).toBe('real-data');
+  expect(() => resolveMobileRuntimeConfig({...real,allowRealData:false})).toThrow(/REAL.DATA/i);
+  expect(() => resolveMobileRuntimeConfig({...real,development:false})).toThrow(/REAL.DATA/i);
+ });
+ it('only permits the known real database with a local API', () => {
+  expect(() => resolveMobileRuntimeConfig({...real,apiUrl:'https://attacker.example'})).toThrow(/REAL.DATA/i);
+  expect(() => resolveMobileRuntimeConfig({...real,supabaseUrl:'https://other.supabase.co'})).toThrow(/REAL.DATA/i);
+ });
+});

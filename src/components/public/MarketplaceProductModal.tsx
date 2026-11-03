@@ -351,17 +351,17 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <p className={cn('text-3xl font-extrabold tracking-tight tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                    {priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
+                    {priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice,product.currency??'PYG')}
                   </p>
                   {hasOffer && (
                     <p className="text-base font-medium tabular-nums text-muted-foreground line-through">
-                      {formatPrice(selectedSalePrice)}
+                      {formatPrice(selectedSalePrice,product.currency??'PYG')}
                     </p>
                   )}
                 </div>
                 {hasOffer && (
                   <p className="inline-flex rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                    Ahorrás {formatPrice(savings)}
+                    Ahorrás {formatPrice(savings,product.currency??'PYG')}
                   </p>
                 )}
               </div>

@@ -356,17 +356,17 @@ export function MarketplaceProductCarousel({
                                   : 'text-foreground'
                             )}
                           >
-                            {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
+                            {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice,product.currency??'PYG')}
                           </p>
                           {hasOffer && (
                             <p className="text-xs text-muted-foreground line-through">
-                              {formatPrice(offer.regularPrice)}
+                              {formatPrice(offer.regularPrice,product.currency??'PYG')}
                             </p>
                           )}
                         </div>
                         {hasOffer && (
                           <p className="-mt-1 text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:-mt-1.5 sm:text-xs">
-                            Ahorrás {formatPrice(offer.savings)}
+                            Ahorrás {formatPrice(offer.savings,product.currency??'PYG')}
                           </p>
                         )}
                       </>

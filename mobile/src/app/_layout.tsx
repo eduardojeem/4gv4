@@ -61,6 +61,8 @@ function RootNavigator() {
           <Stack.Screen name="admin" />
           <Stack.Screen name="delete-account" />
           <Stack.Screen name="feedback" />
+          <Stack.Screen name="mis-pedidos" />
+          <Stack.Screen name="mi-cuenta" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />

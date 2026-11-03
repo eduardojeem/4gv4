@@ -1,5 +1,7 @@
 'use client'
 
+import { useMarketplaceLocationHref } from './MarketplaceLocationPicker'
+
 import { AppImage } from '@/components/ui/app-image'
 
 import Link from 'next/link'
@@ -53,6 +55,7 @@ const navItems = [
 ]
 
 export function MarketplacePublicNav({ initialBranding }: { initialBranding?: PlatformBranding }) {
+  const withLocation=useMarketplaceLocationHref()
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
@@ -102,7 +105,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
     : 'U'
 
   function isActive(href: string, exact: boolean) {
-    return exact ? pathname === href : pathname.startsWith(href)
+    return exact ? (pathname === href || href==='/marketplace'&&pathname==='/marketplace/explorar') : pathname.startsWith(href)
   }
 
   // Tamaño del logo: definicion unica compartida con el nav de la landing.
@@ -121,7 +124,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           {/* Logo */}
-          <Link href="/marketplace" className="flex shrink-0 items-center gap-3 group">
+          <Link href={withLocation('/marketplace')} className="flex shrink-0 items-center gap-3 group">
             {branding.logoUrl || branding.logoDarkUrl ? (
               <div className="flex items-center transition-transform duration-200 group-hover:scale-[1.02]">
                 {branding.logoDarkUrl && branding.logoUrl ? (
@@ -197,7 +200,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={withLocation(item.href)}
                   className={cn(
                     'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
                     active
@@ -587,7 +590,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={withLocation(item.href)}
                     onClick={() => setMobileDrawerOpen(false)}
                     className={cn(
                       'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',

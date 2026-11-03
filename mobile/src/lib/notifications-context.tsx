@@ -1,217 +1,79 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
+import { Alert, AppState } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import { apiFetch } from './api'
-import { secureStorage } from './secure-storage'
-import {
-  getPushPermissionStatus,
-  requestNativePushPermission,
-  registerDeviceForPush,
-  resolveNotificationRoute,
-  PRE_PERMISSION_DISMISSED_KEY,
-} from './push-notifications'
-import {
-  getPrivateCacheContext,
-  subscribePrivateCacheContext,
-  type PrivateCacheContext,
-} from './private-cache-context'
+import { getPushPermissionStatus, requestNativePushPermission, registerDeviceForPush, resolveNotificationRoute } from './push-notifications'
+import { getPrivateCacheContext, subscribePrivateCacheContext } from './private-cache-context'
 import { NotificationPermissionModal } from '../components/NotificationPermissionModal'
 
-interface NotificationsContextValue {
-  unreadCount: number
-  refreshUnreadCount: () => Promise<void>
-  permissionStatus: 'granted' | 'denied' | 'undetermined'
-  promptForPermission: () => Promise<void>
-}
-
-const NotificationsContext = createContext<NotificationsContextValue | null>(null)
-
+type Permission = 'granted' | 'denied' | 'undetermined'
+type Payload = { notificationId?: string; organizationId?: string; type?: string; resourceType?: string; resourceId?: string }
+interface ContextValue { unreadCount: number; feedVersion: number; refreshUnreadCount: () => Promise<void>; permissionStatus: Permission; promptForPermission: () => Promise<void> }
+const Context = createContext<ContextValue | null>(null)
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const [unreadCount, setUnreadCount] = useState<number>(0)
-  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined')
-  const [showPrePermissionModal, setShowPrePermissionModal] = useState<boolean>(false)
-
-  const initialResponseHandled = useRef<boolean>(false)
-  const lastRegisteredOrg = useRef<string | null>(null)
-
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [feedVersion, setFeedVersion] = useState(0)
+  const [permissionStatus, setPermissionStatus] = useState<Permission>('undetermined')
+  const [showPrompt, setShowPrompt] = useState(false)
+  const pending = useRef<Notifications.NotificationResponse | null>(null)
+  const handled = useRef(new Set<string>())
+  const countRequest = useRef(0)
   const refreshUnreadCount = useCallback(async () => {
-    const scope = getPrivateCacheContext()
-    if (!scope.userId || !scope.organizationId) return
-
+    const scope = getPrivateCacheContext(), generation = ++countRequest.current
+    if (!scope.userId || !scope.organizationId) { setUnreadCount(0); return }
     try {
-      const data = await apiFetch<{ count: number }>('/api/notifications/unread-count')
-      if (typeof data?.count === 'number') {
-        setUnreadCount(data.count)
-      }
-    } catch {
-      // Ignorar fallos de red al refrescar el contador
-    }
+      const result = await apiFetch<{ count: number }>('/api/notifications/unread-count')
+      if (scope.epoch !== getPrivateCacheContext().epoch || generation !== countRequest.current) return
+      setUnreadCount(result.count)
+      void Notifications.setBadgeCountAsync(result.count).catch(() => undefined)
+    } catch { /* Conservar el último conteo confirmado si no hay red. */ }
   }, [])
-
-  // 1. Consultar estado inicial de permisos y conteo al montar
+  const handleResponse = useCallback(async (response: Notifications.NotificationResponse) => {
+    const scope = getPrivateCacheContext()
+    if (!scope.userId || !scope.organizationId) { pending.current = response; return }
+    const key = response.notification.request.identifier
+    if (handled.current.has(key)) return
+    handled.current.add(key); pending.current = null
+    const data = response.notification.request.content.data as Payload
+    Notifications.clearLastNotificationResponse()
+    if (data.organizationId && data.organizationId !== scope.organizationId) {
+      router.push('/panel/notifications'); return
+    }
+    if (typeof data.notificationId === 'string') {
+      try { await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify({ notificationId: data.notificationId }) }) }
+      catch { Alert.alert('No se guardó la lectura', 'Podés reintentar desde la bandeja de notificaciones.') }
+    }
+    if (scope.epoch !== getPrivateCacheContext().epoch) return
+    router.push(resolveNotificationRoute(data) as never)
+    setFeedVersion(v => v + 1); void refreshUnreadCount()
+  }, [refreshUnreadCount])
   useEffect(() => {
-    let mounted = true
-
-    async function init() {
+    let active = true
+    const synchronize = async () => {
       const status = await getPushPermissionStatus()
-      if (!mounted) return
+      if (!active) return
       setPermissionStatus(status)
-
-      // Si está otorgado, registrar el token para el usuario y comercio actual
-      if (status === 'granted') {
-        const scope = getPrivateCacheContext()
-        if (scope.userId && scope.organizationId) {
-          lastRegisteredOrg.current = scope.organizationId
-          await registerDeviceForPush()
-        }
-      } else if (status === 'undetermined') {
-        // Verificar si el usuario ya descartó el pre-permiso previamente
-        const dismissed = await secureStorage.getItem(PRE_PERMISSION_DISMISSED_KEY)
-        if (!dismissed && mounted) {
-          setShowPrePermissionModal(true)
-        }
-      }
-
-      await refreshUnreadCount()
-    }
-
-    init()
-
-    return () => {
-      mounted = false
-    }
-  }, [refreshUnreadCount])
-
-  // 2. Reaccionar al cambio de organización (Organization Switching)
-  useEffect(() => {
-    const unsubscribe = subscribePrivateCacheContext(async (next: PrivateCacheContext, previous: PrivateCacheContext) => {
-      if (!next.userId || !next.organizationId) return
-
-      // Si cambió la organización activa
-      if (next.organizationId !== previous.organizationId || next.organizationId !== lastRegisteredOrg.current) {
-        lastRegisteredOrg.current = next.organizationId
-
-        const status = await getPushPermissionStatus()
-        if (status === 'granted') {
-          await registerDeviceForPush()
-        }
-        await refreshUnreadCount()
-      }
-    })
-
-    return () => {
-      unsubscribe()
-    }
-  }, [refreshUnreadCount])
-
-  // 3. Listener de Notificaciones en Primer Plano (Foreground)
-  useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(() => {
-      // Al recibir una notificación en foreground, refrescar el conteo de no leídas
-      refreshUnreadCount()
-    })
-
-    return () => {
-      subscription.remove()
-    }
-  }, [refreshUnreadCount])
-
-  // 4. Listener de Toque / Respuesta de Notificación (Tap / Background)
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as {
-        type?: string
-        resourceType?: string
-        resourceId?: string
-      }
-
-      if (data) {
-        const route = resolveNotificationRoute(data)
-        router.push(route as any)
-        refreshUnreadCount()
-      }
-    })
-
-    return () => {
-      subscription.remove()
-    }
-  }, [refreshUnreadCount])
-
-  // 5. Gestión de Cold Start (arranque de la app desde una notificación cerrada)
-  useEffect(() => {
-    if (initialResponseHandled.current) return
-    initialResponseHandled.current = true
-
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (!response) return
-      const data = response.notification.request.content.data as {
-        type?: string
-        resourceType?: string
-        resourceId?: string
-      }
-      if (data) {
-        const route = resolveNotificationRoute(data)
-        // Pequeño timeout para permitir que la jerarquía de rutas esté montada
-        setTimeout(() => {
-          router.push(route as any)
-          refreshUnreadCount()
-        }, 300)
-      }
-    })
-  }, [refreshUnreadCount])
-
-  // Acción al aceptar el modal de pre-permiso
-  const handleAcceptPrePermission = async () => {
-    setShowPrePermissionModal(false)
-    const newStatus = await requestNativePushPermission()
-    setPermissionStatus(newStatus)
-
-    if (newStatus === 'granted') {
       const scope = getPrivateCacheContext()
-      if (scope.userId && scope.organizationId) {
-        lastRegisteredOrg.current = scope.organizationId
-        await registerDeviceForPush()
-      }
-      await refreshUnreadCount()
+      if (status === 'granted' && scope.userId && scope.organizationId) await registerDeviceForPush()
+      if (active) { void refreshUnreadCount(); setFeedVersion(v => v + 1) }
+      if (pending.current) void handleResponse(pending.current)
     }
+    void synchronize()
+    const app = AppState.addEventListener('change', state => { if (state === 'active') void synchronize() })
+    const scope = subscribePrivateCacheContext(() => { countRequest.current++; setUnreadCount(0); void Notifications.setBadgeCountAsync(0).catch(() => undefined); void synchronize() })
+    const receive = Notifications.addNotificationReceivedListener(() => { void refreshUnreadCount(); setFeedVersion(v => v + 1) })
+    const response = Notifications.addNotificationResponseReceivedListener(value => { void handleResponse(value) })
+    const initial = Notifications.getLastNotificationResponse()
+    if (initial) queueMicrotask(() => { if (active) void handleResponse(initial) })
+    return () => { active = false; app.remove(); scope(); receive.remove(); response.remove() }
+  }, [refreshUnreadCount, handleResponse])
+  const promptForPermission = async () => { setShowPrompt(true) }
+  const accept = async () => {
+    setShowPrompt(false)
+    const status = await requestNativePushPermission(); setPermissionStatus(status)
+    if (status === 'granted') { await registerDeviceForPush(); await refreshUnreadCount() }
   }
-
-  // Acción al descartar ("Ahora no")
-  const handleDismissPrePermission = async () => {
-    setShowPrePermissionModal(false)
-    try {
-      await secureStorage.setItem(PRE_PERMISSION_DISMISSED_KEY, 'true')
-    } catch {
-      // Ignorar error de almacenamiento
-    }
-  }
-
-  const promptForPermission = async () => {
-    setShowPrePermissionModal(true)
-  }
-
-  return (
-    <NotificationsContext.Provider
-      value={{
-        unreadCount,
-        refreshUnreadCount,
-        permissionStatus,
-        promptForPermission,
-      }}>
-      {children}
-      <NotificationPermissionModal
-        visible={showPrePermissionModal}
-        onAccept={handleAcceptPrePermission}
-        onDismiss={handleDismissPrePermission}
-      />
-    </NotificationsContext.Provider>
-  )
+  return <Context.Provider value={{ unreadCount, feedVersion, refreshUnreadCount, permissionStatus, promptForPermission }}>{children}<NotificationPermissionModal visible={showPrompt} onAccept={() => void accept()} onDismiss={() => setShowPrompt(false)} /></Context.Provider>
 }
-
-export function useNotifications() {
-  const context = useContext(NotificationsContext)
-  if (!context) {
-    throw new Error('useNotifications debe usarse dentro de un NotificationsProvider')
-  }
-  return context
-}
+export function useNotifications() { const context = useContext(Context); if (!context) throw new Error('Falta NotificationsProvider'); return context }

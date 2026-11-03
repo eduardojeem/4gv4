@@ -1,3 +1,5 @@
+import { getAllMarketplaceOrganizations } from '@/lib/public/marketplace'
+import { storeMatchesLocation } from '@/lib/public/marketplace-location-catalog'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -20,30 +22,33 @@ const PRODUCT_RESULTS = 28
 const ORGANIZATION_RESULTS = 48
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; marca?: string; categoria?: string; subcategoria?: string; ofertas?: string; pagina?: string; porPagina?: string; orden?: string }>
+  searchParams: Promise<{ country?: string; city?: string; q?: string; marca?: string; categoria?: string; subcategoria?: string; ofertas?: string; pagina?: string; porPagina?: string; orden?: string }>
 }
 
 export default async function MarketplaceSearchPage({ searchParams }: PageProps) {
-  const { q, marca, categoria, subcategoria, ofertas, pagina, porPagina, orden } = await searchParams
+  const { country, city, q, marca, categoria, subcategoria, ofertas, pagina, porPagina, orden } = await searchParams
   const onlyOffers = ofertas === '1'
   const query = q?.trim() ?? ''
   const requestedPage = Number(pagina)
   const currentPage = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const requestedSize = Number(porPagina)
   const pageSize = [12, 28, 48, 100].includes(requestedSize) ? requestedSize : PRODUCT_RESULTS
-  const sort = orden === 'price_asc' || orden === 'price_desc' || orden === 'newest' || orden === 'name_asc' ? orden : 'default'
+  let sort: 'default'|'price_asc'|'price_desc'|'newest'|'name_asc' = orden === 'price_asc' || orden === 'price_desc' || orden === 'newest' || orden === 'name_asc' ? orden : 'default'
   const offset = (currentPage - 1) * pageSize
 
   const [productPage, organizations] = await Promise.all([
-    getMarketplaceProductsPage(pageSize, { q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers }),
-    getMarketplaceOrganizations(ORGANIZATION_RESULTS, { q: query || undefined }),
+    getMarketplaceProductsPage(pageSize, { country, city, q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers }),
+    country||city ? getAllMarketplaceOrganizations().then(stores=>stores.filter(store=>storeMatchesLocation(store,{country:country??'all',city:city??'all'})).filter(store=>!query||store.name.toLowerCase().includes(query.toLowerCase())).slice(0,ORGANIZATION_RESULTS)) : getMarketplaceOrganizations(ORGANIZATION_RESULTS, { q: query || undefined }),
   ])
   const brands = productPage.brands ?? []
 
   const products = productPage.products
+  if(productPage.mixedCurrencies&&sort.startsWith('price_'))sort='default'
   const lastPage = Math.max(1, Math.ceil(productPage.total / pageSize))
   if (currentPage > lastPage) {
     const params = new URLSearchParams()
+    if(country) params.set('country',country)
+    if(city) params.set('city',city)
     if (query) params.set('q', query)
     if (marca) params.set('marca', marca)
     if (categoria) params.set('categoria', categoria)
@@ -112,7 +117,8 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
               a los 400 ms reescribe la URL sin el termino y borra la busqueda recien
               hecha. `hideSearch` deja un solo buscador en la pantalla: el de arriba.
             */}
-            <ProductsClient products={products} initialQuery={query} initialBrand={marca ?? ''}
+            {productPage.mixedCurrencies && <p className="mb-4 rounded-xl border p-3 text-sm text-muted-foreground">Los precios usan monedas diferentes. Elegí una ubicación con una sola moneda para ordenarlos por precio.</p>}
+        <ProductsClient priceSortAvailable={!productPage.mixedCurrencies} products={products} initialQuery={query} initialBrand={marca ?? ''}
               initialCategory={categoria ?? ''} initialSubcategory={subcategoria ?? ''}
               categories={productPage.categories ?? []} initialOnlyOffers={onlyOffers}
               initialSort={sort} brands={brands} totalProducts={productPage.total}

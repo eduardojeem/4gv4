@@ -1,3 +1,5 @@
+import { MarketplaceLocationPicker } from '@/components/marketplace-location-picker';
+import { ALL_LOCATIONS, parseMarketplaceLocation, type MarketplaceLocation } from '../../../src/lib/public/marketplace-location';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -27,10 +29,9 @@ import { StoreDetailSheet } from '@/components/store-detail-sheet';
 import { ProductDetailSheet } from '@/components/product-detail-sheet';
 import { RepairTrackerModal } from '@/components/repair-tracker-modal';
 import { secureStorage } from '@/lib/secure-storage';
-import { apiFetch } from '@/lib/api';
 import {
   fetchMarketplaceHome,
-  formatGs,
+  formatMarketPrice,
   openWeb,
   productPath,
   storePath,
@@ -41,6 +42,7 @@ import {
 import { openRegistration, useRegisterLabel } from '@/lib/registration';
 import { palette, usePalette } from '@/lib/palette';
 import { ROLE_LABELS } from '@/lib/panel';
+import { accountDisplayName, canOpenBusinessPanel, useMarketplaceAccount } from '@/lib/marketplace-account';
 import { useSession } from '@/lib/session';
 
 const cyan = {
@@ -80,18 +82,6 @@ const PRODUCTS_PAGE_SIZE = 10;
 const OFFERS_PAGE_SIZE = 10;
 const STORES_PAGE_SIZE = 8;
 
-/** Clave de la ciudad de una tienda; si el servidor no la mandó, se arma sin acentos, mayúsculas ni «, Paraguay». */
-const storeCityKey = (store: Pick<MarketStore, 'city' | 'cityKey'>) =>
-  store.cityKey ||
-  (store.city
-    ?.normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[,\s-]*(paraguay|py)\s*$/, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') ||
-    null);
-
 export default function MarketplaceScreen() {
   const registerLabel = useRegisterLabel();
   const { session, signOut } = useSession();
@@ -113,34 +103,18 @@ export default function MarketplaceScreen() {
   });
 
   // Datos globales del Marketplace
-  const [data, setData] = useState<MarketplaceHome | null>(null);
+  const [catalogResponse, setCatalogResponse] = useState<{key:string;value:MarketplaceHome}|null>(null);
+  const [marketLocation,setMarketLocation]=useState<MarketplaceLocation>(ALL_LOCATIONS);
+  const [locationReady,setLocationReady]=useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  // Información de comercio/organización del usuario si está autenticado
-  const [org, setOrg] = useState<{ name: string; role: string; slug?: string } | null>(null);
-
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-    let active = true;
-    apiFetch<{ activeOrganization?: { id: string; name: string; slug: string; role: string } }>('/api/organization-context')
-      .then((res) => {
-        if (active && res.activeOrganization) {
-          setOrg({
-            name: res.activeOrganization.name,
-            role: res.activeOrganization.role,
-            slug: res.activeOrganization.slug,
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [session]);
+  // Cuenta y comercio del usuario: los mismos datos que el menú del avatar,
+  // atados a la sesión (al cambiar de cuenta no queda el negocio anterior).
+  const account = useMarketplaceAccount();
+  const org = account.business.state === 'member' ? account.business.organization : null;
+  const panelAllowed = canOpenBusinessPanel(account.business);
 
   // Estados de búsqueda para la sección "Inicio"
   const [homeQuery, setHomeQuery] = useState('');
@@ -166,7 +140,6 @@ export default function MarketplaceScreen() {
 
   // Estados para la sección "Tiendas"
   const [storeQuery, setStoreQuery] = useState('');
-  const [storeCity, setStoreCity] = useState<string | null>(null);
   const [storePage, setStorePage] = useState(1);
 
   // ── Funcionalidades interactivas públicas modernas ──
@@ -180,6 +153,15 @@ export default function MarketplaceScreen() {
   const [showCartSheet, setShowCartSheet] = useState(false);
   const [showCategoriesSheet, setShowCategoriesSheet] = useState(false);
   const [selectedStorePreview, setSelectedStorePreview] = useState<MarketStore | null>(null);
+
+  const catalogRequest = new URLSearchParams({country:marketLocation.country,city:marketLocation.city,q:productQuery,category:productCategory??'',brand:productBrand??'',store:productStore??'',onlyOffers:onlyOffers?'1':'0',inStock:onlyInStock?'1':'0',priceRange,sort:sortBy,productPage:String(productPage),offerQ:offerQuery,offerSort,offerPage:String(offerPage),storeQ:storeQuery,storePage:String(storePage),homeQ:homeQuery,...onlyFavorites?{favorites:[...favorites].sort().join(',')}:{} }).toString();
+  const data = catalogResponse?.value.location?.selection.country===marketLocation.country&&catalogResponse.value.location.selection.city===marketLocation.city?catalogResponse.value:null;
+  const catalogPending=!error&&(!locationReady||catalogResponse?.key!==catalogRequest);
+  const applyLocation = (next:MarketplaceLocation) => {
+    setMarketLocation(next);setProductPage(1);setOfferPage(1);setStorePage(1);setProductStore(null);setProductCategory(null);setProductBrand(null);setSortBy('default');setOfferSort('discount');setPriceRange('all');setSelectedProduct(null);setSelectedStorePreview(null);
+    void secureStorage.setItem('marketplace_location_v1',JSON.stringify(next)).catch(()=>undefined);
+  };
+  useEffect(()=>{let active=true;secureStorage.getItem('marketplace_location_v1').then(value=>{if(active&&value){try{setMarketLocation(parseMarketplaceLocation(JSON.parse(value)));}catch{}}}).catch(()=>undefined).finally(()=>{if(active)setLocationReady(true);});return()=>{active=false;};},[]);
 
   // Cargar carrito guardado en almacenamiento local seguro
   useEffect(() => {
@@ -200,6 +182,7 @@ export default function MarketplaceScreen() {
 
   const addToCart = useCallback(
     (product: MarketProduct) => {
+      if(cartItems.some(item=>(item.currency??'PYG')!==(product.currency??'PYG'))){Alert.alert('El carrito usa otra moneda','Terminá o vaciá el carrito antes de agregar productos en otra moneda.');return;}
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCartItems((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === product.id);
@@ -209,17 +192,19 @@ export default function MarketplaceScreen() {
             idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
           );
         } else {
-          const storeMatch = data?.stores.find((s) => s.slug === product.store.slug);
+          const storeMatch = (data?.storeOptions??data?.stores)?.find((s) => s.slug === product.store.slug);
           const effectivePrice = product.offerPrice ?? product.price ?? 0;
           const newItem: CartItem = {
             id: product.id,
             name: product.name,
             price: effectivePrice,
+            currency: product.currency??'PYG',
             image: product.image,
             store: {
               name: product.store.name,
               slug: product.store.slug,
-              whatsapp: storeMatch?.whatsapp ?? null,
+              whatsapp: product.store.whatsapp ?? storeMatch?.whatsapp ?? null,
+              countryCode: product.store.countryCode,
             },
             quantity: 1,
           };
@@ -229,7 +214,7 @@ export default function MarketplaceScreen() {
         return updated;
       });
     },
-    [data]
+    [data, cartItems]
   );
 
   const updateCartQuantity = useCallback((productId: string, delta: number) => {
@@ -298,13 +283,22 @@ export default function MarketplaceScreen() {
     });
   }, []);
 
+  const canComparePrices = (range=false) => {
+    if(catalogPending){Alert.alert('Actualizando ubicación','Esperá a que terminen de cargar los resultados.');return false;}
+    const last=catalogResponse?.value;
+    if(last?.priceFilteringAvailable===false || (range && last?.currency && last.currency!=='PYG')) {Alert.alert('Comparación de precios',range?'Los rangos actuales son en guaraníes. Podés ordenar por precio dentro de una ubicación con una sola moneda.':'Elegí una ubicación con una sola moneda para comparar precios.');return false;}
+    return true;
+  };
   // Carga de datos
   useEffect(() => {
     let active = true;
-    fetchMarketplaceHome()
+    if (!locationReady) return;
+    const timer=setTimeout(()=>{
+    setError(null);
+    fetchMarketplaceHome(catalogRequest)
       .then((home) => {
         if (!active) return;
-        setData(home);
+        setCatalogResponse({key:catalogRequest,value:home});
         setError(null);
       })
       .catch((err) => {
@@ -313,10 +307,9 @@ export default function MarketplaceScreen() {
       .finally(() => {
         if (active) setRefreshing(false);
       });
-    return () => {
-      active = false;
-    };
-  }, [attempt]);
+    },250);
+    return () => { active=false;clearTimeout(timer); };
+  }, [attempt, catalogRequest, locationReady]);
 
   const reload = useCallback(() => {
     setRefreshing(true);
@@ -335,6 +328,7 @@ export default function MarketplaceScreen() {
   // ── Filtros para pestaña INICIO ──
   const homeFilteredProducts = useMemo(() => {
     if (!data) return [];
+    if (data.home) return data.home.products;
     let list = data.products;
     if (homeQuery.trim()) {
       const q = homeQuery.trim().toLowerCase();
@@ -359,6 +353,7 @@ export default function MarketplaceScreen() {
 
   const allCatalogProducts = useMemo(() => {
     if (!data) return [];
+    if (data.pagination) return data.products;
     // Combinar productos regulares y de ofertas sin duplicar por ID
     const productMap = new Map<string, MarketProduct>();
     for (const p of data.products) productMap.set(p.id, p);
@@ -484,12 +479,13 @@ export default function MarketplaceScreen() {
   const hasProductFilters = activeFiltersCount > 0 || productQuery.trim().length > 0;
 
   // Paginación segura de Productos
-  const totalProductPages = Math.max(1, Math.ceil(allCatalogProducts.length / PRODUCTS_PAGE_SIZE));
-  const safeProductPage = Math.min(Math.max(1, productPage), totalProductPages);
+  const productTotal=data?.pagination?.products.total??allCatalogProducts.length;
+  const totalProductPages = data?.pagination?.products.totalPages??Math.max(1, Math.ceil(allCatalogProducts.length / PRODUCTS_PAGE_SIZE));
+  const safeProductPage = data?.pagination?.products.page??Math.min(Math.max(1, productPage), totalProductPages);
   const paginatedProducts = useMemo(() => {
     const start = (safeProductPage - 1) * PRODUCTS_PAGE_SIZE;
-    return allCatalogProducts.slice(start, start + PRODUCTS_PAGE_SIZE);
-  }, [allCatalogProducts, safeProductPage]);
+    return data?.pagination?allCatalogProducts:allCatalogProducts.slice(start, start + PRODUCTS_PAGE_SIZE);
+  }, [data, allCatalogProducts, safeProductPage]);
 
   const handleProductPageChange = async (newPage: number) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -514,6 +510,7 @@ export default function MarketplaceScreen() {
   // ── Filtros para pestaña OFERTAS ──
   const allOfferProducts = useMemo(() => {
     if (!data) return [];
+    if (data.pagination) return data.offers;
     const map = new Map<string, MarketProduct>();
     for (const p of data.offers) map.set(p.id, p);
     for (const p of data.products) {
@@ -547,12 +544,13 @@ export default function MarketplaceScreen() {
     return list;
   }, [data, offerQuery, offerSort]);
 
-  const totalOfferPages = Math.max(1, Math.ceil(allOfferProducts.length / OFFERS_PAGE_SIZE));
-  const safeOfferPage = Math.min(Math.max(1, offerPage), totalOfferPages);
+  const offerTotal=data?.pagination?.offers.total??allOfferProducts.length;
+  const totalOfferPages = data?.pagination?.offers.totalPages??Math.max(1, Math.ceil(allOfferProducts.length / OFFERS_PAGE_SIZE));
+  const safeOfferPage = data?.pagination?.offers.page??Math.min(Math.max(1, offerPage), totalOfferPages);
   const paginatedOffers = useMemo(() => {
     const start = (safeOfferPage - 1) * OFFERS_PAGE_SIZE;
-    return allOfferProducts.slice(start, start + OFFERS_PAGE_SIZE);
-  }, [allOfferProducts, safeOfferPage]);
+    return data?.pagination?allOfferProducts:allOfferProducts.slice(start, start + OFFERS_PAGE_SIZE);
+  }, [data, allOfferProducts, safeOfferPage]);
 
   const handleOfferPageChange = async (newPage: number) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -563,21 +561,9 @@ export default function MarketplaceScreen() {
   // ── Filtros para pestaña TIENDAS ──
   // Una sola opción por ciudad (el servidor ya unifica «asuncion», «Asunción, PY»…),
   // con cuántas tiendas tiene y las que más tienen primero.
-  const allStoreCities = useMemo(() => {
-    if (!data) return [];
-    const map = new Map<string, { key: string; display: string; count: number }>();
-    for (const s of data.stores) {
-      const key = storeCityKey(s);
-      if (!key || !s.city) continue;
-      const current = map.get(key);
-      if (current) current.count += 1;
-      else map.set(key, { key, display: s.city.trim(), count: 1 });
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count || a.display.localeCompare(b.display, 'es'));
-  }, [data]);
-
   const allFilteredStores = useMemo(() => {
     if (!data) return [];
+    if (data.pagination) return data.stores;
     let list = data.stores;
     if (storeQuery.trim()) {
       const q = storeQuery.trim().toLowerCase();
@@ -588,18 +574,17 @@ export default function MarketplaceScreen() {
           (s.rubro && s.rubro.toLowerCase().includes(q))
       );
     }
-    if (storeCity) {
-      list = list.filter((s) => storeCityKey(s) === storeCity);
-    }
-    return list;
-  }, [data, storeQuery, storeCity]);
 
-  const totalStorePages = Math.max(1, Math.ceil(allFilteredStores.length / STORES_PAGE_SIZE));
-  const safeStorePage = Math.min(Math.max(1, storePage), totalStorePages);
+    return list;
+  }, [data, storeQuery]);
+
+  const storeTotal=data?.pagination?.stores.total??allFilteredStores.length;
+  const totalStorePages = data?.pagination?.stores.totalPages??Math.max(1, Math.ceil(allFilteredStores.length / STORES_PAGE_SIZE));
+  const safeStorePage = data?.pagination?.stores.page??Math.min(Math.max(1, storePage), totalStorePages);
   const paginatedStores = useMemo(() => {
     const start = (safeStorePage - 1) * STORES_PAGE_SIZE;
-    return allFilteredStores.slice(start, start + STORES_PAGE_SIZE);
-  }, [allFilteredStores, safeStorePage]);
+    return data?.pagination?allFilteredStores:allFilteredStores.slice(start, start + STORES_PAGE_SIZE);
+  }, [data, allFilteredStores, safeStorePage]);
 
   const handleStorePageChange = async (newPage: number) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -609,7 +594,7 @@ export default function MarketplaceScreen() {
 
   // Nombres descriptivos para chips activos
   const activeCategoryName = data?.categories.find((c) => c.id === productCategory)?.name ?? productCategory;
-  const activeStoreName = data?.stores.find((s) => s.slug === productStore)?.name ?? productStore;
+  const activeStoreName = (data?.storeOptions??data?.stores)?.find((s) => s.slug === productStore)?.name ?? productStore;
 
   const handleSignOutConfirm = () => {
     Alert.alert('Cerrar sesión', '¿Estás seguro de que deseás cerrar la sesión en tu cuenta?', [
@@ -625,7 +610,6 @@ export default function MarketplaceScreen() {
     ]);
   };
 
-  const userInitial = session?.user.email ? session.user.email.charAt(0).toUpperCase() : null;
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -640,6 +624,7 @@ export default function MarketplaceScreen() {
         onOpenCart={() => setShowCartSheet(true)}
       />
 
+      <MarketplaceLocationPicker selection={marketLocation} facets={catalogResponse?.value.location} onChange={applyLocation}/>
       <View style={styles.flex}>
         <ScrollView
           ref={scrollRef}
@@ -651,6 +636,8 @@ export default function MarketplaceScreen() {
           {/* ══════════════════════════════════════════════════════════════
               PESTAÑA 1: INICIO (HOME MARKETPLACE)
              ══════════════════════════════════════════════════════════════ */}
+          {catalogPending && <View accessibilityLiveRegion="polite" style={{padding:12,flexDirection:'row',gap:10,alignItems:'center'}}><ActivityIndicator color={accent}/><Text style={{color:colors.muted}}>Actualizando resultados…</Text></View>}
+          {error && activeTab!=='inicio' && <View style={{padding:16,gap:8}}><Text accessibilityRole="alert" style={{color:colors.text}}>{error}</Text><Pressable accessibilityRole="button" onPress={reload} style={{padding:12}}><Text style={{color:colors.text,fontWeight:'700'}}>Reintentar</Text></Pressable></View>}
           {activeTab === 'inicio' && (
             <>
               {/* Hero Promocional & Buscador Principal */}
@@ -838,7 +825,7 @@ export default function MarketplaceScreen() {
                   )}
 
                   {/* Sección: Ofertas de la semana (Destacadas) */}
-                  {data.offers.length > 0 && (
+                  {(data.home?.offers??data.offers).length > 0 && (
                     <Section
                       title="Ofertas de la semana"
                       icon="pricetag"
@@ -848,7 +835,7 @@ export default function MarketplaceScreen() {
                       action={{ label: 'Ver todas', onPress: () => handleTabPress('ofertas') }}>
                       <FlatList
                         horizontal
-                        data={data.offers}
+                        data={data.home?.offers??data.offers}
                         keyExtractor={(item) => item.id}
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.hList}
@@ -925,7 +912,7 @@ export default function MarketplaceScreen() {
 
                   {/* Sección: Catálogo de Productos */}
                   <Section
-                    title={homeQuery ? `Resultados (${homeFilteredProducts.length})` : 'Catálogo de comercios'}
+                    title={homeQuery ? `Resultados (${data.home?.total??homeFilteredProducts.length})` : 'Catálogo de comercios'}
                     icon="sparkles"
                     accent={palette.primary}
                     colors={colors}
@@ -1023,7 +1010,7 @@ export default function MarketplaceScreen() {
                       subtitle="Empresas con atención directa y catálogo verificado"
                       action={{ label: 'Ver directorio', onPress: () => handleTabPress('tiendas') }}>
                       <View style={styles.grid}>
-                        {data.stores.slice(0, 4).map((store) => (
+                        {(data.home?.stores??data.stores).slice(0, 4).map((store) => (
                           <StoreCard
                             key={store.id}
                             store={store}
@@ -1096,7 +1083,7 @@ export default function MarketplaceScreen() {
                     ]}>
                     <View style={styles.onlineDot} />
                     <Text style={[styles.totalBadgeText, { color: colors.text }]}>
-                      {allCatalogProducts.length} producto{allCatalogProducts.length !== 1 ? 's' : ''}
+                      {productTotal} producto{productTotal !== 1 ? 's' : ''}
                     </Text>
                   </View>
                 </View>
@@ -1259,7 +1246,7 @@ export default function MarketplaceScreen() {
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setPriceRange(NEXT_PRICE_RANGE[priceRange]);
+                      if(canComparePrices(true)) setPriceRange(NEXT_PRICE_RANGE[priceRange]);
                       setProductPage(1);
                     }}
                     style={[
@@ -1551,7 +1538,7 @@ export default function MarketplaceScreen() {
                         Todos
                       </Text>
                     </Pressable>
-                    {data.stores.map((store) => {
+                    {(data.storeOptions??data.stores).map((store) => {
                       const isSelected = productStore === store.slug;
                       return (
                         <Pressable
@@ -1578,8 +1565,8 @@ export default function MarketplaceScreen() {
               </View>
 
               {/* ── Grilla de Productos Paginada ── */}
-              <View style={styles.productsArea}>
-                {allCatalogProducts.length === 0 ? (
+              <View pointerEvents={catalogPending?'none':'auto'} style={[styles.productsArea,{opacity:catalogPending&&data?.pagination?.products?0.6:1}] }>
+                {!data&&catalogPending?<ActivityIndicator color={accent}/>:!data&&error?null:productTotal === 0 ? (
                   <View style={[styles.emptyContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Ionicons name="search-outline" size={40} color={colors.muted} />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>Sin productos con esos filtros</Text>
@@ -1614,7 +1601,7 @@ export default function MarketplaceScreen() {
                     <PaginationControl
                       currentPage={safeProductPage}
                       totalPages={totalProductPages}
-                      totalItems={allCatalogProducts.length}
+                      totalItems={productTotal}
                       pageSize={PRODUCTS_PAGE_SIZE}
                       onPageChange={handleProductPageChange}
                       colors={colors}
@@ -1666,7 +1653,7 @@ export default function MarketplaceScreen() {
                   <View style={[styles.totalBadge, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <View style={[styles.onlineDot, { backgroundColor: '#DC2626' }]} />
                     <Text style={[styles.totalBadgeText, { color: colors.text }]}>
-                      {allOfferProducts.length} oferta{allOfferProducts.length !== 1 ? 's' : ''}
+                      {offerTotal} oferta{offerTotal !== 1 ? 's' : ''}
                     </Text>
                   </View>
                 </View>
@@ -1714,7 +1701,7 @@ export default function MarketplaceScreen() {
                       key={s.key}
                       onPress={async () => {
                         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setOfferSort(s.key as any);
+                        if(!s.key.startsWith('price_')||canComparePrices()) setOfferSort(s.key as 'discount'|'price_asc'|'price_desc');
                         setOfferPage(1);
                       }}
                       style={[
@@ -1731,8 +1718,8 @@ export default function MarketplaceScreen() {
                 </View>
               </View>
 
-              <View style={styles.productsArea}>
-                {allOfferProducts.length === 0 ? (
+              <View pointerEvents={catalogPending?'none':'auto'} style={[styles.productsArea,{opacity:catalogPending&&data?.pagination?.products?0.6:1}] }>
+                {!data&&catalogPending?<ActivityIndicator color={accent}/>:!data&&error?null:offerTotal === 0 ? (
                   <View style={[styles.emptyContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Ionicons name="pricetag-outline" size={38} color={colors.muted} />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>Sin ofertas</Text>
@@ -1761,7 +1748,7 @@ export default function MarketplaceScreen() {
                     <PaginationControl
                       currentPage={safeOfferPage}
                       totalPages={totalOfferPages}
-                      totalItems={allOfferProducts.length}
+                      totalItems={offerTotal}
                       pageSize={OFFERS_PAGE_SIZE}
                       onPageChange={handleOfferPageChange}
                       colors={colors}
@@ -1813,7 +1800,7 @@ export default function MarketplaceScreen() {
                   <View style={[styles.totalBadge, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <View style={styles.onlineDot} />
                     <Text style={[styles.totalBadgeText, { color: colors.text }]}>
-                      {allFilteredStores.length} tienda{allFilteredStores.length !== 1 ? 's' : ''}
+                      {storeTotal} tienda{storeTotal !== 1 ? 's' : ''}
                     </Text>
                   </View>
                 </View>
@@ -1851,53 +1838,10 @@ export default function MarketplaceScreen() {
                   )}
                 </View>
 
-                {allStoreCities.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChips}>
-                    <Pressable
-                      onPress={async () => {
-                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setStoreCity(null);
-                        setStorePage(1);
-                      }}
-                      style={[
-                        styles.facetPill,
-                        storeCity === null
-                          ? { backgroundColor: palette.primary, borderColor: palette.primary }
-                          : { backgroundColor: colors.card, borderColor: colors.border },
-                      ]}>
-                      <Text style={[styles.facetPillText, { color: storeCity === null ? '#FFFFFF' : colors.text }]}>
-                        Todas
-                      </Text>
-                    </Pressable>
-                    {allStoreCities.map((city) => {
-                      const isSelected = storeCity === city.key;
-                      return (
-                        <Pressable
-                          key={city.key}
-                          accessibilityLabel={`${city.display}, ${city.count} ${city.count === 1 ? 'tienda' : 'tiendas'}`}
-                          onPress={async () => {
-                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setStoreCity(isSelected ? null : city.key);
-                            setStorePage(1);
-                          }}
-                          style={[
-                            styles.facetPill,
-                            isSelected
-                              ? { backgroundColor: palette.primary, borderColor: palette.primary }
-                              : { backgroundColor: colors.card, borderColor: colors.border },
-                          ]}>
-                          <Text style={[styles.facetPillText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
-                            {city.display} · {city.count}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                )}
               </View>
 
-              <View style={styles.productsArea}>
-                {allFilteredStores.length === 0 ? (
+              <View pointerEvents={catalogPending?'none':'auto'} style={[styles.productsArea,{opacity:catalogPending&&data?.pagination?.products?0.6:1}] }>
+                {!data&&catalogPending?<ActivityIndicator color={accent}/>:!data&&error?null:storeTotal === 0 ? (
                   <View style={[styles.emptyContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Ionicons name="business-outline" size={38} color={colors.muted} />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>Sin tiendas</Text>
@@ -1929,7 +1873,7 @@ export default function MarketplaceScreen() {
                     <PaginationControl
                       currentPage={safeStorePage}
                       totalPages={totalStorePages}
-                      totalItems={allFilteredStores.length}
+                      totalItems={storeTotal}
                       pageSize={STORES_PAGE_SIZE}
                       onPageChange={handleStorePageChange}
                       colors={colors}
@@ -1958,182 +1902,88 @@ export default function MarketplaceScreen() {
                 </View>
               </View>
 
-              {/* ── Tarjeta de Identidad de Usuario (Estilo Web) ── */}
+              {/* ── Quién soy: foto, nombre real, correo y editar ── */}
               <View style={[styles.profileHeroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.profileHeroRow}>
-                  <View style={[styles.profileBigAvatar, { backgroundColor: session ? palette.primary : accentSoft }]}>
-                    {session ? (
-                      <Text style={styles.profileBigAvatarText}>{userInitial}</Text>
+                  <View style={[styles.profileBigAvatar, { backgroundColor: session ? palette.primary : accentSoft, overflow: 'hidden' }]}>
+                    {session && account.avatarUrl ? (
+                      <Image source={{ uri: account.avatarUrl }} style={styles.accountAvatarImg} contentFit="cover" />
+                    ) : session ? (
+                      <Text style={styles.profileBigAvatarText}>{(account.fullName || account.email || '?').trim().charAt(0).toUpperCase()}</Text>
                     ) : (
                       <Ionicons name="person-outline" size={32} color={palette.primary} />
                     )}
                   </View>
                   <View style={styles.profileHeroInfo}>
-                    <Text numberOfLines={1} style={[styles.profileDisplayName, { color: colors.text }]}>
-                      {session?.user.email ? session.user.email.split('@')[0] : 'Invitado'}
-                    </Text>
+                    <Text numberOfLines={1} style={[styles.profileDisplayName, { color: colors.text }]}>{accountDisplayName(account)}</Text>
                     <Text numberOfLines={1} style={[styles.profileEmailText, { color: colors.muted }]}>
-                      {session?.user.email ?? 'Sin sesión iniciada'}
+                      {session?.user.email ?? 'Entrá para ver tus pedidos y guardar favoritos'}
                     </Text>
-                    <View style={styles.profileBadgeGroup}>
-                      {session ? (
-                        <View style={[styles.roleBadge, { backgroundColor: 'rgba(16,185,129,0.12)', borderColor: '#10B981' }]}>
-                          <Ionicons name="checkmark-circle" size={11} color="#10B981" />
-                          <Text style={[styles.roleBadgeText, { color: '#10B981' }]}>Cuenta activa</Text>
-                        </View>
-                      ) : (
-                        <View style={[styles.roleBadge, { backgroundColor: accentSoft, borderColor: accent }]}>
-                          <Text style={[styles.roleBadgeText, { color: accent }]}>Modo visitante</Text>
-                        </View>
-                      )}
-                      {org && (
+                    {org && panelAllowed ? (
+                      <View style={styles.profileBadgeGroup}>
                         <View style={[styles.roleBadge, { backgroundColor: 'rgba(37,99,235,0.12)', borderColor: palette.primary }]}>
                           <Ionicons name="business" size={11} color={palette.primary} />
-                          <Text style={[styles.roleBadgeText, { color: palette.primary }]}>
-                            {ROLE_LABELS[org.role] ?? org.role}
+                          <Text numberOfLines={1} style={[styles.roleBadgeText, { color: palette.primary }]}>
+                            {ROLE_LABELS[org.role] ?? org.role} · {org.name}
                           </Text>
                         </View>
-                      )}
-                    </View>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
 
-                {/* Si no ha iniciado sesión, botón para iniciar */}
-                {!session && (
+                {session ? (
                   <Pressable
-                    onPress={() => router.push('/sign-in' as any)}
+                    onPress={() => router.push('/mi-cuenta' as never)}
+                    accessibilityRole="button"
+                    style={[styles.accountEditBtn, { borderColor: colors.border }]}>
+                    <Ionicons name="create-outline" size={16} color={colors.text} />
+                    <Text style={[styles.accountEditText, { color: colors.text }]}>Editar perfil</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push('/sign-in' as never)}
+                    accessibilityRole="button"
                     style={[styles.profileSignInBtn, { backgroundColor: palette.primary }]}>
                     <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.profileSignInBtnText}>Iniciar sesión con mi cuenta</Text>
+                    <Text style={styles.profileSignInBtnText}>Iniciar sesión</Text>
                     <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
                   </Pressable>
                 )}
               </View>
 
-              {/* ── Banner de Tipo de Cuenta / Negocio (ProfileAccountTypeBanner de la Web) ── */}
-              {session && org ? (
-                <View style={[styles.orgCard, { backgroundColor: colors.card, borderColor: palette.primary }]}>
-                  <View style={styles.orgCardHeader}>
-                    <View style={[styles.orgIconWrap, { backgroundColor: 'rgba(37,99,235,0.14)' }]}>
-                      <Ionicons name="business" size={24} color={palette.primary} />
-                    </View>
-                    <View style={styles.orgDetailsText}>
-                      <View style={styles.verifiedStoreRow}>
-                        <Text style={[styles.orgCardTitle, { color: colors.text }]}>{org.name}</Text>
-                        <Ionicons name="shield-checkmark" size={17} color={palette.primary} />
-                      </View>
-                      <Text style={[styles.orgCardSubtitle, { color: colors.muted }]}>
-                        Tu comercio vinculado · Rol: <Text style={{ color: colors.text, fontWeight: '700' }}>{ROLE_LABELS[org.role] ?? org.role}</Text>
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Pressable
-                    onPress={() => router.push('/panel' as any)}
-                    style={[styles.orgCtaBtn, { backgroundColor: palette.primary }]}>
-                    <Ionicons name="grid" size={16} color="#FFFFFF" />
-                    <Text style={styles.orgCtaBtnText}>Ir al Panel de Control de mi Negocio</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                  </Pressable>
-                </View>
-              ) : (
-                /* Banner para usuarios que aún no registraron su comercio */
-                <View style={[styles.leadBusinessCard, { backgroundColor: '#0F172A' }]}>
-                  <View style={styles.leadPill}>
-                    <Ionicons name="rocket" size={13} color="#38BDF8" />
-                    <Text style={styles.leadPillText}>Para Comercios & Talleres</Text>
-                  </View>
-                  <Text style={styles.leadTitle}>¿Tenés un negocio o taller de reparación?</Text>
-                  <Text style={styles.leadDescription}>
-                    Sumá tu comercio a Mi tiendaPY.com. Controlá ventas, cobros, órdenes de taller e inventario en un solo sistema integrado.
-                  </Text>
-                  <View style={styles.leadBenefitsList}>
-                    {['Catálogo online sincronizado en el Marketplace', 'Órdenes de servicio técnico y reparación', 'Facturación & POS móvil'].map((benefit) => (
-                      <View key={benefit} style={styles.leadBenefitItem}>
-                        <Ionicons name="checkmark-circle" size={14} color="#38BDF8" />
-                        <Text style={styles.leadBenefitText}>{benefit}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  <View style={styles.leadCtaRow}>
-                    <Pressable
-                      onPress={async () => {
-                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        router.push('/saas' as any);
-                      }}
-                      style={[styles.leadCtaBtn, { backgroundColor: palette.primary }]}>
-                      <Ionicons name="rocket" size={16} color="#FFFFFF" />
-                      <Text style={styles.leadCtaText}>Ver Sistema SaaS & Planes</Text>
-                      <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={async () => {
-                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        void openRegistration();
-                      }}
-                      style={styles.leadSecondaryBtn}>
-                      <Text style={styles.leadSecondaryBtnText}>{registerLabel}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-              {/* ── Resumen de Actividad & Accesos Rápidos (Estilo Web) ── */}
+              {/* ── Mi actividad (lo principal del comprador) ── */}
               <View style={styles.profileSectionBlock}>
-                <Text style={[styles.profileSectionTitle, { color: colors.text }]}>Actividad y Gestiones</Text>
+                <Text style={[styles.profileSectionTitle, { color: colors.text }]}>Mi actividad</Text>
                 <View style={styles.quickGrid}>
-                  {/* Mis Pedidos */}
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      if (!session) {
-                        router.push('/sign-in' as any);
-                      } else {
-                        openWeb('/marketplace/perfil#pedidos');
-                      }
+                      router.push((session ? '/mis-pedidos' : '/sign-in') as never);
                     }}
+                    accessibilityRole="button"
                     style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(37,99,235,0.18)' : '#EFF6FF' }]}>
-                      <Ionicons name="cube-outline" size={20} color={palette.primary} />
+                      <Ionicons name="bag-handle-outline" size={20} color={palette.primary} />
                     </View>
-                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis Pedidos</Text>
-                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>Compras en tiendas</Text>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis pedidos</Text>
+                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>{session ? 'Compras en las tiendas' : 'Iniciá sesión para verlos'}</Text>
                   </Pressable>
 
-                  {/* Mis Reparaciones (con modal interactivo en vivo) */}
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       setShowRepairTracker(true);
                     }}
+                    accessibilityRole="button"
                     style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(37,99,235,0.18)' : '#EFF6FF' }]}>
                       <Ionicons name="construct-outline" size={20} color={palette.primary} />
                     </View>
-                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis Reparaciones</Text>
-                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>Rastreo en taller en vivo</Text>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis reparaciones</Text>
+                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>Seguí tu equipo en el taller</Text>
                   </Pressable>
 
-                  {/* Créditos en Tiendas */}
-                  <Pressable
-                    onPress={async () => {
-                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      if (!session) {
-                        router.push('/sign-in' as any);
-                      } else {
-                        openWeb('/marketplace/perfil/creditos');
-                      }
-                    }}
-                    style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(37,99,235,0.18)' : '#EFF6FF' }]}>
-                      <Ionicons name="wallet-outline" size={20} color={palette.primary} />
-                    </View>
-                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Créditos en Tiendas</Text>
-                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>Cuentas corrientes</Text>
-                  </Pressable>
-
-                  {/* Mis Favoritos (con filtro en vivo en app) */}
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2142,33 +1992,89 @@ export default function MarketplaceScreen() {
                       setActiveTab('productos');
                       scrollRef.current?.scrollTo({ y: 0, animated: true });
                     }}
+                    accessibilityRole="button"
                     style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={[styles.quickCardIconWrap, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
-                      <Ionicons name="heart" size={20} color="#EF4444" />
+                    <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(37,99,235,0.18)' : '#EFF6FF' }]}>
+                      <Ionicons name="heart-outline" size={20} color={palette.primary} />
                     </View>
-                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis Favoritos</Text>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Favoritos</Text>
                     <Text style={[styles.quickCardSub, { color: colors.muted }]}>
                       {favorites.size} guardado{favorites.size !== 1 ? 's' : ''}
                     </Text>
                   </Pressable>
 
-                  {/* Mi Carrito de Compras */}
                   <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       setShowCartSheet(true);
                     }}
+                    accessibilityRole="button"
                     style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(37,99,235,0.18)' : '#EFF6FF' }]}>
                       <Ionicons name="cart-outline" size={20} color={palette.primary} />
                     </View>
-                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mi Carrito</Text>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Carrito</Text>
                     <Text style={[styles.quickCardSub, { color: colors.muted }]}>
-                      {totalCartCount} item{totalCartCount !== 1 ? 's' : ''} agregado{totalCartCount !== 1 ? 's' : ''}
+                      {totalCartCount} producto{totalCartCount !== 1 ? 's' : ''}
                     </Text>
                   </Pressable>
                 </View>
+
+                {session ? (
+                  /* Créditos sigue en la web: se avisa que se abre el navegador y que ahí hay que entrar. */
+                  <Pressable
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      openWeb('/marketplace/perfil#tiendas');
+                    }}
+                    accessibilityRole="link"
+                    accessibilityHint="Se abre el sitio web en el navegador"
+                    style={[styles.accountWebRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Ionicons name="wallet-outline" size={18} color={palette.primary} />
+                    <View style={styles.accountWebText}>
+                      <Text style={[styles.quickCardTitle, { color: colors.text }]}>Créditos en tiendas</Text>
+                      <Text style={[styles.quickCardSub, { color: colors.muted }]}>Se abre en el sitio web; puede pedirte iniciar sesión</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color={colors.muted} />
+                  </Pressable>
+                ) : null}
               </View>
+
+              {/* ── Mi negocio: solo con rol en un comercio; si no se pudo revisar, no se afirma nada ── */}
+              {session && panelAllowed && org ? (
+                <View style={styles.profileSectionBlock}>
+                  <Text style={[styles.profileSectionTitle, { color: colors.text }]}>Mi negocio</Text>
+                  <Pressable
+                    onPress={() => router.push('/panel' as never)}
+                    accessibilityRole="button"
+                    style={[styles.accountWebRow, { backgroundColor: colors.card, borderColor: palette.primary }]}>
+                    <Ionicons name="grid-outline" size={18} color={palette.primary} />
+                    <View style={styles.accountWebText}>
+                      <Text style={[styles.quickCardTitle, { color: colors.text }]}>Panel de {org.name}</Text>
+                      <Text style={[styles.quickCardSub, { color: colors.muted }]}>Tu rol: {ROLE_LABELS[org.role] ?? org.role}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                  </Pressable>
+                </View>
+              ) : session && account.status === 'error' ? (
+                <Pressable onPress={account.reload} accessibilityRole="button" style={[styles.accountWebRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Ionicons name="refresh" size={18} color={palette.primary} />
+                  <Text style={[styles.quickCardSub, styles.accountWebText, { color: colors.muted }]}>No pudimos cargar todos tus datos de cuenta. Tocá para reintentar.</Text>
+                </Pressable>
+              ) : !session || account.business.state === 'none' ? (
+                /* Anuncio de planes, compacto: no desplaza la actividad del comprador. */
+                <Pressable
+                  onPress={() => router.push('/saas' as never)}
+                  accessibilityRole="button"
+                  style={[styles.accountWebRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Ionicons name="storefront-outline" size={18} color={palette.primary} />
+                  <View style={styles.accountWebText}>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>¿Tenés un negocio?</Text>
+                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>Vendé en el marketplace con tu propio sistema · {registerLabel}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                </Pressable>
+              ) : null}
 
               {/* ── Ajustes y Seguridad (Estilo Web) ── */}
               <View style={styles.profileSectionBlock}>
@@ -2314,7 +2220,7 @@ export default function MarketplaceScreen() {
                           key={range}
                           onPress={async () => {
                             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setPriceRange(range);
+                            if(range==='all'||canComparePrices(true)) setPriceRange(range);
                             setProductPage(1);
                           }}
                           style={[
@@ -2343,7 +2249,7 @@ export default function MarketplaceScreen() {
                           key={option}
                           onPress={async () => {
                             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setSortBy(option);
+                            if(!option.startsWith('price_')||canComparePrices()) setSortBy(option);
                             setProductPage(1);
                           }}
                           style={[
@@ -2450,7 +2356,7 @@ export default function MarketplaceScreen() {
                   onPress={() => setShowFilterModal(false)}
                   style={[styles.sheetApplyBtn, { backgroundColor: palette.primary }]}>
                   <Text style={styles.sheetApplyBtnText}>
-                    Ver {allCatalogProducts.length} producto{allCatalogProducts.length !== 1 ? 's' : ''}
+                    Ver {productTotal} producto{productTotal !== 1 ? 's' : ''}
                   </Text>
                   <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
                 </Pressable>
@@ -2479,7 +2385,7 @@ export default function MarketplaceScreen() {
                   key={option}
                   onPress={async () => {
                     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSortBy(option);
+                    if(!option.startsWith('price_')||canComparePrices()) setSortBy(option);
                     setProductPage(1);
                     setShowSortModal(false);
                   }}
@@ -2698,9 +2604,7 @@ export default function MarketplaceScreen() {
 
               <View style={styles.floatingCartRight}>
                 <Text style={styles.floatingCartTotalText}>
-                  {formatGs(
-                    cartItems.reduce((acc, i) => acc + i.price * i.quantity, 0)
-                  )}
+                  {formatMarketPrice(cartItems.reduce((acc,i)=>acc+i.price*i.quantity,0),cartItems[0]?.currency??'PYG')}
                 </Text>
                 <Ionicons name="chevron-forward" size={15} color="#38BDF8" />
               </View>
@@ -3129,21 +3033,21 @@ function ProductCard({
               <View style={styles.offerPriceBlock}>
                 <View style={styles.priceOldRow}>
                   <Text style={[styles.productOld, { color: colors.muted }]}>
-                    {formatGs(product.price)}
+                    {formatMarketPrice(product.price,product.currency)}
                   </Text>
                   {savings ? (
                     <Text style={styles.savingsLabel}>
-                      Ahorro {formatGs(savings)}
+                      Ahorro {formatMarketPrice(savings,product.currency)}
                     </Text>
                   ) : null}
                 </View>
                 <Text style={[styles.productPrice, { color: '#DC2626' }]}>
-                  {formatGs(product.offerPrice)}
+                  {formatMarketPrice(product.offerPrice,product.currency)}
                 </Text>
               </View>
             ) : (
               <Text style={[styles.productPrice, { color: colors.text }]}>
-                {formatGs(product.price)}
+                {formatMarketPrice(product.price,product.currency)}
               </Text>
             )}
           </View>
@@ -3258,7 +3162,7 @@ function StoreCard({
         <View style={styles.storeLocationRow}>
           <Ionicons name="location-outline" size={12} color={colors.muted} />
           <Text numberOfLines={1} style={[styles.storeMeta, { color: colors.muted }]}>
-            {[store.city, store.rubro].filter(Boolean).join(' · ')}
+            {[[...new Set(store.locations?.map(location=>location.city)??[])].join(' · ')||store.city, store.rubro].filter(Boolean).join(' · ')}
           </Text>
         </View>
       )}
@@ -3274,6 +3178,11 @@ function StoreCard({
 }
 
 const styles = StyleSheet.create({
+  accountAvatarImg: { width: '100%', height: '100%' },
+  accountEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 12, minHeight: 44, marginTop: 12 },
+  accountEditText: { fontSize: 14, fontWeight: '700' },
+  accountWebRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 14, padding: 14, minHeight: 56, marginTop: 10 },
+  accountWebText: { flex: 1, gap: 2 },
   safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: { paddingBottom: 50 },

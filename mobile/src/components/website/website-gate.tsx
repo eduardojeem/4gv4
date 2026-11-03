@@ -8,13 +8,24 @@ import { Notice, StateView, WebsiteScreen } from './website-ui';
  * Carga, permisos, error y conexión de cualquier pantalla del sitio web. Solo
  * renderiza el contenido cuando hay configuración del servidor para editar.
  */
-export function WebsiteGate({ title, children }: { title: string; children: (settings: WebsiteSettings) => ReactNode }) {
-  const { settings, loading, error, offline, forbidden, canEdit, reload } = useWebsite();
+export function WebsiteGate({
+  title,
+  children,
+}: {
+  title: string;
+  children: (settings: WebsiteSettings) => ReactNode;
+}) {
+  const { settings, loading, error, offline, forbidden, canEdit, reload } =
+    useWebsite();
 
   if (!canEdit || forbidden) {
     return (
       <WebsiteScreen title={title}>
-        <StateView icon="lock-closed-outline" title="Sin permiso para editar el sitio" text="Solo el dueño o un administrador del comercio pueden cambiar la tienda online. Pedíselo al dueño." />
+        <StateView
+          icon="lock-closed-outline"
+          title="Sin permiso para editar el sitio"
+          text="Solo el dueño o un administrador del comercio pueden cambiar la tienda online. Pedíselo al dueño."
+        />
       </WebsiteScreen>
     );
   }
@@ -28,7 +39,13 @@ export function WebsiteGate({ title, children }: { title: string; children: (set
   if (!settings) {
     return (
       <WebsiteScreen title={title}>
-        <StateView icon={offline ? 'cloud-offline-outline' : 'alert-circle-outline'} title={offline ? 'Sin conexión' : 'No pudimos cargar el sitio'} text={error ?? undefined} action="Reintentar" onAction={() => void reload()} />
+        <StateView
+          icon={offline ? 'cloud-offline-outline' : 'alert-circle-outline'}
+          title={offline ? 'Sin conexión' : 'No pudimos cargar el sitio'}
+          text={error ?? undefined}
+          action="Reintentar"
+          onAction={() => void reload()}
+        />
       </WebsiteScreen>
     );
   }
@@ -37,6 +54,16 @@ export function WebsiteGate({ title, children }: { title: string; children: (set
 
 /** Aviso dentro del contenido cuando la última carga falló por conexión. */
 export function OfflineNotice() {
-  const { offline } = useWebsite();
-  return offline ? <Notice tone="danger" text="Sin conexión. Ves lo último cargado; no se va a guardar nada hasta que vuelva internet." /> : null;
+  const { offline, error } = useWebsite();
+  return offline ? (
+    <Notice
+      tone="danger"
+      text="Sin conexión. Ves lo último cargado; no se va a guardar nada hasta que vuelva internet."
+    />
+  ) : error ? (
+    <Notice
+      tone="warning"
+      text={`No se pudo actualizar: ${error}. Ves la última configuración confirmada.`}
+    />
+  ) : null;
 }

@@ -209,11 +209,11 @@ function OrgProductCard({
           ) : (
             <div className="flex items-baseline gap-1.5">
               <p className="text-sm sm:text-base font-bold tabular-nums text-foreground">
-                {formatPrice(displayPrice)}
+                {formatPrice(displayPrice,product.currency??'PYG')}
               </p>
               {hasDiscount && (
                 <p className="text-[11px] text-muted-foreground line-through tabular-nums">
-                  {formatPrice(product.sale_price)}
+                  {formatPrice(product.sale_price,product.currency??'PYG')}
                 </p>
               )}
             </div>

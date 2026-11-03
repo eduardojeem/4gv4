@@ -13,6 +13,8 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  // El buscador conserva el filtro de ubicación de la URL.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 describe('el buscador avisa cuando lo estan usando', () => {

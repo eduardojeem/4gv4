@@ -18,6 +18,7 @@ import {
   saveCompanyInfo,
   saveWebsiteSettings,
   searchStoreProducts,
+  searchStoreProductsPage,
   setProductFeatured,
   uploadWebsiteImage,
   websiteErrorMessage,
@@ -261,6 +262,14 @@ describe('APIs de la app: mismas rutas que la web, organización resuelta por el
     expect(JSON.stringify(products)).not.toMatch(/purchase/)
   })
 
+  it('pagina destacados sin truncarlos en treinta productos', async () => {
+    const fetchPage = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => ({ data: { products: Array.from({ length: 30 }, (_, index) => ({ id: `p${index}`, name: 'Producto', sale_price: 100, purchase_price: 60 })), total: 65 } }) }));
+    vi.stubGlobal('fetch', fetchPage);
+    const result = await searchStoreProductsPage('', true, 2);
+    expect(fetchPage.mock.calls[0][0]).toContain('page=2');
+    expect(result.nextPage).toBe(3);
+    expect(JSON.stringify(result.items)).not.toContain('purchase_price');
+  });
   it('destacar actualiza solo el campo featured del producto', async () => {
     await setProductFeatured('p1', true)
     expect(calls[0].url).toMatch(/\/api\/products\/p1$/)

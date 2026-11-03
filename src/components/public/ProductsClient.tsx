@@ -55,6 +55,7 @@ const PAGE_SIZE = 28
 const PAGE_SIZE_OPTIONS = [12, 28, 48, 100]
 
 type Props = {
+  priceSortAvailable?: boolean
   products: MarketplaceProduct[]
   /** Total del query filtrado; permite paginar mas alla del lote actual. */
   totalProducts?: number
@@ -101,6 +102,7 @@ export function ProductsClient({
   initialOnlyOffers = false,
   initialSort = 'default',
   hideSearch = false,
+  priceSortAvailable = true,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -562,7 +564,7 @@ export function ProductsClient({
                 <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Ordenar por:
                 </div>
-                {SORT_OPTIONS.filter((option) => !serverPaginated || option.id !== 'discount_desc').map((option) => {
+                {SORT_OPTIONS.filter((option) => (!serverPaginated || option.id !== 'discount_desc') && (priceSortAvailable || !option.id.startsWith('price_'))).map((option) => {
                   const OptionIcon = option.icon
                   const isSelected = sort === option.id
                   return (
@@ -978,12 +980,12 @@ export function ProductsClient({
                     ) : (
                       <div>
                         <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                          {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
+                          {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice,product.currency??'PYG')}
                         </p>
                         {hasOffer && (
                           <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
-                            <span className="text-muted-foreground line-through">{formatPrice(offer.regularPrice)}</span>
-                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Ahorrás {formatPrice(offer.savings)}</span>
+                            <span className="text-muted-foreground line-through">{formatPrice(offer.regularPrice,product.currency??'PYG')}</span>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Ahorrás {formatPrice(offer.savings,product.currency??'PYG')}</span>
                           </p>
                         )}
                       </div>

@@ -39,6 +39,7 @@ export type EmpresasFilters = { query: string; rubro: string; city: string }
 
 function matchesCity(org: MarketplaceOrganization, city: string): boolean {
   if (!city || city === 'all') return true
+  if(city.includes(':')) return Boolean(org.locations?.some(location=>location.key===city))
   const target = normalizeCity(city)?.key || removeAccents(city)
   const orgCity = normalizeCity(org.city)
   if (!orgCity) return false
@@ -64,6 +65,7 @@ export function matchesQuery(org: MarketplaceOrganization, query: string): boole
     rubroLabel(rubro),
     RUBRO_KEYWORDS[rubro],
     org.business_vertical,
+    ...(org.locations?.map(location=>location.city)??[]),
   ]
   return haystack.some((value) => Boolean(value) && removeAccents(String(value)).includes(q))
 }
@@ -102,18 +104,15 @@ export function rubroFacets(organizations: MarketplaceOrganization[], filters: E
 export type CityFacet = { key: string; display: string; count: number }
 
 /** Las ciudades del directorio, contadas con la búsqueda y el rubro actuales. */
+function organizationCities(org:MarketplaceOrganization){
+ if(org.locations?.length)return [...new Map(org.locations.map(location=>[location.key,{key:location.key,display:location.city}])).values()]
+ const city=normalizeCity(org.city);return city?[city]:[]
+}
 export function cityFacets(organizations: MarketplaceOrganization[], filters: EmpresasFilters): CityFacet[] {
-  const map = new Map<string, CityFacet>()
-  for (const org of organizations) {
-    const city = normalizeCity(org.city)
-    if (city && !map.has(city.key)) map.set(city.key, { key: city.key, display: city.display, count: 0 })
-  }
-  for (const org of filterOrganizations(organizations, filters, 'city')) {
-    const city = normalizeCity(org.city)
-    const facet = city ? map.get(city.key) : undefined
-    if (facet) facet.count += 1
-  }
-  return [...map.values()].sort((a, b) => b.count - a.count || a.display.localeCompare(b.display))
+ const map=new Map<string,CityFacet>()
+ for(const org of organizations)for(const city of organizationCities(org))if(!map.has(city.key))map.set(city.key,{...city,count:0})
+ for(const org of filterOrganizations(organizations,filters,'city'))for(const city of organizationCities(org)){const facet=map.get(city.key);if(facet)facet.count++}
+ return [...map.values()].sort((a,b)=>b.count-a.count||a.display.localeCompare(b.display))
 }
 
 export const SORT_OPTIONS = [

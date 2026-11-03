@@ -54,7 +54,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
   const rubroKey = organization.rubro || 'comercio'
   const rubroMeta = RUBRO_LABELS[rubroKey] ?? RUBRO_LABELS.comercio
   const RubroIcon = rubroMeta.icon
-  const normalizedCity = normalizeCity(organization.city)
+  const normalizedCity = organization.locations?.length?{display:[...new Set(organization.locations.map(location=>location.city))].join(' · ')}:normalizeCity(organization.city)
   const accentColor = organizationAccentColor(organization)
 
   return (
@@ -163,7 +163,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
               <MapPin className="mt-0.5 h-3 w-3 text-primary shrink-0" aria-hidden="true" />
               <div className="min-w-0 text-[11px] leading-tight">
                 {normalizedCity && (
-                  <span className="block truncate text-xs font-semibold text-foreground">{normalizedCity.display}</span>
+                  <span className="block line-clamp-2 text-xs font-semibold text-foreground">{normalizedCity.display}</span>
                 )}
                 {organization.address && (
                   <span className="mt-0.5 line-clamp-2 break-words text-muted-foreground" title={organization.address}>{organization.address}</span>

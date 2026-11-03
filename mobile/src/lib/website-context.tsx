@@ -1,4 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { getPrivateCacheContext } from './private-cache-context';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  type ReactNode,
+} from 'react';
 
 import { ApiError } from './api';
 import { usePanel } from './panel';
@@ -19,11 +29,19 @@ type WebsiteState = {
   organizationName: string | null;
   reload: () => Promise<void>;
   /** Reemplaza las claves guardadas con lo que devolvió el servidor. */
-  applySaved: (patch: Partial<WebsiteSettings> & { company_info?: CompanyInfo }) => void;
+  applySaved: (
+    patch: Partial<WebsiteSettings> & { company_info?: CompanyInfo },
+  ) => void;
 };
 
 /** Lo cargado, siempre atado al comercio para el que se pidió. */
-type Loaded = { organizationId: string; settings: WebsiteSettings | null; error: string | null; offline: boolean; forbidden: boolean };
+type Loaded = {
+  organizationId: string;
+  settings: WebsiteSettings | null;
+  error: string | null;
+  offline: boolean;
+  forbidden: boolean;
+};
 
 const WebsiteContext = createContext<WebsiteState | null>(null);
 
@@ -31,31 +49,57 @@ export function WebsiteProvider({ children }: { children: ReactNode }) {
   const { data } = usePanel();
   const organizationId = data?.organization.id ?? null;
   const role = data?.organization.role ?? null;
-  const canEdit = Boolean(data?.user.isSuperAdmin || role === 'owner' || role === 'admin');
+  const canEdit = Boolean(
+    data?.user.isSuperAdmin || role === 'owner' || role === 'admin',
+  );
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const sequence = useRef(0);
 
   const load = useCallback(async (forOrganization: string) => {
+    const request = ++sequence.current;
+    const scope = getPrivateCacheContext();
     try {
       const settings = await fetchWebsiteSettings();
-      setLoaded({ organizationId: forOrganization, settings, error: null, offline: false, forbidden: false });
+      if (
+        request !== sequence.current ||
+        scope.epoch !== getPrivateCacheContext().epoch
+      )
+        return;
+      setLoaded({
+        organizationId: forOrganization,
+        settings,
+        error: null,
+        offline: false,
+        forbidden: false,
+      });
     } catch (cause) {
+      if (
+        request !== sequence.current ||
+        scope.epoch !== getPrivateCacheContext().epoch
+      )
+        return;
       const status = cause instanceof ApiError ? cause.status : -1;
       // Si falla, se conserva lo último cargado de ESTE comercio.
       setLoaded((current) => ({
         organizationId: forOrganization,
-        settings: current?.organizationId === forOrganization ? current.settings : null,
-        error: websiteErrorMessage(cause, 'No pudimos cargar el sitio web. Intentá nuevamente.'),
+        settings:
+          current?.organizationId === forOrganization ? current.settings : null,
+        error: websiteErrorMessage(
+          cause,
+          'No pudimos cargar el sitio web. Intentá nuevamente.',
+        ),
         offline: status === 0,
         forbidden: status === 403,
       }));
     } finally {
-      setRefreshing(false);
+      if (request === sequence.current) setRefreshing(false);
     }
   }, []);
 
   // Otro comercio: lo cargado no sirve ni se muestra; se pide de nuevo.
-  const current = loaded && loaded.organizationId === organizationId ? loaded : null;
+  const current =
+    loaded && loaded.organizationId === organizationId ? loaded : null;
   useEffect(() => {
     if (organizationId && canEdit && !current) void load(organizationId);
   }, [organizationId, canEdit, current, load]);
@@ -66,26 +110,49 @@ export function WebsiteProvider({ children }: { children: ReactNode }) {
     await load(organizationId);
   }, [organizationId, load]);
 
-  const applySaved = useCallback((patch: Partial<WebsiteSettings> & { company_info?: CompanyInfo }) => {
-    // El servidor devuelve cada clave completa y validada: reemplaza a la anterior.
-    // Si mientras se guardaba se cambió de comercio, no se mezcla con el otro.
-    setLoaded((value) => (value?.settings && value.organizationId === organizationId ? { ...value, settings: { ...value.settings, ...patch } as WebsiteSettings } : value));
-  }, [organizationId]);
+  const applySaved = useCallback(
+    (patch: Partial<WebsiteSettings> & { company_info?: CompanyInfo }) => {
+      // El servidor devuelve cada clave completa y validada: reemplaza a la anterior.
+      // Si mientras se guardaba se cambió de comercio, no se mezcla con el otro.
+      setLoaded((value) =>
+        value?.settings && value.organizationId === organizationId
+          ? {
+              ...value,
+              settings: { ...value.settings, ...patch } as WebsiteSettings,
+            }
+          : value,
+      );
+    },
+    [organizationId],
+  );
 
-  const value = useMemo<WebsiteState>(() => ({
-    settings: current?.settings ?? null,
-    loading: Boolean(organizationId && canEdit && !current),
-    refreshing,
-    error: current?.error ?? null,
-    offline: current?.offline ?? false,
-    forbidden: current?.forbidden ?? false,
-    canEdit,
-    organizationName: data?.organization.name ?? null,
-    reload,
-    applySaved,
-  }), [current, organizationId, canEdit, refreshing, data?.organization.name, reload, applySaved]);
+  const value = useMemo<WebsiteState>(
+    () => ({
+      settings: current?.settings ?? null,
+      loading: Boolean(organizationId && canEdit && !current),
+      refreshing,
+      error: current?.error ?? null,
+      offline: current?.offline ?? false,
+      forbidden: current?.forbidden ?? false,
+      canEdit,
+      organizationName: data?.organization.name ?? null,
+      reload,
+      applySaved,
+    }),
+    [
+      current,
+      organizationId,
+      canEdit,
+      refreshing,
+      data?.organization.name,
+      reload,
+      applySaved,
+    ],
+  );
 
-  return <WebsiteContext.Provider value={value}>{children}</WebsiteContext.Provider>;
+  return (
+    <WebsiteContext.Provider value={value}>{children}</WebsiteContext.Provider>
+  );
 }
 
 export function useWebsite() {

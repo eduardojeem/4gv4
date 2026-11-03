@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  AppState,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,365 +19,662 @@ import {
   View,
 } from 'react-native';
 
-import { fetchFinanceSummary, type FinanceSummaryData } from '@/lib/admin';
-import { formatGs } from '@/lib/marketplace';
-import { palette, usePalette } from '@/lib/palette';
+import {
+  fetchBranches,
+  fetchFinanceSummary,
+  type BranchItem,
+  type FinanceSummaryData,
+} from '@/lib/admin';
+import {
+  financePeriodDates,
+  financeReportKey,
+  financeResultState,
+  isEmptyFinanceSummary,
+  type FinancePeriod,
+} from '@/lib/finance-model';
+import { openWeb } from '@/lib/marketplace';
+import { usePalette } from '@/lib/palette';
+import {
+  getPrivateCacheContext,
+  subscribePrivateCacheContext,
+} from '@/lib/private-cache-context';
+import { formatMobileCurrency } from '@/lib/regional-format';
+import { fetchOrgSettings } from '@/lib/settings-admin';
 
-type Period = 'today' | 'month' | '30d' | 'year';
-
-function getPeriodDates(period: Period) {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  if (period === 'today') {
-    const today = toIsoDate(now);
-    return { startDate: today, endDate: today };
-  }
-  if (period === 'month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { startDate: toIsoDate(start), endDate: toIsoDate(now) };
-  }
-  if (period === '30d') {
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    return { startDate: toIsoDate(start), endDate: toIsoDate(now) };
-  }
-  // year
-  const start = new Date(now.getFullYear(), 0, 1);
-  return { startDate: toIsoDate(start), endDate: toIsoDate(now) };
-}
+type Report = {
+  key: string;
+  data: FinanceSummaryData;
+  dates: { startDate: string; endDate: string };
+  timeZone: string;
+  currency: string;
+  branches: BranchItem[];
+  branchesUnavailable: boolean;
+};
+const PERIODS = [
+  { key: 'today', label: 'Hoy' },
+  { key: 'month', label: 'Este mes' },
+  { key: '30d', label: 'Últimos 30 días' },
+  { key: 'year', label: 'Este año' },
+] as const;
+const calendarDate = (value: string) => {
+  const [year, month, day] = value.split('-');
+  return `${day}/${month}/${year}`;
+};
 
 export default function FinancesAdminScreen() {
   const colors = usePalette();
-  const [data, setData] = useState<FinanceSummaryData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [period, setPeriod] = useState<Period>('month');
-  const [attempt, setAttempt] = useState(0);
-
+  const scope = useSyncExternalStore(
+    subscribePrivateCacheContext,
+    getPrivateCacheContext,
+  );
+  const [period, setPeriod] = useState<FinancePeriod>('month');
+  const [branch, setBranch] = useState<{
+    organizationId: string | null;
+    id: string;
+  }>({ organizationId: null, id: 'all' });
+  const branchId =
+    branch.organizationId === scope.organizationId ? branch.id : 'all';
+  const key = financeReportKey(
+    scope.organizationId,
+    scope.epoch,
+    period,
+    branchId,
+  );
+  const [report, setReport] = useState<Report | null>(null);
+  const [failure, setFailure] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const generation = useRef(0);
+  const visible = report?.key === key ? report : null;
+  const error = failure?.key === key ? failure.message : null;
+  const loading = busyKey === key;
+  const data = visible?.data;
+  const accent = colors.text === '#F1F5F9' ? '#93C5FD' : '#1D4ED8';
+  const load = useCallback(async () => {
+    const snapshot = getPrivateCacheContext();
+    const request = ++generation.current;
+    if (!snapshot.userId || !snapshot.organizationId) return;
+    setBusyKey(key);
+    try {
+      const [settings, branchResult] = await Promise.all([
+        fetchOrgSettings(),
+        fetchBranches(snapshot.organizationId)
+          .then((branches) => ({ branches, failed: false }))
+          .catch(() => ({ branches: [] as BranchItem[], failed: true })),
+      ]);
+      if (
+        request !== generation.current ||
+        snapshot.epoch !== getPrivateCacheContext().epoch
+      )
+        return;
+      const dates = financePeriodDates(period, settings.timeZone);
+      const result = await fetchFinanceSummary({
+        ...dates,
+        ...(branchId !== 'all' ? { branchId } : {}),
+      });
+      if (
+        request !== generation.current ||
+        snapshot.epoch !== getPrivateCacheContext().epoch
+      )
+        return;
+      setReport({
+        key,
+        data: result,
+        dates,
+        timeZone: settings.timeZone,
+        currency: settings.currency,
+        branches: branchResult.branches,
+        branchesUnavailable: branchResult.failed,
+      });
+      setFailure(null);
+    } catch (error) {
+      if (
+        request === generation.current &&
+        snapshot.epoch === getPrivateCacheContext().epoch
+      )
+        setFailure({
+          key,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'No pudimos actualizar el informe.',
+        });
+    } finally {
+      if (request === generation.current) setBusyKey(null);
+    }
+  }, [key, period, branchId]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      return () => {
+        generation.current++;
+      };
+    }, [load]),
+  );
   useEffect(() => {
-    let active = true;
-    const { startDate, endDate } = getPeriodDates(period);
-    fetchFinanceSummary({ startDate, endDate })
-      .then((res) => {
-        if (!active) return;
-        setData(res);
-        setError(null);
-      })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'No se pudo cargar el balance.'))
-      .finally(() => active && setRefreshing(false));
-    return () => {
-      active = false;
-    };
-  }, [period, attempt]);
-
-  const reload = useCallback(() => {
-    setRefreshing(true);
-    setAttempt((n) => n + 1);
-  }, []);
-
-  const netProfit = data?.accrued.netProfit ?? 0;
-  const isPositiveProfit = netProfit >= 0;
-
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
+    return () => subscription.remove();
+  }, [load]);
+  const web = () => {
+    void openWeb('/admin/finances').catch(() =>
+      Alert.alert('No pudimos abrir Finanzas', 'Volvé a intentar.'),
+    );
+  };
+  const amount = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(value)
+      ? 'No calculable'
+      : formatMobileCurrency(value, visible?.currency ?? 'PYG');
+  const profit = data?.accrued.netProfit;
+  const profitState = financeResultState(profit);
+  const resultColor =
+    profit == null
+      ? colors.card
+      : profit > 0
+        ? '#166534'
+        : profit < 0
+          ? '#991B1B'
+          : colors.card;
+  const resultText = profit == null || profit === 0 ? colors.text : '#FFFFFF';
   return (
-    <View style={styles.flex}>
-      <View style={[styles.topBar, { borderColor: colors.border }]}>
-        <Text style={[styles.topTitle, { color: colors.text }]}>Finanzas</Text>
-        <Text style={[styles.topSub, { color: colors.muted }]}>Resultados económicos y flujo de caja</Text>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.title, { color: colors.text }]}
+        >
+          Finanzas
+        </Text>
+        <Text style={{ color: colors.muted }}>Resumen del negocio</Text>
       </View>
-
-      {/* Selector de periodo */}
-      <View style={styles.periodRow}>
-        {(
-          [
-            { key: 'today', label: 'Hoy' },
-            { key: 'month', label: 'Este mes' },
-            { key: '30d', label: 'Últimos 30d' },
-            { key: 'year', label: 'Este año' },
-          ] as const
-        ).map((item) => {
-          const active = period === item.key;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => setPeriod(item.key)}
-              style={[
-                styles.periodTab,
-                {
-                  backgroundColor: active ? palette.primary : colors.card,
-                  borderColor: active ? palette.primary : colors.border,
-                },
-              ]}>
-              <Text style={[styles.periodText, { color: active ? '#fff' : colors.text }]}>{item.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filters}
+        contentContainerStyle={styles.filterContent}
+      >
+        {PERIODS.map((item) => (
+          <Pressable
+            key={item.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: period === item.key }}
+            onPress={() => setPeriod(item.key)}
+            style={[
+              styles.chip,
+              {
+                borderColor: period === item.key ? accent : colors.border,
+                backgroundColor: colors.card,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: period === item.key ? accent : colors.text,
+                fontWeight: '600',
+              }}
+            >
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={palette.primary} />}>
-        {!data ? (
-          error ? (
-            <View style={styles.centerBox}>
-              <Text style={[styles.bold, { color: colors.text }]}>{error}</Text>
-              <Pressable onPress={reload} style={[styles.outlineBtn, { borderColor: colors.border }]}>
-                <Text style={[styles.bold, { color: colors.text }]}>Reintentar</Text>
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void load()}
+            tintColor={accent}
+          />
+        }
+      >
+        <Text style={{ color: colors.text, fontWeight: '700' }}>
+          Sucursal:{' '}
+          {branchId === 'all'
+            ? 'Todas las sucursales'
+            : (visible?.branches.find((item) => item.id === branchId)?.name ??
+              'Sucursal seleccionada')}
+        </Text>
+        {visible && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {[{ id: 'all', name: 'Todas' }, ...visible.branches].map((item) => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: branchId === item.id }}
+                onPress={() =>
+                  setBranch({
+                    organizationId: scope.organizationId,
+                    id: item.id,
+                  })
+                }
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: branchId === item.id ? accent : colors.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: colors.text }}>{item.name}</Text>
               </Pressable>
+            ))}
+          </ScrollView>
+        )}
+        {visible?.branchesUnavailable && (
+          <Text style={{ color: colors.muted }}>
+            No se pudo cargar la lista de sucursales. Deslizá para reintentar.
+          </Text>
+        )}
+        {error && (
+          <View
+            accessibilityRole="alert"
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={{ color: colors.text }}>{error}</Text>
+            {visible && (
+              <Text style={{ color: colors.muted }}>
+                Estos son los últimos datos confirmados; no se pudieron
+                actualizar.
+              </Text>
+            )}
+            <Action
+              label="Reintentar"
+              color={accent}
+              onPress={() => void load()}
+            />
+          </View>
+        )}
+        {!data ? (
+          !error && (
+            <View style={styles.empty}>
+              <ActivityIndicator
+                accessibilityLabel="Cargando resumen financiero"
+                color={accent}
+              />
+              <Text style={{ color: colors.muted }}>
+                {scope.organizationId
+                  ? 'Consultando el informe…'
+                  : 'Esperando el negocio activo…'}
+              </Text>
             </View>
-          ) : (
-            <ActivityIndicator style={styles.loading} color={palette.primary} />
           )
         ) : (
           <>
-            {/* Hero Card: Resultado Neto */}
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: colors.text }}>
+                {calendarDate(visible!.dates.startDate)} al{' '}
+                {calendarDate(visible!.dates.endDate)}
+              </Text>
+              <Text style={{ color: colors.muted }}>
+                Zona horaria: {visible!.timeZone}
+              </Text>
+              {data.generatedAt && (
+                <Text style={{ color: colors.muted }}>
+                  Actualizado:{' '}
+                  {new Date(data.generatedAt).toLocaleString('es-PY', {
+                    timeZone: visible!.timeZone,
+                  })}
+                </Text>
+              )}
+              {loading && (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={{ color: accent }}
+                >
+                  Actualizando…
+                </Text>
+              )}
+            </View>
+            {data.complete === false ||
+            Boolean(data.coverageWarnings?.length) ? (
+              <View
+                accessibilityRole="alert"
+                style={[
+                  styles.card,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.bold, { color: colors.text }]}>
+                  Informe incompleto
+                </Text>
+                <Text style={{ color: colors.muted }}>
+                  Revisá estos datos antes de usar el resultado para decidir.
+                </Text>
+                {data.coverageWarnings?.slice(0, 5).map((warning, index) => (
+                  <Text
+                    key={`${warning.code}-${warning.sourceId}-${index}`}
+                    style={{ color: colors.text }}
+                  >
+                    • {warning.sourceLabel ? `${warning.sourceLabel}: ` : ''}
+                    {warning.message}
+                  </Text>
+                ))}
+                {(data.coverageWarnings?.length ?? 0) > 5 && (
+                  <Text style={{ color: colors.muted }}>
+                    Hay más advertencias en el informe completo.
+                  </Text>
+                )}
+                <Action
+                  label="Revisar en la web"
+                  color={accent}
+                  onPress={web}
+                />
+              </View>
+            ) : null}
+            {isEmptyFinanceSummary(data) && (
+              <View
+                style={[
+                  styles.card,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.bold, { color: colors.text }]}>
+                  Sin movimientos en este período
+                </Text>
+                <Text style={{ color: colors.muted }}>
+                  Probá otro período o sucursal.
+                </Text>
+              </View>
+            )}
             <View
               style={[
-                styles.heroCard,
-                { backgroundColor: isPositiveProfit ? '#15803D' : '#B91C1C' },
-              ]}>
-              <Text style={styles.heroSub}>Resultado Neto del período</Text>
-              <Text style={styles.heroVal}>{formatGs(netProfit)}</Text>
-              <View style={styles.heroPill}>
+                styles.card,
+                { backgroundColor: resultColor, borderColor: colors.border },
+              ]}
+            >
+              <Text style={{ color: resultText }}>
+                Resultado neto del período
+              </Text>
+              <Text style={[styles.heroAmount, { color: resultText }]}>
+                {amount(profit)}
+              </Text>
+              <Text style={{ color: resultText, fontWeight: '700' }}>
+                {profitState}
+              </Text>
+              {profit == null && (
+                <Text style={{ color: colors.muted }}>
+                  Faltan datos para calcular la utilidad. Revisá las
+                  advertencias.
+                </Text>
+              )}
+            </View>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                accessibilityRole="header"
+                style={[styles.cardTitle, { color: colors.text }]}
+              >
+                Estado de resultados
+              </Text>
+              <AmountRow
+                label="Ingresos netos"
+                hint="Ventas, pedidos y reparaciones, descontando devoluciones"
+                value={amount(data.accrued.revenue)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Costos directos"
+                hint="Productos y repuestos con costo registrado"
+                value={amount(data.accrued.directCosts)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Margen bruto"
+                value={amount(data.accrued.grossProfit)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Gastos operativos"
+                value={amount(data.accrued.operatingExpenses)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Costo laboral"
+                value={amount(data.accrued.payrollCost)}
+                colors={colors}
+              />
+            </View>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.heading}>
                 <Ionicons
-                  name={isPositiveProfit ? 'trending-up' : 'trending-down'}
-                  size={14}
-                  color="#fff"
+                  name="swap-vertical-outline"
+                  size={20}
+                  color={accent}
                 />
-                <Text style={styles.heroPillText}>
-                  {isPositiveProfit ? 'Ganancia Neta' : 'Pérdida'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Cuadro de Resultados Devengados */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Estado de Resultados</Text>
-
-              <View style={[styles.row, { borderColor: colors.border }]}>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.rowLabel, { color: colors.text }]}>Facturación bruta</Text>
-                  <Text style={[styles.rowSub, { color: colors.muted }]}>Ventas, tienda web y servicios</Text>
-                </View>
-                <Text style={[styles.rowVal, { color: '#16A34A' }]}>{formatGs(data.accrued.revenue)}</Text>
-              </View>
-
-              <View style={[styles.row, { borderColor: colors.border }]}>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.rowLabel, { color: colors.text }]}>Costo de mercadería</Text>
-                  <Text style={[styles.rowSub, { color: colors.muted }]}>Costo directo de productos y repuestos</Text>
-                </View>
-                <Text style={[styles.rowVal, { color: colors.text }]}>- {formatGs(data.accrued.directCosts)}</Text>
-              </View>
-
-              <View style={[styles.row, styles.highlightRow, { backgroundColor: 'rgba(37,99,235,0.06)' }]}>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.bold, { color: palette.primary }]}>Margen Bruto</Text>
-                  <Text style={[styles.rowSub, { color: colors.muted }]}>Ingresos menos costo directo</Text>
-                </View>
-                <Text style={[styles.bold, { color: palette.primary }]}>
-                  {formatGs(data.accrued.grossProfit ?? 0)}
-                </Text>
-              </View>
-
-              <View style={[styles.row, { borderColor: colors.border }]}>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.rowLabel, { color: colors.text }]}>Gastos operativos</Text>
-                  <Text style={[styles.rowSub, { color: colors.muted }]}>Alquiler, servicios, insumos</Text>
-                </View>
-                <Text style={[styles.rowVal, { color: colors.text }]}>
-                  - {formatGs(data.accrued.operatingExpenses)}
-                </Text>
-              </View>
-
-              <View style={[styles.row, { borderColor: colors.border }]}>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.rowLabel, { color: colors.text }]}>Costo laboral</Text>
-                  <Text style={[styles.rowSub, { color: colors.muted }]}>Sueldos, comisiones del equipo</Text>
-                </View>
-                <Text style={[styles.rowVal, { color: colors.text }]}>
-                  - {formatGs(data.accrued.payrollCost)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Flujo de Caja en Efectivo */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.cardHeaderRow}>
-                <Ionicons name="wallet-outline" size={18} color={palette.primary} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Flujo de Caja (Efectivo)</Text>
-              </View>
-
-              <View style={styles.grid2}>
-                <View style={[styles.miniKpi, { borderColor: colors.border }]}>
-                  <Text style={[styles.small, { color: colors.muted }]}>Total cobrado</Text>
-                  <Text style={[styles.bold, { color: '#16A34A', fontSize: 16 }]}>
-                    {formatGs(data.cash.collected)}
-                  </Text>
-                </View>
-
-                <View style={[styles.miniKpi, { borderColor: colors.border }]}>
-                  <Text style={[styles.small, { color: colors.muted }]}>Total pagado</Text>
-                  <Text style={[styles.bold, { color: '#DC2626', fontSize: 16 }]}>
-                    {formatGs(data.cash.paid)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={[styles.cashNetRow, { borderColor: colors.border }]}>
-                <Text style={[styles.bold, { color: colors.text }]}>Saldo Neto de Caja</Text>
                 <Text
-                  style={[
-                    styles.bold,
-                    {
-                      fontSize: 16,
-                      color: data.cash.netCashFlow >= 0 ? '#16A34A' : '#DC2626',
-                    },
-                  ]}>
-                  {formatGs(data.cash.netCashFlow)}
+                  accessibilityRole="header"
+                  style={[styles.cardTitle, { color: colors.text }]}
+                >
+                  Cobros y pagos
                 </Text>
               </View>
+              <Text style={{ color: colors.muted }}>
+                Incluye efectivo, tarjetas y transferencias. No representa el
+                efectivo del cajón.
+              </Text>
+              <AmountRow
+                label="Total cobrado"
+                value={amount(data.cash.collected)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Total pagado"
+                value={amount(data.cash.paid)}
+                colors={colors}
+              />
+              <AmountRow
+                label="Flujo neto del período"
+                value={amount(data.cash.netCashFlow)}
+                colors={colors}
+              />
             </View>
-
-            {/* Obligaciones Vencidas */}
-            {data.overdue.length > 0 && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: '#DC262655' }]}>
-                <View style={styles.cardHeaderRow}>
-                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
-                  <Text style={[styles.cardTitle, { color: '#DC2626' }]}>
-                    Vencimientos Atrasados ({data.overdue.length})
-                  </Text>
-                </View>
-                {data.overdue.map((item) => (
-                  <View key={item.id} style={[styles.dueRow, { borderColor: colors.border }]}>
-                    <View style={styles.flex}>
-                      <Text style={[styles.bold, { color: colors.text }]}>
-                        {item.concept || 'Obligación pendiente'}
-                      </Text>
-                      <Text style={[styles.small, { color: '#DC2626' }]}>Venció: {item.dueDate}</Text>
-                    </View>
-                    <Text style={[styles.bold, { color: '#DC2626' }]}>{formatGs(item.amount)}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Próximos Vencimientos */}
-            {data.upcomingDue.length > 0 && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.cardHeaderRow}>
-                  <Ionicons name="calendar-outline" size={18} color={palette.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>
-                    Próximos Vencimientos ({data.upcomingDue.length})
-                  </Text>
-                </View>
-                {data.upcomingDue.map((item) => (
-                  <View key={item.id} style={[styles.dueRow, { borderColor: colors.border }]}>
-                    <View style={styles.flex}>
-                      <Text style={[styles.bold, { color: colors.text }]}>
-                        {item.concept || 'Obligación a pagar'}
-                      </Text>
-                      <Text style={[styles.small, { color: colors.muted }]}>Vence: {item.dueDate}</Text>
-                    </View>
-                    <Text style={[styles.bold, { color: colors.text }]}>{formatGs(item.amount)}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+            <Text style={{ color: colors.muted }}>
+              Los vencimientos muestran las obligaciones pendientes actuales de
+              la sucursal elegida, sin limitarse al período del resultado.
+            </Text>
+            <DueList
+              title="Vencidos"
+              items={data.overdue}
+              empty="No hay obligaciones vencidas."
+              colors={colors}
+              amount={amount}
+              onOpen={web}
+              accent={accent}
+            />
+            <DueList
+              title="Próximos vencimientos"
+              items={data.upcomingDue}
+              empty="No hay vencimientos pendientes registrados."
+              colors={colors}
+              amount={amount}
+              onOpen={web}
+              accent={accent}
+            />
           </>
         )}
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.bold, { color: colors.text }]}>
+            Gestión completa
+          </Text>
+          <Text style={{ color: colors.muted }}>
+            Para registrar gastos, pagar obligaciones o gestionar nómina, abrí
+            Finanzas en la web y verificá el negocio activo.
+          </Text>
+          <Action
+            label="Abrir gestión de Finanzas en la web"
+            color={accent}
+            onPress={web}
+          />
+        </View>
       </ScrollView>
     </View>
   );
 }
 
+type Colors = ReturnType<typeof usePalette>;
+function Action({
+  label,
+  color,
+  onPress,
+}: {
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.action}
+    >
+      <Text style={{ color, fontWeight: '600' }}>{label}</Text>
+    </Pressable>
+  );
+}
+function AmountRow({
+  label,
+  hint,
+  value,
+  colors,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  colors: Colors;
+}) {
+  return (
+    <View style={[styles.row, { borderColor: colors.border }]}>
+      <View style={styles.rowLabel}>
+        <Text style={{ color: colors.text, fontWeight: '600' }}>{label}</Text>
+        {hint && (
+          <Text style={{ color: colors.muted, fontSize: 12 }}>{hint}</Text>
+        )}
+      </View>
+      <Text style={[styles.amount, { color: colors.text }]}>{value}</Text>
+    </View>
+  );
+}
+function DueList({
+  title,
+  items,
+  empty,
+  colors,
+  amount,
+  onOpen,
+  accent,
+}: {
+  title: string;
+  items: FinanceSummaryData['overdue'];
+  empty: string;
+  colors: Colors;
+  amount: (value: number) => string;
+  onOpen: () => void;
+  accent: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+    >
+      <Text
+        accessibilityRole="header"
+        style={[styles.cardTitle, { color: colors.text }]}
+      >
+        {title} ({items.length})
+      </Text>
+      {!items.length ? (
+        <Text style={{ color: colors.muted }}>{empty}</Text>
+      ) : (
+        <>
+          {items.slice(0, 10).map((item) => (
+            <View
+              key={item.id}
+              style={[styles.row, { borderColor: colors.border }]}
+            >
+              <View style={styles.rowLabel}>
+                <Text style={{ color: colors.text }}>
+                  {item.concept || 'Obligación pendiente'}
+                </Text>
+                <Text style={{ color: colors.muted }}>
+                  Vencimiento: {calendarDate(item.dueDate)}
+                </Text>
+              </View>
+              <Text style={[styles.amount, { color: colors.text }]}>
+                {amount(item.amount)}
+              </Text>
+            </View>
+          ))}
+          {items.length > 10 && (
+            <Text style={{ color: colors.muted }}>
+              Mostrando 10 de {items.length} obligaciones.
+            </Text>
+          )}
+          <Action
+            label="Ver y gestionar obligaciones en la web"
+            color={accent}
+            onPress={onOpen}
+          />
+        </>
+      )}
+    </View>
+  );
+}
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  topBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  topTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
-  topSub: { fontSize: 12, marginTop: 1 },
-  periodRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  periodTab: {
+  header: { padding: 16, gap: 4 },
+  title: { fontSize: 24, fontWeight: '800' },
+  filters: { flexGrow: 0 },
+  filterContent: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  chip: {
+    minHeight: 44,
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
   },
-  periodText: { fontSize: 12, fontWeight: '700' },
-  content: { padding: 16, gap: 14, paddingBottom: 32 },
-  loading: { paddingVertical: 40 },
-  centerBox: { alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 },
-  bold: { fontSize: 14, fontWeight: '800' },
-  small: { fontSize: 12 },
-  outlineBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, marginTop: 8 },
-  heroCard: {
-    borderRadius: 18,
-    padding: 18,
-    gap: 4,
-  },
-  heroSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700' },
-  heroVal: { color: '#fff', fontSize: 32, fontWeight: '900', letterSpacing: -0.5 },
-  heroPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginTop: 6,
-  },
-  heroPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
-  cardTitle: { fontSize: 15, fontWeight: '800' },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  content: { padding: 16, gap: 16, paddingBottom: 40 },
+  card: { padding: 16, borderRadius: 12, borderWidth: 1, gap: 12 },
+  bold: { fontWeight: '700', fontSize: 16 },
+  cardTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
+  heroAmount: { fontSize: 28, fontWeight: '800', flexShrink: 1 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 10,
-  },
-  highlightRow: {
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderTopWidth: 0,
-    marginVertical: 4,
-  },
-  rowInfo: { flex: 1, gap: 2 },
-  rowLabel: { fontSize: 13, fontWeight: '700' },
-  rowSub: { fontSize: 11 },
-  rowVal: { fontSize: 14, fontWeight: '800' },
-  grid2: { flexDirection: 'row', gap: 10 },
-  miniKpi: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  cashNetRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
   },
-  dueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-  },
+  rowLabel: { flexGrow: 1, flexShrink: 1, flexBasis: 150, gap: 4 },
+  amount: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  action: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
+  empty: { alignItems: 'center', padding: 32, gap: 12 },
 });

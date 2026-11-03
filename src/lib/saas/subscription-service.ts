@@ -1,3 +1,4 @@
+import { countMonthlyRepairs } from './repair-monthly-usage'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { readServiceBusinessDetails } from '@/lib/organization/service-specialties'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
@@ -95,6 +96,7 @@ export interface OrganizationUsage {
 }
 
 export interface OrganizationSubscriptionState {
+  repairUsage?: Awaited<ReturnType<typeof countMonthlyRepairs>>
   subscription: SubscriptionRecord | null
   currentPlan: PlanRecord
   plans: PlanRecord[]
@@ -570,6 +572,7 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
     billingResult,
     paymentsResult,
     redemptionsResult,
+    repairUsage,
   ] = await Promise.all([
     supabase
       .from('subscriptions')
@@ -607,7 +610,8 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
       .from('subscription_promo_redemptions')
       .select('id, promo_code_id, redeemed_at, benefit_snapshot, redeemed_by')
       .eq('organization_id', organizationId)
-      .order('redeemed_at', { ascending: false })
+      .order('redeemed_at', { ascending: false }),
+    countMonthlyRepairs(supabase, organizationId)
   ])
 
   const queryError = [
@@ -648,6 +652,7 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
 
   return {
     subscription,
+    repairUsage,
     currentPlan,
     plans,
     usage,
@@ -870,25 +875,9 @@ export async function canCreateRepair(
     ? null
     : (Number.isFinite(toNumber(raw, Number.NaN)) ? toNumber(raw, Number.NaN) : null)
 
-  // Plan ilimitado (limit null) -> siempre permitido, sin contar.
-  if (limit === null) {
-    return { allowed: true, current: 0, limit: null, plan: effectivePlan, expired: subscriptionStatus.isExpired }
-  }
+  const current = (state.repairUsage ?? await countMonthlyRepairs(createAdminSupabase(), organizationId)).current
+  if (limit === null) return { allowed: true, current, limit: null, plan: effectivePlan, expired: subscriptionStatus.isExpired }
 
-  const supabase = createAdminSupabase()
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const { count, error } = await supabase
-    .from('repairs')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', organizationId)
-    .gte('created_at', monthStart)
-
-  if (error) {
-    throw new Error(`No se pudieron contar las reparaciones del período: ${error.message}`)
-  }
-
-  const current = count || 0
   return { allowed: current < limit, current, limit, plan: effectivePlan, expired: subscriptionStatus.isExpired }
 }
 

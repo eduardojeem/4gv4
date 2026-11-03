@@ -1,5 +1,7 @@
 'use client'
 
+import { useMarketplaceLocationHref } from './MarketplaceLocationPicker'
+
 import { FocusEvent, FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
@@ -32,6 +34,7 @@ export function MarketplaceSearchBox({
   initialQuery = '',
   onFocusChange,
 }: Props) {
+  const withLocation=useMarketplaceLocationHref()
   const router = useRouter()
   const [query, setQuery] = useState(initialQuery)
   const [focused, setFocused] = useState(false)
@@ -56,7 +59,7 @@ export function MarketplaceSearchBox({
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const value = query.trim()
-    router.push(value ? `/marketplace/buscar?q=${encodeURIComponent(value)}` : '/marketplace/buscar')
+    router.push(withLocation(value ? `/marketplace/buscar?q=${encodeURIComponent(value)}` : '/marketplace/buscar'))
   }
 
   return (

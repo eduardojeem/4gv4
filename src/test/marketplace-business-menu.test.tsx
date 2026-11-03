@@ -15,7 +15,9 @@ vi.mock('@/contexts/auth-context', () => ({
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => '/marketplace',
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  // Los filtros de ubicación leen la query: sin parámetros, como el inicio del marketplace.
+  useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,

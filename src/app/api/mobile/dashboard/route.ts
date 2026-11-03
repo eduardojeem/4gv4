@@ -1,3 +1,4 @@
+import { buildSubscriptionExpiryNotice, canSeeSubscriptionExpiry } from '@/lib/saas/subscription-expiry-notice'
 import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
 import { roleHasPermission } from '@/lib/saas/permissions'
 import { NextResponse } from 'next/server'
@@ -33,9 +34,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Tu usuario no pertenece a ningún comercio activo.' }, { status: 403 })
     }
 
-    const [planInfo, profile] = await Promise.all([
+    const showSubscription = canSeeSubscriptionExpiry(organization.role, auth.user.role === 'super_admin')
+    const [planInfo, appearance, profile, subscription] = await Promise.all([
       getOrganizationPlanInfo(organization.id),
+      createAdminSupabase().from('website_settings').select('value').eq('organization_id', organization.id).eq('key', 'company_info').maybeSingle(),
       createAdminSupabase().from('profiles').select('full_name, avatar_url').eq('id', auth.user.id).maybeSingle(),
+      showSubscription ? createAdminSupabase().from('subscriptions').select('plan,status,current_period_ends_at,trial_ends_at,cancel_at_period_end').eq('organization_id', organization.id).maybeSingle() : Promise.resolve({ data: null, error: null }),
     ])
 
     const role = auth.user.role === 'super_admin' ? 'super_admin' : mapOrganizationRoleToDashboardRole(organization.role)
@@ -50,12 +54,15 @@ export async function GET() {
 
     const profileRow = profile.data as { full_name?: string | null; avatar_url?: string | null } | null
 
+    const company = appearance.data?.value as { brandColor?: unknown; customBrandColor?: unknown } | null
     const costAccess = await resolveOrganizationProductCostAccess(createAdminSupabase(), {userId:auth.user.id,organizationId:organization.id})
+    if (subscription.error) logger.warn('[mobile-dashboard] No se pudo consultar el vencimiento del plan')
     return NextResponse.json({
+      subscriptionNotice: showSubscription && !subscription.error ? buildSubscriptionExpiryNotice(subscription.data) : null,
       capabilities: {...Object.fromEntries(([
         'products.create','products.update','products.delete','inventory.stock.manage',
-        'crm.customers.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
-      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
+        'crm.customers.manage','ecommerce.orders.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
+      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'agenda.create': groups.some(group => group.items.some(item => item.key === 'agenda')) && (role === 'super_admin' || roleHasPermission(organization.role, 'pos.sales.read')), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
       user: {
         email: auth.user.email ?? null,
         name: profileRow?.full_name || null,
@@ -71,6 +78,8 @@ export async function GET() {
         logoUrl: organization.logoUrl,
         role: organization.role,
         plan: planInfo.name,
+        brandColor: typeof company?.brandColor === 'string' ? company.brandColor : undefined,
+        customBrandColor: typeof company?.customBrandColor === 'string' ? company.customBrandColor : undefined,
       },
       // Sin el ícono (es un componente de React de la web): la app tiene los suyos por `key`.
       groups: groups.map((group) => ({

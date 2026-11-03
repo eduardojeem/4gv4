@@ -25,7 +25,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { key: 'cash', label: 'Monitor de cajas', hint: 'Cajas abiertas en todas las sucursales', icon: 'cash-outline', route: '/admin/cash' },
       { key: 'inventory', label: 'Inventario', hint: 'Productos y stock', icon: 'cube-outline', web: '/admin/inventory' },
-      { key: 'finances', label: 'Finanzas', hint: 'Gastos, nómina y rentabilidad', icon: 'wallet-outline', route: '/admin/finances' },
+      { key: 'finances', label: 'Finanzas', hint: 'Resumen, cobros y vencimientos', icon: 'wallet-outline', route: '/admin/finances' },
     ],
   },
   {
@@ -58,6 +58,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
 ];
 
 /** Las pestañas de abajo, como la barra móvil de /admin. */
-export const ADMIN_TABS = ['overview', 'cash', 'users', 'reviews'];
+export const ADMIN_TABS = ['overview', 'finances', 'branches'];
 
 export const adminItem = (key: string) => ADMIN_NAV.flatMap((group) => group.items).find((item) => item.key === key);

@@ -1,24 +1,27 @@
+import { BillingCard } from '@/components/subscription/billing-card';
+import { usePanel } from '@/lib/panel';
+import { navigationColor } from '@/lib/bottom-nav-model';
+import { buildSubscriptionExpiryNotice, subscriptionPeriodEnd } from '../../../../src/lib/saas/subscription-expiry-notice';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { SubscriptionTransferCard } from '@/components/subscription/transfer-card';
-import { fetchSubscription, saveBillingProfile } from '@/lib/admin';
+import { fetchSubscription } from '@/lib/admin';
 import { formatGs, openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import {
-  BILLING_FIELDS,
   billingMissingFields,
   isFreePlan,
   moduleLabel,
@@ -27,7 +30,6 @@ import {
   redemptionText,
   subscriptionStatus,
   visibleQuotas,
-  type BillingProfile,
   type StatusTone,
   type SubscriptionDetails,
   type SubscriptionPayment,
@@ -69,6 +71,11 @@ export default function SubscriptionsAdminScreen() {
   // Momento de la última carga: los días que faltan se cuentan desde ahí, no en cada render.
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
   const [showAllPayments, setShowAllPayments] = useState(false);
+  const [modulesExpanded, setModulesExpanded] = useState(false);
+  const [couponsExpanded, setCouponsExpanded] = useState(false);
+  const [billingEditing, setBillingEditing] = useState(false);
+  const { data: panel } = usePanel();
+  const accent = navigationColor(panel?.organization.brandColor, panel?.organization.customBrandColor);
 
   useEffect(() => {
     let active = true;
@@ -91,12 +98,17 @@ export default function SubscriptionsAdminScreen() {
     setAttempt((n) => n + 1);
   }, []);
 
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state === 'active' && !billingEditing) reload(); });
+    return () => listener.remove();
+  }, [reload, billingEditing]);
+
   const free = isFreePlan(data?.plan ?? null);
   const planName = data?.plan?.name || data?.subscription?.plan || 'Gratis';
-  const status = subscriptionStatus(data?.subscription?.status);
+  const status = subscriptionStatus(data?.subscription?.status ?? (free && data?.plan ? 'free' : null));
   const tone = TONES[status.tone];
-  const periodEnd = data?.subscription?.current_period_ends_at || data?.subscription?.trial_ends_at || null;
-  const daysLeft = periodEnd && loadedAt ? Math.ceil((new Date(periodEnd).getTime() - loadedAt) / 86_400_000) : null;
+  const periodEnd = subscriptionPeriodEnd(data?.subscription);
+  const expiry = loadedAt ? buildSubscriptionExpiryNotice(data?.subscription ?? null, loadedAt) : null;
   const cancelScheduled = data?.subscription?.cancel_at_period_end === true;
   const missingBilling = billingMissingFields(data?.billingProfile ?? null);
   const payments = data?.payments ?? [];
@@ -112,7 +124,7 @@ export default function SubscriptionsAdminScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={palette.primary} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} enabled={!billingEditing} tintColor={accent} />}>
         {!data ? (
           error ? (
             <View style={styles.centerBox}>
@@ -122,16 +134,18 @@ export default function SubscriptionsAdminScreen() {
               </Pressable>
             </View>
           ) : (
-            <ActivityIndicator style={styles.loading} color={palette.primary} />
+            <ActivityIndicator style={styles.loading} color={accent} />
           )
         ) : (
           <>
+            {error && <View accessibilityRole="alert" style={[styles.notice,{borderColor:palette.danger}]}><Text style={[styles.small,{color:colors.text,flex:1}]}>{error} Se muestran los últimos datos cargados.</Text><Pressable accessibilityRole="button" onPress={reload} style={{padding:10,minHeight:44}}><Text style={{color:colors.text,fontWeight:'700'}}>Reintentar</Text></Pressable></View>}
             {/* Plan vigente */}
-            <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: palette.primary }]}>
+            <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: accent }]}>
               <View style={styles.heroTop}>
                 <View style={styles.flexShrink}>
                   <Text style={[styles.heroSub, { color: colors.muted }]}>Tu plan</Text>
                   <Text style={[styles.heroTitle, { color: colors.text }]}>{planName}</Text>
+                  <Text style={[styles.small,{color:colors.muted}]}>Actualizado: {loadedAt ? new Date(loadedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'}) : 'Sin confirmar'}</Text>
                   {!free && data.plan?.price_monthly ? (
                     <Text style={[styles.small, { color: colors.muted }]}>{formatGs(data.plan.price_monthly)} por mes</Text>
                   ) : null}
@@ -150,19 +164,7 @@ export default function SubscriptionsAdminScreen() {
               )}
             </View>
 
-            {daysLeft !== null && daysLeft <= 7 && !cancelScheduled && !free && (
-              <View style={[styles.notice, { borderColor: daysLeft < 0 ? palette.danger : '#D97706' }]}>
-                <Ionicons name="alert-circle" size={18} color={daysLeft < 0 ? palette.danger : '#D97706'} />
-                <Text style={[styles.small, styles.flexShrink, { color: colors.text }]}>
-                  {daysLeft < 0
-                    ? `Tu plan venció hace ${Math.abs(daysLeft)} ${Math.abs(daysLeft) === 1 ? 'día' : 'días'}.`
-                    : daysLeft === 0
-                      ? 'Tu plan vence hoy.'
-                      : `Tu plan vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}.`}
-                  {PURCHASES_IN_APP ? ' Pagá para conservarlo.' : ' Renovalo desde tu cuenta en la web.'}
-                </Text>
-              </View>
-            )}
+            {expiry && <View style={[styles.notice, { borderColor: expiry.tone === 'danger' ? palette.danger : '#D97706' }]}><Ionicons name="time-outline" size={20} color={colors.text}/><Text style={[styles.small,styles.flexShrink,{color:colors.text}]}>{expiry.title}. Fecha: {expiry.dateLabel}.</Text></View>}
 
             {PURCHASES_IN_APP ? (
               <>
@@ -198,20 +200,22 @@ export default function SubscriptionsAdminScreen() {
             {/* Cupos del plan */}
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>Uso y límites del plan</Text>
-              {visibleQuotas(data).map((quota) => {
-                const unlimited = quota.max === null || quota.max < 0;
-                const ratio = unlimited ? 0 : Math.min(1, quota.current / Math.max(1, quota.max ?? 1));
-                const near = !unlimited && ratio >= 0.85;
-                const barColor = near ? palette.danger : palette.primary;
+              {data.repairUsage && data.plan?.modules.includes('repairs') && <Text style={[styles.small,{color:colors.muted}]}>El cupo de reparaciones se renueva el {formatDate(data.repairUsage.endsAt)} (hora de Paraguay). No se acumula; las reparaciones anteriores siguen guardadas.</Text>}
+              {visibleQuotas(data).sort((a,b) => Number(b.key === (panel?.businessFocus === 'repairs' ? 'repairs' : panel?.businessFocus === 'agenda' ? 'services' : 'products')) - Number(a.key === (panel?.businessFocus === 'repairs' ? 'repairs' : panel?.businessFocus === 'agenda' ? 'services' : 'products'))).map((quota) => {
+                const unlimited = quota.max === null || (typeof quota.max === 'number' && quota.max < 0);
+                const known = quota.current !== null && quota.max !== undefined;
+                const ratio = unlimited || !known ? 0 : Math.min(1, (quota.current ?? 0) / Math.max(1, quota.max ?? 1));
+                const near = known && !unlimited && ratio >= 0.85;
+                const barColor = near ? palette.danger : accent;
                 return (
-                  <View key={quota.key} style={styles.quotaRow} accessible accessibilityLabel={`${quota.label}: ${quota.current} de ${unlimited ? 'ilimitado' : quota.max}`}>
+                  <View key={quota.key} style={styles.quotaRow} accessible accessibilityLabel={`${quota.label}: ${quota.current ?? 'sin información'} de ${unlimited ? 'ilimitado' : quota.max ?? 'sin información'}`}>
                     <View style={styles.quotaHead}>
                       <Text style={[styles.quotaLabel, { color: colors.text }]}>{quota.label}</Text>
                       <Text style={[styles.quotaValues, { color: near ? palette.danger : colors.text }]}>
-                        {quota.current} / {unlimited ? 'Ilimitado' : quota.max}
+                        {quota.current ?? 'Sin dato'} / {unlimited ? 'Ilimitado' : quota.max ?? 'Sin dato'}
                       </Text>
                     </View>
-                    {!unlimited && (
+                    {!unlimited && known && (
                       <View style={[styles.trackBar, { backgroundColor: colors.border }]}>
                         <View style={[styles.fillBar, { width: `${Math.round(ratio * 100)}%`, backgroundColor: barColor }]} />
                       </View>
@@ -224,24 +228,25 @@ export default function SubscriptionsAdminScreen() {
             {/* Módulos */}
             {data.plan && data.plan.modules.length > 0 && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Incluido en tu plan</Text>
-                <View style={styles.moduleGrid}>
+                <Pressable accessibilityRole="button" accessibilityState={{expanded:modulesExpanded}} onPress={() => setModulesExpanded(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><Text style={[styles.cardTitle, { color: colors.text }]}>Incluido en tu plan · {data.plan.modules.length} {modulesExpanded ? '⌃' : '⌄'}</Text></Pressable>
+                {modulesExpanded && <View style={styles.moduleGrid}>
                   {data.plan.modules.map((m) => (
                     <View key={m} style={[styles.moduleChip, { backgroundColor: colors.background, borderColor: colors.border }]}>
                       <Ionicons name="checkmark-circle" size={15} color={palette.success} />
                       <Text style={[styles.moduleText, { color: colors.text }]}>{moduleLabel(m)}</Text>
                     </View>
                   ))}
-                </View>
+                </View>}
               </View>
             )}
 
             {/* Historial de pagos */}
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.cardHeaderRow}>
-                <Ionicons name="time-outline" size={18} color={palette.primary} />
+                <Ionicons name="time-outline" size={18} color={accent} />
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Pagos</Text>
               </View>
+              {payments.length >= 25 && <Text style={[styles.small,{color:colors.muted}]}>Se muestran los últimos 25 pagos.</Text>}
               {payments.length === 0 ? (
                 <Text style={[styles.small, { color: colors.muted }]}>Todavía no hay pagos registrados.</Text>
               ) : (
@@ -251,7 +256,7 @@ export default function SubscriptionsAdminScreen() {
                   ))}
                   {payments.length > 5 && (
                     <Pressable onPress={() => setShowAllPayments((v) => !v)} style={styles.linkBtn} accessibilityRole="button">
-                      <Text style={[styles.bold, { color: palette.primary }]}>{showAllPayments ? 'Ver menos' : `Ver los ${payments.length} pagos`}</Text>
+                      <Text style={[styles.bold, { color: accent }]}>{showAllPayments ? 'Ver menos' : `Ver los ${payments.length} pagos`}</Text>
                     </Pressable>
                   )}
                 </>
@@ -262,10 +267,10 @@ export default function SubscriptionsAdminScreen() {
             {data.promoRedemptions.length > 0 && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.cardHeaderRow}>
-                  <Ionicons name="pricetag-outline" size={18} color={palette.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Cupones aplicados</Text>
+                  <Ionicons name="pricetag-outline" size={18} color={accent} />
+                  <Pressable accessibilityRole="button" accessibilityState={{expanded:couponsExpanded}} onPress={()=>setCouponsExpanded(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><Text style={[styles.cardTitle, { color: colors.text }]}>Cupones aplicados · {data.promoRedemptions.length} {couponsExpanded?'⌃':'⌄'}</Text></Pressable>
                 </View>
-                {data.promoRedemptions.map((redemption) => (
+                {couponsExpanded && data.promoRedemptions.map((redemption) => (
                   <View key={redemption.id} style={styles.fieldRow}>
                     <Text style={[styles.small, styles.flexShrink, { color: colors.text }]}>
                       {redemptionText(redemption.benefit_snapshot, formatGs)}
@@ -279,7 +284,7 @@ export default function SubscriptionsAdminScreen() {
 
             <BillingCard
               profile={data.billingProfile}
-              colors={colors}
+              onEditingChange={setBillingEditing}
               onSaved={(billingProfile) => setData((prev) => (prev ? { ...prev, billingProfile } : prev))}
             />
           </>
@@ -312,118 +317,6 @@ function PaymentRow({ payment, colors, first }: { payment: SubscriptionPayment; 
       </View>
     </View>
   );
-}
-
-function BillingCard({ profile, colors, onSaved }: { profile: BillingProfile | null; colors: ReturnType<typeof usePalette>; onSaved: (profile: BillingProfile) => void }) {
-  const missing = billingMissingFields(profile);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Record<keyof BillingProfile, string>>(() => emptyDraft(profile));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  const startEditing = () => {
-    setDraft(emptyDraft(profile));
-    setError(null);
-    setSaved(false);
-    setEditing(true);
-  };
-
-  const save = async () => {
-    if (saving) return;
-    const blank = BILLING_FIELDS.find((field) => !draft[field.key].trim());
-    if (blank) {
-      setError(`Completá ${blank.label.toLowerCase()}.`);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const next = await saveBillingProfile({
-        business_name: draft.business_name.trim(),
-        ruc: draft.ruc.trim(),
-        billing_email: draft.billing_email.trim(),
-        phone: draft.phone.trim(),
-        fiscal_address: draft.fiscal_address.trim(),
-      });
-      onSaved(next);
-      setEditing(false);
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron guardar los datos.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.cardHeaderRow}>
-        <Ionicons name="receipt-outline" size={18} color={palette.primary} />
-        <Text style={[styles.cardTitle, styles.flex, { color: colors.text }]}>Datos de facturación</Text>
-        {!editing && (
-          <Pressable onPress={startEditing} hitSlop={8} accessibilityRole="button">
-            <Text style={[styles.bold, { color: palette.primary }]}>{missing.length === BILLING_FIELDS.length ? 'Completar' : 'Editar'}</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {editing ? (
-        <View style={styles.form}>
-          {BILLING_FIELDS.map((field) => (
-            <View key={field.key} style={styles.formField}>
-              <Text style={[styles.small, { color: colors.muted }]}>{field.label}</Text>
-              <TextInput
-                value={draft[field.key]}
-                onChangeText={(value) => { setDraft((prev) => ({ ...prev, [field.key]: value })); setError(null); }}
-                placeholder={field.placeholder}
-                placeholderTextColor={colors.muted}
-                keyboardType={field.keyboard ?? 'default'}
-                autoCapitalize={field.keyboard === 'email-address' ? 'none' : 'sentences'}
-                autoCorrect={false}
-                editable={!saving}
-                accessibilityLabel={field.label}
-                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-              />
-            </View>
-          ))}
-          {error && <Text accessibilityRole="alert" style={[styles.small, { color: palette.danger }]}>{error}</Text>}
-          <View style={styles.formActions}>
-            <Pressable onPress={() => setEditing(false)} disabled={saving} style={[styles.outlineBtn, styles.formBtn, { borderColor: colors.border }]}>
-              <Text style={[styles.bold, { color: colors.text }]}>Cancelar</Text>
-            </Pressable>
-            <Pressable onPress={() => void save()} disabled={saving} style={[styles.primaryBtn, styles.formBtn, { opacity: saving ? 0.6 : 1 }]}>
-              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryText}>Guardar</Text>}
-            </Pressable>
-          </View>
-        </View>
-      ) : missing.length === BILLING_FIELDS.length ? (
-        <Text style={[styles.small, { color: colors.muted }]}>Todavía no cargaste tus datos fiscales para las facturas del plan.</Text>
-      ) : (
-        <View style={styles.profileData}>
-          {BILLING_FIELDS.map((field) => (
-            <View key={field.key} style={styles.fieldRow}>
-              <Text style={[styles.small, { color: colors.muted }]}>{field.label}</Text>
-              <Text style={[styles.bold, styles.fieldValue, { color: profile?.[field.key] ? colors.text : '#B45309' }]}>
-                {profile?.[field.key] || 'Falta'}
-              </Text>
-            </View>
-          ))}
-          {saved && <Text style={[styles.small, { color: palette.success }]}>Datos guardados.</Text>}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function emptyDraft(profile: BillingProfile | null): Record<keyof BillingProfile, string> {
-  return {
-    business_name: profile?.business_name ?? '',
-    ruc: profile?.ruc ?? '',
-    billing_email: profile?.billing_email ?? '',
-    phone: profile?.phone ?? '',
-    fiscal_address: profile?.fiscal_address ?? '',
-  };
 }
 
 const styles = StyleSheet.create({

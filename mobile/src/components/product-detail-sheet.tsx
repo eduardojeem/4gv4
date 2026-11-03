@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch } from '@/lib/api';
-import { formatGs, openWeb, productPath, SITE_URL, type MarketProduct, type MarketStore } from '@/lib/marketplace';
+import { formatMarketPrice, openWeb, productPath, SITE_URL, type MarketProduct, type MarketStore } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { availabilityLabel, toProductDetail, whatsappProductLine, type ProductDetail } from '@/lib/product-detail-model';
 import { imageUrl } from '@/lib/products';
@@ -54,6 +54,7 @@ export function ProductDetailSheet({
   onSelectProduct,
 }: ProductDetailSheetProps) {
   const colors = usePalette();
+  const formatGs=(value:number)=>formatMarketPrice(value,product?.currency??'PYG');
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);

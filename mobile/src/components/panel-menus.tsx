@@ -1,9 +1,15 @@
+import { filterSectionGroups, sectionMenuActive, sectionMenuRoute } from '@/lib/sections-menu-model';
+import { bottomNavigation, navigationColor, navigationInk } from '@/lib/bottom-nav-model';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
-import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
+import { createContext, use, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Alert,
   Animated,
   Easing,
@@ -22,7 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAfterDismiss } from '@/lib/after-dismiss';
 import { openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
-import { hasNativePanelSection, iconFor, panelRoute, ROLE_LABELS, usePanel, type PanelItem } from '@/lib/panel';
+import { hasNativePanelSection, iconFor, ROLE_LABELS, usePanel, type PanelItem } from '@/lib/panel';
 import { profileMenuSections, type ProfileMenuEntry } from '@/lib/profile-menu';
 import { useSession } from '@/lib/session';
 
@@ -52,8 +58,6 @@ export function PanelMenusProvider({ children }: PropsWithChildren) {
   );
 }
 
-/** «Administración» abre su área aparte; volver atrás regresa al panel. */
-const sectionRoute = (key: string) => (key === 'administration' ? '/admin' : panelRoute(key));
 
 const initialOf = (value?: string | null) => (value || '?').trim().charAt(0).toUpperCase();
 
@@ -64,52 +68,61 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const pathname = usePathname();
-  const { data } = usePanel();
+  const { data, loading, error, reload } = usePanel();
+  const { schedule, onDismiss } = useAfterDismiss();
+  const closing = useRef(false);
+  const brand = navigationColor(data?.organization.brandColor, data?.organization.customBrandColor);
   const [query, setQuery] = useState('');
-  const drawerWidth = Math.min(340, width * 0.86);
+  const [keyboardVisible, setKeyboardVisible] = useState(Keyboard.isVisible());
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const drawerWidth = Math.min(420, width * 0.94);
   const [progress] = useState(() => new Animated.Value(0));
 
   // Al abrir, el cajón entra desde la izquierda.
   useEffect(() => {
     if (!visible) return;
+    closing.current = false;
     progress.setValue(0);
     Animated.timing(progress, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [visible, progress]);
 
   // Al cerrar, primero sale y recién después se quita el modal.
   const close = (after?: () => void) => {
-    Animated.timing(progress, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
+    if (closing.current) return;
+    closing.current = true;
+    Keyboard.dismiss();
+    Animated.timing(progress, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) { closing.current = false; return; }
+      if (after) schedule(after);
       setQuery('');
       onClose();
-      after?.();
     });
   };
 
   const q = query.trim().toLowerCase();
-  const groups = (data?.groups ?? [])
-    .map((group) => ({
-      ...group,
-      items: q
-        ? group.items.filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(q))
-        : group.items,
-    }))
-    .filter((group) => group.items.length > 0);
-
-  const isActive = (item: PanelItem) => {
-    const route = panelRoute(item.key);
-    return route === '/panel' ? pathname === '/panel' : pathname === route;
-  };
+  const groups = filterSectionGroups(data?.groups ?? [], query);
+  const quickKeys = bottomNavigation(data).tabs;
+  const quickItems = quickKeys.flatMap(key => data?.groups.flatMap(group => group.items).filter(item => item.key === key) ?? []);
+  const resultCount = groups.reduce((total, group) => total + group.items.length, 0);
+  const isActive = (item: PanelItem) => sectionMenuActive(pathname, item.key);
 
   const go = (route: string) => close(() => router.navigate(route as never));
 
   const org = data?.organization;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={() => close()} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => close()} statusBarTranslucent onDismiss={onDismiss}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <View style={styles.flex}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => close()} accessibilityLabel="Cerrar menú" />
       </Animated.View>
       <Animated.View
+        accessibilityViewIsModal
         style={[
           styles.drawer,
           {
@@ -120,24 +133,28 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
             transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] }) }],
           },
         ]}>
+        {!keyboardVisible && <>
         {/* Comercio */}
         <View style={styles.drawerHead}>
-          <View style={[styles.orgLogo, { backgroundColor: palette.primary }]}>
+          <View style={[styles.orgLogo, { backgroundColor: brand }]}>
             {org?.logoUrl ? (
               <Image source={org.logoUrl} style={styles.fill} contentFit="cover" />
             ) : (
-              <Text style={styles.orgInitial}>{initialOf(org?.name)}</Text>
+              <Text style={[styles.orgInitial, { color: navigationInk(brand) }]}>{initialOf(org?.name)}</Text>
             )}
           </View>
           <View style={styles.flex}>
             <Text numberOfLines={1} style={[styles.orgName, { color: colors.text }]}>{org?.name ?? 'Mi panel'}</Text>
-            {org && <Text style={[styles.small, { color: colors.muted }]}>Plan {org.plan}</Text>}
+            {org && <Text numberOfLines={1} style={[styles.small, { color: colors.muted }]}>{ROLE_LABELS[org.role] ?? org.role} · Plan {org.plan}</Text>}
           </View>
           <Pressable onPress={() => close()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar menú" style={styles.iconBtn}>
             <Ionicons name="close" size={22} color={colors.muted} />
           </Pressable>
         </View>
 
+        <Text accessibilityRole="header" style={[styles.menuTitle, { color: colors.text }]}>Secciones</Text>
+        <Text style={[styles.menuIntro, { color: colors.muted }]}>Todo lo que necesitás para tu negocio</Text>
+        </>}
         {/* Buscar sección */}
         <View style={[styles.search, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <Ionicons name="search" size={16} color={colors.muted} />
@@ -147,6 +164,7 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
             placeholder="Buscar sección"
             placeholderTextColor={colors.muted}
             autoCorrect={false}
+            autoCapitalize="none"
             returnKeyType="search"
             accessibilityLabel="Buscar sección"
             style={[styles.searchInput, { color: colors.text }]}
@@ -158,32 +176,43 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
           ) : null}
         </View>
 
-        <ScrollView style={styles.flex} contentContainerStyle={styles.drawerList} keyboardShouldPersistTaps="handled">
-          {groups.length === 0 && (
-            <Text style={[styles.empty, { color: colors.muted }]}>Ninguna sección coincide con «{query}».</Text>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.drawerList} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          {!q && quickItems.length > 0 && <View style={styles.quickSection}>
+            <Text style={[styles.groupLabel, { color: colors.muted }]}>Accesos principales</Text>
+            <View style={styles.quickGrid}>{quickItems.map(item => <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={item.label} accessibilityState={{ selected: isActive(item) }} onPress={() => go(sectionMenuRoute(item.key))} style={({ pressed }) => [styles.quickCard, { backgroundColor: colors.background, borderColor: isActive(item) ? brand : colors.border, opacity: pressed ? .65 : 1 }]}>
+              <Ionicons name={iconFor(item.key)} size={23} color={colors.text} />
+              <Text numberOfLines={2} style={[styles.quickLabel, { color: colors.text }]}>{item.key === 'overview' ? 'Inicio' : item.key === 'cash-register' ? 'Caja' : item.mobileLabel ?? item.label}</Text>
+            </Pressable>)}</View>
+          </View>}
+          {q ? <Text accessibilityLiveRegion="polite" style={[styles.resultCount, { color: colors.muted }]}>{resultCount} {resultCount === 1 ? 'sección encontrada' : 'secciones encontradas'}</Text> : null}
+          {loading && !data && <ActivityIndicator accessibilityLabel="Cargando secciones" color={brand} style={{ margin: 24 }} />}
+          {error && <View style={[styles.menuNotice, { backgroundColor: colors.background }]}><Text style={{ color: colors.text }}>{data ? 'No pudimos actualizar las secciones.' : 'No pudimos cargar el menú.'}</Text><Pressable accessibilityRole="button" onPress={reload} style={styles.retry}><Text style={{ color: colors.text, fontWeight: '700' }}>Reintentar</Text></Pressable></View>}
+          {groups.length === 0 && !loading && !error && (
+            <Text style={[styles.empty, { color: colors.muted }]}>{q ? 'No encontramos esa sección. Probá otro nombre o categoría.' : 'No hay secciones disponibles para tu usuario.'}</Text>
           )}
           {groups.map((group) => (
             <View key={group.id} style={styles.group}>
-              <Text style={[styles.groupLabel, { color: colors.muted }]}>{group.label}</Text>
+              <Text style={[styles.groupLabel, { color: colors.muted }]}>{group.label} · {group.items.length}</Text>
               {group.items.map((item) => {
                 const active = isActive(item);
                 return (
                   <Pressable
                     key={item.key}
-                    onPress={() => go(sectionRoute(item.key))}
+                    onPress={() => go(sectionMenuRoute(item.key))}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
+                    accessibilityHint={!hasNativePanelSection(item.key) ? "Abre una sección web" : item.description}
                     style={({ pressed }) => [
                       styles.item,
-                      active && { backgroundColor: 'rgba(37,99,235,0.12)' },
+                      active && { backgroundColor: colors.background, borderColor: brand },
                       pressed && !active && { backgroundColor: colors.background },
                     ]}>
-                    <Ionicons name={iconFor(item.key)} size={20} color={active ? palette.primary : colors.muted} />
+                    <Ionicons name={iconFor(item.key)} size={20} color={colors.text} />
                     <View style={styles.flex}>
-                      <Text style={[styles.itemLabel, { color: active ? palette.primary : colors.text }, active && styles.bold]}>{item.label}{!hasNativePanelSection(item.key) ? ' · Web' : ''}</Text>
-                      {q ? <Text numberOfLines={1} style={[styles.small, { color: colors.muted }]}>{item.description}</Text> : null}
+                      <Text style={[styles.itemLabel, { color: colors.text }, active && styles.bold]}>{item.label}</Text>
+                      <Text numberOfLines={2} style={[styles.itemDescription, { color: colors.muted }]}>{item.description}{!hasNativePanelSection(item.key) ? " · Se abre en la web" : ""}</Text>
                     </View>
-                    {active && <View style={[styles.activeDot, { backgroundColor: palette.primary }]} />}
+                    {active ? <Ionicons name="checkmark-circle" size={19} color={colors.text} /> : <Ionicons name={hasNativePanelSection(item.key) ? "chevron-forward" : "open-outline"} size={16} color={colors.muted} />}
                   </Pressable>
                 );
               })}
@@ -191,14 +220,18 @@ function SectionsDrawer({ visible, onClose }: { visible: boolean; onClose: () =>
           ))}
         </ScrollView>
 
-        <Pressable
+        {!keyboardVisible && <Pressable
           onPress={() => close(() => router.replace('/'))}
+          accessibilityRole="button"
+          accessibilityLabel="Ver el marketplace"
           style={[styles.drawerFooter, { borderColor: colors.border }]}>
           <Ionicons name="storefront-outline" size={20} color="#0891B2" />
           <Text style={[styles.itemLabel, styles.flex, { color: colors.text }]}>Ver el marketplace</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-        </Pressable>
+        </Pressable>}
       </Animated.View>
+      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -438,14 +471,24 @@ const styles = StyleSheet.create({
   orgLogo: { width: 44, height: 44, borderRadius: 13, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   orgInitial: { color: '#fff', fontSize: 19, fontWeight: '800' },
   orgName: { fontSize: 16, fontWeight: '800' },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 42, marginHorizontal: 4, marginBottom: 8 },
   searchInput: { flex: 1, fontSize: 15, height: '100%' },
-  drawerList: { paddingBottom: 12 },
+  drawerList: { paddingBottom: 16 },
+  menuTitle: { fontSize: 25, fontWeight: '800', paddingHorizontal: 8 },
+  menuIntro: { fontSize: 13, paddingHorizontal: 8, marginTop: 4, marginBottom: 16 },
+  quickSection: { marginTop: 12, marginBottom: 8 },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4 },
+  quickCard: { flexGrow: 1, flexBasis: '28%', minHeight: 88, borderRadius: 18, borderWidth: 1, padding: 12, gap: 8 },
+  quickLabel: { fontSize: 12, fontWeight: '700' },
+  itemDescription: { fontSize: 12, marginTop: 3, lineHeight: 17 },
+  resultCount: { padding: 12, fontSize: 12 },
+  menuNotice: { padding: 16, borderRadius: 16, marginTop: 12 },
+  retry: { minHeight: 44, justifyContent: 'center' },
   empty: { padding: 16, textAlign: 'center' },
   group: { marginTop: 12 },
   groupLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 12, marginBottom: 4 },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 12 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: 'transparent', minHeight: 68 },
   itemLabel: { fontSize: 15, fontWeight: '600' },
   activeDot: { width: 6, height: 6, borderRadius: 3 },
   drawerFooter: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },

@@ -1,379 +1,105 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
-import { router } from 'expo-router'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native'
+import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable'
 import { apiFetch } from '@/lib/api'
-import { usePalette, palette } from '@/lib/palette'
+import { usePalette } from '@/lib/palette'
 import { resolveNotificationRoute } from '@/lib/push-notifications'
 import { useNotifications } from '@/lib/notifications-context'
+import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/private-cache-context'
+import { NOTIFICATION_GROUPS, notificationGroup, notificationDateSection, relativeNotificationTime, isUrgentNotification } from '../../../../src/lib/notifications/presentation'
 
-interface NotificationItem {
-  id: string
-  organizationId: string
-  branchId: string | null
-  type: string
-  title: string
-  body: string
-  data: Record<string, unknown>
-  resourceType: string | null
-  resourceId: string | null
-  readAt: string | null
-  createdAt: string
-}
-
-interface NotificationsFeedResponse {
-  items: NotificationItem[]
-  nextCursor: string | null
-}
-
+type Item = { id: string; organizationId: string; branchId: string | null; type: string; title: string; body: string; resourceType: string | null; resourceId: string | null; readAt: string | null; createdAt: string }
+type Feed = { items: Item[]; nextCursor: string | null }
 export default function NotificationsScreen() {
   const colors = usePalette()
-  const { refreshUnreadCount } = useNotifications()
-
-  const [items, setItems] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
-  const [refreshing, setRefreshing] = useState<boolean>(false)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState<boolean>(false)
-  const [attempt, setAttempt] = useState<number>(0)
-
-  useEffect(() => {
-    let active = true
-
-    const query = new URLSearchParams({ limit: '20' })
-    apiFetch<NotificationsFeedResponse>(`/api/notifications?${query.toString()}`)
-      .then((res) => {
-        if (!active) return
-        setItems(res.items ?? [])
-        setNextCursor(res.nextCursor ?? null)
-      })
-      .catch((err) => {
-        console.warn('[notifications] Error al cargar el feed:', err)
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false)
-          setRefreshing(false)
-        }
-      })
-
-    return () => {
-      active = false
-    }
-  }, [attempt])
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true)
-    setAttempt((v) => v + 1)
-  }, [])
-
-  const handleLoadMore = async () => {
-    if (!nextCursor || loadingMore) return
-
-    setLoadingMore(true)
+  const { refreshUnreadCount, feedVersion, promptForPermission, permissionStatus, unreadCount } = useNotifications()
+  const [items, setItems] = useState<Item[]>([])
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [busy, setBusy] = useState(true)
+  const [more, setMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState('all')
+  const [reading, setReading] = useState(false)
+  const request = useRef(0)
+  const loadingMore = useRef(false)
+  const readLock = useRef(false)
+  const load = useCallback(async () => {
+    const generation = ++request.current
+    const scope = getPrivateCacheContext()
+    setBusy(true)
     try {
-      const query = new URLSearchParams({ limit: '20', cursor: nextCursor })
-      const res = await apiFetch<NotificationsFeedResponse>(`/api/notifications?${query.toString()}`)
-
-      setItems((prev) => [...prev, ...(res.items ?? [])])
-      setNextCursor(res.nextCursor ?? null)
-    } catch (err) {
-      console.warn('[notifications] Error al cargar más notificaciones:', err)
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  const markAsRead = async (notificationId: string) => {
-    // Actualización optimista
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === notificationId ? { ...item, readAt: new Date().toISOString() } : item
-      )
-    )
-
+      const result = await apiFetch<Feed>('/api/notifications?limit=20')
+      if (generation !== request.current || scope.epoch !== getPrivateCacheContext().epoch) return
+      setItems(result.items); setCursor(result.nextCursor); setError(null)
+      void refreshUnreadCount()
+    } catch { if (generation === request.current) setError('No pudimos cargar tus avisos. Revisá tu conexión y reintentá.') }
+    finally { if (generation === request.current) setBusy(false) }
+  }, [refreshUnreadCount])
+  useFocusEffect(useCallback(() => { void load(); return () => { request.current++ } }, [load]))
+  useEffect(() => { if (feedVersion) queueMicrotask(() => void load()) }, [load, feedVersion])
+  useEffect(() => subscribePrivateCacheContext(() => { request.current++; setItems([]); setCursor(null); void load() }), [load])
+  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active') void load() }); return () => sub.remove() }, [load])
+  const loadMore = async () => {
+    if (!cursor || busy || loadingMore.current) return
+    loadingMore.current = true; setMore(true)
+    const generation = request.current
     try {
-      await apiFetch('/api/notifications/read', {
-        method: 'POST',
-        body: JSON.stringify({ notificationId }),
-      })
-      await refreshUnreadCount()
-    } catch (err) {
-      console.warn('[notifications] Error al marcar leída:', err)
-    }
+      const result = await apiFetch<Feed>(`/api/notifications?limit=20&cursor=${encodeURIComponent(cursor)}`)
+      if (generation !== request.current) return
+      setItems(prev => [...prev, ...result.items.filter(item => !prev.some(old => old.id === item.id))]); setCursor(result.nextCursor); setError(null)
+    } catch { setError('No pudimos cargar más avisos. Tocá Reintentar.') }
+    finally { loadingMore.current = false; setMore(false) }
   }
-
-  const markAllAsRead = async () => {
-    // Actualización optimista
-    const now = new Date().toISOString()
-    setItems((prev) => prev.map((item) => ({ ...item, readAt: item.readAt ?? now })))
-
+  const markRead = async (item?: Item) => {
+    if (readLock.current) return false
+    readLock.current = true; setReading(true)
+    const generation = request.current
     try {
-      await apiFetch('/api/notifications/read', {
-        method: 'POST',
-        body: JSON.stringify({ all: true }),
-      })
-      await refreshUnreadCount()
-    } catch (err) {
-      console.warn('[notifications] Error al marcar todas como leídas:', err)
-    }
+      await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify(item ? { notificationId: item.id } : { all: true }) })
+      if (generation !== request.current) return false
+      setItems(prev => prev.map(row => !item || row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row))
+      void refreshUnreadCount(); void Haptics.selectionAsync().catch(() => undefined)
+      return true
+    } catch { Alert.alert('No se guardó la lectura', 'Revisá tu conexión y volvé a intentar.'); return false }
+    finally { readLock.current = false; setReading(false) }
   }
-
-  const handlePressItem = async (item: NotificationItem) => {
-    if (!item.readAt) {
-      await markAsRead(item.id)
+  const sections = useMemo(() => {
+    const grouped = new Map<string, Item[]>()
+    for (const item of items.filter(row => filter === 'all' || (filter === 'unread' ? !row.readAt : notificationGroup(row.type) === filter))) {
+      const key = notificationDateSection(item.createdAt)
+      grouped.set(key, [...(grouped.get(key) ?? []), item])
     }
-
-    const route = resolveNotificationRoute({
-      type: item.type,
-      resourceType: item.resourceType,
-      resourceId: item.resourceId,
-    })
-
-    if (route && route !== '/panel/notifications') {
-      router.push(route as any)
-    }
-  }
-
-  const renderIcon = (type: string) => {
-    if (type.startsWith('SALE_')) return 'cash-outline'
-    if (type.startsWith('REPAIR_')) return 'build-outline'
-    if (type.startsWith('BOOKING_')) return 'calendar-outline'
-    if (type.startsWith('ORDER_')) return 'cart-outline'
-    if (type.includes('STOCK')) return 'cube-outline'
-    if (type.startsWith('CASH_')) return 'wallet-outline'
-    if (type.startsWith('CREDIT_')) return 'card-outline'
-    return 'notifications-outline'
-  }
-
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Barra de título con botón Volver y Marcar todas */}
-      <View style={[styles.header, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-          style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </Pressable>
-
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Notificaciones</Text>
-
-        <Pressable
-          onPress={markAllAsRead}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Marcar todas como leídas"
-          style={styles.markAllBtn}>
-          <Text style={[styles.markAllText, { color: palette.primary }]}>Marcar leídas</Text>
-        </Pressable>
-      </View>
-
-      {/* Lista del Feed */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={palette.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={palette.primary}
-            />
-          }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <Ionicons name="notifications-off-outline" size={48} color={colors.muted} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Sin notificaciones</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                Acá vas a ver las alertas de ventas, reparaciones y pedidos de tu comercio.
-              </Text>
-            </View>
-          }
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={palette.primary} />
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => {
-            const isUnread = !item.readAt
-            return (
-              <Pressable
-                onPress={() => handlePressItem(item)}
-                accessibilityRole="button"
-                accessibilityLabel={item.title}
-                style={({ pressed }) => [
-                  styles.item,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: isUnread
-                      ? colors.card
-                      : pressed
-                      ? colors.border + '30'
-                      : 'transparent',
-                  },
-                ]}>
-                <View
-                  style={[
-                    styles.itemIconCircle,
-                    {
-                      backgroundColor: isUnread ? palette.primary + '18' : colors.border + '60',
-                    },
-                  ]}>
-                  <Ionicons
-                    name={renderIcon(item.type)}
-                    size={20}
-                    color={isUnread ? palette.primary : colors.muted}
-                  />
-                </View>
-
-                <View style={styles.itemContent}>
-                  <View style={styles.itemHeader}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.itemTitle,
-                        { color: colors.text, fontWeight: isUnread ? '700' : '500' },
-                      ]}>
-                      {item.title}
-                    </Text>
-                    {isUnread && (
-                      <View style={[styles.unreadDot, { backgroundColor: palette.primary }]} />
-                    )}
-                  </View>
-
-                  <Text
-                    numberOfLines={2}
-                    style={[styles.itemBody, { color: isUnread ? colors.text : colors.muted }]}>
-                    {item.body}
-                  </Text>
-
-                  <Text style={[styles.itemDate, { color: colors.muted }]}>
-                    {new Date(item.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}{' '}
-                    ·{' '}
-                    {new Date(item.createdAt).toLocaleDateString([], {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
-                  </Text>
-                </View>
-              </Pressable>
-            )
-          }}
-        />
-      )}
-    </View>
-  )
+    return [...grouped].map(([title, data]) => ({ title, data }))
+  }, [items, filter])
+  const linkColor = colors.text === '#F1F5F9' ? '#93C5FD' : '#1D4ED8'
+  return <GestureHandlerRootView style={{ flex: 1 }}><View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={styles.header}><Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Notificaciones</Text><NotificationButton color={linkColor} label="Preferencias" action={() => router.push('/panel/settings/notifications')} /></View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.chips}>
+      {[['all', 'Todas'], ['unread', 'No leídas'], ...Object.entries(NOTIFICATION_GROUPS).map(([key, value]) => [key, value.label])].map(([key, label]) => <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected: filter === key }} onPress={() => setFilter(key)} style={[styles.chip, { borderColor: filter === key ? linkColor : colors.border, backgroundColor: filter === key ? colors.card : colors.background }]}><Text style={{ color: filter === key ? linkColor : colors.text }}>{label}</Text></Pressable>)}
+    </ScrollView>
+    <View style={styles.toolbar}><Text style={{ color: colors.muted }}>Tus avisos del negocio</Text><Pressable accessibilityRole="button" disabled={reading || unreadCount === 0} onPress={() => void markRead()} style={styles.button}><Text style={{ color: linkColor }}>{reading ? 'Guardando…' : 'Marcar todas leídas'}</Text></Pressable></View>
+    {error && <View accessibilityRole="alert" style={styles.message}><Text style={{ color: colors.text }}>{error}</Text><NotificationButton color={linkColor} label="Reintentar" action={() => void load()} /></View>}
+    {busy && items.length === 0 ? <ActivityIndicator accessibilityLabel="Cargando notificaciones" style={{ margin: 40 }} color={linkColor} /> : <SectionList sections={sections} keyExtractor={item => item.id} stickySectionHeadersEnabled={false} refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={linkColor} />} onEndReached={() => void loadMore()} onEndReachedThreshold={0.3}
+      renderSectionHeader={({ section }) => <Text accessibilityRole="header" style={[styles.section, { color: colors.muted }]}>{section.title}</Text>}
+      ListEmptyComponent={!error ? <View style={styles.empty}><Ionicons name="notifications-outline" size={42} color={colors.muted} /><Text style={[styles.title, { color: colors.text }]}>{filter === 'unread' ? 'Estás al día' : 'Sin avisos por acá'}</Text><Text style={{ color: colors.muted, textAlign: 'center' }}>Acá vas a encontrar las novedades de tu negocio.</Text><NotificationButton color={linkColor} label="Elegí qué avisos recibir" action={() => router.push('/panel/settings/notifications')} />{permissionStatus !== 'granted' && <NotificationButton color={linkColor} label="Activar notificaciones" action={() => void promptForPermission()} />}</View> : null}
+      ListFooterComponent={more ? <ActivityIndicator accessibilityLabel="Cargando más avisos" /> : cursor ? <NotificationButton color={linkColor} label="Cargar más" action={() => void loadMore()} /> : null}
+      renderItem={({ item }) => {
+        const group = NOTIFICATION_GROUPS[notificationGroup(item.type)]
+        const urgent = isUrgentNotification(item.type)
+        const color = urgent ? (colors.text === '#F1F5F9' ? '#FDA4AF' : '#9F1239') : (colors.text === '#F1F5F9' ? ({ sales: '#86EFAC', orders: '#93C5FD', repairs: '#D8B4FE', services: '#67E8F9', inventory: '#FCD34D', cash: '#FDA4AF', credits: '#FDA4AF', suppliers: '#CBD5E1', employees: '#CBD5E1', security: '#CBD5E1', system: '#CBD5E1' }[notificationGroup(item.type)]) : group.color)
+        return <Swipeable onSwipeableOpen={() => void markRead(item)} enabled={!item.readAt && !reading} renderRightActions={() => <Pressable accessibilityRole="button" accessibilityLabel={`Marcar como leída: ${item.title}`} onPress={() => void markRead(item)} style={[styles.swipe, { backgroundColor: colors.card }]}><Text style={{ color: linkColor }}>Marcar leída</Text></Pressable>}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${item.readAt ? 'Leída' : 'No leída'}. ${urgent ? 'Requiere atención. ' : ''}${item.title}. ${item.body}. ${relativeNotificationTime(item.createdAt)}. Abrir detalle.`} onPress={() => { void (async () => { if (!item.readAt && !await markRead(item)) return; router.push(resolveNotificationRoute(item) as never) })() }} style={[styles.row, { backgroundColor: item.readAt ? colors.background : colors.card, borderColor: colors.border }]}>
+            <View style={[styles.icon, { backgroundColor: color + '15' }]}><Ionicons name={group.icon} size={22} color={color} /></View>
+            <View style={{ flex: 1 }}><Text style={{ color, fontSize: 12, fontWeight: '700' }}>{group.label}{urgent ? ' · Requiere atención' : ''}</Text><Text style={{ color: colors.text, fontWeight: item.readAt ? '500' : '700', fontSize: 16, marginVertical: 4 }}>{item.title}</Text><Text style={{ color: colors.text, lineHeight: 21 }}>{item.body}</Text><Text style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>{relativeNotificationTime(item.createdAt)} · Ver detalle</Text></View>
+            {!item.readAt && <View style={[styles.dot, { backgroundColor: linkColor }]} />}
+          </Pressable>
+        </Swipeable>
+      }} />}
+  </View></GestureHandlerRootView>
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  markAllBtn: {
-    padding: 4,
-  },
-  markAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    marginTop: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  item: {
-    flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    alignItems: 'flex-start',
-  },
-  itemIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  itemTitle: {
-    fontSize: 15,
-    flex: 1,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  itemBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  itemDate: {
-    fontSize: 11,
-  },
-  footerLoader: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-})
+const styles = StyleSheet.create({ header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12 }, title: { fontSize: 22, fontWeight: '700' }, button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }, chips: { gap: 8, padding: 16 }, chip: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderRadius: 22, paddingHorizontal: 16 }, toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }, section: { paddingHorizontal: 16, paddingVertical: 12, fontWeight: '700' }, row: { flexDirection: 'row', gap: 12, padding: 16, borderBottomWidth: StyleSheet.hairlineWidth }, icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, dot: { width: 8, height: 8, borderRadius: 4, marginTop: 8 }, empty: { padding: 32, alignItems: 'center', gap: 12 }, message: { padding: 16 }, swipe: { minWidth: 112, justifyContent: 'center', alignItems: 'center' } })
+function NotificationButton({ label, action, color }: { label: string; action: () => void; color: string }) { return <Pressable accessibilityRole="button" onPress={action} style={styles.button}><Text style={{ color, fontWeight: '600' }}>{label}</Text></Pressable> }

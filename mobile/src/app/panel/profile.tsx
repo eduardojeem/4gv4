@@ -18,14 +18,12 @@ import { Image } from 'expo-image';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 
 import { apiFetch } from '@/lib/api';
+import { pickAndUploadAvatar, removeAvatar as removeAvatarFromProfile } from '@/lib/avatar';
 import { palette, usePalette } from '@/lib/palette';
 import { ROLE_LABELS, usePanel } from '@/lib/panel';
 import {
-  avatarPath,
-  avatarStoragePath,
   isProfileDirty,
   nameError,
   passwordChangeError,
@@ -48,7 +46,6 @@ type RemoteProfile = {
 };
 
 const EMPTY: ProfileDraft = { fullName: '', phone: '', jobTitle: '' };
-const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 const STRENGTH_COLORS = ['#CBD5E1', '#DC2626', '#D97706', '#16A34A', '#15803D'];
 
 const initialOf = (value?: string | null) => (value || '?').trim().charAt(0).toUpperCase();
@@ -149,44 +146,13 @@ export default function MobileUserProfileScreen() {
     }
   };
 
-  const saveAvatarUrl = async (url: string) => {
-    await apiFetch('/api/dashboard/profile', { method: 'PATCH', body: JSON.stringify({ avatarUrl: url }) });
-  };
-
   const uploadAvatar = async (source: 'camera' | 'library') => {
     if (!userId || avatarBusy) return;
-    const permission = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso necesario', source === 'camera'
-        ? 'Habilitá la cámara en los ajustes del teléfono para sacarte una foto.'
-        : 'Habilitá el acceso a tus fotos en los ajustes del teléfono para elegir una.');
-      return;
-    }
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 };
-    const result = source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-    const asset = result.canceled ? null : result.assets?.[0];
-    if (!asset?.uri) return;
-    if (asset.fileSize && asset.fileSize > AVATAR_MAX_BYTES) {
-      Alert.alert('Imagen muy pesada', 'Elegí una foto de hasta 5 MB.');
-      return;
-    }
-
     setAvatarBusy(true);
-    const previous = avatarUrl;
     try {
-      const mimeType = asset.mimeType === 'image/png' || asset.mimeType === 'image/webp' ? asset.mimeType : 'image/jpeg';
-      const path = avatarPath(userId, mimeType);
-      const body = await fetch(asset.uri).then((r) => r.arrayBuffer());
-      const { error } = await supabase.storage.from('avatars').upload(path, body, { contentType: mimeType, cacheControl: '3600', upsert: false });
-      if (error) throw new Error(error.message);
-      const url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
-      await saveAvatarUrl(url);
+      const url = await pickAndUploadAvatar(source, userId, avatarUrl);
+      if (!url) return;
       setAvatarUrl(url);
-      // La foto anterior ya no se usa: se borra para no acumular archivos.
-      const oldPath = avatarStoragePath(previous, userId);
-      if (oldPath) void supabase.storage.from('avatars').remove([oldPath]).catch(() => undefined);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       flash('success', 'Foto actualizada.');
       reload();
@@ -201,9 +167,7 @@ export default function MobileUserProfileScreen() {
     if (!userId || !avatarUrl || avatarBusy) return;
     setAvatarBusy(true);
     try {
-      await saveAvatarUrl('');
-      const oldPath = avatarStoragePath(avatarUrl, userId);
-      if (oldPath) void supabase.storage.from('avatars').remove([oldPath]).catch(() => undefined);
+      await removeAvatarFromProfile(userId, avatarUrl);
       setAvatarUrl(null);
       flash('success', 'Quitaste tu foto.');
       reload();

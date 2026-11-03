@@ -178,7 +178,8 @@ describe('la busqueda global consulta la base', () => {
   const pagina = leer('src/app/marketplace/buscar/page.tsx')
 
   it('le pasa el termino a las dos consultas', () => {
-    expect(pagina).toContain('getMarketplaceProductsPage(pageSize, { q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })')
+    // Con los filtros de ubicación también viajan país y ciudad.
+    expect(pagina).toContain('getMarketplaceProductsPage(pageSize, { country, city, q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })')
     expect(pagina).toContain('getMarketplaceOrganizations(ORGANIZATION_RESULTS, { q: query || undefined })')
   })
 

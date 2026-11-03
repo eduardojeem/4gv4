@@ -23,7 +23,8 @@ describe('public page performance contracts', () => {
   })
 
   it('keeps the complete catalog reachable while bounding Marketplace home payloads', () => {
-    const marketplace = read('src/app/marketplace/page.tsx')
+    // La portada delega el contenido en MarketplaceHomeContent: se revisan los dos.
+    const marketplace = read('src/app/marketplace/page.tsx') + read('src/components/public/MarketplaceHomeContent.tsx')
 
     expect(marketplace).toContain('MARKETPLACE_HOME_PRODUCT_LIMIT = 24')
     expect(marketplace).toContain('MARKETPLACE_HOME_OFFER_LIMIT = 48')

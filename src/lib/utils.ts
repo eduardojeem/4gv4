@@ -44,7 +44,8 @@ export function formatDuration(milliseconds: number): string {
 /**
  * Formatea un precio en guaraníes paraguayos
  */
-export function formatPrice(price: number): string {
+export function formatPrice(price: number, currency = 'PYG'): string {
+  if(currency!=='PYG'){try{return new Intl.NumberFormat('es-PY',{style:'currency',currency}).format(price)}catch{return price.toLocaleString('es-PY')+' '+currency}}
   return formatCurrency(price)
 }
 

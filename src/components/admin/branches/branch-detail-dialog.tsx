@@ -42,6 +42,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { BranchAssignedUser, BranchSummary } from '@/lib/branches/types'
+import { BranchInsightsPanel } from './branch-insights-panel'
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Superadministrador',
@@ -305,8 +306,10 @@ export function BranchDetailDialog({
                 </div>
               </div>
 
+              <BranchInsightsPanel branchId={branch.id} open={open} />
+
               <section className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Actividad</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Equipo y configuración</p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <MetricTile icon={Users} label="Usuarios" value={usersCount} helper={`${primaryUsersCount} principales`} />
                   <MetricTile

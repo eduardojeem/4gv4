@@ -1,3 +1,4 @@
+import { remainingWebsiteEdits } from '@/lib/website-save-state';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
@@ -37,15 +38,20 @@ export default function BookingScreen() {
 function BookingEditor({ settings }: { settings: WebsiteSettings }) {
   const colors = usePalette();
   const { applySaved } = useWebsite();
-  const saved = (settings.booking_section ?? DEFAULT_BOOKING_SECTION) as BookingSection;
+  const saved = (settings.booking_section ??
+    DEFAULT_BOOKING_SECTION) as BookingSection;
   const [patch, setPatch] = useState<Partial<BookingSection>>({});
   const [saving, setSaving] = useState(false);
 
-  const booking = useMemo(() => mergeSetting<BookingSection>(saved, patch), [saved, patch]);
+  const booking = useMemo(
+    () => mergeSetting<BookingSection>(saved, patch),
+    [saved, patch],
+  );
   const dirty = isDirty(saved, booking);
   const issues = bookingIssues(booking);
 
-  const edit = (changes: Partial<BookingSection>) => setPatch((current) => ({ ...current, ...changes }));
+  const edit = (changes: Partial<BookingSection>) =>
+    setPatch((current) => ({ ...current, ...changes }));
 
   const applyPreset = (preset: (typeof BOOKING_PRESETS)[number]) => {
     edit({
@@ -58,36 +64,53 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
 
   const save = useCallback(async () => {
     if (Object.keys(issues).length > 0) {
-      Alert.alert('Revisá los datos de reserva', Object.values(issues).join('\n'));
+      Alert.alert(
+        'Revisá los datos de reserva',
+        Object.values(issues).join('\n'),
+      );
       return false;
     }
     setSaving(true);
     try {
       const persisted = await saveWebsiteSettings({ booking_section: booking });
       applySaved(persisted as Partial<WebsiteSettings>);
-      setPatch({});
+      setPatch((current) => remainingWebsiteEdits(current, patch));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return true;
     } catch (error) {
-      Alert.alert('No pudimos guardar', websiteErrorMessage(error, 'No pudimos guardar los cambios. Revisá tu conexión e intentá nuevamente.'));
+      Alert.alert(
+        'No pudimos guardar',
+        websiteErrorMessage(
+          error,
+          'No pudimos guardar los cambios. Revisá tu conexión e intentá nuevamente.',
+        ),
+      );
       return false;
     } finally {
       setSaving(false);
     }
-  }, [issues, booking, applySaved]);
+  }, [issues, booking, patch, applySaved]);
 
-  useUnsavedChangesGuard(dirty && !saving, save);
+  useUnsavedChangesGuard(dirty, save, saving);
 
   const isEnabled = booking.enabled !== false;
 
   return (
     <WebsiteScreen
+      saving={saving}
       title="Reservas y citas"
       subtitle="Configuración para tu tienda"
-      footer={<SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />}>
+      footer={
+        <SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />
+      }
+    >
       <OfflineNotice />
 
-      <Section title="Visibilidad" icon="calendar-outline" hint="Activá o desactivá la sección de citas en la portada.">
+      <Section
+        title="Visibilidad"
+        icon="calendar-outline"
+        hint="Activá o desactivá la sección de citas en la portada."
+      >
         <ToggleRow
           label="Mostrar citas en el inicio"
           hint="Permite a tus clientes agendar consultas, citas o turnos desde la web"
@@ -98,7 +121,11 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
 
       {isEnabled ? (
         <>
-          <Section title="Plantillas rápidas multirrubro" icon="sparkles-outline" hint="Tocá un rubro para autocompletar textos recomendados:">
+          <Section
+            title="Plantillas rápidas multirrubro"
+            icon="sparkles-outline"
+            hint="Tocá un rubro para autocompletar textos recomendados:"
+          >
             <View style={styles.presetsGrid}>
               {BOOKING_PRESETS.map((preset) => (
                 <Pressable
@@ -113,15 +140,26 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
                       borderColor: colors.border,
                       opacity: pressed ? 0.75 : 1,
                     },
-                  ]}>
-                  <Ionicons name={preset.icon} size={18} color={palette.primary} />
-                  <Text style={[styles.presetText, { color: colors.text }]}>{preset.name}</Text>
+                  ]}
+                >
+                  <Ionicons
+                    name={preset.icon}
+                    size={18}
+                    color={palette.primary}
+                  />
+                  <Text style={[styles.presetText, { color: colors.text }]}>
+                    {preset.name}
+                  </Text>
                 </Pressable>
               ))}
             </View>
           </Section>
 
-          <Section title="Textos de la sección" icon="create-outline" hint="Personalizá los mensajes que verán tus visitantes.">
+          <Section
+            title="Textos de la sección"
+            icon="create-outline"
+            hint="Personalizá los mensajes que verán tus visitantes."
+          >
             <Field
               label="Etiqueta superior"
               value={booking.badge ?? ''}
@@ -152,19 +190,55 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
             />
           </Section>
 
-          <Section title="Vista previa en tu tienda" icon="eye-outline" hint="Así se verá el bloque en tu página de inicio:">
-            <View style={[styles.previewCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Section
+            title="Vista previa en tu tienda"
+            icon="eye-outline"
+            hint="Así se verá el bloque en tu página de inicio:"
+          >
+            <View
+              style={[
+                styles.previewCard,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               {booking.badge ? (
-                <View style={[styles.previewBadge, { backgroundColor: `${palette.primary}18`, borderColor: `${palette.primary}33` }]}>
-                  <Text style={[styles.previewBadgeText, { color: palette.primary }]}>{booking.badge}</Text>
+                <View
+                  style={[
+                    styles.previewBadge,
+                    {
+                      backgroundColor: `${palette.primary}18`,
+                      borderColor: `${palette.primary}33`,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.previewBadgeText,
+                      { color: palette.primary },
+                    ]}
+                  >
+                    {booking.badge}
+                  </Text>
                 </View>
               ) : null}
-              <Text style={[styles.previewTitle, { color: colors.text }]}>{booking.title || 'Título de la reserva'}</Text>
+              <Text style={[styles.previewTitle, { color: colors.text }]}>
+                {booking.title || 'Título de la reserva'}
+              </Text>
               {booking.subtitle ? (
-                <Text style={[styles.previewSubtitle, { color: colors.muted }]}>{booking.subtitle}</Text>
+                <Text style={[styles.previewSubtitle, { color: colors.muted }]}>
+                  {booking.subtitle}
+                </Text>
               ) : null}
               <View style={styles.previewAction}>
-                <View style={[styles.previewButton, { backgroundColor: palette.primary }]}>
+                <View
+                  style={[
+                    styles.previewButton,
+                    { backgroundColor: palette.primary },
+                  ]}
+                >
                   <Ionicons name="calendar-outline" size={15} color="#fff" />
                   <Text style={styles.previewButtonText}>Agendar cita</Text>
                 </View>

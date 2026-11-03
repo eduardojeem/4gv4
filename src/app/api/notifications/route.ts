@@ -106,10 +106,14 @@ export const GET = withTenantAuth({}, async (request: NextRequest, { user, organ
       .eq('user_id', user.id)
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(limit + 1)
 
     if (cursor) {
-      query = query.lt('created_at', cursor)
+      const [rawTimestamp, id] = cursor.split('|')
+      const timestamp = Number.isFinite(Date.parse(rawTimestamp)) ? new Date(rawTimestamp).toISOString() : ''
+      if (!Number.isFinite(Date.parse(timestamp)) || (id && !/^[0-9a-f-]{36}$/i.test(id))) return NextResponse.json({ error: 'Cursor inválido.' }, { status: 400 })
+      query = id ? query.or(`created_at.lt.${timestamp},and(created_at.eq.${timestamp},id.lt.${id})`) : query.lt('created_at', timestamp)
     }
 
     const { data, error } = await query
@@ -122,7 +126,7 @@ export const GET = withTenantAuth({}, async (request: NextRequest, { user, organ
     const rows = (data ?? []) as NotificationDbRow[]
     const hasMore = rows.length > limit
     const items = hasMore ? rows.slice(0, limit) : rows
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].created_at : null
+    const nextCursor = hasMore && items.length > 0 ? `${items[items.length - 1].created_at}|${items[items.length - 1].id}` : null
 
     return NextResponse.json({
       items: items.map((row) => ({

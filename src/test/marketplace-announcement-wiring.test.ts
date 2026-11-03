@@ -10,7 +10,8 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
  */
 describe('el marketplace muestra el aviso', () => {
   it('lo pide en el servidor y lo monta al entrar', () => {
-    const page = leer('src/app/marketplace/page.tsx')
+    // La portada delega el contenido en MarketplaceHomeContent: se revisan los dos.
+    const page = leer('src/app/marketplace/page.tsx') + leer('src/components/public/MarketplaceHomeContent.tsx')
     expect(page).toContain('getPlatformAnnouncements()')
     expect(page).toContain('<AnnouncementModal announcement={pickLiveAnnouncement(announcement, new Date())} scope="marketplace" />')
   })

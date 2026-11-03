@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import Link from '@/components/public/MarketplaceLink'
 import { redirect } from 'next/navigation'
 import { ArrowRight, ChevronRight, Package, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic'
 
 type PageProps = {
   searchParams: Promise<{
+    country?: string
+    city?: string
     q?: string
     categoria?: string
     subcategoria?: string
@@ -35,22 +37,25 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 }
 
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
-  const { q, categoria, subcategoria, marca, pagina, porPagina, orden, ofertas } = await searchParams
+  const { country, city, q, categoria, subcategoria, marca, pagina, porPagina, orden, ofertas } = await searchParams
   const onlyOffers = ofertas === '1'
   const requestedPage = parsePositiveInteger(pagina, 1)
   const parsedPageSize = parsePositiveInteger(porPagina, 28)
   const pageSize = PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number]) ? parsedPageSize : 28
-  const sort = SORT_OPTIONS.includes(orden as (typeof SORT_OPTIONS)[number])
+  let sort = SORT_OPTIONS.includes(orden as (typeof SORT_OPTIONS)[number])
     ? orden as (typeof SORT_OPTIONS)[number]
     : 'default'
   const offset = (requestedPage - 1) * pageSize
 
-  const productPage = await getMarketplaceProductsPage(pageSize, { q, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })
+  const productPage = await getMarketplaceProductsPage(pageSize, { country, city, q, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })
   const categories = productPage.categories ?? []
   const brands = productPage.brands ?? []
+  if(productPage.mixedCurrencies&&sort.startsWith('price_'))sort='default'
   const totalPages = Math.max(1, Math.ceil(productPage.total / pageSize))
   if (requestedPage > totalPages) {
     const params = new URLSearchParams()
+    if(country) params.set('country',country)
+    if(city) params.set('city',city)
     if (q) params.set('q', q)
     if (categoria) params.set('categoria', categoria)
     if (subcategoria) params.set('subcategoria', subcategoria)
@@ -131,7 +136,8 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
 
       {/* ── Catálogo completo con Filtros por Categoría, Subcategoría y Marca ── */}
       <section id="catalogo" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-8 sm:px-6 lg:px-8">
-        <ProductsClient
+        {productPage.mixedCurrencies && <p className="mb-4 rounded-xl border p-3 text-sm text-muted-foreground">Los precios usan monedas diferentes. Elegí una ubicación con una sola moneda para ordenarlos por precio.</p>}
+        <ProductsClient priceSortAvailable={!productPage.mixedCurrencies}
           products={productPage.products}
           totalProducts={productPage.total}
           currentPage={currentPage}

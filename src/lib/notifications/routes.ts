@@ -26,7 +26,7 @@ export function resolveNotificationRoute(payload: {
 
   // 3. Ventas (POS)
   if (type.startsWith('SALE_') || resourceType === 'sale') {
-    return '/panel/pos'
+    return safeId ? `/panel/sales/${safeId}` : '/panel/pos'
   }
 
   // 4. Pedidos
@@ -52,7 +52,7 @@ export function resolveNotificationRoute(payload: {
 
   // 7. Créditos
   if (type.startsWith('CREDIT_') || type.startsWith('PAYMENT_') || resourceType === 'credit') {
-    return safeId ? `/panel/credits/${safeId}` : '/panel/credits'
+    return '/panel/credits'
   }
 
   // 8. Proveedores

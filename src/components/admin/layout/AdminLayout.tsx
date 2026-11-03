@@ -266,9 +266,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
         <div className="space-y-2 border-t border-border bg-muted/20 p-4">
           <SubscriptionChip variant="sidebar" />
-          <Link href="/dashboard" onClick={() => setMobileSidebarOpen(false)} className={cn('flex items-center rounded-xl border border-transparent text-muted-foreground shadow-sm transition-all duration-200 hover:border-border hover:bg-background hover:text-foreground', collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5')} title="Volver a Inicio">
+          {/* Salida del área de administración: destacada para no confundirla con una sección más. */}
+          <Link href="/dashboard" onClick={() => setMobileSidebarOpen(false)} className={cn('flex items-center rounded-xl bg-primary font-semibold text-primary-foreground shadow-sm ring-1 ring-primary/30 transition-all duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5')} title="Volver al panel de inicio" aria-label="Volver al panel de inicio">
             <ArrowLeft className={cn('flex-shrink-0', collapsed ? 'h-5 w-5' : 'h-4 w-4')} />
-            {!collapsed && <span className="text-sm font-medium">Volver a Inicio</span>}
+            {!collapsed && <span className="text-sm">Volver al panel de inicio</span>}
           </Link>
         </div>
       </aside>
@@ -316,10 +317,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
               )}
 
               {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-border/80 shadow-sm sm:inline-flex">
-                  <Link href="/dashboard" className="flex items-center gap-1.5">
+                <Button asChild size="sm" className="h-9 gap-1.5 shadow-sm">
+                  <Link href="/dashboard" className="flex items-center gap-1.5" aria-label="Volver al panel de inicio" title="Volver al panel de inicio">
                     <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="hidden font-medium lg:inline">Inicio</span>
+                    <span className="hidden font-semibold sm:inline">Volver al panel</span>
                   </Link>
                 </Button>
               )}

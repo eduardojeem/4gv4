@@ -1,8 +1,10 @@
+import type { MarketplaceCategory } from '@/lib/public/marketplace'
 import { getMarketplaceCategories } from '@/lib/public/marketplace'
 import { CompactCategoryBar } from './CompactCategoryBar'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Props = {
+  categories?: MarketplaceCategory[]
   activeId?: string
   title?: string
   subtitle?: string
@@ -13,11 +15,12 @@ type Props = {
 
 // ─── Server component — fetches data and delegates to client bar ──────────────
 export async function CategoryCarouselSection({
+  categories: providedCategories,
   activeId,
   showViewAll = true,
   showCount = true,
 }: Props) {
-  const categories = await getMarketplaceCategories().catch(() => [])
+  const categories = providedCategories ?? await getMarketplaceCategories().catch(() => [])
   if (!categories.length) return null
 
   return (

@@ -1,3 +1,5 @@
+import { publicStoreAction } from '../../../src/lib/public/marketplace-location';
+import { useAfterDismiss } from '@/lib/after-dismiss';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -31,9 +33,12 @@ export function StoreDetailSheet({
 }: StoreDetailSheetProps) {
   const colors = usePalette();
   const insets = useSafeAreaInsets();
+  const {schedule,onDismiss}=useAfterDismiss();
 
   if (!store) return null;
 
+  const action=publicStoreAction(store);
+  const openStore=()=>{schedule(()=>{void openWeb(storePath(store));});onClose();};
   const handleShare = async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -57,9 +62,9 @@ export function StoreDetailSheet({
     const rawNumber = store.whatsapp ? store.whatsapp.replace(/\D/g, '') : null;
     if (rawNumber && rawNumber.length >= 8) {
       let phoneWithCountry = rawNumber;
-      if (rawNumber.startsWith('09')) {
+      if ((store.countryCode??'PY')==='PY' && rawNumber.startsWith('09')) {
         phoneWithCountry = `595${rawNumber.slice(1)}`;
-      } else if (rawNumber.startsWith('9')) {
+      } else if ((store.countryCode??'PY')==='PY' && rawNumber.startsWith('9')) {
         phoneWithCountry = `595${rawNumber}`;
       }
       await Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${message}`);
@@ -69,7 +74,7 @@ export function StoreDetailSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onDismiss={onDismiss}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Cerrar tienda" />
         <View
@@ -119,7 +124,7 @@ export function StoreDetailSheet({
                 <View style={styles.storeLocation}>
                   <Ionicons name="location-outline" size={14} color={colors.muted} />
                   <Text style={[styles.storeLocationText, { color: colors.muted }]}>
-                    {[store.city, store.rubro].filter(Boolean).join(' · ')}
+                    {[[...new Set(store.locations?.map(location=>location.city)??[])].join(' · ')||store.city, store.rubro].filter(Boolean).join(' · ')}
                   </Text>
                 </View>
               )}
@@ -153,17 +158,19 @@ export function StoreDetailSheet({
           <View style={[styles.footerBar, { borderTopColor: colors.border }]}>
             <Pressable
               onPress={() => {
+                if(action.kind==='services'){openStore();return;}
+                if(action.kind==='repairs'){schedule(()=>{void handleWhatsApp();});onClose();return;}
                 onClose();
                 onViewProducts(store.slug);
               }}
               style={[styles.primaryBtn, { backgroundColor: palette.primary }]}>
               <Ionicons name="bag-handle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryBtnText}>Ver Productos en la App</Text>
+              <Text style={styles.primaryBtnText}>{action.label}</Text>
             </Pressable>
 
             <View style={styles.secondaryBtnRow}>
               <Pressable
-                onPress={handleWhatsApp}
+                onPress={()=>{schedule(()=>{void handleWhatsApp();});onClose();}}
                 style={[styles.halfBtn, { backgroundColor: '#10B981' }]}>
                 <Ionicons name="logo-whatsapp" size={17} color="#FFFFFF" />
                 <Text style={styles.halfBtnText}>WhatsApp</Text>
@@ -172,7 +179,7 @@ export function StoreDetailSheet({
               <Pressable
                 onPress={async () => {
                   await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  openWeb(storePath(store));
+                  openStore();
                 }}
                 style={[styles.halfBtnOutline, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <Ionicons name="globe-outline" size={17} color={colors.text} />

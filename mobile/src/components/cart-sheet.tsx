@@ -13,15 +13,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { formatGs, openWeb, storePath } from '@/lib/marketplace';
+import { formatMarketPrice, openWeb, storePath } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 
 export interface CartItem {
   id: string;
   name: string;
   price: number;
+  currency?: string;
   image: string | null;
-  store: { name: string; slug: string; whatsapp?: string | null };
+  store: { name: string; slug: string; whatsapp?: string | null; countryCode?: string | null };
   quantity: number;
 }
 
@@ -43,6 +44,7 @@ export function CartSheet({
   onClearCart,
 }: CartSheetProps) {
   const colors = usePalette();
+  const formatGs=(value:number)=>formatMarketPrice(value,items[0]?.currency??'PYG');
   const insets = useSafeAreaInsets();
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -74,9 +76,9 @@ export function CartSheet({
     const rawNumber = group.store.whatsapp ? group.store.whatsapp.replace(/\D/g, '') : null;
     if (rawNumber && rawNumber.length >= 8) {
       let phoneWithCountry = rawNumber;
-      if (rawNumber.startsWith('09')) {
+      if ((group.store.countryCode??'PY')==='PY' && rawNumber.startsWith('09')) {
         phoneWithCountry = `595${rawNumber.slice(1)}`;
-      } else if (rawNumber.startsWith('9')) {
+      } else if ((group.store.countryCode??'PY')==='PY' && rawNumber.startsWith('9')) {
         phoneWithCountry = `595${rawNumber}`;
       }
       await Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${message}`);
