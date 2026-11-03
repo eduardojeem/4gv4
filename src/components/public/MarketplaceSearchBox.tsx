@@ -2,7 +2,7 @@
 
 import { useMarketplaceLocationHref } from './MarketplaceLocationPicker'
 
-import { FocusEvent, FormEvent, useEffect, useState } from 'react'
+import { FocusEvent, FormEvent, Suspense, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,27 @@ type Props = {
   onFocusChange?: (focused: boolean) => void
 }
 
-export function MarketplaceSearchBox({
+const keepHref = (href: string) => href
+
+/**
+ * El buscador lee la ubicación de la URL (useSearchParams). En una página que se
+ * genera estática, eso sin <Suspense> corta el build de Next 16. Mientras no
+ * hay URL, se pinta el mismo buscador sin el filtro de ubicación.
+ */
+export function MarketplaceSearchBox(props: Props) {
+  return (
+    <Suspense fallback={<SearchBox {...props} withLocation={keepHref} />}>
+      <LocatedSearchBox {...props} />
+    </Suspense>
+  )
+}
+
+function LocatedSearchBox(props: Props) {
+  const withLocation = useMarketplaceLocationHref()
+  return <SearchBox {...props} withLocation={withLocation} />
+}
+
+function SearchBox({
   className,
   inputClassName,
   buttonClassName,
@@ -33,8 +53,8 @@ export function MarketplaceSearchBox({
   autoFocus = false,
   initialQuery = '',
   onFocusChange,
-}: Props) {
-  const withLocation=useMarketplaceLocationHref()
+  withLocation,
+}: Props & { withLocation: (href: string) => string }) {
   const router = useRouter()
   const [query, setQuery] = useState(initialQuery)
   const [focused, setFocused] = useState(false)
