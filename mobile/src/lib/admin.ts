@@ -272,6 +272,10 @@ export async function updateBranch(
 // ─── Finanzas ───────────────────────────────────────────────────────────────
 
 export type FinanceSummaryData = {
+  complete?: boolean;
+  generatedAt?: string;
+  filters?: { startDate: string; endDate: string; branchId?: string | null };
+  coverageWarnings?: { code: string; message: string; sourceId?: string; sourceLabel?: string; sourceType?: string }[];
   accrued: {
     revenue: number;
     directCosts: number;
@@ -299,6 +303,8 @@ export async function fetchFinanceSummary(params?: { startDate?: string; endDate
   try {
     return await apiFetch<FinanceSummaryData>(`/api/admin/finances/summary${qs ? `?${qs}` : ''}`);
   } catch (error) {
+    // Mantener el motivo del servidor: un módulo desactivado no es un error de rol.
+    if (error instanceof ApiError) throw error;
     return fail(error, 'No se pudo cargar el resumen financiero.');
   }
 }
@@ -360,3 +366,35 @@ export const WEB_SECTIONS: { label: string; hint: string; path: string; icon: st
   { label: 'Datos del negocio', hint: 'Rubro, contacto y visibilidad', path: '/admin/onboarding', icon: 'storefront-outline' },
   { label: 'Guía del sistema', hint: 'Manual operativo paso a paso', path: '/admin/guia', icon: 'help-circle-outline' },
 ];
+
+// ─── Detalle de sucursal ───────────────────────────────────────────────────
+
+/** Mismo formato que /api/admin/branches/[id]/insights (src/lib/admin/branch-insights.ts). */
+export type BranchInsights = {
+  generatedAt: string;
+  timeZone: string;
+  sales: {
+    today: { count: number; total: number };
+    last7Days: { count: number; total: number; daily: { date: string; total: number }[] };
+    month: { count: number; total: number };
+    previousMonth: { total: number };
+    monthChangePct: number | null;
+    averageTicket: number;
+    lastSaleAt: string | null;
+    paymentMix: { method: string; total: number; count: number }[];
+    topProducts: { productId: string; name: string; quantity: number; total: number }[];
+  };
+  cash: { registers: { id: string; name: string; isOpen: boolean; balance: number }[]; openCount: number };
+  inventory: { trackedProducts: number; units: number; lowStock: number; outOfStock: number; alerts: { productId: string; name: string; stock: number; minStock: number }[] };
+  repairs: { active: number; ready: number; deliveredThisMonth: number };
+  orders: { open: number; openTotal: number };
+};
+
+export async function fetchBranchInsights(branchId: string): Promise<BranchInsights> {
+  try {
+    const res = await apiFetch<{ insights: BranchInsights }>(`/api/admin/branches/${encodeURIComponent(branchId)}/insights`);
+    return res.insights;
+  } catch (error) {
+    return fail(error, 'No se pudo cargar el detalle de la sucursal.');
+  }
+}

@@ -45,6 +45,7 @@ export interface PublicProductVariant {
 }
 
 export interface PublicProduct {
+  currency?: string | null
   catalog_summary?: PublicCatalogSummary
   id: string
   name: string

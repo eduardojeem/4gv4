@@ -1405,7 +1405,7 @@ function OrderDetailDialog({
   )
 }
 
-export function OrdersDashboard() {
+export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOpen?: boolean } = {}) {
   const { scope, currentScope } = useTenantScope()
   const abortRef = useRef<AbortController | null>(null)
   const statsLoadedRef = useRef(false)
@@ -1426,7 +1426,7 @@ export function OrdersDashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(initialCreateOpen)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null)

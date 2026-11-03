@@ -1,3 +1,4 @@
+import { KeyboardFormScroll } from './keyboard-form-scroll';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
@@ -7,7 +8,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -175,7 +175,7 @@ export function DeliverySheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrap}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.wrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Cerrar entrega" />
         <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 12 }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -191,7 +191,7 @@ export function DeliverySheet({
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <KeyboardFormScroll contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {/* Resultado (lo define la verificación técnica) */}
             <View
               style={[
@@ -329,7 +329,7 @@ export function DeliverySheet({
             )}
 
             {error && <Text style={styles.error}>{error}</Text>}
-          </ScrollView>
+          </KeyboardFormScroll>
 
           <Pressable
             onPress={submit}
@@ -379,7 +379,7 @@ function Total({ label, value, colors, tone }: { label: string; value: string; c
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(2,6,23,0.45)' },
-  sheet: { maxHeight: '92%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8 },
+  sheet: { flexShrink: 1, maxHeight: '92%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginBottom: 10 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 8 },
   title: { fontSize: 19, fontWeight: '800' },

@@ -1,19 +1,16 @@
+import { BottomSheet } from './bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { PatternPicker } from '@/components/pattern-picker';
@@ -72,31 +69,7 @@ function Sheet({
   footer: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const colors = usePalette();
-  const insets = useSafeAreaInsets();
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrap}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={`Cerrar ${title}`} />
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 12 }]}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
-          <View style={styles.head}>
-            <View style={styles.flex}>
-              <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-              {subtitle ? <Text style={[styles.small, { color: colors.muted }]}>{subtitle}</Text> : null}
-            </View>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Cerrar">
-              <Ionicons name="close" size={24} color={colors.muted} />
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-            {children}
-          </ScrollView>
-          {footer}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+  return <BottomSheet visible={visible} title={title} subtitle={subtitle} onClose={onClose} footer={footer}>{children}</BottomSheet>;
 }
 
 function Submit({ label, icon, onPress, disabled, saving, tone = palette.primary }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; disabled?: boolean; saving: boolean; tone?: string }) {

@@ -3,6 +3,7 @@ import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 import { apiFetch } from './api'
 import { secureStorage } from './secure-storage'
+import { CATEGORY_CHANNEL_VERSION, NOTIFICATION_GROUPS } from '../../../src/lib/notifications/presentation'
 
 const DEVICE_ID_STORAGE_KEY = 'mt_push_device_id'
 const PRE_PERMISSION_DISMISSED_KEY = 'mt_push_pre_permission_dismissed'
@@ -75,6 +76,7 @@ export async function getPushPermissionStatus(): Promise<'granted' | 'denied' | 
 export async function requestNativePushPermission(): Promise<'granted' | 'denied'> {
   if (Platform.OS === 'web') return 'denied'
   try {
+    await setupNotificationChannels()
     const settings = await Notifications.requestPermissionsAsync({
       ios: {
         allowAlert: true,
@@ -94,6 +96,9 @@ export async function requestNativePushPermission(): Promise<'granted' | 'denied
  */
 export async function setupNotificationChannels(): Promise<void> {
   if (Platform.OS === 'android') {
+    for (const [key, group] of Object.entries(NOTIFICATION_GROUPS)) {
+      await Notifications.setNotificationChannelAsync(`business-${key}`, { name: group.label, importance: ['orders', 'repairs', 'cash', 'credits'].includes(key) ? Notifications.AndroidImportance.HIGH : Notifications.AndroidImportance.DEFAULT, sound: 'default' })
+    }
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Notificaciones del negocio',
       importance: Notifications.AndroidImportance.MAX,
@@ -128,7 +133,7 @@ export async function registerDeviceForPush(): Promise<{ success: boolean; token
     const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId })
     const pushToken = pushTokenData.data
     const deviceId = await getOrCreateDeviceId()
-    const appVersion = Constants.expoConfig?.version ?? '1.0.0'
+    const appVersion = Constants.expoConfig?.version ?? CATEGORY_CHANNEL_VERSION
     const platform = Platform.OS === 'ios' ? 'ios' : 'android'
 
     await apiFetch('/api/mobile/push/register', {

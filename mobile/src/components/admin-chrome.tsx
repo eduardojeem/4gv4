@@ -1,3 +1,5 @@
+import { PremiumBottomNav, type NavigationItem } from './premium-bottom-nav';
+import { navigationColor } from '@/lib/bottom-nav-model';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
@@ -54,8 +56,8 @@ export function AdminHeader() {
           <Text numberOfLines={1} style={styles.subtitle}>{org?.name ?? 'Tu negocio'}</Text>
         </View>
         <Pressable onPress={() => router.replace('/panel' as never)} accessibilityRole="button" accessibilityLabel="Volver al panel" style={styles.exit}>
-          <Ionicons name="grid-outline" size={15} color="#fff" />
-          <Text style={styles.exitText}>Panel</Text>
+          <Ionicons name="arrow-back" size={15} color={ADMIN.bar} />
+          <Text style={styles.exitText}>Volver al panel</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -63,35 +65,13 @@ export function AdminHeader() {
 }
 
 export function AdminTabBar() {
-  const colors = usePalette();
   const pathname = usePathname();
+  const { data } = usePanel();
   const { open } = useAdminMenu();
   const tabs = ADMIN_TABS.map(adminItem).filter((item): item is AdminNavItem => Boolean(item));
-  const moreActive = !tabs.some((tab) => isActive(pathname, tab));
-  const shortLabel: Record<string, string> = { overview: 'Resumen', cash: 'Cajas', users: 'Equipo', reviews: 'Reseñas' };
-
-  return (
-    <SafeAreaView edges={['bottom']} style={[styles.tabBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.tabRow}>
-        {tabs.map((item) => (
-          <Tab key={item.key} icon={item.icon} label={shortLabel[item.key] ?? item.label} active={isActive(pathname, item)} onPress={() => go(item)} colors={colors} />
-        ))}
-        <Tab icon="menu-outline" label="Más" active={moreActive} onPress={open} colors={colors} />
-      </View>
-    </SafeAreaView>
-  );
-}
-
-function Tab({ icon, label, active, onPress, colors }: { icon: AdminNavItem['icon']; label: string; active: boolean; onPress: () => void; colors: ReturnType<typeof usePalette> }) {
-  const name = active ? (icon.replace('-outline', '') as typeof icon) : icon;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={label} style={styles.tab}>
-      <View style={[styles.tabIcon, active && { backgroundColor: 'rgba(79,70,229,0.14)' }]}>
-        <Ionicons name={name} size={22} color={active ? '#4F46E5' : colors.muted} />
-      </View>
-      <Text numberOfLines={1} style={[styles.tabLabel, { color: active ? '#4F46E5' : colors.muted }, active && styles.tabLabelActive]}>{label}</Text>
-    </Pressable>
-  );
+  const items: NavigationItem[] = tabs.map(item => ({ key: item.key, label: item.key === 'overview' ? 'Resumen' : item.label, icon: item.icon, active: isActive(pathname, item), onPress: () => go(item) }));
+  items.push({ key: 'more', label: 'Más', icon: 'grid-outline', active: !items.some(item => item.active), onPress: open });
+  return <PremiumBottomNav items={items} brand={navigationColor(data?.organization.brandColor, data?.organization.customBrandColor)} />;
 }
 
 /** Menú lateral con las mismas categorías que la barra de /admin. */
@@ -150,9 +130,10 @@ function AdminDrawer({ visible, onClose }: { visible: boolean; onClose: () => vo
                 onClose();
                 router.replace('/panel' as never);
               }}
-              style={[styles.back, { borderColor: colors.border }]}>
-              <Ionicons name="arrow-back" size={18} color={palette.primary} />
-              <Text style={[styles.itemLabel, { color: palette.primary }]}>Volver al panel</Text>
+              accessibilityRole="button"
+              style={[styles.back, { backgroundColor: palette.primary }]}>
+              <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+              <Text style={[styles.itemLabel, { color: '#FFFFFF' }]}>Volver al panel de inicio</Text>
             </Pressable>
           </ScrollView>
         </SafeAreaView>
@@ -170,14 +151,9 @@ const styles = StyleSheet.create({
   badge: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(165,180,252,0.15)', alignItems: 'center', justifyContent: 'center' },
   title: { color: '#fff', fontSize: 16, fontWeight: '800' },
   subtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 1 },
-  exit: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
-  exitText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  tabBar: { borderTopWidth: StyleSheet.hairlineWidth },
-  tabRow: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 6, paddingBottom: 4 },
-  tab: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 2 },
-  tabIcon: { width: 48, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  tabLabel: { fontSize: 11, fontWeight: '600' },
-  tabLabelActive: { fontWeight: '800' },
+  // La salida al panel va en el color del área, bien visible: antes se perdía como un botón gris más.
+  exit: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 12, minHeight: 36, backgroundColor: ADMIN.accent },
+  exitText: { color: ADMIN.bar, fontSize: 12, fontWeight: '800' },
   drawerWrap: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(15,23,42,0.45)' },
   drawer: { width: '84%', maxWidth: 360 },
   drawerHead: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, backgroundColor: ADMIN.bar },
@@ -191,5 +167,5 @@ const styles = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9 },
   itemLabel: { fontSize: 14, fontWeight: '700' },
   itemHint: { fontSize: 11, marginTop: 1 },
-  back: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 10, paddingHorizontal: 10, paddingTop: 14 },
+  back: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 12, marginTop: 14, paddingHorizontal: 14, minHeight: 48 },
 });

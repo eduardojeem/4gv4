@@ -1,3 +1,4 @@
+import type { SubscriptionExpiryNotice } from '../../../src/lib/saas/subscription-expiry-notice';
 import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, panelTransitionAction, setPrivateCacheOrganization, subscribePrivateCacheContext } from './private-cache-context';
 import type { Ionicons } from '@expo/vector-icons';
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from 'react';
@@ -8,8 +9,9 @@ export type PanelItem = { key: string; label: string; mobileLabel: string | null
 export type PanelGroup = { id: string; label: string; items: PanelItem[] };
 
 export type PanelData = {
+  subscriptionNotice?: SubscriptionExpiryNotice | null;
   user: { email: string | null; name: string | null; avatarUrl: string | null; isAdmin: boolean; isSuperAdmin: boolean };
-  organization: { id: string; name: string; slug: string; logoUrl: string | null; role: string; plan: string };
+  organization: { id: string; name: string; slug: string; logoUrl: string | null; role: string; plan: string; brandColor?: string; customBrandColor?: string };
   groups: PanelGroup[];
   tabs: string[];
   /** Sección principal del rubro (taller o agenda); null en comercios de productos. */

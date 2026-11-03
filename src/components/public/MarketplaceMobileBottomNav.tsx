@@ -1,5 +1,7 @@
 'use client'
 
+import { useMarketplaceLocationHref } from './MarketplaceLocationPicker'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -15,7 +17,10 @@ import { useAuth } from '@/contexts/auth-context'
 import { AuthModal } from '@/components/public/AuthModal'
 import { cn } from '@/lib/utils'
 
+export const MARKETPLACE_PROFILE_PATH = '/marketplace/perfil'
+
 export function MarketplaceMobileBottomNav() {
+  const withLocation=useMarketplaceLocationHref()
   const pathname = usePathname()
   const { user } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
@@ -25,6 +30,11 @@ export function MarketplaceMobileBottomNav() {
     user?.role === 'admin' ||
     user?.role === 'tecnico' ||
     user?.role === 'vendedor'
+
+  const accountHref = canAccessDashboard ? '/dashboard' : MARKETPLACE_PROFILE_PATH
+  const accountActive = canAccessDashboard
+    ? pathname.startsWith('/dashboard')
+    : pathname === MARKETPLACE_PROFILE_PATH || pathname.startsWith(`${MARKETPLACE_PROFILE_PATH}/`)
 
   const tabs = [
     { href: '/marketplace', label: 'Inicio', icon: Home, exact: true },
@@ -41,12 +51,12 @@ export function MarketplaceMobileBottomNav() {
       >
         {tabs.map((tab) => {
           const Icon = tab.icon
-          const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href)
+          const isActive = tab.exact ? (pathname === tab.href || tab.href==='/marketplace'&&pathname==='/marketplace/explorar') : pathname.startsWith(tab.href)
 
           return (
             <Link
               key={tab.href}
-              href={tab.href}
+              href={withLocation(tab.href)}
               className={cn(
                 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
                 isActive
@@ -69,13 +79,14 @@ export function MarketplaceMobileBottomNav() {
           )
         })}
 
-        {/* Tab 5: Mi Cuenta / Panel */}
+        {/* Tab 5: Mi Cuenta / Panel. El comprador va a su perfil del marketplace (antes volvía al inicio). */}
         {user ? (
           <Link
-            href={canAccessDashboard ? '/dashboard' : '/marketplace'}
+            href={accountHref}
+            aria-current={accountActive ? 'page' : undefined}
             className={cn(
               'group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold transition-all select-none',
-              pathname.startsWith('/dashboard')
+              accountActive
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             )}
@@ -83,7 +94,7 @@ export function MarketplaceMobileBottomNav() {
             <div
               className={cn(
                 'flex h-7 w-7 items-center justify-center rounded-xl transition-all duration-200',
-                pathname.startsWith('/dashboard')
+                accountActive
                   ? 'bg-primary/10 text-primary scale-110 shadow-xs'
                   : 'group-hover:bg-muted text-muted-foreground'
               )}

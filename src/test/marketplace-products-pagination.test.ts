@@ -9,7 +9,7 @@ const SEARCH = readFileSync(resolve(process.cwd(), 'src/app/marketplace/buscar/p
 describe('/marketplace/productos usa un catalogo paginado de verdad', () => {
   it('calcula el offset y pide solo el rango de la pagina actual', () => {
     expect(PAGE).toContain('const offset = (requestedPage - 1) * pageSize')
-    expect(PAGE).toContain('getMarketplaceProductsPage(pageSize, { q, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })')
+    expect(PAGE).toContain('getMarketplaceProductsPage(pageSize, { country, city, q, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })')
     expect(PAGE).toContain('totalProducts={productPage.total}')
     expect(PAGE).toContain('serverPaginated')
   })

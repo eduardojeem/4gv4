@@ -2,25 +2,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { apiFetch } from '@/lib/api';
+import { useAfterDismiss } from '@/lib/after-dismiss';
+import { accountDisplayName, canOpenBusinessPanel, useMarketplaceAccount } from '@/lib/marketplace-account';
 import { palette, usePalette } from '@/lib/palette';
 import { ROLE_LABELS } from '@/lib/panel';
 import { useSession } from '@/lib/session';
-
-type OrganizationContext = {
-  activeOrganization?: { id: string; name: string; slug: string; role: string };
-};
 
 type MarketplaceHeaderProps = {
   showBack?: boolean;
@@ -30,6 +31,14 @@ type MarketplaceHeaderProps = {
   onOpenCart?: () => void;
 };
 
+type IconName = keyof typeof Ionicons.glyphMap;
+
+/**
+ * Cabecera del marketplace con el menú de cuenta. El menú usa los mismos datos
+ * que la pestaña Perfil (useMarketplaceAccount): nombre y foto reales, y el
+ * acceso al panel solo para quien tiene un rol en un comercio. El servidor
+ * sigue autorizando cada pantalla del panel.
+ */
 export function MarketplaceHeader({
   showBack,
   onBack,
@@ -37,72 +46,55 @@ export function MarketplaceHeader({
   cartItemCount = 0,
   onOpenCart,
 }: MarketplaceHeaderProps) {
-  const { session, signOut } = useSession();
+  const { signOut } = useSession();
+  const account = useMarketplaceAccount();
   const colors = usePalette();
   const dark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const { schedule, onDismiss } = useAfterDismiss();
   const [menuVisible, setMenuVisible] = useState(false);
-  const [org, setOrg] = useState<{ name: string; role: string } | null>(null);
 
-  // Cargar información de comercio del usuario si tiene sesión activa
-  useEffect(() => {
-    if (!session) return;
-    let active = true;
-    apiFetch<OrganizationContext>('/api/organization-context')
-      .then((data) => {
-        if (active && data.activeOrganization) {
-          setOrg({
-            name: data.activeOrganization.name,
-            role: data.activeOrganization.role,
-          });
-        }
-      })
-      .catch(() => {
-        // En caso de que no tenga org asociada o falle la llamada
-      });
-    return () => {
-      active = false;
-    };
-  }, [session]);
+  const signedIn = account.kind === 'buyer';
+  const name = accountDisplayName(account);
+  const initial = (account.fullName || account.email || '?').trim().charAt(0).toUpperCase();
+  const business = account.business;
+  const panelAllowed = canOpenBusinessPanel(business);
 
-  const activeOrg = session ? org : null;
-
-  const toggleMenu = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMenuVisible((prev) => !prev);
+  const openMenu = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    setMenuVisible(true);
   };
 
-  const handleGoToPanel = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  /** Cierra el menú y recién después navega: abrir otra pantalla con el modal yéndose la deja colgada en iOS. */
+  const closeThen = (action?: () => void) => {
+    if (action) schedule(action);
     setMenuVisible(false);
-    router.push('/panel' as any);
-  };
-
-  const handleGoToSignIn = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMenuVisible(false);
-    router.push('/sign-in' as any);
   };
 
   const handleSignOut = () => {
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro de que deseás salir de tu cuenta?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar sesión',
-          style: 'destructive',
-          onPress: async () => {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            setMenuVisible(false);
-            await signOut();
-          },
+    closeThen(() => Alert.alert('Cerrar sesión', '¿Querés salir de tu cuenta en este teléfono?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        style: 'destructive',
+        onPress: async () => {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+          await signOut();
         },
-      ]
-    );
+      },
+    ]));
   };
 
-  const initial = session?.user.email ? session.user.email.charAt(0).toUpperCase() : null;
+  const avatar = (size: number) => (
+    <View style={[styles.avatarBase, { width: size, height: size, borderRadius: size / 2, backgroundColor: palette.primary }]}>
+      {account.avatarUrl ? (
+        <Image source={{ uri: account.avatarUrl }} style={styles.fill} contentFit="cover" accessibilityIgnoresInvertColors />
+      ) : (
+        <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initial}</Text>
+      )}
+    </View>
+  );
 
   return (
     <>
@@ -123,10 +115,7 @@ export function MarketplaceHeader({
             </Pressable>
           )}
 
-          <Pressable
-            onPress={() => router.replace('/')}
-            accessibilityRole="link"
-            style={styles.brandContainer}>
+          <Pressable onPress={() => router.replace('/')} accessibilityRole="link" style={styles.brandContainer}>
             <Image
               source={require('@/assets/images/branding/brand-icon.png')}
               style={styles.brandIcon}
@@ -147,7 +136,7 @@ export function MarketplaceHeader({
                 onOpenCart();
               }}
               accessibilityRole="button"
-              accessibilityLabel="Ver carrito de compras"
+              accessibilityLabel={cartItemCount > 0 ? `Ver carrito, ${cartItemCount} productos` : 'Ver carrito de compras'}
               style={({ pressed }) => [
                 styles.cartButton,
                 {
@@ -156,43 +145,34 @@ export function MarketplaceHeader({
                   opacity: pressed ? 0.8 : 1,
                 },
               ]}>
-              <Ionicons
-                name={cartItemCount > 0 ? 'cart' : 'cart-outline'}
-                size={19}
-                color={cartItemCount > 0 ? palette.primary : colors.text}
-              />
+              <Ionicons name={cartItemCount > 0 ? 'cart' : 'cart-outline'} size={19} color={cartItemCount > 0 ? palette.primary : colors.text} />
               {cartItemCount > 0 && (
                 <View style={styles.cartBadge}>
-                  <Text style={styles.cartBadgeText}>
-                    {cartItemCount > 99 ? '99+' : cartItemCount}
-                  </Text>
+                  <Text style={styles.cartBadgeText}>{cartItemCount > 99 ? '99+' : cartItemCount}</Text>
                 </View>
               )}
             </Pressable>
           )}
 
-          {/* Botón de Perfil / Menú de Cuenta */}
           <Pressable
-            onPress={toggleMenu}
+            onPress={openMenu}
             accessibilityRole="button"
-            accessibilityLabel="Abrir menú de usuario"
+            accessibilityLabel={signedIn ? `Menú de cuenta de ${name}` : 'Abrir menú de cuenta'}
             style={({ pressed }) => [
               styles.profileButton,
               {
-                backgroundColor: session ? (dark ? 'rgba(37,99,235,0.2)' : 'rgba(37,99,235,0.1)') : colors.background,
-                borderColor: session ? palette.primary : colors.border,
+                backgroundColor: signedIn ? (dark ? 'rgba(37,99,235,0.2)' : 'rgba(37,99,235,0.1)') : colors.background,
+                borderColor: signedIn ? palette.primary : colors.border,
                 opacity: pressed ? 0.8 : 1,
               },
             ]}>
-            {session ? (
+            {signedIn ? (
               <View style={styles.profileActiveRow}>
-                <View style={[styles.avatarCircle, { backgroundColor: palette.primary }]}>
-                  <Text style={styles.avatarText}>{initial}</Text>
-                </View>
-                <Ionicons name="menu" size={17} color={palette.primary} />
+                {avatar(24)}
+                <Ionicons name="chevron-down" size={14} color={palette.primary} />
               </View>
             ) : (
-              <View style={styles.profileGuestRow}>
+              <View style={styles.profileActiveRow}>
                 <Ionicons name="person-circle-outline" size={20} color={colors.text} />
                 <Ionicons name="chevron-down" size={12} color={colors.muted} />
               </View>
@@ -201,398 +181,159 @@ export function MarketplaceHeader({
         </View>
       </View>
 
-      {/* ── Modal Menú de Perfil / Negocio ── */}
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
+      <Modal visible={menuVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => closeThen()} onDismiss={onDismiss}>
+        <View style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => closeThen()} accessibilityLabel="Cerrar menú de cuenta" accessibilityRole="button" />
           <View
-            style={[
-              styles.modalCard,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-            onStartShouldSetResponder={() => true}>
-            
-            {/* Cabecera del Menú */}
-            <View style={[styles.menuHeader, { borderBottomColor: colors.border }]}>
-              {session ? (
-                <View style={styles.menuUserInfo}>
-                  <View style={[styles.largeAvatar, { backgroundColor: palette.primary }]}>
-                    <Text style={styles.largeAvatarText}>{initial}</Text>
-                  </View>
-                  <View style={styles.menuUserTexts}>
-                    <Text numberOfLines={1} style={[styles.menuUserEmail, { color: colors.text }]}>
-                      {session.user.email}
-                    </Text>
-                    {activeOrg ? (
-                      <View style={styles.orgBadgeRow}>
-                        <Ionicons name="business" size={12} color={palette.primary} />
-                        <Text numberOfLines={1} style={[styles.orgName, { color: colors.text }]}>
-                          {activeOrg.name}
-                        </Text>
-                        <Text style={[styles.orgRole, { color: colors.muted }]}>
-                          ({ROLE_LABELS[activeOrg.role] ?? activeOrg.role})
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={[styles.userBadge, { color: palette.success }]}>
-                        ● Cuenta activa
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.menuGuestHeader}>
-                  <View style={[styles.largeAvatar, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
-                    <Ionicons name="storefront" size={24} color={palette.primary} />
-                  </View>
-                  <View style={styles.menuUserTexts}>
-                    <Text style={[styles.menuUserTitle, { color: colors.text }]}>
-                      Mi tiendaPY<Text style={{ color: palette.primary }}>.com</Text>
-                    </Text>
-                    <Text style={[styles.menuUserSub, { color: colors.muted }]}>
-                      Marketplace & Sistema Comercial
-                    </Text>
-                  </View>
+            accessibilityViewIsModal
+            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, maxHeight: height - insets.top - insets.bottom - 24 }]}>
+            {/* Cabecera: quién soy */}
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              {signedIn ? avatar(48) : (
+                <View style={[styles.avatarBase, styles.guestAvatar, { backgroundColor: dark ? 'rgba(37,99,235,0.2)' : 'rgba(37,99,235,0.1)' }]}>
+                  <Ionicons name="person-outline" size={24} color={palette.primary} />
                 </View>
               )}
-              <Pressable onPress={() => setMenuVisible(false)} hitSlop={8} style={styles.closeBtn}>
-                <Ionicons name="close" size={20} color={colors.muted} />
+              <View style={styles.flex}>
+                <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>{name}</Text>
+                <Text numberOfLines={1} style={[styles.sub, { color: colors.muted }]}>
+                  {signedIn ? account.email : 'Entrá para ver tus pedidos y guardar favoritos'}
+                </Text>
+              </View>
+              <Pressable onPress={() => closeThen()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar" style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color={colors.muted} />
               </Pressable>
             </View>
 
-            {/* Opciones del Menú */}
-            <View style={styles.menuActions}>
-              {onOpenProfile && (
-                <Pressable
-                  onPress={async () => {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMenuVisible(false);
-                    onOpenProfile();
-                  }}
-                  style={({ pressed }) => [
-                    styles.actionRow,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.8 : 1,
-                    },
-                  ]}>
-                  <View style={[styles.actionIconBox, { backgroundColor: palette.primary }]}>
-                    <Ionicons name="person" size={17} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.actionTextBox}>
-                    <Text style={[styles.actionTitle, { color: colors.text }]}>
-                      Mi Perfil de Usuario
-                    </Text>
-                    <Text style={[styles.actionSub, { color: colors.muted }]}>
-                      Datos personales, compras y preferencias
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-                </Pressable>
-              )}
-
-              {session ? (
+            <ScrollView contentContainerStyle={styles.body} bounces={false} showsVerticalScrollIndicator={false}>
+              {signedIn ? (
                 <>
-                  {/* Opción 1: Ir al Panel */}
-                  <Pressable
-                    onPress={handleGoToPanel}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: dark ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.06)',
-                        borderColor: palette.primary,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: palette.primary }]}>
-                      <Ionicons name="grid" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: palette.primary }]}>
-                        Ir a Mi Panel de Control
-                      </Text>
-                      <Text style={[styles.actionSub, { color: colors.muted }]}>
-                        Ventas, cobranzas, stock y órdenes de taller
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={palette.primary} />
-                  </Pressable>
+                  <Group label="Mi cuenta" colors={colors}>
+                    {onOpenProfile && (
+                      <Row icon="person-outline" title="Mi perfil" sub="Actividad, favoritos y carrito" colors={colors} onPress={() => closeThen(onOpenProfile)} />
+                    )}
+                    <Row icon="bag-handle-outline" title="Mis pedidos" sub="Compras en las tiendas" colors={colors} onPress={() => closeThen(() => router.push('/mis-pedidos' as never))} />
+                    <Row icon="create-outline" title="Editar perfil" sub="Nombre, teléfono y foto" colors={colors} onPress={() => closeThen(() => router.push('/mi-cuenta' as never))} />
+                  </Group>
 
-                  {/* Opción 2: ¿Tenés un negocio? */}
-                  <Pressable
-                    onPress={async () => {
-                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setMenuVisible(false);
-                      router.push('/saas' as any);
-                    }}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: '#7C3AED' }]}>
-                      <Ionicons name="rocket" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: colors.text }]}>
-                        ¿Tenés un negocio?
-                      </Text>
-                      <Text style={[styles.actionSub, { color: colors.muted }]}>
-                        Conocé nuestro software SaaS, planes y POS
-                      </Text>
-                    </View>
-                    <Ionicons name="arrow-forward" size={15} color={colors.muted} />
-                  </Pressable>
+                  <Group label="Mi negocio" colors={colors}>
+                    {panelAllowed && business.state === 'member' ? (
+                      <Row
+                        icon="grid-outline"
+                        title={`Panel de ${business.organization.name}`}
+                        sub={`Tu rol: ${ROLE_LABELS[business.organization.role] ?? business.organization.role}`}
+                        colors={colors}
+                        highlight
+                        onPress={() => closeThen(() => router.push('/panel' as never))}
+                      />
+                    ) : account.status === 'loading' ? (
+                      <View style={styles.inline}>
+                        <ActivityIndicator size="small" color={palette.primary} />
+                        <Text style={[styles.sub, { color: colors.muted }]}>Revisando si tenés un negocio…</Text>
+                      </View>
+                    ) : business.state === 'unknown' ? (
+                      <Pressable onPress={account.reload} accessibilityRole="button" style={styles.inline}>
+                        <Ionicons name="refresh" size={16} color={palette.primary} />
+                        <Text style={[styles.sub, { color: colors.muted }]}>No pudimos revisar tu negocio. <Text style={{ color: palette.primary, fontWeight: '700' }}>Reintentar</Text></Text>
+                      </Pressable>
+                    ) : (
+                      <Row icon="storefront-outline" title="¿Tenés un negocio?" sub="Vendé en el marketplace con tu propio sistema" colors={colors} onPress={() => closeThen(() => router.push('/saas' as never))} />
+                    )}
+                  </Group>
 
-                  {/* Opción 3: Cerrar sesión */}
-                  <Pressable
-                    onPress={handleSignOut}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: 'rgba(220,38,38,0.1)' }]}>
-                      <Ionicons name="log-out-outline" size={18} color={palette.danger} />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: palette.danger }]}>
-                        Cerrar sesión
-                      </Text>
-                      <Text style={[styles.actionSub, { color: colors.muted }]}>
-                        Desconectar este dispositivo de tu cuenta
-                      </Text>
-                    </View>
-                  </Pressable>
+                  <Row icon="log-out-outline" title="Cerrar sesión" colors={colors} danger onPress={handleSignOut} />
                 </>
               ) : (
                 <>
-                  {/* Opción 1: Iniciar Sesión */}
                   <Pressable
-                    onPress={handleGoToSignIn}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: palette.primary,
-                        borderColor: palette.primary,
-                        opacity: pressed ? 0.88 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                      <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: '#FFFFFF' }]}>
-                        Iniciar sesión
-                      </Text>
-                      <Text style={[styles.actionSub, { color: 'rgba(255,255,255,0.85)' }]}>
-                        Entrá con tu cuenta comercial del sistema
-                      </Text>
-                    </View>
-                    <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                    onPress={() => closeThen(() => router.push('/sign-in' as never))}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.primary, { opacity: pressed ? 0.88 : 1 }]}>
+                    <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.primaryText}>Iniciar sesión</Text>
                   </Pressable>
-
-                  {/* Opción 2: ¿Tenés un negocio? */}
-                  <Pressable
-                    onPress={async () => {
-                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setMenuVisible(false);
-                      router.push('/saas' as any);
-                    }}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: '#7C3AED' }]}>
-                      <Ionicons name="rocket" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: colors.text }]}>
-                        ¿Tenés un negocio?
-                      </Text>
-                      <Text style={[styles.actionSub, { color: colors.muted }]}>
-                        POS, Taller, Stock y Planes desde Gs. 150.000
-                      </Text>
-                    </View>
-                    <Ionicons name="arrow-forward" size={15} color={colors.muted} />
-                  </Pressable>
-
-                  {/* Opción 3: Explorar catálogo */}
-                  <Pressable
-                    onPress={() => {
-                      setMenuVisible(false);
-                      router.push('/products' as any);
-                    }}
-                    style={({ pressed }) => [
-                      styles.actionRow,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}>
-                    <View style={[styles.actionIconBox, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
-                      <Ionicons name="cube-outline" size={18} color={palette.primary} />
-                    </View>
-                    <View style={styles.actionTextBox}>
-                      <Text style={[styles.actionTitle, { color: colors.text }]}>
-                        Ver todos los productos
-                      </Text>
-                      <Text style={[styles.actionSub, { color: colors.muted }]}>
-                        Catálogo público de todas las empresas
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={15} color={colors.muted} />
-                  </Pressable>
+                  <Row icon="cube-outline" title="Ver productos" sub="Catálogo de todas las tiendas" colors={colors} onPress={() => closeThen(() => router.push('/products' as never))} />
+                  <Row icon="storefront-outline" title="¿Tenés un negocio?" sub="Conocé el sistema y sus planes" colors={colors} onPress={() => closeThen(() => router.push('/saas' as never))} />
                 </>
               )}
-            </View>
-
+            </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );
 }
 
+function Group({ label, colors, children }: { label: string; colors: ReturnType<typeof usePalette>; children: ReactNode }) {
+  return (
+    <View style={styles.group}>
+      <Text style={[styles.groupLabel, { color: colors.muted }]}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function Row({ icon, title, sub, onPress, colors, highlight, danger }: {
+  icon: IconName;
+  title: string;
+  sub?: string;
+  onPress: () => void;
+  colors: ReturnType<typeof usePalette>;
+  highlight?: boolean;
+  danger?: boolean;
+}) {
+  const tint = danger ? palette.danger : palette.primary;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.row,
+        { borderColor: highlight ? palette.primary : colors.border, backgroundColor: highlight ? 'rgba(37,99,235,0.08)' : colors.background, opacity: pressed ? 0.8 : 1 },
+      ]}>
+      <View style={[styles.rowIcon, { backgroundColor: danger ? 'rgba(220,38,38,0.1)' : 'rgba(37,99,235,0.1)' }]}>
+        <Ionicons name={icon} size={18} color={tint} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={[styles.rowTitle, { color: danger ? palette.danger : colors.text }]}>{title}</Text>
+        {sub ? <Text style={[styles.sub, { color: colors.muted }]}>{sub}</Text> : null}
+      </View>
+      {!danger && <Ionicons name="chevron-forward" size={16} color={colors.muted} />}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  nav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  navLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  flex: { flex: 1 },
+  fill: { width: '100%', height: '100%' },
+  nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  navLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   backBtn: { padding: 4 },
-  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
   brandIcon: { width: 30, height: 30, borderRadius: 9 },
-  brandTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5 },
-
-  cartButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#DC2626',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
-  },
-
-  profileButton: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  profileActiveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  avatarCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  profileGuestRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 20,
-    gap: 16,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  menuHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  menuUserInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 8 },
-  menuGuestHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 8 },
-  largeAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  largeAvatarText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  menuUserTexts: { flex: 1, gap: 2 },
-  menuUserEmail: { fontSize: 15, fontWeight: '800' },
-  menuUserTitle: { fontSize: 16, fontWeight: '900', letterSpacing: -0.4 },
-  menuUserSub: { fontSize: 12 },
-  userBadge: { fontSize: 12, fontWeight: '700' },
-  orgBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  orgName: { fontSize: 13, fontWeight: '700' },
-  orgRole: { fontSize: 12 },
-  closeBtn: { padding: 4 },
-
-  menuActions: { gap: 10 },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
-  },
-  actionIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTextBox: { flex: 1, gap: 2 },
-  actionTitle: { fontSize: 14, fontWeight: '700' },
-  actionSub: { fontSize: 11, lineHeight: 15 },
+  brandTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5, flexShrink: 1 },
+  cartButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cartBadge: { position: 'absolute', top: -3, right: -3, backgroundColor: '#DC2626', borderRadius: 10, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  cartBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  profileButton: { borderWidth: 1, borderRadius: 22, paddingHorizontal: 8, minHeight: 40, justifyContent: 'center' },
+  profileActiveRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  avatarBase: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  guestAvatar: { width: 48, height: 48, borderRadius: 24 },
+  avatarText: { color: '#FFFFFF', fontWeight: '800' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
+  card: { width: '100%', maxWidth: 420, borderRadius: 24, borderWidth: 1, overflow: 'hidden', elevation: 8, shadowColor: '#0F172A', shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  name: { fontSize: 16, fontWeight: '800' },
+  sub: { fontSize: 12, lineHeight: 16 },
+  closeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  body: { padding: 16, gap: 14 },
+  group: { gap: 8 },
+  groupLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, minHeight: 56, paddingVertical: 8 },
+  rowIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  rowTitle: { fontSize: 14, fontWeight: '700' },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  primary: { minHeight: 50, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primary },
+  primaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
 });

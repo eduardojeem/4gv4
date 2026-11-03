@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { DIRECTORY_STAT_MINIMUMS } from '@/lib/public/business-directory'
 import { Building2, ChevronRight, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getMarketplaceOrganizations } from '@/lib/public/marketplace'
+import { getAllMarketplaceOrganizations } from '@/lib/public/marketplace'
 import { EmpresasClient } from '@/components/public/EmpresasClient'
 import { TopRatedCarousel } from '@/components/public/TopRatedCarousel'
 
@@ -15,12 +15,12 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; rubro?: string; ciudad?: string; city?: string; orden?: string }>
+  searchParams: Promise<{ country?: string; q?: string; rubro?: string; ciudad?: string; city?: string; orden?: string }>
 }
 
 export default async function MarketplaceOrganizationsPage({ searchParams }: PageProps) {
-  const { q, rubro, ciudad, city, orden } = await searchParams
-  const organizations = await getMarketplaceOrganizations(120)
+  const { country, q, rubro, ciudad, city, orden } = await searchParams
+  const organizations = (await getAllMarketplaceOrganizations()).filter(store=>!country||country==='all'||(store.countryCode??'unknown')===country)
 
   return (
     <div className="min-h-screen">

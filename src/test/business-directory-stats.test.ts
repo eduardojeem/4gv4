@@ -32,7 +32,8 @@ describe('las cifras del marketplace', () => {
   const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
   it('la portada usa el mismo criterio y cuenta todas las tiendas, no las 24 que trae', () => {
-    const portada = leer('src/app/marketplace/page.tsx')
+    // La portada delega el contenido en MarketplaceHomeContent: se revisan los dos.
+    const portada = leer('src/app/marketplace/page.tsx') + leer('src/components/public/MarketplaceHomeContent.tsx')
     expect(portada).toContain('getMarketplaceOrganizationCount().catch(() => 0)')
     expect(portada).toContain('Math.max(organizations.length, organizationCount)')
     expect(portada).not.toContain('getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES)')

@@ -1,3 +1,4 @@
+import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -302,6 +303,7 @@ async function loadBranchMetricsFallback(branchIds: string[], monthStartIso: str
       .select('branch_id, total_amount, total')
       .in('branch_id', branchIds)
       .gte('created_at', monthStartIso)
+      .in('status', [...COMPLETED_SALE_STATUSES])
 
     if (!full.error) return full
     return supabase
@@ -309,6 +311,7 @@ async function loadBranchMetricsFallback(branchIds: string[], monthStartIso: str
       .select('branch_id, total_amount')
       .in('branch_id', branchIds)
       .gte('created_at', monthStartIso)
+      .in('status', [...COMPLETED_SALE_STATUSES])
   }
 
   const [assignments, registers, sales, repairs] = await Promise.all([

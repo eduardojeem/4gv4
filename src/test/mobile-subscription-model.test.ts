@@ -61,3 +61,13 @@ describe('suscripción en la app', () => {
     expect(screen).toMatch(/PURCHASES_IN_APP \? \(\s*<>[\s\S]*SubscriptionTransferCard[\s\S]*\) : \(/)
   })
 })
+
+it('uses monthly repair usage rather than historical repairs and does not fabricate missing quota data',()=>{
+ const details=normalizeSubscription({...RESPONSE,usage:{repairs:1000},repairUsage:{current:12,startsAt:'2026-11-01T03:00:00Z',endsAt:'2026-12-01T03:00:00Z',timeZone:'America/Asuncion'},currentPlan:{...RESPONSE.currentPlan,limits:{repairs:150,users:'invalid',branches:null}}})
+ const quotas=visibleQuotas(details)
+ expect(quotas.find(row=>row.key==='repairs')).toMatchObject({label:'Reparaciones de este mes',current:12,max:150})
+ expect(quotas.find(row=>row.key==='products')).toMatchObject({current:null,max:undefined})
+ expect(quotas.find(row=>row.key==='users')?.max).toBeUndefined()
+ expect(quotas.find(row=>row.key==='branches')?.max).toBeNull()
+ expect(visibleQuotas(normalizeSubscription(RESPONSE)).find(row=>row.key==='repairs')?.current).toBeNull()
+})

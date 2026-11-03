@@ -460,6 +460,15 @@ describe('Notifications Phase 3 - Expo Push & Mobile Client Tests', () => {
     expect(res.pushAttempted).toBe(0)
   })
 
+  it('push activado con in-app desactivado entrega sin crear aviso en la bandeja', async () => {
+    dbPreferences.push({ organization_id: orgA, user_id: user1, notification_type: 'SALE_CREATED', push_enabled: true, in_app_enabled: false })
+    dbPushDevices.push({ id: 'push-only', organization_id: orgA, user_id: user1, device_id: 'push-only-device', platform: 'android', push_token: 'ExponentPushToken[token1234567890123456789]', enabled: true, app_version: '1.0.0', last_seen_at: new Date().toISOString() })
+    const result = await dispatchNotificationEvent({ organizationId: orgA, type: 'SALE_CREATED', resourceId: 'sale-push-only', targetUserIds: [user1] })
+    expect(result.createdNotifications).toBe(0)
+    expect(dbNotifications).toHaveLength(0)
+    expect(result.pushAttempted).toBe(1)
+    expect(mockFetch).toHaveBeenCalledOnce()
+  })
   it('10. push ON -> eligible push devices resolved', async () => {
     // Dispositivo push activo para user1
     dbPushDevices.push({
@@ -485,6 +494,16 @@ describe('Notifications Phase 3 - Expo Push & Mobile Client Tests', () => {
     expect(res.pushAttempted).toBe(1)
     expect(res.pushDelivered).toBe(1)
     expect(mockFetch).toHaveBeenCalled()
+  })
+
+  it.each(['1.0.0', '1.1.0'])('canal y payload compatibles para build %s', async (version) => {
+    dbPushDevices.push({ id: 'protocol-device', organization_id: orgA, user_id: user1, device_id: 'protocol-device', platform: 'android', push_token: 'ExponentPushToken[token1234567890123456789]', enabled: true, app_version: version, last_seen_at: new Date().toISOString() })
+    const result = await dispatchNotificationEvent({ organizationId: orgA, type: 'SALE_CREATED', resourceId: 'sale-protocol', targetUserIds: [user1] })
+    const messages = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(messages[0].channelId).toBe(version === '1.0.0' ? 'default' : 'business-sales')
+    expect(messages[0].data.organizationId).toBe(orgA)
+    expect(messages[0].data.notificationId).toBe(result.notificationIds[0])
+    expect(messages[0].priority).toBe('normal')
   })
 
   it('11. push failure does not rollback in-app notification', async () => {
@@ -604,7 +623,7 @@ describe('Notifications Phase 3 - Expo Push & Mobile Client Tests', () => {
         resourceType: 'sale',
         resourceId: 'sale-303',
       })
-    ).toBe('/panel/pos')
+    ).toBe('/panel/sales/sale-303')
 
     expect(
       resolveNotificationRoute({

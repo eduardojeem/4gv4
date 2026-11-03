@@ -7,7 +7,9 @@ const workflows = ['ci.yml', 'test.yml'].map((file) => ({
   source: readFileSync(resolve(process.cwd(), '.github/workflows', file), 'utf8'),
 }))
 
+// La portada delega el contenido en MarketplaceHomeContent: se revisan los dos.
 const marketplacePage = readFileSync(resolve(process.cwd(), 'src/app/marketplace/page.tsx'), 'utf8')
+  + readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceHomeContent.tsx'), 'utf8')
 const categoryCarousel = readFileSync(resolve(process.cwd(), 'src/components/public/CategoryCarouselSection.tsx'), 'utf8')
 
 describe('entorno de compilación de CI', () => {

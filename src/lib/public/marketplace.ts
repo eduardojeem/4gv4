@@ -1,3 +1,4 @@
+import { publicLocation, type PublicLocation } from './marketplace-location'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PRODUCT_ORGANIZATION } from '@/lib/supabase/embeds'
 import { logger } from '@/lib/logger'
@@ -82,7 +83,7 @@ async function resolveBrandIds(supabase: ReturnType<typeof createAdminSupabase>,
  * UUID: no existe esa categoria, asi que no hace falta preguntarle nada a la
  * base y el catalogo filtrado por ella esta vacio.
  */
-async function resolveCategoryIds(
+export async function resolveCategoryIds(
   supabase: ReturnType<typeof createAdminSupabase>,
   categoria: string
 ): Promise<string[] | null> {
@@ -148,6 +149,9 @@ async function getShowcaseOrganizationIds(supabase: ReturnType<typeof createAdmi
 }
 
 export type MarketplaceOrganization = {
+  countryCode?: string | null
+  currency?: string | null
+  locations?: PublicLocation[]
   id: string
   name: string
   slug: string
@@ -370,7 +374,7 @@ export function resolveOrganizationRubro(
 
 async function getMarketplaceOrganizationsUncached(
   limit = 24,
-  options?: { q?: string }
+  options?: { q?: string; offset?: number; strict?: boolean }
 ): Promise<MarketplaceOrganization[]> {
   const supabase = createAdminSupabase()
 
@@ -387,8 +391,9 @@ async function getMarketplaceOrganizationsUncached(
     }
   }
 
-  const { data: organizations, error: organizationError } = await organizationQuery.limit(limit)
+  const { data: organizations, error: organizationError } = await organizationQuery.order('id', { ascending: true }).range(options?.offset ?? 0, (options?.offset ?? 0)+limit-1)
 
+  if (organizationError && options?.strict) throw new MarketplaceCatalogUnavailableError()
   if (organizationError || !organizations?.length) return []
 
   const organizationRows = organizations as OrganizationRow[]
@@ -412,8 +417,8 @@ async function getMarketplaceOrganizationsUncached(
 
   const [
     { data: products },
-    { data: orgSettings },
-    { data: branches },
+    { data: orgSettings, error: locationSettingsError },
+    { data: branches, error: locationBranchesError },
     { data: websiteSettings },
     { data: countRows },
     { data: subscriptionRows },
@@ -421,7 +426,7 @@ async function getMarketplaceOrganizationsUncached(
     productsPorTienda,
     supabase
       .from('organization_settings')
-      .select('organization_id, city, company_address')
+      .select('organization_id, city, company_address, country_code, currency')
       .in('organization_id', organizationIds),
     supabase
       .from('branches')
@@ -479,9 +484,12 @@ async function getMarketplaceOrganizationsUncached(
     productsByOrganization.set(product.organization_id, rows)
   })
 
+  if(options?.strict&&(locationSettingsError||locationBranchesError)) throw new MarketplaceCatalogUnavailableError()
   const settingsByOrganization = new Map<
     string,
     {
+      country_code?: string | null
+      currency?: string | null
       city?: string | null
       company_address?: string | null
       company_phone?: string | null
@@ -555,6 +563,9 @@ async function getMarketplaceOrganizationsUncached(
 
     return {
       ...organization,
+      countryCode: orgSetting?.country_code ?? null,
+      currency: orgSetting?.currency ?? null,
+      locations: [...new Map([city,...orgBranches.map(branch=>branch.city)].map(value=>publicLocation(orgSetting?.country_code,value)).filter((value):value is PublicLocation=>Boolean(value)).map(value=>[value.key,value])).values()],
       rubro: resolvedRubro,
       city,
       address,
@@ -574,7 +585,7 @@ async function getMarketplaceOrganizationsUncached(
       business_type: businessType,
       products_count: productCountByOrganization.get(organization.id) ?? 0,
       products_total: productTotalByOrganization.get(organization.id) ?? 0,
-      featured_products: organizationProducts.slice(0, FEATURED_PRODUCTS_PER_ORGANIZATION).map(toPublicProduct),
+      featured_products: organizationProducts.slice(0, FEATURED_PRODUCTS_PER_ORGANIZATION).map(product=>({...toPublicProduct(product),currency:orgSetting?.currency??'PYG'})),
       review_rating_avg: organization.review_rating_avg ?? null,
       review_count: organization.review_count ?? null,
     }
@@ -592,7 +603,9 @@ async function getMarketplaceOrganizationsUncached(
   })
 }
 
-type MarketplaceProductFilters = {
+export type MarketplaceProductFilters = {
+  country?: string
+  city?: string
   organizationId?: string
   q?: string
   categoria?: string
@@ -661,7 +674,8 @@ export function getMarketplaceOrganizations(limit = 24, options?: { q?: string }
     : getCachedMarketplaceOrganizations(limit)
 }
 
-export function getMarketplaceProductsPage(limit = 48, options?: MarketplaceProductFilters) {
+export function getMarketplaceProductsPage(limit = 48, options?: MarketplaceProductFilters): Promise<MarketplaceProductsPage> {
+  if (options?.country || options?.city) return import('./marketplace-location-catalog').then(module=>module.getLocatedProductsPage(limit,options))
   return hasMarketplaceProductFilters(options)
     ? getMarketplaceProductsPageUncached(limit, options)
     : getCachedMarketplaceProductsPage(limit)
@@ -676,6 +690,7 @@ export function getMarketplaceBrands(limit = 50, options?: { categoria?: string 
 }
 
 export type MarketplaceProductsPage = {
+  mixedCurrencies?: boolean
   products: MarketplaceProduct[]
   total: number
   brands?: MarketplaceBrand[]
@@ -784,13 +799,13 @@ async function getMarketplaceProductsPageUncached(
     { data: websiteSettings },
   ] = organizationIds.length > 0
     ? await Promise.all([
-        supabase.from('organization_settings').select('organization_id, city, company_address').in('organization_id', organizationIds),
+        supabase.from('organization_settings').select('organization_id, city, company_address, country_code, currency').in('organization_id', organizationIds),
         supabase.from('branches').select('organization_id, city, address, is_default, is_active').in('organization_id', organizationIds).eq('is_active', true),
         supabase.from('website_settings').select('organization_id, key, value').in('organization_id', organizationIds).in('key', ['company_info']),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }]
 
-  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
+  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null; country_code?: string | null; currency?: string | null }>()
   ;(orgSettings ?? []).forEach((s) => {
     settingsByOrganization.set(s.organization_id, s)
   })
@@ -843,6 +858,7 @@ async function getMarketplaceProductsPageUncached(
         organization_name: organization.name,
         organization_slug: organization.slug,
         organization_logo_url: organization.logo_url ?? null,
+        currency: orgSetting?.currency ?? 'PYG',
         organization_city: city,
         organization_address: address,
         organization_maps_url: mapsHref,
@@ -1056,4 +1072,20 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 
 async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplaceProduct[]> {
   return (await getMarketplaceProductsPageUncached(limit, { onlyOffers: true })).products
+}
+
+export const getAllMarketplaceOrganizations = unstable_cache(async () => {
+ const {count,error}=await createAdminSupabase().from('organizations').select('id',{count:'exact',head:true}).eq('marketplace_public',true).eq('storefront_public',true)
+ if(error||count===null) throw new MarketplaceCatalogUnavailableError()
+ const result:MarketplaceOrganization[]=[]
+ for(let offset=0;offset<count;offset+=120) result.push(...await getMarketplaceOrganizationsUncached(120,{offset,strict:true}))
+ return result
+},['marketplace-full-directory-v1'],{revalidate:300,tags:['marketplace:organizations']})
+
+/** Only existing fixed catalog batches receive shared cache keys. */
+export async function getMarketplaceCatalogBatch(offset=0):Promise<MarketplaceProductsPage>{
+ const first=await getCachedMarketplaceProductsPage(100)
+ if(offset===0)return first
+ if(!Number.isSafeInteger(offset)||offset<0||offset%100!==0||offset>=first.total)return {products:[],total:first.total}
+ return getCachedMarketplaceProductsPage(100,{offset})
 }

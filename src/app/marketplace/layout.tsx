@@ -1,3 +1,5 @@
+import { Suspense } from 'react'
+import { MarketplaceLocationPicker } from '@/components/public/MarketplaceLocationPicker'
 import type { Metadata } from 'next'
 import { MarketplacePublicNav } from '@/components/public/marketplace-public-nav'
 import { MarketplaceMobileBottomNav } from '@/components/public/MarketplaceMobileBottomNav'
@@ -18,9 +20,10 @@ export default async function MarketplaceLayout({
   const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
   return (
     <div className="min-h-screen bg-background text-foreground pb-20 lg:pb-0">
-      <MarketplacePublicNav initialBranding={branding} />
+      <Suspense fallback={null}><MarketplacePublicNav initialBranding={branding} /></Suspense>
+      <Suspense fallback={null}><MarketplaceLocationPicker /></Suspense>
       {children}
-      <MarketplaceMobileBottomNav />
+      <Suspense fallback={null}><MarketplaceMobileBottomNav /></Suspense>
       <SiteAnalyticsTracker />
     </div>
   )

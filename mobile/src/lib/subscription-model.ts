@@ -26,6 +26,8 @@ export type BillingProfile = {
 };
 
 export type SubscriptionDetails = {
+  repairUsage?: { current: number; startsAt: string; endsAt: string; timeZone: string } | null;
+  usageKnown?: Partial<Record<QuotaKey, boolean>>;
   subscription: {
     id: string;
     plan: string;
@@ -68,11 +70,16 @@ export function normalizeSubscription(raw: RawResponse): SubscriptionDetails {
   const limits: Record<string, number | null> = {};
   if (plan && typeof plan.limits === 'object' && plan.limits) {
     for (const [key, value] of Object.entries(plan.limits as Record<string, unknown>)) {
-      limits[key] = value === null || value === undefined ? null : num(value, Number.NaN);
-      if (Number.isNaN(limits[key] as number)) limits[key] = null;
+      if (value === null) limits[key] = null;
+      else if (value !== undefined && value !== '' && Number.isFinite(Number(value))) limits[key] = Number(value);
     }
   }
+  const monthly = raw.repairUsage as SubscriptionDetails['repairUsage'];
+  const validMonthly = monthly && Number.isFinite(monthly.current) && monthly.current >= 0 && Number.isFinite(Date.parse(monthly.startsAt)) && Number.isFinite(Date.parse(monthly.endsAt));
+  const known = (value: unknown) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value));
   return {
+    repairUsage: validMonthly ? monthly : null,
+    usageKnown: Object.fromEntries(['branches','users','cashRegisters','products','services'].map(key => [key,known(key === 'cashRegisters' ? usage.cashRegisters ?? usage.registers : usage[key])])),
     subscription: (raw.subscription as SubscriptionDetails['subscription']) ?? null,
     plan: plan
       ? {
@@ -113,7 +120,8 @@ export function subscriptionStatus(status: string | null | undefined): { label: 
     case 'cancelled':
     case 'canceled': return { label: 'Cancelado', tone: 'neutral' };
     case 'pending': return { label: 'Pago pendiente', tone: 'warning' };
-    default: return { label: status ? 'Sin confirmar' : 'Activo', tone: status ? 'warning' : 'success' };
+    case 'free': return { label: 'Gratis', tone: 'neutral' };
+    default: return { label: 'Sin confirmar', tone: 'warning' };
   }
 }
 
@@ -137,22 +145,22 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   manual: 'Manual',
 };
 
-export const isFreePlan = (plan: SubscriptionDetails['plan']) => !plan || plan.code.toUpperCase() === 'FREE' || plan.price_monthly <= 0;
+export const isFreePlan = (plan: SubscriptionDetails['plan']) => !plan || plan.code.toUpperCase() === 'FREE';
 
 /** Qué cupos mostrar: los de siempre, más Reparaciones y Servicios si el plan trae ese módulo. */
-export function visibleQuotas(details: SubscriptionDetails): { key: QuotaKey; label: string; current: number; max: number | null }[] {
+export function visibleQuotas(details: SubscriptionDetails): { key: QuotaKey; label: string; current: number | null; max: number | null | undefined }[] {
   const modules = details.plan?.modules ?? [];
   const rows: { key: QuotaKey; label: string; show: boolean }[] = [
     { key: 'branches', label: 'Sucursales', show: true },
     { key: 'users', label: 'Miembros del equipo', show: true },
     { key: 'cashRegisters', label: 'Cajas registradoras', show: true },
     { key: 'products', label: 'Productos en catálogo', show: true },
-    { key: 'repairs', label: 'Reparaciones', show: modules.includes('repairs') },
+    { key: 'repairs', label: 'Reparaciones de este mes', show: modules.includes('repairs') },
     { key: 'services', label: 'Servicios', show: modules.includes('services') },
   ];
   return rows
     .filter((row) => row.show)
-    .map((row) => ({ key: row.key, label: row.label, current: details.usage[row.key], max: details.plan?.limits[row.key] ?? null }));
+    .map((row) => ({ key: row.key, label: row.label, current: row.key === 'repairs' ? details.repairUsage?.current ?? null : details.usageKnown?.[row.key] === false ? null : details.usage[row.key], max: details.plan?.limits[row.key] }));
 }
 
 const MODULE_LABELS: Record<string, string> = {

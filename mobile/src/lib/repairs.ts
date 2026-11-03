@@ -32,6 +32,9 @@ export type Repair = {
   labor_cost?: number | null;
   discount_amount?: number | null;
   warranty_months?: number | null;
+  warranty_type?: string | null;
+  warranty_notes?: string | null;
+  warranty_expires_at?: string | null;
   parts?: { id: string; part_name: string; quantity: number; unit_price: number; unit_cost?: number | null; product_id?: string | null; part_number?: string | null; supplier?: string | null; line_type?: string | null; discount_amount?: number | null; tax_rate?: number | null }[] | null;
   estimated_completion?: string | null;
   created_at: string;

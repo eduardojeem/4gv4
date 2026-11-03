@@ -5,11 +5,12 @@ export type MobileRuntimeConfigInput = {
   siteUrl?: string;
   development: boolean;
   runtimeEnvironment?: string;
+  allowRealData?: boolean;
 };
 
 const PRODUCTION_WEB_HOSTS = new Set(['www.mitiendapy.com', 'mitiendapy.com']);
 const PRODUCTION_SUPABASE_HOST = 'cswtugmwazxdktntndpy.supabase.co';
-const RUNTIME_ENVIRONMENTS = new Set(['development', 'preview', 'production']);
+const RUNTIME_ENVIRONMENTS = new Set(['development', 'preview', 'production', 'real-data']);
 
 function parseUrl(value: string | undefined, name: string) {
   if (!value) throw new Error(`${name} no está configurada. Ejecutá el setup del entorno móvil local.`);
@@ -47,10 +48,16 @@ export function resolveMobileRuntimeConfig(input: MobileRuntimeConfigInput) {
 
   const environment = input.runtimeEnvironment ?? (input.development ? 'development' : 'production');
   if (!RUNTIME_ENVIRONMENTS.has(environment)) {
-    throw new Error('EXPO_PUBLIC_RUNTIME_ENV debe ser development, preview o production.');
+    throw new Error('EXPO_PUBLIC_RUNTIME_ENV debe ser development, preview, production o real-data.');
   }
 
-  if (environment === 'development' || input.development) {
+  if (environment === 'real-data') {
+    if (!input.development || !input.allowRealData
+      || supabaseUrl.origin !== 'https://' + PRODUCTION_SUPABASE_HOST
+      || [apiUrl, siteUrl].some(url => url.protocol !== 'http:' || !isPrivateLanHost(url.hostname) || url.port !== '3000' || url.username || url.password)) {
+      throw new Error('Expo REAL-DATA requiere consentimiento explícito, ejecución DEV, API local :3000 y el Supabase real conocido.');
+    }
+  } else if (environment === 'development' || input.development) {
     for (const [name, url] of [
       ['API', apiUrl],
       ['Supabase', supabaseUrl],
@@ -97,5 +104,6 @@ export function getMobileRuntimeConfig() {
     siteUrl: process.env.EXPO_PUBLIC_SITE_URL,
     development: typeof __DEV__ !== 'undefined' && __DEV__,
     runtimeEnvironment: process.env.EXPO_PUBLIC_RUNTIME_ENV,
+    allowRealData: process.env.EXPO_PUBLIC_ALLOW_REAL_DATA === 'yes',
   });
 }

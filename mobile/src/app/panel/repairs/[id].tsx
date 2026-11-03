@@ -1,3 +1,5 @@
+import { BottomSheet } from '@/components/bottom-sheet';
+import { repairWarrantySummary } from '@/lib/repair-warranty';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -5,9 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -147,6 +147,7 @@ export default function RepairDetail() {
   const stepIndex = TIMELINE.indexOf(repair.status === 'pausado' ? 'reparacion' : repair.status);
   const priority = repair.priority ? PRIORITY[repair.priority] : null;
   const outcome = repairOutcome(repair);
+  const warranty = repairWarrantySummary(repair);
 
   const openChange = (stage: RepairStatus) => {
     setError(null);
@@ -337,6 +338,15 @@ export default function RepairDetail() {
           {repair.diagnosis ? <Block label="Diagnóstico" value={repair.diagnosis} colors={colors} /> : null}
         </Card>
 
+        <Card title="Garantía" icon="shield-checkmark-outline" colors={colors}>
+          <Field label="Duración" value={warranty.duration} colors={colors} />
+          <Field label="Estado" value={warranty.status} colors={colors} />
+          {Number(repair.warranty_months) > 0 && <Field label="Cobertura" value={warranty.coverage} colors={colors} />}
+          {warranty.expiresAt && <Field label="Vence el" value={warranty.expiresAt} colors={colors} />}
+          {warranty.status === 'Pendiente de entrega' && <Text style={[styles.small, { color: colors.muted }]}>El plazo comienza cuando se entrega el equipo.</Text>}
+          {warranty.notes && <Block label="Condiciones" value={warranty.notes} colors={colors} />}
+        </Card>
+
         {/* Cliente */}
         <Card title="Cliente" icon="person-outline" colors={colors}>
           <Text style={[styles.customer, { color: colors.text }]}>{customerName(repair)}</Text>
@@ -475,42 +485,26 @@ export default function RepairDetail() {
       />
 
       {/* Confirmar cambio de estado */}
-      <Modal visible={target !== null} transparent animationType="fade" onRequestClose={() => !saving && setTarget(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalWrap}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => !saving && setTarget(null)} />
-          {target && (
-            <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-              <Text style={[styles.h2, { color: colors.text }]}>
-                {target === 'cancelado' ? '¿Cancelar la orden?' : `¿Pasar a ${STATUS[target].label.toLowerCase()}?`}
-              </Text>
-              <Text style={[styles.small, { color: colors.muted }]}>
-                {ticketOf(repair)} · {deviceName(repair)}. Queda registrado en el historial.
-              </Text>
-              <TextInput
-                value={note}
-                onChangeText={setNote}
-                placeholder={target === 'cancelado' ? 'Motivo de la cancelación (opcional)' : 'Nota para el historial (opcional)'}
-                placeholderTextColor={colors.muted}
-                multiline
-                maxLength={500}
-                style={[styles.noteInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              />
-              {error && <Text style={styles.error}>{error}</Text>}
-              <View style={styles.sheetActions}>
-                <Pressable disabled={saving} onPress={() => setTarget(null)} style={[styles.sheetBtn, { borderColor: colors.border, borderWidth: 1 }]}>
-                  <Text style={[styles.actionText, { color: colors.text }]}>Volver</Text>
-                </Pressable>
-                <Pressable
-                  disabled={saving}
-                  onPress={confirmChange}
-                  style={[styles.sheetBtn, { backgroundColor: target === 'cancelado' ? palette.danger : palette.primary, opacity: saving ? 0.7 : 1 }]}>
-                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionPrimaryText}>Confirmar</Text>}
-                </Pressable>
-              </View>
-            </View>
-          )}
-        </KeyboardAvoidingView>
-      </Modal>
+      <BottomSheet
+        visible={target !== null}
+        title={target === 'cancelado' ? '¿Cancelar la orden?' : target ? `¿Pasar a ${STATUS[target].label.toLowerCase()}?` : 'Cambiar estado'}
+        subtitle={`${ticketOf(repair)} · ${deviceName(repair)}. Queda registrado en el historial.`}
+        onClose={() => !saving && setTarget(null)}
+        footer={<View style={styles.sheetActions}>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={() => setTarget(null)} style={[styles.sheetBtn, { borderColor: colors.border, borderWidth: 1 }]}><Text style={[styles.actionText, { color: colors.text }]}>Volver</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={confirmChange} style={[styles.sheetBtn, { backgroundColor: target === 'cancelado' ? palette.danger : palette.primary, opacity: saving ? 0.7 : 1 }]}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionPrimaryText}>Confirmar</Text>}</Pressable>
+        </View>}>
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          accessibilityLabel={target === 'cancelado' ? 'Motivo de la cancelación' : 'Comentario del cambio de estado'}
+          placeholder={target === 'cancelado' ? 'Motivo de la cancelación (opcional)' : 'Nota para el historial (opcional)'}
+          placeholderTextColor={colors.muted}
+          multiline maxLength={500}
+          style={[styles.noteInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+        />
+        {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      </BottomSheet>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import Link from 'next/link'
+import Link from './MarketplaceLink'
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getCategoryIcon } from './CategoryCarousel'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'

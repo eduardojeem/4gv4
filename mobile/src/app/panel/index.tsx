@@ -1,7 +1,8 @@
+import { SubscriptionExpiryBanner } from '@/components/subscription-expiry-banner';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState, type ComponentProps } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FirstStepsCard } from '@/components/first-steps-card';
 import { apiFetch } from '@/lib/api';
@@ -73,6 +74,10 @@ export default function PanelOverview() {
   const error = scopedError?.scope === scopeKey ? scopedError.message : null;
 
   useEffect(() => subscribePrivateCacheContext((next) => setBranchId(next.branchId)), []);
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') reloadPanel(); });
+    return () => listener.remove();
+  }, [reloadPanel]);
 
   useEffect(() => {
     if (!organizationId) {
@@ -193,6 +198,7 @@ export default function PanelOverview() {
         <Text style={[styles.title, { color: colors.text }]}>Resumen del negocio</Text>
       </View>
 
+      <SubscriptionExpiryBanner />
       <FirstStepsCard />
 
       {!visibleSummary && !error && (

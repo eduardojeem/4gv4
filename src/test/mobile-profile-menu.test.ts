@@ -74,6 +74,8 @@ describe('menú de perfil del panel móvil', () => {
   })
 
   it('el cajón abre Administración directo, sin pasar por la redirección', () => {
-    expect(read('components/panel-menus.tsx')).toMatch(/key === 'administration' \? '\/admin'/)
+    // La regla vive en sections-menu-model (sectionMenuRoute) y el cajón la usa.
+    expect(read('lib/sections-menu-model.ts')).toMatch(/key === 'administration' \? '\/admin'/)
+    expect(read('components/panel-menus.tsx')).toContain('go(sectionMenuRoute(item.key))')
   })
 })

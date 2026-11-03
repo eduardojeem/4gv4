@@ -1,3 +1,4 @@
+import { notificationChannel, supportsCategoryChannels, isUrgentNotification } from '../presentation'
 import { randomUUID } from 'node:crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
@@ -144,20 +145,7 @@ export async function dispatchNotificationEvent(
     }
   }
 
-  if (recipientsToDeliver.length === 0) {
-    return {
-      eventType: type,
-      organizationId,
-      candidateRecipients: candidates.length,
-      eligibleRecipients: eligible.length,
-      createdNotifications: 0,
-      skippedByPreference,
-      skippedByPermission,
-      skippedByBranch,
-      duplicates: 0,
-      notificationIds: [],
-    }
-  }
+  // Los canales se evalúan de forma independiente: silenciar la bandeja no silencia push.
 
   // 5. Presentación y Formato del Contenido
   const formatted = formatNotificationContent(type, data)
@@ -169,6 +157,7 @@ export async function dispatchNotificationEvent(
   let createdNotifications = 0
   let duplicates = 0
   const notificationIds: string[] = []
+  const notificationByUser = new Map<string, string>()
   // Un reintento del mismo evento (clave de idempotencia repetida) no vuelve a sonar en el celular.
   const duplicateUserIds = new Set<string>()
 
@@ -216,6 +205,7 @@ export async function dispatchNotificationEvent(
     } else if (inserted) {
       createdNotifications++
       notificationIds.push(inserted.id)
+      notificationByUser.set(recipient.userId, inserted.id)
     }
   }
 
@@ -238,7 +228,7 @@ export async function dispatchNotificationEvent(
     try {
       const { data: devices, error: devError } = await supabase
         .from('push_devices')
-        .select('user_id, push_token')
+        .select('user_id, push_token, app_version')
         .eq('organization_id', organizationId)
         .in('user_id', pushEligibleUserIds)
         .eq('enabled', true)
@@ -250,11 +240,14 @@ export async function dispatchNotificationEvent(
           body: formatted.body,
           data: {
             type,
+            organizationId,
+            notificationId: notificationByUser.get(dev.user_id),
             resourceType: finalResourceType,
             resourceId: resourceId ?? null,
           },
           sound: 'default',
-          priority: 'high',
+          channelId: supportsCategoryChannels(dev.app_version) ? notificationChannel(type) : 'default',
+          priority: isUrgentNotification(type) ? 'high' : 'normal',
         }))
 
         const pushResult = await sendExpoPushNotifications(pushMessages)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import Link from 'next/link'
+import Link from './MarketplaceLink'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Grid3X3 } from 'lucide-react'
 import { motion, AnimatePresence } from '@/components/ui/motion'

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
-import Link from 'next/link'
+import Link from './MarketplaceLink'
 import {
   Tag,
   ArrowRight,

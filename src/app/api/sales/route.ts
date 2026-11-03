@@ -23,6 +23,8 @@ export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' 
   try {
     const { searchParams } = new URL(request.url)
     
+    const saleId = searchParams.get('id')
+    if (saleId && !UUID_PATTERN.test(saleId)) return NextResponse.json({ error: 'Identificador inválido.' }, { status: 400 })
     const startDate = searchParams.get('start_date')
     const endDate = searchParams.get('end_date')
     const customerId = searchParams.get('customer_id')
@@ -45,6 +47,8 @@ export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' 
       `, { count: 'exact' })
       .eq('organization_id', organization.id)
     
+    if (saleId) queryBuilder = queryBuilder.eq('id', saleId)
+
     // Apply filters
     if (startDate) {
       queryBuilder = queryBuilder.gte('created_at', startDate)
