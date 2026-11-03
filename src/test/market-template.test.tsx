@@ -90,6 +90,7 @@ describe('plantilla Supermercado: reglas', () => {
     const home = readFileSync(resolve(process.cwd(), 'src/app/(public)/inicio/HomePageClient.tsx'), 'utf8')
     const header = readFileSync(resolve(process.cwd(), 'src/components/public/PublicHeader.tsx'), 'utf8')
     expect(home).toContain('{isMarket && <MarketAisleRows />}')
-    expect(header).toContain('const beautyCategories = isBeauty || isMarket')
+    // La barra de categorías del header también la usa Tecnología.
+    expect(header).toMatch(/const storeCategories = isBeauty \|\| isMarket/)
   })
 })

@@ -90,7 +90,7 @@ describe('BrandsSectionEditor', () => {
   it('renders public visibility options for home, products, and offers', async () => {
     render(<BrandsSectionEditor />)
 
-    expect(screen.getByText('Visibilidad en Secciones Públicas')).toBeInTheDocument()
+    expect(screen.getByText('Dónde mostrar las marcas')).toBeInTheDocument()
     expect(screen.getByText('Página de Inicio')).toBeInTheDocument()
     expect(screen.getByText('Catálogo de Productos')).toBeInTheDocument()
     expect(screen.getByText('Página de Ofertas')).toBeInTheDocument()
@@ -113,10 +113,10 @@ describe('BrandsSectionEditor', () => {
     render(<BrandsSectionEditor />)
 
     await waitFor(() => {
-      expect(screen.getByText('Sincronizar todas a la marquesina')).toBeInTheDocument()
+      expect(screen.getByText('Agregar todas las detectadas')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Sincronizar todas a la marquesina'))
+    fireEvent.click(screen.getByText('Agregar todas las detectadas'))
 
     // The brands should now be in the marquee list
     await waitFor(() => {

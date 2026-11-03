@@ -98,8 +98,12 @@ describe('qué aspecto toma la tienda', () => {
     expect(resolveStorefrontStyle(undefined, 'clothing')).toBe('fashion')
   })
 
-  it('en Automático, los demás rubros quedan como siempre', () => {
-    for (const rubro of ['general', 'electronics', 'cosmetics', 'food', 'hardware', 'other', null, undefined, 'constructor']) {
+  it('en Automático, cada rubro toma su plantilla y los demás quedan en Clásico', () => {
+    // La plantilla sigue al rubro (STYLE_BY_VERTICAL).
+    expect(resolveStorefrontStyle('auto', 'electronics')).toBe('tech')
+    expect(resolveStorefrontStyle('auto', 'cosmetics')).toBe('beauty')
+    expect(resolveStorefrontStyle('auto', 'food')).toBe('market')
+    for (const rubro of ['general', 'hardware', 'other', null, undefined, 'constructor']) {
       expect(resolveStorefrontStyle('auto', rubro)).toBe('classic')
     }
   })
@@ -111,7 +115,8 @@ describe('qué aspecto toma la tienda', () => {
 
   it('un valor desconocido no rompe la tienda: decide el rubro', () => {
     expect(resolveStorefrontStyle('minimal', 'clothing')).toBe('fashion')
-    expect(resolveStorefrontStyle('minimal', 'electronics')).toBe('classic')
+    expect(resolveStorefrontStyle('minimal', 'electronics')).toBe('tech')
+    expect(resolveStorefrontStyle('minimal', 'constructor')).toBe('classic')
   })
 
   it('las tiendas existentes arrancan en Automático', () => {
