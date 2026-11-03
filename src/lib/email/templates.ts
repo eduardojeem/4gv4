@@ -15,9 +15,16 @@ export function renderWelcomeEmail(params: {
   companyName: string
   plan: string
   loginUrl: string
+  /** Días de prueba del plan elegido (los de la tarjeta de precios). 0 = sin prueba. */
+  trialDays?: number
   brand?: BrandInfo
 }) {
   const { ownerName, companyName, plan, loginUrl, brand } = params
+  const trialDays = Math.max(0, Math.floor(params.trialDays ?? 0))
+  // Antes decía «14 días» fijo aunque el plan tuviera otra prueba (o ninguna).
+  const trialLine = trialDays > 0
+    ? `<p style="margin-top:16px;">Tu prueba gratis de ${trialDays} ${trialDays === 1 ? 'día' : 'días'} ya comenzó. Aprovechá todas las funciones de tu plan.</p>`
+    : ''
 
   return renderBrandedEmail({
     title: `¡Bienvenido a la plataforma!`,
@@ -31,7 +38,7 @@ export function renderWelcomeEmail(params: {
         <li>Agregar miembros al equipo</li>
         <li>Activar el punto de venta</li>
       </ul>
-      <p style="margin-top:16px;">Tu trial de 14 días ya comenzó. Aprovechá todas las funcionalidades sin límite.</p>
+      ${trialLine}
     `,
     cta: { label: 'Ir a mi dashboard', url: loginUrl },
     brand: {
