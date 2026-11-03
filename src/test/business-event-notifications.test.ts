@@ -13,13 +13,13 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 afterEach(() => vi.clearAllMocks())
 
 describe('avisos de ventas, pedidos y reparaciones', () => {
-  it('una venta avisa al resto del equipo, no al cajero, y una grande avisa aparte', async () => {
+  it('una venta pasa quién la hizo (el dispatcher decide si avisarle) y una grande avisa aparte', async () => {
     mocks.dispatch.mockResolvedValue({})
     await notifySaleCreated({ organizationId: 'org', branchId: 'b1', saleId: 's1', actorUserId: 'cajero', total: 2_500_000 })
 
     expect(mocks.dispatch).toHaveBeenCalledTimes(2)
     expect(mocks.dispatch.mock.calls.map(([event]) => event.type)).toEqual(['SALE_CREATED', 'LARGE_SALE'])
-    expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({ resourceId: 's1', branchId: 'b1', excludeUserIds: ['cajero'] })
+    expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({ resourceId: 's1', branchId: 'b1', actorUserId: 'cajero' })
   })
 
   it('un error al avisar nunca rompe la venta', async () => {
@@ -31,12 +31,12 @@ describe('avisos de ventas, pedidos y reparaciones', () => {
   it('pedido online y reparación con técnico asignado', async () => {
     mocks.dispatch.mockResolvedValue({})
     await notifyOrderCreated({ organizationId: 'org', branchId: null, orderId: 'o1', online: true, orderNumber: 'A12', customerName: 'Ana', total: 150000 })
-    expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({ type: 'NEW_ONLINE_ORDER', resourceId: 'o1', excludeUserIds: [] })
+    expect(mocks.dispatch.mock.calls[0][0]).toMatchObject({ type: 'NEW_ONLINE_ORDER', resourceId: 'o1', actorUserId: null })
 
     mocks.dispatch.mockClear()
     await notifyRepairCreated({ organizationId: 'org', branchId: 'b1', repairId: 'r1', actorUserId: 'recepcion', device: 'Samsung A54', technicianId: 'tec' })
     expect(mocks.dispatch.mock.calls.map(([event]) => [event.type, event.excludeUserIds ?? event.targetUserIds])).toEqual([
-      ['REPAIR_CREATED', ['recepcion', 'tec']],
+      ['REPAIR_CREATED', ['tec']],
       ['REPAIR_ASSIGNED', ['tec']],
     ])
   })
@@ -51,6 +51,12 @@ describe('avisos de ventas, pedidos y reparaciones', () => {
     expect(read('src/app/api/orders/route.ts')).toMatch(/afterResponse\(\(\) => notifyOrderCreated/)
     expect(read('src/app/api/public/orders/route.ts')).toMatch(/afterResponse\(\(\) => notifyOrderCreated/)
     expect(read('src/app/api/repairs/route.ts')).toMatch(/afterResponse\(\(\) => notifyRepairCreated/)
+  })
+
+  it('al personal no se le avisa de lo que hizo; a dueños y administradores sí', () => {
+    const dispatcher = read('src/lib/notifications/server/dispatcher.ts')
+    expect(dispatcher).toContain("export const ACTOR_NOTIFIED_ROLES = new Set(['owner', 'admin'])")
+    expect(dispatcher).toContain('if (actorUserId && member.userId === actorUserId) return ACTOR_NOTIFIED_ROLES.has(member.role)')
   })
 
   it('un reintento con la misma clave no vuelve a mandar push', () => {

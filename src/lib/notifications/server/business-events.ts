@@ -59,7 +59,7 @@ export function notifySaleCreated(params: {
       resourceType: 'sale',
       resourceId: params.saleId,
       data,
-      excludeUserIds: [params.actorUserId],
+      actorUserId: params.actorUserId,
     })
     if (params.total != null && params.total >= LARGE_SALE_THRESHOLD) {
       await dispatchNotificationEvent({
@@ -69,7 +69,7 @@ export function notifySaleCreated(params: {
         resourceType: 'sale',
         resourceId: params.saleId,
         data,
-        excludeUserIds: [params.actorUserId],
+        actorUserId: params.actorUserId,
       })
     }
   })
@@ -96,7 +96,7 @@ export function notifyOrderCreated(params: {
       customerName: params.customerName ?? null,
       totalFormatted: params.total != null ? formatNotificationAmount(params.total) : undefined,
     },
-    excludeUserIds: params.actorUserId ? [params.actorUserId] : [],
+    actorUserId: params.actorUserId ?? null,
   }))
 }
 
@@ -117,8 +117,9 @@ export function notifyRepairCreated(params: {
       resourceType: 'repair',
       resourceId: params.repairId,
       data: { device: params.device ?? null, customerName: params.customerName ?? null },
+      actorUserId: params.actorUserId,
       // El técnico asignado recibe el aviso personal de abajo, no los dos.
-      excludeUserIds: [params.actorUserId, ...(params.technicianId ? [params.technicianId] : [])],
+      excludeUserIds: params.technicianId ? [params.technicianId] : [],
     })
     // Si ya entra con técnico, a él le llega «Te asignaron…».
     if (params.technicianId && params.technicianId !== params.actorUserId) {

@@ -13,6 +13,9 @@ import { resolveRecipients } from './recipients'
 import { getBatchEffectiveNotificationPreferences } from './preferences'
 import { sendExpoPushNotifications, type ExpoPushMessage } from './expo-push'
 
+/** Roles que reciben el aviso aunque la acción la hayan hecho ellos. */
+export const ACTOR_NOTIFIED_ROLES = new Set(['owner', 'admin'])
+
 export interface DispatchNotificationEventParams {
   organizationId: string
   branchId?: string | null
@@ -23,6 +26,12 @@ export interface DispatchNotificationEventParams {
   targetUserIds?: string[]
   /** Quien hizo la acción no necesita que le avisen (el cajero que cobró, quien cargó la reparación). */
   excludeUserIds?: string[]
+  /**
+   * Quien hizo la acción. Al personal no se le avisa de lo que acaba de hacer
+   * (al cajero, de su propia venta); a dueños y administradores sí, porque
+   * muchas veces atienden solos y quieren el registro en el celular.
+   */
+  actorUserId?: string | null
   idempotencyKey?: string | null
 }
 
@@ -60,6 +69,7 @@ export async function dispatchNotificationEvent(
     data,
     targetUserIds,
     excludeUserIds,
+    actorUserId,
     idempotencyKey,
   } = params
 
@@ -107,7 +117,11 @@ export async function dispatchNotificationEvent(
   })
   const { candidates, skippedByBranch, skippedByPermission } = resolved
   const excluded = new Set(excludeUserIds ?? [])
-  const eligible = resolved.eligible.filter((member) => !excluded.has(member.userId))
+  const eligible = resolved.eligible.filter((member) => {
+    if (excluded.has(member.userId)) return false
+    if (actorUserId && member.userId === actorUserId) return ACTOR_NOTIFIED_ROLES.has(member.role)
+    return true
+  })
 
   if (eligible.length === 0) {
     return {
