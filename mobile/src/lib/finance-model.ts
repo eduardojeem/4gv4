@@ -52,3 +52,74 @@ export function isEmptyFinanceSummary(data: FinanceSummaryData) {
     !data.upcomingDue.length
   );
 }
+
+/**
+ * Lo que la pantalla muestra en grande. El servidor no calcula la ganancia si
+ * a alguna venta le falta el costo, y en un comercio chico eso pasa casi
+ * siempre: en ese caso se muestra igual, marcada como estimada (sale más alta
+ * de lo real, porque esas ventas cuentan sin costo).
+ */
+export function financeHeadline(data: FinanceSummaryData) {
+  const { revenue, directCosts, operatingExpenses, payrollCost, netProfit } = data.accrued;
+  const exact = netProfit != null && Number.isFinite(netProfit);
+  const profit = exact ? netProfit : revenue - directCosts - operatingExpenses - payrollCost;
+  return {
+    profit,
+    estimated: !exact,
+    /** Cuánto queda de cada 100 vendidos; sin ventas no hay margen. */
+    marginPct: revenue > 0 ? Math.round((profit / revenue) * 100) : null,
+  };
+}
+
+const SOURCE_NAMES: Record<string, [string, string]> = {
+  sale: ['venta', 'ventas'],
+  order: ['pedido', 'pedidos'],
+  repair: ['reparación', 'reparaciones'],
+};
+const plural = (count: number, [one, many]: [string, string]) => `${count} ${count === 1 ? one : many}`;
+
+export type FinanceWarningGroup = { code: string; title: string; hint: string; count: number };
+
+/** Las advertencias del informe agrupadas, en palabras del comercio y no una por venta. */
+export function groupFinanceWarnings(warnings: FinanceSummaryData['coverageWarnings']): FinanceWarningGroup[] {
+  const groups = new Map<string, FinanceWarningGroup & { sources: Map<string, number> }>();
+  for (const warning of warnings ?? []) {
+    const group = groups.get(warning.code) ?? { code: warning.code, title: '', hint: '', count: 0, sources: new Map() };
+    group.count++;
+    const source = warning.sourceType ?? '';
+    group.sources.set(source, (group.sources.get(source) ?? 0) + 1);
+    if (!group.hint) group.hint = warning.message;
+    groups.set(warning.code, group);
+  }
+  return [...groups.values()].map(({ sources, ...group }) => {
+    const items = [...sources.entries()]
+      .map(([source, count]) => plural(count, SOURCE_NAMES[source] ?? ['registro', 'registros']))
+      .join(', ');
+    if (group.code === 'MISSING_DIRECT_COST') {
+      return { ...group, title: `${items} sin costo cargado`, hint: 'La ganancia sale más alta de lo real hasta que cargues cuánto te costaron esos productos.' };
+    }
+    if (group.code === 'MISSING_CASH_TIMING') {
+      return { ...group, title: `${items} con cobros sin fecha`, hint: 'No sabemos qué día entró esa plata, así que puede faltar en «Entró».' };
+    }
+    return { ...group, title: plural(group.count, ['dato para revisar', 'datos para revisar']) };
+  });
+}
+
+/**
+ * Partes de lo vendido para la barra «a dónde va cada guaraní». Solo con
+ * ventas y sin pérdida: con pérdida los gastos pasan el 100 % y la barra mentiría.
+ */
+export function financeBreakdown(data: FinanceSummaryData, profit: number) {
+  const { revenue, directCosts, operatingExpenses, payrollCost } = data.accrued;
+  if (!(revenue > 0) || profit < 0) return null;
+  const share = (value: number) => Math.max(0, value) / revenue;
+  return {
+    goods: share(directCosts),
+    expenses: share(operatingExpenses),
+    payroll: share(payrollCost),
+    profit: share(profit),
+  };
+}
+
+export const sumDue = (items: FinanceSummaryData['overdue']) =>
+  items.reduce((total, item) => total + (Number.isFinite(item.amount) ? item.amount : 0), 0);
