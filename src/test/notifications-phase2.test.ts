@@ -304,6 +304,16 @@ describe('Notifications Phase 2 - Backend Engine & API Tests', () => {
     expect(dbNotifications.some((n) => n.user_id === ownerUser)).toBe(true)
   })
 
+  it('1b. Quien hizo la venta: el dueño recibe su propio aviso, el encargado no', async () => {
+    await dispatchNotificationEvent({ organizationId: orgA, type: 'SALE_CREATED', resourceId: 'sale-own-owner', actorUserId: ownerUser })
+    expect(dbNotifications.some((n) => n.user_id === ownerUser && n.resource_id === 'sale-own-owner')).toBe(true)
+
+    await dispatchNotificationEvent({ organizationId: orgA, type: 'SALE_CREATED', resourceId: 'sale-own-manager', actorUserId: branchUser1 })
+    expect(dbNotifications.some((n) => n.user_id === branchUser1 && n.resource_id === 'sale-own-manager')).toBe(false)
+    // El resto del equipo sí lo recibe.
+    expect(dbNotifications.some((n) => n.user_id === ownerUser && n.resource_id === 'sale-own-manager')).toBe(true)
+  })
+
   it('2. User from another organization does not receive it', async () => {
     await dispatchNotificationEvent({
       organizationId: orgA,

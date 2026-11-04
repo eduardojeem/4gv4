@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,14 @@ interface CategoryModalProps {
 
 const NO_GLOBAL = 'none'
 
+/**
+ * Sin catálogo se usa siempre el mismo arreglo. Un `= []` en los props creaba
+ * uno nuevo en cada render: el efecto que arma el formulario volvía a correr,
+ * cambiaba el estado y React cortaba con «Maximum update depth exceeded»
+ * (pasaba al crear una categoría desde el alta de productos).
+ */
+const EMPTY_CATALOG: NonNullable<CategoryModalProps['globalCatalog']> = []
+
 function stringToColorClass(str: string): string {
     const colors = ['text-violet-600', 'text-blue-600', 'text-emerald-600', 'text-amber-600', 'text-rose-600', 'text-cyan-600', 'text-orange-600', 'text-pink-600', 'text-indigo-600', 'text-teal-600']
     let hash = 0
@@ -44,7 +52,7 @@ export function CategoryModal({
     category,
     categories,
     initialParentId,
-    globalCatalog = [],
+    globalCatalog = EMPTY_CATALOG,
 }: CategoryModalProps) {
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
@@ -69,6 +77,11 @@ export function CategoryModal({
         })
     }, [globalCatalog])
 
+    // El catálogo solo sirve para mostrar el nombre del vínculo: leerlo de una ref
+    // evita que un catálogo nuevo (otra referencia, mismos datos) reinicie el formulario.
+    const catalogRef = useRef(globalCatalog)
+    useEffect(() => { catalogRef.current = globalCatalog }, [globalCatalog])
+
     useEffect(() => {
         if (isOpen) {
             if (category) {
@@ -88,9 +101,9 @@ export function CategoryModal({
             // guardaba vacío: cualquier edición desvinculaba la categoría del marketplace.
             const linkedId = category?.global_category_id ?? null
             setGlobalCategoryId(linkedId)
-            setGlobalCategoryName(linkedId ? globalCatalog.find((item) => item.id === linkedId)?.name ?? 'Categoría del marketplace' : '')
+            setGlobalCategoryName(linkedId ? catalogRef.current.find((item) => item.id === linkedId)?.name ?? 'Categoría del marketplace' : '')
         }
-    }, [isOpen, category, initialParentId, globalCatalog])
+    }, [isOpen, category, initialParentId])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()

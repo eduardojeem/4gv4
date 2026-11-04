@@ -17,5 +17,12 @@ describe('saved navigation colors',()=>{
  it('chooses legible foreground across supported and extreme colors',()=>{for(const color of ['#ffffff','#000000','#3B82F6','#F59E0B','#22C55E','#A855F7','#14B8A6','#ef4444']) expect(contrast(color,navigationInk(color))).toBeGreaterThanOrEqual(4.5)})
 })
 
-it('offers repair and new order for an authorized workshop',()=>{const nav=bottomNavigation(panel(['overview','repairs','orders','pos'],{'repairs.orders.create':true,'ecommerce.orders.manage':true,'pos.sales.create':true},'repairs'));expect(nav.actions.map(a=>a.key)).toEqual(['repairs','orders']);expect(nav.actions[1].route).toBe('/panel/orders/new')})
+it('offers repair and new order for an authorized workshop',()=>{const nav=bottomNavigation(panel(['overview','repairs','orders','pos'],{'repairs.orders.create':true,'ecommerce.orders.manage':true,'pos.sales.create':true},'repairs'));expect(nav.actions.map(a=>a.key)).toEqual(['repairs','pos','orders']);expect(nav.actions[2].route).toBe('/panel/orders/new')})
 it('offers reservation and order for services, excludes inaccessible order creation',()=>{expect(bottomNavigation(panel(['agenda','orders'],{'agenda.create':true,'ecommerce.orders.manage':true},'agenda')).actions.map(a=>a.key)).toEqual(['agenda','orders']);expect(bottomNavigation(panel(['repairs','orders'],{'repairs.orders.create':true},'repairs')).actions.map(a=>a.key)).toEqual(['repairs'])})
+
+it('«Crear» siempre ofrece «Nueva venta» que abre el POS cuando puede vender',()=>{
+  const nav=bottomNavigation(panel(['overview','repairs','agenda','orders','pos'],{'repairs.orders.create':true,'agenda.create':true,'ecommerce.orders.manage':true,'pos.sales.create':true},'repairs'))
+  expect(nav.actions.map(a=>a.key)).toEqual(['repairs','pos','orders','agenda'])
+  expect(nav.actions.find(a=>a.key==='pos')).toMatchObject({label:'Nueva venta',route:'/panel/pos'})
+  expect(bottomNavigation(panel(['overview','pos'],{})).actions).toEqual([])
+})

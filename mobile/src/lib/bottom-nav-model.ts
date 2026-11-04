@@ -17,11 +17,13 @@ export function bottomNavigation(data: PanelData | null) {
   const actions: CreateAction[] = [];
   if (keys.has('repairs') && data?.capabilities?.['repairs.orders.create']) actions.push({ key: 'repairs', label: 'Nueva reparación', route: '/panel/repairs/new', icon: 'construct-outline' });
   if (keys.has('agenda') && data?.capabilities?.['agenda.create']) actions.push({ key: 'agenda', label: 'Nueva reserva', route: '/panel/agenda/form', icon: 'calendar-outline' });
-  if (keys.has('pos') && data?.capabilities?.['pos.sales.create']) actions.push({ key: 'pos', label: 'Vender', route: '/panel/pos', icon: 'cart-outline' });
+  if (keys.has('pos') && data?.capabilities?.['pos.sales.create']) actions.push({ key: 'pos', label: 'Nueva venta', route: '/panel/pos', icon: 'cart-outline' });
   if (keys.has('orders') && data?.capabilities?.['ecommerce.orders.manage']) actions.push({ key: 'orders', label: 'Nuevo pedido', route: '/panel/orders/new', icon: 'bag-add-outline' });
   const focus = data?.businessFocus;
   const preferred = actions.find(a => a.key === focus) ?? actions[0];
-  const choices = [preferred, actions.find(action => action.key === 'orders' && action !== preferred), ...actions].filter((action): action is CreateAction => Boolean(action)).filter((action, index, list) => list.findIndex(item => item.key === action.key) === index).slice(0, 2);
+  // «Crear» abre una lista: primero lo del rubro, después la venta (siempre que
+  // pueda vender) y el pedido. Antes se cortaba en dos y la venta quedaba afuera.
+  const choices = [preferred, actions.find(action => action.key === 'pos'), actions.find(action => action.key === 'orders'), ...actions].filter((action): action is CreateAction => Boolean(action)).filter((action, index, list) => list.findIndex(item => item.key === action.key) === index);
   const priorities = focus === 'agenda' ? ['overview', 'agenda', 'customers'] : focus === 'repairs' ? ['overview', 'repairs', 'cash-register'] : ['overview', 'products', 'cash-register'];
   const tabs = [...new Set([...priorities, ...(data?.tabs ?? [])])].filter(key => keys.has(key)).slice(0, choices.length ? 3 : 4);
   return { tabs, actions: choices };
