@@ -45,6 +45,8 @@ import {
 } from '@/lib/website/setup-checklist'
 import { isSectionAvailable, resolveSectionAvailability, type WebsiteEditableSection } from '@/lib/website/section-availability'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
+import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -81,6 +83,10 @@ export default function WebsiteAdminPage() {
   const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, businessVertical, {
     servicesAvailable: storefrontCapabilities.hasServices,
     catalogAvailable: effectiveModules.includes('inventory'),
+    commerceMode: resolvePublicCommerceMode(settings?.checkout?.commerceMode, {
+      ordersEnabled: effectiveModules.includes('orders'),
+      hasWhatsapp: hasStoreWhatsapp(settings?.company_info),
+    }),
   })
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null)

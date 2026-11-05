@@ -10,6 +10,7 @@ import {
   resolveStorefrontStyle,
   type StorefrontStylePreference,
 } from '@/lib/website/storefront-style'
+import type { PublicCommerceMode } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
 
 interface StorefrontTemplateSelectorProps {
@@ -22,20 +23,31 @@ interface StorefrontTemplateSelectorProps {
   servicesAvailable?: boolean
   /** Vende productos: sin productos, un negocio de servicios no ve plantillas de tienda. */
   catalogAvailable?: boolean
+  /** Modo comercial resuelto de la tienda. */
+  commerceMode?: PublicCommerceMode
 }
 
 /**
  * Grilla de plantillas. Las miniaturas toman el color de marca del contenedor
  * (ver BrandColorScope), así el dueño ve cada plantilla con su color.
  */
-export function StorefrontTemplateSelector({ value, onChange, businessVertical, suggestedStyle, servicesAvailable, catalogAvailable }: StorefrontTemplateSelectorProps) {
-  const context = { servicesAvailable, catalogAvailable, businessVertical }
+export function StorefrontTemplateSelector({
+  value,
+  onChange,
+  businessVertical,
+  suggestedStyle,
+  servicesAvailable,
+  catalogAvailable,
+  commerceMode,
+}: StorefrontTemplateSelectorProps) {
+  const context = { servicesAvailable, catalogAvailable, businessVertical, commerceMode }
   return (
     <div role="group" aria-labelledby="storefrontStyleLabel" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
       {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, context)).map((option) => {
         const style = resolveStorefrontStyle(option.value, businessVertical, context)
         const selected = value === option.value
         const isAuto = option.value === 'auto'
+        const isRecommended = commerceMode === 'catalog' && option.value === 'catalog-basic'
         return (
           <button
             key={option.value}
@@ -62,10 +74,10 @@ export function StorefrontTemplateSelector({ value, onChange, businessVertical, 
                 {isAuto ? `Según tu rubro: ${STOREFRONT_STYLE_LABELS[style]}` : STOREFRONT_TEMPLATES_METADATA[style].badge}
               </span>
             </span>
-            {option.value === suggestedStyle && (
+            {(option.value === suggestedStyle || isRecommended) && (
               <span className="absolute right-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-full bg-background/95 px-1.5 py-0.5 text-[10px] font-semibold text-primary shadow-sm">
                 <Sparkles aria-hidden="true" className="h-2.5 w-2.5" />
-                Sugerida
+                {isRecommended ? 'Recomendada' : 'Sugerida'}
               </span>
             )}
           </button>

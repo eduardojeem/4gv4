@@ -195,6 +195,21 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
       )}
 
       {style === 'wholesale-pro' && (<><NavRow /><div className="rounded border bg-background p-1"><Bar className="w-3/4" /></div><div className="rounded bg-primary/10 p-2"><Bar className="w-1/2" /></div><ProductRow style={style} count={4} /></>)}
+      {style === 'catalog-basic' && (
+        <>
+          <NavRow />
+          <div className="rounded border border-border/70 bg-muted/20 p-1.5 space-y-1">
+            <Bar className="w-2/3 h-1 bg-foreground/70" />
+            <Bar className="w-1/2 h-0.5 bg-muted-foreground/60" />
+          </div>
+          <div className="flex gap-1 overflow-hidden py-0.5">
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[6px] font-medium text-primary">Todos</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[6px] text-muted-foreground">Cat. 1</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[6px] text-muted-foreground">Cat. 2</span>
+          </div>
+          <ProductRow style={style} count={3} />
+        </>
+      )}
       {style === 'services' && (
         <>
           <NavRow dark />

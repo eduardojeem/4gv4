@@ -948,6 +948,19 @@ export function ProductCard(props: ProductCardProps) {
                     <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(selectedPrice * quantity)}</>
                   )}
                 </button>
+              ) : commerceMode === 'catalog' ? (
+                (modalWhatsappHref || whatsappHref) ? (
+                  <a
+                    href={(modalWhatsappHref || whatsappHref)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setQuickViewOpen(false)}
+                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background text-xs sm:text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
+                  >
+                    <WhatsAppIcon className="h-4 w-4" />
+                    Consultar disponibilidad
+                  </a>
+                ) : null
               ) : (modalWhatsappHref || whatsappHref) ? (
                 <a
                   href={(modalWhatsappHref || whatsappHref)!}

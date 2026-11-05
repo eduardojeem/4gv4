@@ -55,6 +55,7 @@ import {
   type StorefrontStyle,
 } from '@/lib/website/storefront-style'
 import { heroFieldsForStyle } from '@/lib/website/vertical-guidance'
+import { getPremiumHeroForVertical } from '@/lib/website/premium-hero'
 
 // Los textos por rubro viven en la librería: también los usa el servidor al preparar la página.
 export { HERO_PRESETS, type HeroPreset } from '@/lib/website/hero-presets'
@@ -147,6 +148,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
   const hasChanges = heroContentDraft !== null || heroStatsDraft !== null
   const fields = heroFieldsForStyle(storefrontStyle, capabilities)
   const isServicesStyle = storefrontStyle === 'services'
+  const verticalDef = getPremiumHeroForVertical(capabilities.businessVertical)
   const compatiblePresetIds = getCompatibleHeroPresetIds(capabilities)
   const compatiblePresets = compatiblePresetIds
     .map((id) => HERO_PRESETS.find((preset) => preset.id === id))
@@ -223,6 +225,37 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
     toast.success(`Textos de «${preset.label}» aplicados`, {
       description: 'Ajustalos a tu negocio antes de guardar.',
     })
+  }
+
+  const applyPremiumHero = (enable = true) => {
+    setHeroContentDraft((c) => ({
+      ...(c ?? heroContent),
+      enabled: enable,
+      badge: verticalDef.hero.badge,
+      title: verticalDef.hero.title,
+      subtitle: verticalDef.hero.subtitle,
+      ctaPrimaryText: verticalDef.hero.ctaPrimaryText,
+      ctaSecondaryText: verticalDef.hero.ctaSecondaryText,
+      trustBadges: [...verticalDef.hero.trustBadges],
+    }))
+    if (fields.stats) {
+      setHeroStatsDraft((s) => ({
+        ...(s ?? heroStats),
+        enabled: enable,
+        repairs: verticalDef.stats.repairs,
+        satisfaction: verticalDef.stats.satisfaction,
+        avgTime: verticalDef.stats.avgTime,
+      }))
+    }
+    setErrors({})
+    toast.success(
+      enable
+        ? `Portada premium de ${verticalDef.verticalLabel} activada`
+        : `Textos premium de ${verticalDef.verticalLabel} aplicados`,
+      {
+        description: 'Revisá los textos y guardá para publicar en tu tienda.',
+      }
+    )
   }
 
   const applyBusinessData = () => {
@@ -316,6 +349,73 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
         onToggle={(checked) => updateContent('enabled', checked)}
       />
 
+      {/* Tarjeta destacada de Portada Premium según el rubro */}
+      <div className={cn(
+        'rounded-2xl border p-4 transition-all',
+        !visible
+          ? 'border-emerald-500/30 bg-emerald-500/5'
+          : 'border-primary/20 bg-primary/[0.03]'
+      )}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xl leading-none select-none" aria-hidden="true">{verticalDef.icon}</span>
+              <h3 className="text-sm font-bold text-foreground">
+                Portada Premium: {verticalDef.verticalLabel}
+              </h3>
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[10px] font-bold',
+                visible
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-muted text-muted-foreground'
+              )}>
+                {visible ? 'Portada activa' : 'Desactivada por defecto'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+              {!visible
+                ? 'Por defecto la portada está desactivada para que tu tienda cargue directo en el catálogo (máxima rapidez en celulares). Podés activarla con 1 clic con textos de alta conversión pensados para tu rubro.'
+                : 'Esta portada cuenta con textos persuasivos y llamadas a la acción preparadas para tu rubro. Podés personalizarlos abajo o desactivar la portada si preferís mostrar el catálogo directo.'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {!visible ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => applyPremiumHero(true)}
+                className="gap-1.5 font-bold shadow-sm"
+              >
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                Activar portada premium
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyPremiumHero(true)}
+                  className="gap-1.5 text-xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Restaurar textos de {verticalDef.verticalLabel.split(' ')[0]}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateContent('enabled', false)}
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                >
+                  Desactivar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Qué plantilla y qué rubro, y qué partes tiene esta portada. */}
       <div className="flex flex-col gap-3 rounded-2xl border bg-muted/20 p-3.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1.5">
@@ -386,9 +486,36 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                 data-color-scheme={brandColor && brandColor !== 'custom' ? brandColor : undefined}
                 data-custom-brand={hasValidCustomBrand ? '' : undefined}
                 style={hasValidCustomBrand ? ({ '--brand-primary': customBrandColor } as React.CSSProperties) : undefined}
-                className={cn('transition-opacity', !visible && 'opacity-40')}
               >
-                {storefrontStyle === 'market' ? (
+                {!visible ? (
+                  <div className="bg-muted/30 p-4 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mb-2 text-lg">
+                      {verticalDef.icon}
+                    </div>
+                    <p className="text-xs font-bold text-foreground">Portada desactivada · Carga directa al catálogo</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                      Tus clientes ven inmediatamente los productos de <strong>{verticalDef.verticalLabel}</strong> sin pasar por un banner.
+                    </p>
+                    <div className="mt-3 flex items-center justify-center gap-1.5 overflow-hidden">
+                      {verticalDef.previewChips.slice(0, 3).map((chip, idx) => (
+                        <span key={chip} className={cn("rounded px-2 py-0.5 text-[9px]", idx === 0 ? "bg-primary text-primary-foreground font-semibold" : "bg-background border text-muted-foreground")}>
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-left">
+                      {verticalDef.previewProducts.slice(0, 2).map((prod, idx) => (
+                        <div key={idx} className="rounded border bg-card p-1.5 text-[10px]">
+                          <div className="aspect-[4/3] rounded bg-muted/60 flex items-center justify-center mb-1 text-sm">
+                            {verticalDef.icon}
+                          </div>
+                          <p className="font-semibold truncate text-foreground">{prod.name}</p>
+                          <p className="text-primary font-bold">{prod.price}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : storefrontStyle === 'market' ? (
                   <div className="bg-primary p-5 text-primary-foreground">
                     <p className="text-xs font-semibold opacity-80">{heroContent.badge || company?.name || 'Tu súper'}</p>
                     <p className="mt-1 text-xl font-black leading-tight">{heroContent.title || '¿Qué necesitás hoy?'}</p>

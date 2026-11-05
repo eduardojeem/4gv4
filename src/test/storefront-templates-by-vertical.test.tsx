@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isStorefrontStyleAvailable, resolveStorefrontStyle, STOREFRONT_STYLE_OPTIONS, suggestStorefrontAppearance } from '@/lib/website/storefront-style'
+import { isStorefrontStyleAvailable, resolveStorefrontStyle, STOREFRONT_STYLE_OPTIONS, suggestStorefrontAppearance, type StorefrontStyleContext } from '@/lib/website/storefront-style'
 
-const offered = (businessVertical: string, context: { servicesAvailable?: boolean; catalogAvailable?: boolean }) =>
+const offered = (businessVertical: string, context: StorefrontStyleContext = {}) =>
   STOREFRONT_STYLE_OPTIONS.map((option) => option.value).filter((style) => style !== 'auto' && isStorefrontStyleAvailable(style, { ...context, businessVertical }))
 
 describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
@@ -28,6 +28,10 @@ describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
   it('comercio general u otro rubro con agenda conserva todas las opciones', () => {
     expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(9)
     expect(offered('other', { servicesAvailable: false, catalogAvailable: true })).not.toContain('services')
+  })
+
+  it('en modo catálogo se suma la plantilla catálogo básico', () => {
+    expect(offered('general', { servicesAvailable: true, catalogAvailable: true, commerceMode: 'catalog' })).toContain('catalog-basic')
   })
 
   it('una plantilla guardada que ya no corresponde vuelve a la del rubro', () => {

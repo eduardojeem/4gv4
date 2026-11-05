@@ -35,6 +35,8 @@ import {
   Images
 } from 'lucide-react'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import { StorefrontAppearanceEditor } from '@/components/admin/website/StorefrontAppearanceEditor'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
@@ -70,7 +72,13 @@ export function CompanyInfoForm() {
     field?.focus()
   }, [errors])
 
-  const { businessVertical } = useSubscriptionStatus()
+  const { businessVertical, effectiveModules, modules } = useSubscriptionStatus()
+  const ordersEnabled = modules.length === 0 || effectiveModules.includes('orders')
+  const storeHasWhatsapp = hasStoreWhatsapp(formData)
+  const resolvedCommerceMode = resolvePublicCommerceMode(settings?.checkout?.commerceMode, {
+    ordersEnabled,
+    hasWhatsapp: storeHasWhatsapp,
+  })
   // La vista con productos reales solo existe para una tienda ya publicada (lo guardado, no el borrador).
   const savedCompany = settings?.company_info
   const publishedStorePath = savedCompany?.storefrontPublic === true && savedCompany.slug ? `/${savedCompany.slug}` : null
@@ -535,6 +543,7 @@ export function CompanyInfoForm() {
           customColorError={errors.customBrandColor}
           businessVertical={businessVertical}
           storePath={publishedStorePath}
+          commerceMode={resolvedCommerceMode}
         />
       </SectionCard>
 
