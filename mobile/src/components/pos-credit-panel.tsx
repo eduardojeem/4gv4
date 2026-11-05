@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
-import { FREQUENCY_LABEL, shortDate, type CreditFrequency, type CreditPlan, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
+import { fetchCreditPolicy, FREQUENCY_LABEL, OPEN_POLICY, shortDate, type CreditFrequency, type CreditPlan, type CreditPolicyState, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
 
 type Colors = ReturnType<typeof usePalette>;
 
@@ -48,6 +48,17 @@ export function PosCreditPanel({
 }) {
   const [showAll, setShowAll] = useState(false);
   const [customCount, setCustomCount] = useState(!COUNTS.includes(terms.count));
+  const [rules, setRules] = useState<CreditPolicyState>(OPEN_POLICY);
+  useEffect(() => {
+    let active = true;
+    void fetchCreditPolicy().then((next) => { if (active) setRules(next); });
+    return () => { active = false; };
+  }, []);
+  const { policy, canOverride } = rules;
+  const amountsAllowed = canOverride || (policy.allowCustomTerms && policy.allowInstallmentAmounts);
+  const maxCount = canOverride ? 60 : policy.maxInstallments;
+  const maxRate = canOverride ? 100 : policy.maxInterestRate;
+  const mode = amountsAllowed ? terms.mode ?? 'percent' : 'percent';
 
   if (loading) return <ActivityIndicator color={palette.primary} />;
   if (error) return <Text style={styles.error}>{error}</Text>;
@@ -121,7 +132,7 @@ export function PosCreditPanel({
       {customCount && (
         <TextInput
           value={String(terms.count)}
-          onChangeText={(value) => onTerms({ ...terms, count: Math.min(60, Math.max(1, Number(value.replace(/\D/g, '')) || 1)) })}
+          onChangeText={(value) => onTerms({ ...terms, count: Math.min(maxCount, Math.max(1, Number(value.replace(/\D/g, '')) || 1)) })}
           keyboardType="number-pad"
           maxLength={2}
           placeholder="Cantidad de cuotas (1 a 60)"
@@ -134,7 +145,7 @@ export function PosCreditPanel({
         <View style={styles.flex}>
           <Text style={[styles.label, { color: colors.text }]}>Frecuencia</Text>
           <View style={styles.chips}>
-            {(Object.keys(FREQUENCY_LABEL) as CreditFrequency[]).map((key) => (
+            {(Object.keys(FREQUENCY_LABEL) as CreditFrequency[]).filter((key) => canOverride || policy.allowedFrequencies.includes(key) || key === terms.frequency).map((key) => (
               <Chip key={key} label={FREQUENCY_LABEL[key]} selected={terms.frequency === key} onPress={() => onTerms({ ...terms, frequency: key })} colors={colors} small />
             ))}
           </View>
@@ -143,18 +154,44 @@ export function PosCreditPanel({
 
       <View style={styles.pair}>
         <View style={styles.rate}>
-          <Text style={[styles.label, { color: colors.text }]}>Interés %</Text>
-          <TextInput
-            value={terms.interestRate ? String(terms.interestRate) : ''}
-            onChangeText={(value) => {
-              const rate = Number(value.replace(',', '.').replace(/[^\d.]/g, ''));
-              onTerms({ ...terms, interestRate: Number.isFinite(rate) ? Math.min(100, Math.max(0, rate)) : 0 });
-            }}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor={colors.muted}
-            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-          />
+          {amountsAllowed && (
+            <View style={styles.chips}>
+              <Chip label="%" selected={mode === 'percent'} onPress={() => onTerms({ ...terms, mode: 'percent' })} colors={colors} small />
+              <Chip
+                label="Cuota"
+                selected={mode === 'installment_amount'}
+                onPress={() => onTerms({ ...terms, mode: 'installment_amount', installmentAmount: terms.installmentAmount || plan.installments[0]?.amount || 0 })}
+                colors={colors}
+                small
+              />
+            </View>
+          )}
+          <Text style={[styles.label, { color: colors.text }]}>{mode === 'percent' ? 'Interés %' : 'Valor de cada cuota'}</Text>
+          {mode === 'percent' ? (
+            <TextInput
+              value={terms.interestRate ? String(terms.interestRate) : ''}
+              onChangeText={(value) => {
+                const rate = Number(value.replace(',', '.').replace(/[^\d.]/g, ''));
+                onTerms({ ...terms, interestRate: Number.isFinite(rate) ? Math.min(maxRate, Math.max(0, rate)) : 0 });
+              }}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.muted}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+            />
+          ) : (
+            <TextInput
+              value={pretty(terms.installmentAmount ?? '')}
+              onChangeText={(value) => onTerms({ ...terms, installmentAmount: Number(value.replace(/\D/g, '')) || 0 })}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.muted}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+            />
+          )}
+          {mode !== 'percent' && (
+            <Text style={[styles.small, { color: colors.muted }]}>Recargo resultante: {plan.interestRate}%</Text>
+          )}
         </View>
         <View style={styles.flex}>
           <Text style={[styles.label, { color: colors.text }]}>Primera cuota</Text>

@@ -10,7 +10,7 @@ import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
 import { Upload, Package, Tag, Warehouse, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, TrendingUp, Percent, RotateCcw } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildCreditInstallmentPlan, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
@@ -2776,7 +2776,7 @@ export function ProductModal({
                                             type="number"
                                             step="0.1"
                                             min={0}
-                                            max={999}
+                                            max={MAX_CREDIT_INTEREST_RATE}
                                             autoFocus
                                             value={currentRate}
                                             onChange={(e) => setChipRate((prev) => ({ ...prev, [preset]: e.target.value }))}
@@ -2923,7 +2923,7 @@ export function ProductModal({
                                                 type="number"
                                                 step="0.1"
                                                 min={0}
-                                                max={999}
+                                                max={MAX_CREDIT_INTEREST_RATE}
                                                 disabled={already || !entry.checked}
                                                 value={entry.rate}
                                                 onClick={(e) => e.preventDefault()}
@@ -3064,6 +3064,7 @@ export function ProductModal({
                                               type="number"
                                               step="0.01"
                                               min={0}
+                                              max={MAX_CREDIT_INTEREST_RATE}
                                               placeholder="0"
                                               className="h-7 text-sm px-2"
                                               data-rate

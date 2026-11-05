@@ -16,7 +16,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { CreditFilePaymentSummary } from './CustomerCreditFileSummary'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { formatThousands, parseThousands } from '@/lib/currency'
 import { ProductCreditPlanPicker } from './ProductCreditPlanPicker'
 import {
@@ -252,19 +252,13 @@ export function PaymentMethods({
       .reduce((total, split) => total + split.amount, 0),
     [paymentSplit]
   )
-  const creditSplitPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: Math.max(0, existingCreditPrincipal + splitAmount),
-    interestRate: creditTerms.interestRate,
-    installmentCount: creditTerms.count,
-    frequency: creditTerms.frequency,
-  }), [creditTerms.count, creditTerms.frequency, creditTerms.interestRate, existingCreditPrincipal, splitAmount])
+  // Mismo cálculo que el resumen y la venta: respeta las cuotas por monto.
+  const creditSplitPlan = React.useMemo(
+    () => buildPosCreditSummary(Math.max(0, existingCreditPrincipal + splitAmount), creditTerms),
+    [creditTerms, existingCreditPrincipal, splitAmount],
+  )
   // Lo que se financia si va todo a crédito (con interés): es lo que tiene que entrar en el disponible.
-  const fullCreditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartTotal,
-    interestRate: creditTerms.interestRate,
-    installmentCount: creditTerms.count,
-    frequency: creditTerms.frequency,
-  }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  const fullCreditPlan = React.useMemo(() => buildPosCreditSummary(cartTotal, creditTerms), [cartTotal, creditTerms])
   const hasCreditLine = Boolean(creditSummary && (creditSummary.availableCredit + creditSummary.usedCredit) > 0)
   const overdueAmount = creditSummary?.overdueAmount ?? 0
   // El adelanto mínimo para que el resto, con su interés, entre en el crédito disponible.

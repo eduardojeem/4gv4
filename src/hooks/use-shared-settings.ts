@@ -43,7 +43,6 @@ export interface SystemSettingsRow {
   retention_days: number
   updated_at: string
   updated_by: string | null
-  default_installment_rates?: Record<string, number>
 }
 
 // Shared settings interface used in the application
@@ -92,9 +91,6 @@ export interface SharedSettings {
 
   // Admin
   maintenanceMode: boolean
-
-  // Defaults
-  defaultInstallmentRates: Record<string, number>
 }
 
 export type SharedSettingsSource = 'remote' | 'default'
@@ -144,7 +140,6 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   passwordMinLength: 8,
   requireTwoFactor: false,
   maintenanceMode: false,
-  defaultInstallmentRates: {}
 }
 
 // ============================================================================
@@ -187,7 +182,6 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     passwordMinLength: data.password_min_length ?? DEFAULT_SHARED_SETTINGS.passwordMinLength,
     requireTwoFactor: data.require_two_factor ?? DEFAULT_SHARED_SETTINGS.requireTwoFactor,
     maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode,
-    defaultInstallmentRates: data.default_installment_rates ?? DEFAULT_SHARED_SETTINGS.defaultInstallmentRates
   }
 }
 

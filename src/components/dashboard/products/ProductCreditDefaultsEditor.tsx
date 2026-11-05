@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Check, Coins, Loader2, Percent, Plus, RotateCcw, Save, Tag, Trash2, Wallet,
+  Check, Coins, Loader2, Percent, Plus, RotateCcw, Save, ShieldCheck, Tag, Trash2, Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -12,6 +12,8 @@ import {
   CREDIT_BASE_LABELS,
   buildCreditPlanPreviews,
 } from '@/lib/credits/product-credit-defaults'
+import { MAX_CREDIT_INSTALLMENTS, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
+import { normalizeCreditPosPolicy, type CreditPosPolicy } from '@/lib/credits/pos-credit-policy'
 import { formatCurrency } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,6 +55,9 @@ export function ProductCreditDefaultsEditor() {
 
   const setPlans = (plans: CreditPlanDefault[]) => patch('plans', plans)
 
+  const posPolicy = normalizeCreditPosPolicy(current.posPolicy)
+  const patchPolicy = (changes: Partial<CreditPosPolicy>) => patch('posPolicy', { ...posPolicy, ...changes })
+
   const addPlan = (count: number) => {
     if (current.plans.some((plan) => plan.count === count)) return
     setPlans([...current.plans, { count, rate: 0 }].sort((a, b) => a.count - b.count))
@@ -92,9 +97,10 @@ export function ProductCreditDefaultsEditor() {
         .filter((plan) => Number.isFinite(plan.count) && plan.count >= 1)
         .map((plan) => ({
           count: Math.round(clamp(Number(plan.count), 1, 60, 1)),
-          rate: clamp(Number(plan.rate), 0, 300, 0),
+          rate: clamp(Number(plan.rate), 0, MAX_CREDIT_INTEREST_RATE, 0),
         }))
         .sort((a, b) => a.count - b.count),
+      posPolicy: normalizeCreditPosPolicy(draft.posPolicy),
     }
 
     const result = await updateSetting('product_credit_defaults', normalized)
@@ -384,7 +390,7 @@ export function ProductCreditDefaultsEditor() {
                           type="number"
                           inputMode="decimal"
                           min={0}
-                          max={300}
+                          max={MAX_CREDIT_INTEREST_RATE}
                           step="0.1"
                           aria-label={`Recargo del plan de ${row.count} cuotas`}
                           value={current.plans.find((plan) => plan.count === row.count)?.rate ?? 0}
@@ -426,6 +432,117 @@ export function ProductCreditDefaultsEditor() {
                 Entrega inicial {formatCurrency(preview.base.downPayment)} · se financian {formatCurrency(preview.base.financedAmount)}
               </p>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Reglas del POS ──────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            Reglas para vender a crédito en el POS
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Las aplica el servidor en cada venta, en la web y en la app. Dueños y administradores pueden salirse
+            de estas reglas; esas ventas quedan marcadas.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 px-4 py-3 sm:col-span-2">
+            <div>
+              <Label htmlFor="pos-custom-terms" className="text-sm font-semibold">El cajero puede cambiar las condiciones</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Apagado: solo se venden los planes del producto o los planes de esta página.
+              </p>
+            </div>
+            <Switch
+              id="pos-custom-terms"
+              checked={posPolicy.allowCustomTerms}
+              onCheckedChange={(value) => patchPolicy({ allowCustomTerms: value })}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 px-4 py-3 sm:col-span-2">
+            <div>
+              <Label htmlFor="pos-installment-amounts" className="text-sm font-semibold">Permitir cuotas por monto</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Además del recargo %, cargar el valor de cada cuota (por ejemplo, 10 cuotas de Gs. 150.000) o montos a mano.
+              </p>
+            </div>
+            <Switch
+              id="pos-installment-amounts"
+              checked={posPolicy.allowInstallmentAmounts}
+              disabled={!posPolicy.allowCustomTerms}
+              onCheckedChange={(value) => patchPolicy({ allowInstallmentAmounts: value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pos-max-rate" className="text-xs font-medium">Recargo máximo (%)</Label>
+            <Input
+              id="pos-max-rate"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={MAX_CREDIT_INTEREST_RATE}
+              value={posPolicy.maxInterestRate}
+              onChange={(event) => patchPolicy({ maxInterestRate: Number(event.target.value) })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pos-max-installments" className="text-xs font-medium">Máximo de cuotas</Label>
+            <Input
+              id="pos-max-installments"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MAX_CREDIT_INSTALLMENTS}
+              value={posPolicy.maxInstallments}
+              onChange={(event) => patchPolicy({ maxInstallments: Number(event.target.value) })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pos-min-down" className="text-xs font-medium">Entrega mínima en el POS (%)</Label>
+            <Input
+              id="pos-min-down"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={90}
+              value={posPolicy.minDownPaymentPercent}
+              onChange={(event) => patchPolicy({ minDownPaymentPercent: Number(event.target.value) })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Frecuencias permitidas</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(FREQUENCY_LABELS) as ProductCreditDefaults['frequency'][]).map((option) => {
+                const active = posPolicy.allowedFrequencies.includes(option)
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      const next = active
+                        ? posPolicy.allowedFrequencies.filter((frequency) => frequency !== option)
+                        : [...posPolicy.allowedFrequencies, option]
+                      if (next.length > 0) patchPolicy({ allowedFrequencies: next })
+                    }}
+                    className={cn(
+                      'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                      active
+                        ? 'border-indigo-500 bg-indigo-600 text-white'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900',
+                    )}
+                  >
+                    {FREQUENCY_LABELS[option]}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </CardContent>
       </Card>

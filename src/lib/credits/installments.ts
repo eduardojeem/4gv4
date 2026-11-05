@@ -66,10 +66,45 @@ function splitAmount(total: number, count: number, fractionDigits: number) {
   )
 }
 
+/**
+ * Topes de un credito. Son los mismos que aplica el servidor al procesar la
+ * venta (process_pos_sale_atomic) y al crear la cuenta de credito: cualquier
+ * formulario que deje cargar mas termina en una venta rechazada.
+ */
+export const MAX_CREDIT_INSTALLMENTS = 60
+/** Recargo total sobre lo financiado (no mensual), en porcentaje. */
+export const MAX_CREDIT_INTEREST_RATE = 100
+
+export function isValidCreditInterestRate(value: unknown): boolean {
+  const rate = Number(value)
+  return Number.isFinite(rate) && rate >= 0 && rate <= MAX_CREDIT_INTEREST_RATE
+}
+
+/** Decimales de la moneda configurada: 0 en guaranies, 2 en USD. */
+export function creditFractionDigits(): number {
+  return getCurrencyFractionDigits(getLocaleConfig().currency)
+}
+
+/** Redondea a la unidad minima de la moneda (guarani entero en PYG). */
+export function roundToCurrencyUnit(value: number, fractionDigits: number = creditFractionDigits()): number {
+  const digits = Math.max(0, Math.min(2, Math.floor(fractionDigits)))
+  return roundMoney(Number(value) || 0, digits)
+}
+
+/**
+ * Capital minimo para que ninguna cuota quede en cero: una unidad de moneda
+ * por cuota. Con menos, el reparto deja las primeras cuotas en 0 y todo el
+ * saldo en la ultima.
+ */
+export function minimumCreditPrincipal(installmentCount: number, fractionDigits: number = creditFractionDigits()): number {
+  const digits = Math.max(0, Math.min(2, Math.floor(fractionDigits)))
+  return roundMoney(normalizeInstallmentCount(installmentCount) / moneyStep(digits), digits)
+}
+
 export function normalizeInstallmentCount(value: unknown) {
   const count = Number(value)
   if (!Number.isFinite(count) || count <= 0) return 1
-  return Math.min(60, Math.max(1, Math.floor(count)))
+  return Math.min(MAX_CREDIT_INSTALLMENTS, Math.max(1, Math.floor(count)))
 }
 
 export function normalizeCreditFrequency(value: unknown): CreditFrequency {
@@ -158,6 +193,98 @@ export function buildCreditInstallmentPlan(input: {
         dueDate: buildCreditDueDate(dueDateBase, index, frequency, useProvidedBase),
         amount: roundMoney(principalComponent + interestComponent, fractionDigits),
         principalComponent,
+        interestComponent,
+      }
+    }),
+  }
+}
+
+/** Cómo se arman las cuotas: por recargo %, por valor fijo de cuota o a mano. */
+export type CreditScheduleMode = 'percent' | 'installment_amount' | 'custom'
+
+/** n cuotas del mismo valor: "10 cuotas de Gs. 150.000". */
+export function fixedInstallmentAmounts(installmentCount: number, installmentAmount: number, fractionDigits: number = creditFractionDigits()): number[] {
+  const amount = roundToCurrencyUnit(installmentAmount, fractionDigits)
+  return Array.from({ length: normalizeInstallmentCount(installmentCount) }, () => amount)
+}
+
+/**
+ * Por qué una lista de montos no sirve como plan, o null si sirve. Mismas
+ * reglas que process_pos_sale_atomic_v6: cada cuota de al menos una unidad de
+ * la moneda y sin fracciones, la suma cubre lo financiado y el recargo que
+ * resulta no supera el tope.
+ */
+export function installmentAmountsError(principalAmount: number, amounts: number[], fractionDigits: number = creditFractionDigits()): string | null {
+  const digits = Math.max(0, Math.min(2, Math.floor(fractionDigits)))
+  const unit = 1 / moneyStep(digits)
+  if (!Array.isArray(amounts) || amounts.length < 1 || amounts.length > MAX_CREDIT_INSTALLMENTS) {
+    return `Cargá entre 1 y ${MAX_CREDIT_INSTALLMENTS} cuotas.`
+  }
+  if (amounts.some(amount => !Number.isFinite(amount) || amount < unit || roundMoney(amount, digits) !== amount)) {
+    return digits === 0
+      ? 'Cada cuota tiene que ser un monto entero mayor a cero.'
+      : 'Cada cuota tiene que ser un monto mayor a cero, con hasta dos decimales.'
+  }
+  const principal = roundMoney(Math.max(0, Number(principalAmount) || 0), digits)
+  const total = roundMoney(amounts.reduce((sum, amount) => sum + amount, 0), digits)
+  if (principal <= 0) return 'No hay monto a crédito para repartir.'
+  if (total < principal) return 'Las cuotas no cubren el monto a crédito.'
+  if (impliedInterestRate(principal, total) > MAX_CREDIT_INTEREST_RATE) {
+    return `El recargo que resulta de esas cuotas supera el ${MAX_CREDIT_INTEREST_RATE}%.`
+  }
+  return null
+}
+
+/** Recargo total % que resulta de cobrar `scheduledTotal` por `principalAmount`. */
+export function impliedInterestRate(principalAmount: number, scheduledTotal: number): number {
+  const principal = Number(principalAmount) || 0
+  if (principal <= 0) return 0
+  return Math.round(((Number(scheduledTotal) - principal) * 100 / principal) * 10_000) / 10_000
+}
+
+/**
+ * Plan con montos dados por cuota. Las fechas salen del mismo calendario que
+ * el plan por porcentaje; el recargo se reparte en proporción al monto de cada
+ * cuota y la última se queda con el sobrante (igual que el SQL).
+ */
+export function buildCreditInstallmentPlanFromAmounts(input: {
+  principalAmount: number
+  amounts: number[]
+  frequency?: CreditFrequency
+  firstInstallmentTiming?: FirstInstallmentTiming
+  now?: Date
+  fractionDigits?: number
+}): CreditInstallmentPlan {
+  const digits = Number.isFinite(input.fractionDigits)
+    ? Math.max(0, Math.min(2, Math.floor(input.fractionDigits as number)))
+    : creditFractionDigits()
+  const principalAmount = roundMoney(Math.max(0, Number(input.principalAmount) || 0), digits)
+  const amounts = input.amounts.map(amount => roundMoney(Math.max(0, Number(amount) || 0), digits))
+  const financedTotal = roundMoney(amounts.reduce((sum, amount) => sum + amount, 0), digits)
+  const interestAmount = roundMoney(Math.max(0, financedTotal - principalAmount), digits)
+  const frequency = normalizeCreditFrequency(input.frequency)
+  const base = input.now ?? new Date()
+  const useProvidedBase = input.firstInstallmentTiming !== 'next_cycle'
+  const step = moneyStep(digits)
+  let assigned = 0
+
+  return {
+    principalAmount,
+    interestRate: impliedInterestRate(principalAmount, financedTotal),
+    interestAmount,
+    financedTotal,
+    installmentCount: amounts.length,
+    frequency,
+    installments: amounts.map((amount, index) => {
+      const interestComponent = index < amounts.length - 1
+        ? (financedTotal > 0 ? Math.trunc((amount * interestAmount / financedTotal) * step) / step : 0)
+        : roundMoney(interestAmount - assigned, digits)
+      assigned = roundMoney(assigned + interestComponent, digits)
+      return {
+        installmentNumber: index + 1,
+        dueDate: buildCreditDueDate(base, index, frequency, useProvidedBase),
+        amount,
+        principalComponent: roundMoney(amount - interestComponent, digits),
         interestComponent,
       }
     }),

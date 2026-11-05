@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_CREDIT_INSTALLMENTS, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { ServiceBusinessDetailsSchema } from '@/lib/organization/service-specialties'
 import { STOREFRONT_STYLE_PREFERENCES } from '@/lib/website/storefront-style'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
@@ -284,7 +285,16 @@ export const BrandsSectionSchema = z.object({
 
 export const CreditPlanDefaultSchema = z.object({
   count: z.number().int().min(1, 'Minimo 1 cuota').max(60, 'Maximo 60 cuotas'),
-  rate: z.number().min(0, 'El recargo no puede ser negativo').max(300, 'Recargo demasiado alto'),
+  rate: z.number().min(0, 'El recargo no puede ser negativo').max(MAX_CREDIT_INTEREST_RATE, `El recargo no puede superar ${MAX_CREDIT_INTEREST_RATE}%`),
+})
+
+export const CreditPosPolicySchema = z.object({
+  allowCustomTerms: z.boolean(),
+  allowInstallmentAmounts: z.boolean(),
+  maxInterestRate: z.number().min(0).max(MAX_CREDIT_INTEREST_RATE, `El recargo no puede superar ${MAX_CREDIT_INTEREST_RATE}%`),
+  maxInstallments: z.number().int().min(1, 'Minimo 1 cuota').max(MAX_CREDIT_INSTALLMENTS, `Maximo ${MAX_CREDIT_INSTALLMENTS} cuotas`),
+  allowedFrequencies: z.array(z.enum(['weekly', 'biweekly', 'monthly'])).min(1, 'Elegí al menos una frecuencia'),
+  minDownPaymentPercent: z.number().min(0).max(90, 'La entrega minima no puede superar el 90%'),
 })
 
 export const ProductCreditDefaultsSchema = z.object({
@@ -295,6 +305,7 @@ export const ProductCreditDefaultsSchema = z.object({
   frequency: z.enum(['weekly', 'biweekly', 'monthly']),
   downPaymentPercent: z.number().min(0).max(90, 'La entrega inicial no puede superar el 90%'),
   publicByDefault: z.boolean(),
+  posPolicy: CreditPosPolicySchema.optional(),
   plans: z.array(CreditPlanDefaultSchema)
     .max(12, 'Maximo 12 planes')
     .refine(

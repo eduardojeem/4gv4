@@ -1,4 +1,5 @@
 import * as z from "zod"
+import { MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { validateBarcode } from "./product-validation"
 import {
   ProductAttributeDefinitionSchema,
@@ -89,7 +90,7 @@ export const productSchema = z
             .coerce
             .number()
             .min(0, "El recargo no puede ser negativo")
-            .max(1000, "El recargo no puede exceder 1000%"),
+            .max(MAX_CREDIT_INTEREST_RATE, `El recargo no puede superar ${MAX_CREDIT_INTEREST_RATE}%`),
         }),
       )
       .default([]),

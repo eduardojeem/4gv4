@@ -1,6 +1,6 @@
 import { subscribePrivateCacheContext } from './private-cache-context';
 import { formatMobileDate, formatMobileNumber } from './regional-format';
-import type { CreditTerms } from './pos-credit';
+import { installmentAmounts, type CreditTerms } from './pos-credit';
 import { apiFetch, ApiError } from './api';
 import type { Product } from './products';
 
@@ -145,6 +145,9 @@ export async function processSale(input: {
                 installment_count: input.credit.count,
                 frequency: input.credit.frequency,
                 first_installment_timing: input.credit.timing,
+                ...(installmentAmounts(input.credit)
+                  ? { schedule_mode: 'installment_amount', installment_amounts: installmentAmounts(input.credit) }
+                  : { schedule_mode: 'percent' }),
                 ...(input.credit.firstPayment && input.credit.timing === 'at_start'
                   ? {
                       first_payment:

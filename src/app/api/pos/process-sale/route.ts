@@ -10,7 +10,19 @@ import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
-import { creditBusinessDate } from '@/lib/credits/installments'
+import {
+  creditBusinessDate,
+  isValidCreditInterestRate,
+  MAX_CREDIT_INSTALLMENTS,
+  MAX_CREDIT_INTEREST_RATE,
+  impliedInterestRate,
+  installmentAmountsError,
+  minimumCreditPrincipal,
+  roundToCurrencyUnit,
+  type CreditFrequency,
+  type CreditScheduleMode,
+} from '@/lib/credits/installments'
+import { checkCreditPosPolicy } from '@/lib/credits/pos-credit-policy.server'
 import { getCurrencyFractionDigits } from '@/lib/currency'
 import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
 import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
@@ -147,9 +159,9 @@ function normalizeCredit(value: unknown) {
   const row = value as JsonRecord
   const interestRate = finiteNumber(row.interest_rate)
   const installmentCount = finiteNumber(row.installment_count)
-  const frequency = row.frequency === 'weekly' || row.frequency === 'biweekly' ? row.frequency : 'monthly'
-  if (interestRate === null || interestRate < 0 || interestRate > 100) return null
-  if (installmentCount === null || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 60) return null
+  const frequency: CreditFrequency = row.frequency === 'weekly' || row.frequency === 'biweekly' ? row.frequency : 'monthly'
+  if (interestRate === null || !isValidCreditInterestRate(interestRate)) return null
+  if (installmentCount === null || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > MAX_CREDIT_INSTALLMENTS) return null
   const timing = row.first_installment_timing ?? 'at_start'
   if (timing !== 'at_start' && timing !== 'next_cycle') return null
   if (row.start_date !== undefined && (typeof row.start_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.start_date))) return null
@@ -163,7 +175,43 @@ function normalizeCredit(value: unknown) {
       : { method: 'transfer', bank: typeof value.bank === 'string' ? value.bank.trim() : '', reference: typeof value.reference === 'string' ? value.reference.trim() : '' }
     if ((firstPayment.bank?.length ?? 0) > 120 || (firstPayment.reference?.length ?? 0) > 120 || firstPaymentError(firstPayment, 0.01, timing)) return null
   }
-  return { interest_rate: interestRate, installment_count: installmentCount, frequency, first_installment_timing: timing, start_date: row.start_date ?? creditBusinessDate(), fraction_digits: getCurrencyFractionDigits(config.currency), first_payment: firstPayment ?? null }
+  // Cuotas por monto: el cliente manda cuánto vale cada cuota y el recargo se
+  // deriva en el servidor. Sin montos, el plan sale del recargo %.
+  const scheduleMode: CreditScheduleMode = row.schedule_mode === 'installment_amount' || row.schedule_mode === 'custom'
+    ? row.schedule_mode
+    : 'percent'
+  let installmentAmounts: number[] | null = null
+  if (scheduleMode !== 'percent') {
+    if (!Array.isArray(row.installment_amounts) || row.installment_amounts.length !== installmentCount) return null
+    installmentAmounts = row.installment_amounts.map(amount => finiteNumber(amount)).filter((amount): amount is number => amount !== null)
+    if (installmentAmounts.length !== installmentCount) return null
+  }
+  return {
+    interest_rate: interestRate,
+    installment_count: installmentCount,
+    frequency,
+    first_installment_timing: timing,
+    start_date: row.start_date ?? creditBusinessDate(),
+    fraction_digits: getCurrencyFractionDigits(config.currency),
+    first_payment: firstPayment ?? null,
+    schedule_mode: scheduleMode,
+    ...(installmentAmounts ? { installment_amounts: installmentAmounts } : {}),
+    policy_override: false,
+  }
+}
+
+/** Explica por que no se aceptaron las condiciones, en vez de un generico. */
+function creditTermsErrorMessage(value: unknown): string {
+  const row = value && typeof value === 'object' ? value as JsonRecord : {}
+  const interestRate = finiteNumber(row.interest_rate)
+  const installmentCount = finiteNumber(row.installment_count)
+  if (interestRate !== null && !isValidCreditInterestRate(interestRate)) {
+    return `El interés total del crédito tiene que estar entre 0% y ${MAX_CREDIT_INTEREST_RATE}%.`
+  }
+  if (installmentCount !== null && (!Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > MAX_CREDIT_INSTALLMENTS)) {
+    return `La cantidad de cuotas tiene que ser un número entero entre 1 y ${MAX_CREDIT_INSTALLMENTS}.`
+  }
+  return 'Configura las cuotas de la venta a credito.'
 }
 
 async function getTaxRate(
@@ -276,6 +324,9 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
     ['POS_TOTAL_MUST_BE_POSITIVE', 'El total de la venta debe ser mayor a 0.', 400],
     ['CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para registrar una venta a crédito.', 400],
     ['CREDIT_LIMIT_EXCEEDED', 'El cliente no tiene límite de crédito suficiente disponible.', 409],
+    ['CREDIT_SCHEDULE_BELOW_PRINCIPAL', 'Las cuotas no cubren el monto a crédito. Revisá los montos.', 400],
+    ['CREDIT_SCHEDULE_RATE_TOO_HIGH', 'El recargo que resulta de esas cuotas supera el máximo permitido.', 400],
+    ['INVALID_CREDIT_SCHEDULE', 'No se pudieron validar los montos de las cuotas. No se procesó la venta.', 400],
     ['STORE_CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para utilizar saldo a favor.', 400],
     ['STORE_CREDIT_EXCEEDS_SALE_TOTAL', 'El saldo a favor no puede superar el total de la venta.', 400],
     ['STORE_CREDIT_SALE_CUSTOMER_MISMATCH', 'El saldo a favor no pertenece al cliente seleccionado.', 409],
@@ -345,6 +396,7 @@ export const POST = withTenantAuth(
     const priceMode = body.p_price_mode === 'wholesale' ? 'wholesale' : 'retail'
     const orderDiscountRate = finiteNumber(body.p_order_discount_rate ?? 0)
     const credit = normalizeCredit(body.p_credit)
+    const creditInPayments = payments?.some(payment => payment.payment_method === 'credit') ?? false
     const storeCreditAmount = requestedStoreCreditAmount
 
     if (!items || !payments || !repairIds) {
@@ -360,7 +412,32 @@ export const POST = withTenantAuth(
       return NextResponse.json({ success: false, error: 'El cliente seleccionado no es valido.' }, { status: 400 })
     }
     if (payments.some(payment => payment.payment_method === 'credit') && !credit) {
-      return NextResponse.json({ success: false, error: 'Configura las cuotas de la venta a credito.' }, { status: 400 })
+      return NextResponse.json({ success: false, error: creditTermsErrorMessage(body.p_credit) }, { status: 400 })
+    }
+    if (credit) {
+      // El servidor redondea lo financiado a la unidad de la moneda y lo reparte
+      // en partes iguales: con menos de una unidad por cuota, las primeras
+      // quedarían en cero y todo el saldo en la última.
+      const creditPrincipal = roundToCurrencyUnit(
+        payments.filter(payment => payment.payment_method === 'credit').reduce((sum, payment) => sum + payment.amount, 0),
+        credit.fraction_digits,
+      )
+      const minimumPrincipal = minimumCreditPrincipal(credit.installment_count, credit.fraction_digits)
+      if (creditPrincipal > 0 && creditPrincipal < minimumPrincipal) {
+        return NextResponse.json({
+          success: false,
+          error: `El monto a crédito no alcanza para ${credit.installment_count} cuotas. Bajá la cantidad de cuotas.`,
+        }, { status: 400 })
+      }
+      if (credit.installment_amounts && creditInPayments) {
+        const amountsError = installmentAmountsError(creditPrincipal, credit.installment_amounts, credit.fraction_digits)
+        if (amountsError) return NextResponse.json({ success: false, error: amountsError }, { status: 400 })
+        // El recargo real es el que resulta de las cuotas, no el que mande el cliente.
+        credit.interest_rate = impliedInterestRate(creditPrincipal, credit.installment_amounts.reduce((sum, amount) => sum + amount, 0))
+      }
+      if (credit.installment_amounts && appointmentId) {
+        return NextResponse.json({ success: false, error: 'Los turnos se cobran a crédito solo con recargo porcentual.' }, { status: 400 })
+      }
     }
     if (orderDiscountRate === null || orderDiscountRate < 0 || orderDiscountRate > 100) {
       return NextResponse.json({ success: false, error: 'El descuento general no es valido.' }, { status: 400 })
@@ -459,6 +536,24 @@ export const POST = withTenantAuth(
           return NextResponse.json({ success: false, error: 'Falta aplicar la migración de cobro de primera cuota. La venta no fue procesada.' }, { status: 503 })
         }
       }
+      const creditPrincipal = payments.filter(payment => payment.payment_method === 'credit').reduce((sum, payment) => sum + payment.amount, 0)
+      const paidNow = payments.filter(payment => payment.payment_method !== 'credit').reduce((sum, payment) => sum + payment.amount, 0) + storeCreditAmount
+      const policy = await checkCreditPosPolicy({
+        supabase,
+        organizationId: organization.id,
+        role: organization.role,
+        productIds: [...new Set(items.map(item => item.product_id))],
+        terms: {
+          installmentCount: credit.installment_count,
+          interestRate: credit.interest_rate,
+          frequency: credit.frequency,
+          mode: credit.schedule_mode,
+        },
+        paidNow,
+        saleTotal: paidNow + creditPrincipal,
+      })
+      if ('error' in policy) return NextResponse.json({ success: false, code: 'CREDIT_POLICY', error: policy.error }, { status: policy.status })
+      credit.policy_override = policy.override
     }
     const taxRate = await getTaxRate(supabase, organization.id)
     // Los turnos se cobran con su tarifa acordada; el resto, con la oferta
@@ -486,13 +581,7 @@ export const POST = withTenantAuth(
     }
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
-    let rpcResponse = appointmentId ? await supabase.rpc('process_agenda_pos_sale', {
-      p_org:organization.id,p_branch:branchScope.branchId,p_actor:user.id,p_session:sessionId,p_appointment:appointmentId,p_key:idempotencyKey,p_items:items,p_payments:payments,
-      p_options:{code,customer_id:customerId,price_mode:priceMode,order_discount_rate:orderDiscountRate,
-        notes:typeof saleData.notes==='string'?saleData.notes.slice(0,2000):null,tax_rate:taxRate,prices_include_tax:config.pricesIncludeTax,
-        credit,repair_ids:repairIds,mark_repairs_delivered:body.p_mark_repairs_delivered===true,
-        delivery_outcome:typeof body.p_delivery_outcome==='string'?body.p_delivery_outcome.slice(0,120):null,store_credit_amount:storeCreditAmount},
-    }) : await supabase.rpc('process_pos_sale_atomic_v5', {
+    const atomicSaleArgs = {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,
       p_actor_id: user.id,
@@ -512,8 +601,26 @@ export const POST = withTenantAuth(
       p_mark_repairs_delivered: body.p_mark_repairs_delivered === true,
       p_delivery_outcome: typeof body.p_delivery_outcome === 'string' ? body.p_delivery_outcome.slice(0, 120) : null,
       p_store_credit_amount: storeCreditAmount,
-    })
+    }
+    let rpcResponse = appointmentId ? await supabase.rpc('process_agenda_pos_sale', {
+      p_org:organization.id,p_branch:branchScope.branchId,p_actor:user.id,p_session:sessionId,p_appointment:appointmentId,p_key:idempotencyKey,p_items:items,p_payments:payments,
+      p_options:{code,customer_id:customerId,price_mode:priceMode,order_discount_rate:orderDiscountRate,
+        notes:typeof saleData.notes==='string'?saleData.notes.slice(0,2000):null,tax_rate:taxRate,prices_include_tax:config.pricesIncludeTax,
+        credit,repair_ids:repairIds,mark_repairs_delivered:body.p_mark_repairs_delivered===true,
+        delivery_outcome:typeof body.p_delivery_outcome==='string'?body.p_delivery_outcome.slice(0,120):null,store_credit_amount:storeCreditAmount},
+    }) : await supabase.rpc('process_pos_sale_atomic_v6', atomicSaleArgs)
 
+    // Compatibilidad durante el despliegue: sin la v6 (cuotas por monto) se
+    // sigue vendiendo con la v5, salvo que la venta necesite la v6.
+    if (!appointmentId && rpcResponse.error && (
+      ['PGRST202', '42883'].includes(rpcResponse.error.code ?? '')
+      || rpcResponse.error.message?.includes('process_pos_sale_atomic_v6')
+    )) {
+      if (credit?.installment_amounts || credit?.policy_override) {
+        return NextResponse.json({ success: false, error: 'Falta aplicar la migración de cuotas por monto. No se procesó la venta.' }, { status: 503 })
+      }
+      rpcResponse = await supabase.rpc('process_pos_sale_atomic_v5', atomicSaleArgs)
+    }
     // Compatibilidad durante el despliegue: nunca degradar una venta con
     // variantes a una función que no descuenta su inventario específico.
     if (appointmentId && rpcResponse.error && ['PGRST202','42883'].includes(rpcResponse.error.code ?? '')) return NextResponse.json({success:false,error:'Falta aplicar la migración de cobro de turnos. No se procesó la venta.'},{status:503})

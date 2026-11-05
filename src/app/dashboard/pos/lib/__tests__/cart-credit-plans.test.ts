@@ -157,3 +157,22 @@ describe('buildManualDownPaymentSplit', () => {
   })
 })
 
+
+describe('reparto en guaraníes enteros', () => {
+  it('no deja céntimos al financiar un producto de un carrito mixto', () => {
+    const allocation = getProductCreditAllocation({ productSubtotal: 1, cartSubtotal: 3 }, 100_000)
+    expect(allocation).toEqual({ dueNow: 66_667, financedPrincipal: 33_333 })
+    expect(allocation.dueNow + allocation.financedPrincipal).toBe(100_000)
+  })
+
+  it('respeta el total con decimales que calcula el servidor', () => {
+    const allocation = getProductCreditAllocation({ productSubtotal: 1, cartSubtotal: 2 }, 28_333.05)
+    expect(Number.isInteger(allocation.dueNow)).toBe(true)
+    expect(allocation.dueNow + allocation.financedPrincipal).toBeCloseTo(28_333.05, 2)
+  })
+
+  it('redondea la entrega manual a la unidad de la moneda', () => {
+    const payments = buildManualDownPaymentSplit(100_000, 10_000.4, 'cash', () => 'id')
+    expect(payments.map(payment => payment.amount)).toEqual([10_000, 90_000])
+  })
+})

@@ -13,7 +13,8 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { createReceiptData, type ReceiptData, type PaymentSplit as ReceiptPaymentSplit } from '@/lib/receipt-utils'
-import { buildPosCreditSummary, withPersistedCreditSchedule, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { buildPosCreditSummary, posCreditInstallmentAmounts, posCreditSchedulePayload, withPersistedCreditSchedule, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { installmentAmountsError } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import type { CartItem, PaymentSplit } from '../types'
 import { firstPaymentError } from '@/lib/credits/first-payment'
@@ -232,7 +233,9 @@ export function usePOSSaleProcessor() {
         const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
         const creditSummary =
           paymentMethod === 'credit' ? buildPosCreditSummary(amountDue, creditTerms) : null
-        const firstPaymentValidation = creditSummary ? firstPaymentError(creditTerms.firstPayment, creditSummary.installmentAmount, creditSummary.firstInstallmentTiming) : null
+        const creditAmounts = creditSummary ? posCreditInstallmentAmounts(creditTerms, amountDue) : null
+        const firstPaymentValidation = (creditAmounts ? installmentAmountsError(amountDue, creditAmounts) : null)
+          ?? (creditSummary ? firstPaymentError(creditTerms.firstPayment, creditSummary.installmentAmount, creditSummary.firstInstallmentTiming) : null)
         if (firstPaymentValidation) {
           setPaymentError(firstPaymentValidation)
           setPaymentStatus('failed')
@@ -251,7 +254,7 @@ export function usePOSSaleProcessor() {
             : cartCalculations.total,
           change: cartCalculations.change,
           creditInfo: creditSummary
-            ? { ...creditSummary, interestRate: creditTerms.interestRate }
+            ? { ...creditSummary, interestRate: creditSummary.interestRate }
             : undefined,
         }
 
@@ -351,6 +354,7 @@ export function usePOSSaleProcessor() {
                     first_installment_timing: creditSummary?.firstInstallmentTiming,
                     start_date: creditSummary?.startDate,
                     first_payment: creditTerms.firstPayment,
+                    ...posCreditSchedulePayload(creditTerms, amountDue),
                   }
                 : undefined,
             repair_ids: selectedRepairIds,
@@ -501,7 +505,9 @@ export function usePOSSaleProcessor() {
         .reduce((t, s) => t + s.amount, 0)
       const mixedCreditSummary =
         creditPrincipal > 0 ? buildPosCreditSummary(creditPrincipal, creditTerms) : null
-      const firstPaymentValidation = mixedCreditSummary ? firstPaymentError(creditTerms.firstPayment, mixedCreditSummary.installmentAmount, mixedCreditSummary.firstInstallmentTiming) : null
+      const mixedCreditAmounts = mixedCreditSummary ? posCreditInstallmentAmounts(creditTerms, creditPrincipal) : null
+      const firstPaymentValidation = (mixedCreditAmounts ? installmentAmountsError(creditPrincipal, mixedCreditAmounts) : null)
+        ?? (mixedCreditSummary ? firstPaymentError(creditTerms.firstPayment, mixedCreditSummary.installmentAmount, mixedCreditSummary.firstInstallmentTiming) : null)
       if (firstPaymentValidation) {
         setPaymentError(firstPaymentValidation)
         setPaymentStatus('failed')
@@ -526,7 +532,7 @@ export function usePOSSaleProcessor() {
         mixedCreditSummary
           ? {
               ...mixedReceiptCalculations,
-              creditInfo: { ...mixedCreditSummary, interestRate: creditTerms.interestRate },
+              creditInfo: { ...mixedCreditSummary, interestRate: mixedCreditSummary.interestRate },
             }
           : mixedReceiptCalculations,
         receiptPayments,
@@ -590,6 +596,7 @@ export function usePOSSaleProcessor() {
                 first_installment_timing: mixedCreditSummary?.firstInstallmentTiming,
                 start_date: mixedCreditSummary?.startDate,
                 first_payment: creditTerms.firstPayment,
+                ...posCreditSchedulePayload(creditTerms, creditPrincipal),
               }
             : undefined,
           repair_ids: selectedRepairIds,
