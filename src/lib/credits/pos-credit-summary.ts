@@ -1,4 +1,13 @@
-import { buildCreditInstallmentPlan, creditBusinessDate, type CreditFrequency, type FirstInstallmentTiming } from './installments'
+import {
+  buildCreditInstallmentPlan,
+  buildCreditInstallmentPlanFromAmounts,
+  creditBusinessDate,
+  fixedInstallmentAmounts,
+  normalizeInstallmentCount,
+  type CreditFrequency,
+  type CreditScheduleMode,
+  type FirstInstallmentTiming,
+} from './installments'
 import type { FirstInstallmentPayment } from './first-payment'
 
 export type PosCreditTerms = {
@@ -8,10 +17,45 @@ export type PosCreditTerms = {
   firstInstallmentTiming?: FirstInstallmentTiming
   startDate?: string
   firstPayment?: FirstInstallmentPayment
+  /** Cómo se arman las cuotas. Sin valor: por recargo %. */
+  scheduleMode?: CreditScheduleMode
+  /** Valor de cada cuota en modo 'installment_amount'. */
+  installmentAmount?: number
+  /** Monto de cada cuota en modo 'custom' (uno por cuota). */
+  customAmounts?: number[]
+}
+
+/**
+ * Montos por cuota que se mandan al servidor, o null si el plan es por
+ * recargo %. En modo manual, mientras la lista no tenga una fila por cuota,
+ * se completa con el reparto en partes iguales.
+ */
+export function posCreditInstallmentAmounts(terms: PosCreditTerms, baseTotal: number): number[] | null {
+  const count = normalizeInstallmentCount(terms.count)
+  if (terms.scheduleMode === 'installment_amount') {
+    return fixedInstallmentAmounts(count, Number(terms.installmentAmount) || 0)
+  }
+  if (terms.scheduleMode === 'custom') {
+    const custom = Array.isArray(terms.customAmounts) ? terms.customAmounts : []
+    if (custom.length === count) return custom.map(amount => Number(amount) || 0)
+    return buildCreditInstallmentPlan({ principalAmount: baseTotal, installmentCount: count, interestRate: 0 })
+      .installments.map(installment => installment.amount)
+  }
+  return null
+}
+
+/** Campos de cuotas por monto para el cuerpo de /api/pos/process-sale. */
+export function posCreditSchedulePayload(terms: PosCreditTerms, baseTotal: number) {
+  const amounts = posCreditInstallmentAmounts(terms, baseTotal)
+  return amounts
+    ? { schedule_mode: terms.scheduleMode, installment_amounts: amounts }
+    : { schedule_mode: 'percent' as const }
 }
 
 export type PosCreditSummary = {
   baseTotal: number
+  /** Recargo total %: el elegido, o el que resulta de los montos por cuota. */
+  interestRate: number
   interestAmount: number
   financedTotal: number
   installmentCount: number
@@ -45,17 +89,27 @@ export function buildPosCreditSummary(
 ): PosCreditSummary {
   const startDate = terms.startDate ?? (options.now ? toCalendarDate(options.now) : creditBusinessDate())
   const [year, month, day] = startDate.split('-').map(Number)
-  const plan = buildCreditInstallmentPlan({
-    principalAmount: baseTotal,
-    interestRate: terms.interestRate,
-    installmentCount: terms.count,
-    frequency: terms.frequency,
-    now: new Date(year, month - 1, day, 12),
-    firstInstallmentTiming: terms.firstInstallmentTiming,
-  })
+  const amounts = posCreditInstallmentAmounts(terms, baseTotal)
+  const plan = amounts
+    ? buildCreditInstallmentPlanFromAmounts({
+      principalAmount: baseTotal,
+      amounts,
+      frequency: terms.frequency,
+      now: new Date(year, month - 1, day, 12),
+      firstInstallmentTiming: terms.firstInstallmentTiming,
+    })
+    : buildCreditInstallmentPlan({
+      principalAmount: baseTotal,
+      interestRate: terms.interestRate,
+      installmentCount: terms.count,
+      frequency: terms.frequency,
+      now: new Date(year, month - 1, day, 12),
+      firstInstallmentTiming: terms.firstInstallmentTiming,
+    })
 
   return {
     baseTotal: plan.principalAmount,
+    interestRate: plan.interestRate,
     interestAmount: plan.interestAmount,
     financedTotal: plan.financedTotal,
     installmentCount: plan.installmentCount,

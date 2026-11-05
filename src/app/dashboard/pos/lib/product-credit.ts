@@ -1,4 +1,4 @@
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildCreditInstallmentPlan, isValidCreditInterestRate, MAX_CREDIT_INSTALLMENTS } from '@/lib/credits/installments'
 import type { InstallmentPlanOption } from '@/types/product-unified'
 
 export type ProductCreditSource = {
@@ -18,10 +18,8 @@ export type ProductCreditPlan = {
 function isValidPlan(plan: InstallmentPlanOption): boolean {
   return Number.isInteger(plan.count)
     && plan.count >= 1
-    && plan.count <= 60
-    && Number.isFinite(plan.rate)
-    && plan.rate >= 0
-    && plan.rate <= 100
+    && plan.count <= MAX_CREDIT_INSTALLMENTS
+    && isValidCreditInterestRate(plan.rate)
 }
 
 export function getProductCreditPlans(

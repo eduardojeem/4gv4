@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 import {
   ProductAttributeDefinitionSchema,
@@ -116,7 +117,7 @@ const productBaseSchema = z.object({
   installments_plans: z.array(
     z.object({
       count: z.number().int().min(1).max(60),
-      rate: z.number().min(0).max(1000),
+      rate: z.number().min(0).max(MAX_CREDIT_INTEREST_RATE),
     })
   ).optional(),
 

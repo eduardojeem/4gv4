@@ -8,7 +8,7 @@ import { PosCreditPanel } from '@/components/pos-credit-panel';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { isWholesaleCustomer, type PayMethod, type PaymentInput, type PosCustomer } from '@/lib/pos';
-import { buildCreditPlan, DEFAULT_TERMS, fetchCreditStatus, firstPaymentError, minimumDownPayment, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
+import { buildCreditPlan, DEFAULT_TERMS, fetchCreditStatus, firstPaymentError, installmentAmountsError, minimumDownPayment, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
 
 type Colors = ReturnType<typeof usePalette>;
 
@@ -122,6 +122,8 @@ export function PosCheckout({
       if (downAmount >= total) return 'La entrega cubre todo: cobrá con otro medio.';
       if (downAmount > 0 && downMethod === 'card' && !/^\d{4}$/.test(cardLast4)) return 'Anotá los últimos 4 dígitos de la tarjeta de la entrega.';
       if (downAmount > 0 && downMethod === 'transfer' && !reference.trim()) return 'Anotá la referencia de la transferencia de la entrega.';
+      const amountsError = installmentAmountsError(total - downAmount, terms);
+      if (amountsError) return amountsError;
       const firstError = firstPaymentError(terms.firstPayment, plan.installments[0]?.amount ?? 0, terms.timing);
       if (firstError) return firstError;
       if (plan.financedTotal > creditStatus.available) return `El disponible (${formatGs(creditStatus.available)}) no cubre ${formatGs(plan.financedTotal)}.`;

@@ -43,7 +43,6 @@ import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
 import { SaleConfirmationDialog } from './checkout/SaleConfirmationDialog'
 import type { Promotion } from '@/types/promotion'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import { getRepairBalanceDue } from '../lib/repair-charge'
 import type { RepairDeliveryEligibility } from '../lib/repair-charge'
@@ -211,12 +210,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }, [activeCustomer?.id, loadCreditData])
   
   // Verificar si el cliente puede comprar a credito
-  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: amountDue,
-    interestRate: creditTerms.interestRate,
-    installmentCount: creditTerms.count,
-    frequency: creditTerms.frequency,
-  }), [amountDue, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  const creditPlan = React.useMemo(() => buildPosCreditSummary(amountDue, creditTerms), [amountDue, creditTerms])
   const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer as unknown as Parameters<typeof canSellOnCredit>[0], creditPlan.financedTotal)
   const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : amountDue
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer as unknown as Parameters<typeof getCreditSummary>[0]) : null

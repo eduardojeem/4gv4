@@ -1,3 +1,5 @@
+import type { CreditPosPolicy } from '@/lib/credits/pos-credit-policy'
+
 export interface CompanyInfo {
   name?: string
   slogan?: string
@@ -107,6 +109,8 @@ export interface ProductCreditDefaults {
   plans: CreditPlanDefault[]
   /** Marcar las cuotas como visibles en la tienda publica al activarlas. */
   publicByDefault: boolean
+  /** Reglas para vender a credito desde el POS. Sin configurar: todo permitido. */
+  posPolicy?: CreditPosPolicy
 }
 
 export interface PromotionalCarouselSlide {

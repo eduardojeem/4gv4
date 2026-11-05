@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildCreditInstallmentPlan, isValidCreditInterestRate, MAX_CREDIT_INSTALLMENTS } from '@/lib/credits/installments'
 import type { InstallmentPlanOption } from '@/types/public'
 
 interface InstallmentSelectorProps {
@@ -24,7 +24,8 @@ export function InstallmentSelector({ price, plans, compact = false, className }
   const options = useMemo(() => {
     if (!price || price <= 0 || !Array.isArray(plans)) return []
     return plans
-      .filter((plan) => plan && plan.count >= 1)
+      // Solo planes que el POS puede vender: mismos topes que el servidor.
+      .filter((plan) => plan && Number.isInteger(Number(plan.count)) && Number(plan.count) >= 1 && Number(plan.count) <= MAX_CREDIT_INSTALLMENTS && isValidCreditInterestRate(plan.rate ?? 0))
       .sort((a, b) => a.count - b.count)
       .map((plan) => {
         const built = buildCreditInstallmentPlan({

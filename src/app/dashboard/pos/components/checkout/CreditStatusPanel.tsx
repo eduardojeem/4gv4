@@ -3,13 +3,31 @@ import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
-import { buildPosCreditSummary, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { buildPosCreditSummary, posCreditInstallmentAmounts, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { creditPosPolicyViolation } from '@/lib/credits/pos-credit-policy'
+import { usePosCreditPolicy } from '../../hooks/usePosCreditPolicy'
+import {
+  creditFractionDigits,
+  installmentAmountsError,
+  MAX_CREDIT_INSTALLMENTS,
+  MAX_CREDIT_INTEREST_RATE,
+  minimumCreditPrincipal,
+  type CreditScheduleMode,
+} from '@/lib/credits/installments'
 import { FirstInstallmentSelector } from './FirstInstallmentSelector'
 import type { CreditPlanSuggestion } from '../../contexts/CheckoutContext'
 
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
 export type CreditTerms = PosCreditTerms
+
+const FREQUENCIES: CreditFrequency[] = ['weekly', 'biweekly', 'monthly']
+const FREQUENCY_OPTION_LABEL: Record<CreditFrequency, string> = { weekly: 'Semanal', biweekly: 'Quincenal', monthly: 'Mensual' }
+const SCHEDULE_MODE_LABEL: Record<CreditScheduleMode, string> = {
+  percent: 'Recargo %',
+  installment_amount: 'Valor de cuota',
+  custom: 'A mano',
+}
 
 interface CreditStatusPanelProps {
   cartTotal: number
@@ -40,6 +58,48 @@ export function CreditStatusPanel({
   const remainingCredit = Math.max(0, creditSummary.availableCredit - creditPlan.financedTotal)
   const utilizationPercentage = totalCredit > 0 ? (newBalance / totalCredit) * 100 : 0
   const isNearLimit = utilizationPercentage > 80
+  // Igual que el servidor: al menos una unidad de moneda por cuota.
+  const tooManyInstallments = cartTotal > 0 && cartTotal < minimumCreditPrincipal(installmentCount)
+  const creditPolicy = usePosCreditPolicy()
+  const { policy } = creditPolicy
+  const fractionDigits = creditFractionDigits()
+  const scheduleMode: CreditScheduleMode = terms.scheduleMode ?? 'percent'
+  const amountsAllowed = creditPolicy.canOverride || (policy.allowCustomTerms && policy.allowInstallmentAmounts)
+  const scheduleModes: CreditScheduleMode[] = amountsAllowed ? ['percent', 'installment_amount', 'custom'] : ['percent']
+  const maxInstallments = creditPolicy.canOverride ? MAX_CREDIT_INSTALLMENTS : policy.maxInstallments
+  const maxInterestRate = creditPolicy.canOverride ? MAX_CREDIT_INTEREST_RATE : policy.maxInterestRate
+  const frequencyAllowed = (frequency: CreditFrequency) => creditPolicy.canOverride || policy.allowedFrequencies.includes(frequency)
+  const amounts = posCreditInstallmentAmounts(terms, cartTotal)
+  const amountsError = amounts && cartTotal > 0 ? installmentAmountsError(cartTotal, amounts) : null
+  const policyPlans = React.useMemo(() => [
+    ...creditPolicy.defaultPlans,
+    ...(suggestion ? [{ count: suggestion.count, rate: suggestion.interestRate, frequency: suggestion.frequency }] : []),
+  ], [creditPolicy.defaultPlans, suggestion])
+  // La entrega mínima la controla el servidor con el total de la venta.
+  const policyMessage = creditPolicy.loaded
+    ? creditPosPolicyViolation({ ...policy, minDownPaymentPercent: 0 }, {
+      installmentCount,
+      interestRate: creditPlan.interestRate,
+      frequency: terms.frequency,
+      mode: scheduleMode,
+      downPaymentPercent: 0,
+    }, policyPlans)
+    : null
+  const resizeAmounts = (count: number): number[] => {
+    const current = posCreditInstallmentAmounts({ ...terms, scheduleMode: 'custom' }, cartTotal) ?? []
+    if (current.length === count) return [...current]
+    return posCreditInstallmentAmounts({ ...terms, count, scheduleMode: 'custom', customAmounts: undefined }, cartTotal) ?? []
+  }
+  const changeMode = (mode: CreditScheduleMode) => {
+    if (mode === scheduleMode) return
+    if (mode === 'installment_amount') {
+      onTermsChange({ ...terms, scheduleMode: mode, installmentAmount: terms.installmentAmount || estimatedInstallment })
+    } else if (mode === 'custom') {
+      onTermsChange({ ...terms, scheduleMode: mode, customAmounts: creditPlan.installments.map(installment => installment.amount) })
+    } else {
+      onTermsChange({ ...terms, scheduleMode: mode })
+    }
+  }
   const suggestionWasAdjusted = Boolean(suggestion && (
     suggestion.count !== terms.count
     || suggestion.interestRate !== terms.interestRate
@@ -162,12 +222,27 @@ export function CreditStatusPanel({
             <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Condiciones de pago</span>
           </div>
+          {scheduleModes.length > 1 && (
+            <div role="group" aria-label="Cómo se arman las cuotas" className="mb-2 grid grid-cols-3 gap-1 rounded-md bg-blue-100/60 p-1 dark:bg-blue-950/40">
+              {scheduleModes.map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={scheduleMode === mode}
+                  onClick={() => changeMode(mode)}
+                  className={`rounded px-2 py-1 text-[11px] font-medium ${scheduleMode === mode ? 'bg-white text-blue-900 shadow-sm dark:bg-slate-900 dark:text-blue-100' : 'text-blue-700 dark:text-blue-300'}`}
+                >
+                  {SCHEDULE_MODE_LABEL[mode]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-[10px] text-blue-600 dark:text-blue-400">Cuotas</span>
               <DraftNumberInput
-                min={1} max={60} value={terms.count} emptyValue={1}
-                onValueChange={count => onTermsChange({ ...terms, count })}
+                min={1} max={maxInstallments} value={terms.count} emptyValue={1}
+                onValueChange={count => onTermsChange({ ...terms, count, customAmounts: scheduleMode === 'custom' ? resizeAmounts(count) : terms.customAmounts })}
                 aria-label="Cantidad de cuotas"
                 className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
               />
@@ -179,21 +254,75 @@ export function CreditStatusPanel({
                 onChange={e => onTermsChange({ ...terms, frequency: e.target.value as CreditFrequency })}
                 className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
               >
-                <option value="weekly">Semanal</option>
-                <option value="biweekly">Quincenal</option>
-                <option value="monthly">Mensual</option>
+                {FREQUENCIES.filter(frequency => frequencyAllowed(frequency) || frequency === terms.frequency).map(frequency => (
+                  <option key={frequency} value={frequency}>{FREQUENCY_OPTION_LABEL[frequency]}</option>
+                ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] text-blue-600 dark:text-blue-400" title="Porcentaje sobre el monto financiado, por todo el crédito (no por mes)">Interés total %</span>
-              <DraftNumberInput
-                decimals min={0} max={500} value={terms.interestRate} emptyValue={0}
-                onValueChange={interestRate => onTermsChange({ ...terms, interestRate })}
-                aria-label="Interés total del crédito en porcentaje"
-                className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
-              />
-            </label>
+            {scheduleMode === 'percent' && (
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] text-blue-600 dark:text-blue-400" title="Porcentaje sobre el monto financiado, por todo el crédito (no por mes)">Interés total %</span>
+                <DraftNumberInput
+                  decimals min={0} max={maxInterestRate} value={terms.interestRate} emptyValue={0}
+                  onValueChange={interestRate => onTermsChange({ ...terms, interestRate })}
+                  aria-label="Interés total del crédito en porcentaje"
+                  className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
+                />
+              </label>
+            )}
+            {scheduleMode === 'installment_amount' && (
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] text-blue-600 dark:text-blue-400">Valor de cada cuota</span>
+                <DraftNumberInput
+                  decimals={fractionDigits > 0} min={0} value={terms.installmentAmount ?? 0} emptyValue={0}
+                  onValueChange={installmentAmount => onTermsChange({ ...terms, installmentAmount })}
+                  aria-label="Valor de cada cuota"
+                  className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
+                />
+              </label>
+            )}
+            {scheduleMode === 'custom' && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-blue-600 dark:text-blue-400">Recargo resultante</span>
+                <span className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-sm leading-8 text-blue-900 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-100">{creditPlan.interestRate}%</span>
+              </div>
+            )}
           </div>
+          {scheduleMode === 'custom' && (
+            <div className="mt-2 grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
+              {resizeAmounts(installmentCount).map((amount, index) => (
+                <label key={index} className="flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-300">
+                  <span className="w-5 shrink-0 text-right">{index + 1}</span>
+                  <DraftNumberInput
+                    decimals={fractionDigits > 0} min={0} value={amount} emptyValue={0}
+                    onValueChange={value => {
+                      const next = resizeAmounts(installmentCount)
+                      next[index] = value
+                      onTermsChange({ ...terms, customAmounts: next })
+                    }}
+                    aria-label={`Monto de la cuota ${index + 1}`}
+                    className="h-7 w-full rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-xs"
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+          {scheduleMode !== 'percent' && (
+            <p className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
+              Recargo resultante: <strong>{creditPlan.interestRate}%</strong> ({formatCurrency(creditPlan.interestAmount)}). Las cuotas suman {formatCurrency(creditPlan.financedTotal)}.
+            </p>
+          )}
+          {(amountsError || policyMessage) && (
+            <p role="alert" className={`mt-2 text-xs font-medium ${amountsError || !creditPolicy.canOverride ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
+              {amountsError ?? policyMessage}
+              {!amountsError && creditPolicy.canOverride && ' Como administrador podés confirmar igual; queda registrado.'}
+            </p>
+          )}
+          {tooManyInstallments && (
+            <p role="alert" className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">
+              El monto no alcanza para {installmentCount} cuotas. Bajá la cantidad de cuotas.
+            </p>
+          )}
           <FirstInstallmentSelector value={terms.firstInstallmentTiming ?? 'at_start'} onChange={value => onTermsChange({ ...terms, firstInstallmentTiming: value, firstPayment: value === 'next_cycle' ? undefined : terms.firstPayment })} frequency={terms.frequency} />
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

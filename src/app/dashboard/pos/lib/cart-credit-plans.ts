@@ -1,6 +1,8 @@
 import type { InstallmentPlanOption } from '@/types/product-unified'
 import type { PaymentSplit } from '../types'
 
+import { roundToCurrencyUnit } from '@/lib/credits/installments'
+
 import { getProductCreditPlans } from './product-credit'
 
 export type CartCreditSource = {
@@ -27,21 +29,32 @@ export type ProductCreditAllocation = {
   dueNow: number
 }
 
-const roundMoney = (value: number) => Math.round(value * 100) / 100
+/**
+ * Redondeo a la unidad de la moneda (guarani entero en PYG). Con centavos fijos,
+ * Gs. 100.000 repartidos 1/3 daban 33.333,33 a credito y 66.666,67 en efectivo:
+ * el servidor redondea el credito a 33.333 y la caja registraba decimales.
+ */
+const roundMoney = (value: number) => roundToCurrencyUnit(value)
+// El total de la venta se respeta tal cual lo calcula el servidor (dos
+// decimales): redondearlo a la unidad haria que los pagos no sumen el total.
+const roundCents = (value: number) => Math.round(value * 100) / 100
 
 export function getProductCreditAllocation(
   plan: Pick<CartProductCreditPlan, 'productSubtotal' | 'cartSubtotal'>,
   cartTotal: number,
 ): ProductCreditAllocation {
-  const normalizedTotal = Math.max(0, roundMoney(Number(cartTotal) || 0))
+  const normalizedTotal = Math.max(0, roundCents(Number(cartTotal) || 0))
   const ratio = plan.cartSubtotal > 0
     ? Math.min(1, Math.max(0, plan.productSubtotal / plan.cartSubtotal))
     : 0
-  const financedPrincipal = roundMoney(normalizedTotal * ratio)
+  // Lo que se cobra ahora se redondea y el credito se queda con el resto, asi
+  // efectivo + credito suman exactamente el total de la venta.
+  const dueNow = Math.min(normalizedTotal, roundMoney(normalizedTotal * (1 - ratio)))
+  const financedPrincipal = roundCents(normalizedTotal - dueNow)
 
   return {
     financedPrincipal,
-    dueNow: roundMoney(normalizedTotal - financedPrincipal),
+    dueNow,
   }
 }
 
@@ -80,12 +93,12 @@ export function buildManualDownPaymentSplit(
   downPaymentMethod: 'cash' | 'card' | 'transfer',
   createId: () => string,
 ): PaymentSplit[] {
-  const normalizedTotal = Math.max(0, roundMoney(Number(cartTotal) || 0))
+  const normalizedTotal = Math.max(0, roundCents(Number(cartTotal) || 0))
   const normalizedDownPayment = Math.min(
     normalizedTotal,
     Math.max(0, roundMoney(Number(downPayment) || 0)),
   )
-  const financedAmount = roundMoney(normalizedTotal - normalizedDownPayment)
+  const financedAmount = roundCents(normalizedTotal - normalizedDownPayment)
 
   return [
     ...(normalizedDownPayment > 0 ? [{

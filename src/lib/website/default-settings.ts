@@ -1,3 +1,4 @@
+import { DEFAULT_CREDIT_POS_POLICY, normalizeCreditPosPolicy } from '@/lib/credits/pos-credit-policy'
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
 
@@ -414,6 +415,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       frequency: 'monthly',
       downPaymentPercent: 0,
       publicByDefault: true,
+      posPolicy: { ...DEFAULT_CREDIT_POS_POLICY },
       plans: [
         { count: 3, rate: 0 },
         { count: 6, rate: 10 },
@@ -580,6 +582,7 @@ export function applyWebsiteSettingsDefaults(
       plans: Array.isArray(productCreditDefaults.plans)
         ? productCreditDefaults.plans
         : defaults.product_credit_defaults.plans,
+      posPolicy: normalizeCreditPosPolicy(productCreditDefaults.posPolicy),
     },
     services_section: {
       ...defaults.services_section,
