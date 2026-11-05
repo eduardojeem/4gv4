@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   useCallback,
   useEffect,
@@ -16,6 +16,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 
@@ -26,10 +27,13 @@ import {
   type FinanceSummaryData,
 } from '@/lib/admin';
 import {
+  financeBreakdown,
+  financeHeadline,
   financePeriodDates,
   financeReportKey,
-  financeResultState,
+  groupFinanceWarnings,
   isEmptyFinanceSummary,
+  sumDue,
   type FinancePeriod,
 } from '@/lib/finance-model';
 import { openWeb } from '@/lib/marketplace';
@@ -43,8 +47,9 @@ import { fetchOrgSettings } from '@/lib/settings-admin';
 
 type Report = {
   key: string;
+  organizationId: string;
+  epoch: number;
   data: FinanceSummaryData;
-  dates: { startDate: string; endDate: string };
   timeZone: string;
   currency: string;
   branches: BranchItem[];
@@ -60,9 +65,22 @@ const calendarDate = (value: string) => {
   const [year, month, day] = value.split('-');
   return `${day}/${month}/${year}`;
 };
+const periodText = (dates: { startDate: string; endDate: string }) =>
+  dates.startDate === dates.endDate
+    ? calendarDate(dates.startDate)
+    : `Del ${calendarDate(dates.startDate)} al ${calendarDate(dates.endDate)}`;
+
+/** Colores de lectura rápida: verde gana, rojo pierde, ámbar revisar. */
+const TONES = {
+  light: { good: '#15803D', bad: '#B91C1C', warn: '#B45309', warnBg: '#FFFBEB', badBg: '#FEF2F2', accent: '#1D4ED8', onAccent: '#FFFFFF' },
+  dark: { good: '#4ADE80', bad: '#F87171', warn: '#FBBF24', warnBg: '#2A2110', badBg: '#2A1215', accent: '#93C5FD', onAccent: '#0B1120' },
+} as const;
+const BAR = { goods: '#F59E0B', expenses: '#8B5CF6', payroll: '#0EA5E9', profit: '#22C55E' } as const;
 
 export default function FinancesAdminScreen() {
   const colors = usePalette();
+  const tone = TONES[useColorScheme() === 'dark' ? 'dark' : 'light'];
+  const accent = tone.accent;
   const scope = useSyncExternalStore(
     subscribePrivateCacheContext,
     getPrivateCacheContext,
@@ -72,6 +90,7 @@ export default function FinancesAdminScreen() {
     organizationId: string | null;
     id: string;
   }>({ organizationId: null, id: 'all' });
+  const [showUpcoming, setShowUpcoming] = useState(false);
   const branchId =
     branch.organizationId === scope.organizationId ? branch.id : 'all';
   const key = financeReportKey(
@@ -87,11 +106,18 @@ export default function FinancesAdminScreen() {
   } | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const generation = useRef(0);
-  const visible = report?.key === key ? report : null;
+  // Al cambiar de período o sucursal queda lo anterior (atenuado) mientras
+  // carga, en vez de vaciar la pantalla; nunca de otro negocio o sesión.
+  const shown =
+    report &&
+    report.organizationId === scope.organizationId &&
+    report.epoch === scope.epoch
+      ? report
+      : null;
+  const stale = Boolean(shown && shown.key !== key);
   const error = failure?.key === key ? failure.message : null;
   const loading = busyKey === key;
-  const data = visible?.data;
-  const accent = colors.text === '#F1F5F9' ? '#93C5FD' : '#1D4ED8';
+  const data = shown?.data;
   const load = useCallback(async () => {
     const snapshot = getPrivateCacheContext();
     const request = ++generation.current;
@@ -121,8 +147,9 @@ export default function FinancesAdminScreen() {
         return;
       setReport({
         key,
+        organizationId: snapshot.organizationId,
+        epoch: snapshot.epoch,
         data: result,
-        dates,
         timeZone: settings.timeZone,
         currency: settings.currency,
         branches: branchResult.branches,
@@ -164,31 +191,31 @@ export default function FinancesAdminScreen() {
       Alert.alert('No pudimos abrir Finanzas', 'Volvé a intentar.'),
     );
   };
-  const amount = (value: number | null | undefined) =>
-    value == null || !Number.isFinite(value)
-      ? 'No calculable'
-      : formatMobileCurrency(value, visible?.currency ?? 'PYG');
-  const profit = data?.accrued.netProfit;
-  const profitState = financeResultState(profit);
-  const resultColor =
-    profit == null
-      ? colors.card
-      : profit > 0
-        ? '#166534'
-        : profit < 0
-          ? '#991B1B'
-          : colors.card;
-  const resultText = profit == null || profit === 0 ? colors.text : '#FFFFFF';
+  const amount = (value: number) =>
+    formatMobileCurrency(Number.isFinite(value) ? value : 0, shown?.currency ?? 'PYG');
+  const headline = data ? financeHeadline(data) : null;
+  const warnings = data ? groupFinanceWarnings(data.coverageWarnings) : [];
+  const breakdown = data && headline ? financeBreakdown(data, headline.profit) : null;
+  const branches = shown?.branches ?? [];
+  const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
+  const profitColor = !headline || headline.profit === 0 ? colors.text : headline.profit > 0 ? tone.good : tone.bad;
+  const profitTitle = !headline
+    ? ''
+    : headline.profit < 0
+      ? headline.estimated ? 'Pérdida estimada' : 'Pérdida'
+      : headline.estimated ? 'Ganancia estimada' : 'Ganancia';
+
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.text }]}
-        >
+        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
           Finanzas
         </Text>
-        <Text style={{ color: colors.muted }}>Resumen del negocio</Text>
+        <Text style={{ color: colors.muted }}>
+          {shown
+            ? periodText(financePeriodDates(period, shown.timeZone))
+            : 'Cómo le va a tu negocio'}
+        </Text>
       </View>
       <ScrollView
         horizontal
@@ -197,484 +224,483 @@ export default function FinancesAdminScreen() {
         contentContainerStyle={styles.filterContent}
       >
         {PERIODS.map((item) => (
-          <Pressable
+          <Chip
             key={item.key}
-            accessibilityRole="button"
-            accessibilityState={{ selected: period === item.key }}
+            label={item.label}
+            selected={period === item.key}
+            accent={accent}
+            onAccent={tone.onAccent}
+            colors={colors}
             onPress={() => setPeriod(item.key)}
-            style={[
-              styles.chip,
-              {
-                borderColor: period === item.key ? accent : colors.border,
-                backgroundColor: colors.card,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: period === item.key ? accent : colors.text,
-                fontWeight: '600',
-              }}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
+          />
         ))}
       </ScrollView>
+      {/* Con una sola sucursal «Todas» y esa muestran lo mismo: no se ofrece elegir. */}
+      {branches.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filters}
+          contentContainerStyle={styles.filterContent}
+        >
+          {[{ id: 'all', name: 'Todas las sucursales' }, ...branches].map((item) => (
+            <Chip
+              key={item.id}
+              icon={item.id === 'all' ? 'business-outline' : 'storefront-outline'}
+              label={item.name}
+              selected={branchId === item.id}
+              accent={accent}
+              onAccent={tone.onAccent}
+              colors={colors}
+              onPress={() => setBranch({ organizationId: scope.organizationId, id: item.id })}
+            />
+          ))}
+        </ScrollView>
+      )}
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={loading && Boolean(data) && !stale}
             onRefresh={() => void load()}
             tintColor={accent}
           />
         }
       >
-        <Text style={{ color: colors.text, fontWeight: '700' }}>
-          Sucursal:{' '}
-          {branchId === 'all'
-            ? 'Todas las sucursales'
-            : (visible?.branches.find((item) => item.id === branchId)?.name ??
-              'Sucursal seleccionada')}
-        </Text>
-        {visible && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {[{ id: 'all', name: 'Todas' }, ...visible.branches].map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: branchId === item.id }}
-                onPress={() =>
-                  setBranch({
-                    organizationId: scope.organizationId,
-                    id: item.id,
-                  })
-                }
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: branchId === item.id ? accent : colors.border,
-                  },
-                ]}
-              >
-                <Text style={{ color: colors.text }}>{item.name}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-        {visible?.branchesUnavailable && (
+        {shown?.branchesUnavailable && (
           <Text style={{ color: colors.muted }}>
-            No se pudo cargar la lista de sucursales. Deslizá para reintentar.
+            No se pudo cargar la lista de sucursales. Deslizá hacia abajo para reintentar.
           </Text>
         )}
-        {error && (
-          <View
-            accessibilityRole="alert"
-            style={[
-              styles.card,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Text style={{ color: colors.text }}>{error}</Text>
-            {visible && (
-              <Text style={{ color: colors.muted }}>
-                Estos son los últimos datos confirmados; no se pudieron
-                actualizar.
-              </Text>
-            )}
-            <Action
-              label="Reintentar"
-              color={accent}
-              onPress={() => void load()}
-            />
+        {stale && loading && (
+          <View style={styles.updating} accessibilityLiveRegion="polite">
+            <ActivityIndicator size="small" color={accent} />
+            <Text style={{ color: accent, fontWeight: '600' }}>Actualizando…</Text>
           </View>
         )}
-        {!data ? (
+        {error && (
+          <View accessibilityRole="alert" style={[styles.card, { backgroundColor: tone.badBg, borderColor: tone.bad }]}>
+            <Text style={[styles.bold, { color: colors.text }]}>{error}</Text>
+            {shown && (
+              <Text style={{ color: colors.muted }}>
+                Abajo ves los últimos datos que pudimos traer.
+              </Text>
+            )}
+            <Action label="Reintentar" color={accent} onPress={() => void load()} />
+          </View>
+        )}
+        {!data || !headline ? (
           !error && (
             <View style={styles.empty}>
-              <ActivityIndicator
-                accessibilityLabel="Cargando resumen financiero"
-                color={accent}
-              />
+              <ActivityIndicator accessibilityLabel="Cargando finanzas" color={accent} />
               <Text style={{ color: colors.muted }}>
-                {scope.organizationId
-                  ? 'Consultando el informe…'
-                  : 'Esperando el negocio activo…'}
+                {scope.organizationId ? 'Calculando cómo te fue…' : 'Esperando el negocio activo…'}
               </Text>
             </View>
           )
         ) : (
-          <>
-            <View style={{ gap: 4 }}>
-              <Text style={{ color: colors.text }}>
-                {calendarDate(visible!.dates.startDate)} al{' '}
-                {calendarDate(visible!.dates.endDate)}
-              </Text>
-              <Text style={{ color: colors.muted }}>
-                Zona horaria: {visible!.timeZone}
-              </Text>
-              {data.generatedAt && (
-                <Text style={{ color: colors.muted }}>
-                  Actualizado:{' '}
-                  {new Date(data.generatedAt).toLocaleString('es-PY', {
-                    timeZone: visible!.timeZone,
-                  })}
+          <View style={[styles.content, styles.noPad, stale && styles.dim]}>
+            {isEmptyFinanceSummary(data) ? (
+              <View style={[card, styles.center]}>
+                <Ionicons name="calendar-clear-outline" size={32} color={colors.muted} />
+                <Text style={[styles.bold, { color: colors.text }]}>Sin movimientos en este período</Text>
+                <Text style={[styles.centerText, { color: colors.muted }]}>
+                  No hubo ventas, gastos ni pagos. Probá con otro período
+                  {branches.length > 1 ? ' o sucursal' : ''}.
                 </Text>
-              )}
-              {loading && (
-                <Text
-                  accessibilityLiveRegion="polite"
-                  style={{ color: accent }}
-                >
-                  Actualizando…
-                </Text>
-              )}
-            </View>
-            {data.complete === false ||
-            Boolean(data.coverageWarnings?.length) ? (
-              <View
-                accessibilityRole="alert"
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.bold, { color: colors.text }]}>
-                  Informe incompleto
-                </Text>
-                <Text style={{ color: colors.muted }}>
-                  Revisá estos datos antes de usar el resultado para decidir.
-                </Text>
-                {data.coverageWarnings?.slice(0, 5).map((warning, index) => (
-                  <Text
-                    key={`${warning.code}-${warning.sourceId}-${index}`}
-                    style={{ color: colors.text }}
-                  >
-                    • {warning.sourceLabel ? `${warning.sourceLabel}: ` : ''}
-                    {warning.message}
-                  </Text>
-                ))}
-                {(data.coverageWarnings?.length ?? 0) > 5 && (
-                  <Text style={{ color: colors.muted }}>
-                    Hay más advertencias en el informe completo.
-                  </Text>
-                )}
-                <Action
-                  label="Revisar en la web"
-                  color={accent}
-                  onPress={web}
-                />
               </View>
-            ) : null}
-            {isEmptyFinanceSummary(data) && (
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.bold, { color: colors.text }]}>
-                  Sin movimientos en este período
-                </Text>
-                <Text style={{ color: colors.muted }}>
-                  Probá otro período o sucursal.
-                </Text>
+            ) : (
+              <>
+                <View
+                  accessible
+                  accessibilityLabel={`${profitTitle}: ${amount(headline.profit)}`}
+                  style={card}
+                >
+                  <View style={styles.between}>
+                    <Text style={[styles.bold, { color: colors.muted }]}>{profitTitle}</Text>
+                    {headline.estimated && (
+                      <View style={[styles.pill, { backgroundColor: tone.warnBg }]}>
+                        <Text style={{ color: tone.warn, fontSize: 12, fontWeight: '700' }}>Faltan costos</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroAmount, { color: profitColor }]}>
+                    {amount(headline.profit)}
+                  </Text>
+                  {headline.marginPct != null && headline.profit > 0 && (
+                    <Text style={{ color: colors.text }}>
+                      De cada {amount(100)} que vendiste te quedaron {amount(headline.marginPct)}.
+                    </Text>
+                  )}
+                  {headline.profit < 0 && (
+                    <Text style={{ color: colors.text }}>
+                      Gastaste más de lo que ganaste con las ventas.
+                    </Text>
+                  )}
+                  {headline.estimated && (
+                    <Text style={{ color: colors.muted }}>
+                      Es aproximada: algunas ventas no tienen el costo cargado y cuentan como si no te hubieran costado nada.
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.tiles}>
+                  <Tile
+                    icon="trending-up-outline"
+                    label="Vendiste"
+                    value={amount(data.accrued.revenue)}
+                    hint="Ventas, pedidos y reparaciones"
+                    colors={colors}
+                    accent={accent}
+                  />
+                  <Tile
+                    icon="swap-vertical-outline"
+                    label="Entró − salió"
+                    value={amount(data.cash.netCashFlow)}
+                    valueColor={data.cash.netCashFlow < 0 ? tone.bad : undefined}
+                    hint="Plata cobrada menos pagada"
+                    colors={colors}
+                    accent={accent}
+                  />
+                </View>
+
+                {warnings.length > 0 && (
+                  <View accessibilityRole="alert" style={[styles.card, { backgroundColor: tone.warnBg, borderColor: tone.warn }]}>
+                    <View style={styles.heading}>
+                      <Ionicons name="alert-circle-outline" size={20} color={tone.warn} />
+                      <Text style={[styles.bold, { color: colors.text }]}>Para que los números sean exactos</Text>
+                    </View>
+                    {warnings.map((group) => (
+                      <View key={group.code} style={{ gap: 2 }}>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>• {group.title}</Text>
+                        <Text style={{ color: colors.muted }}>{group.hint}</Text>
+                      </View>
+                    ))}
+                    {warnings.some((group) => group.code === 'MISSING_DIRECT_COST') && (
+                      <Action
+                        label="Cargar costos en Productos"
+                        color={accent}
+                        onPress={() => router.push('/panel/products' as never)}
+                      />
+                    )}
+                    <Action label="Ver cuáles son en la web" color={accent} onPress={web} />
+                  </View>
+                )}
+
+                <View style={card}>
+                  <Text accessibilityRole="header" style={[styles.cardTitle, { color: colors.text }]}>
+                    De dónde sale la ganancia
+                  </Text>
+                  {breakdown && (
+                    <View
+                      accessible
+                      accessibilityLabel={`De lo vendido: ${Math.round(breakdown.goods * 100)}% mercadería, ${Math.round(breakdown.expenses * 100)}% gastos, ${Math.round(breakdown.payroll * 100)}% sueldos y ${Math.round(breakdown.profit * 100)}% ganancia`}
+                      style={[styles.bar, { backgroundColor: colors.border }]}
+                    >
+                      {(['goods', 'expenses', 'payroll', 'profit'] as const).map((part) =>
+                        breakdown[part] > 0 ? (
+                          <View key={part} style={{ flex: breakdown[part], backgroundColor: BAR[part] }} />
+                        ) : null,
+                      )}
+                    </View>
+                  )}
+                  <Line label="Vendiste" value={amount(data.accrued.revenue)} colors={colors} />
+                  <Line
+                    dot={BAR.goods}
+                    label="Mercadería y repuestos"
+                    hint={headline.estimated ? 'Solo lo que tiene costo cargado' : 'Lo que te costó lo que vendiste'}
+                    value={`− ${amount(data.accrued.directCosts)}`}
+                    colors={colors}
+                  />
+                  <Line dot={BAR.expenses} label="Gastos del negocio" hint="Alquiler, servicios, compras varias" value={`− ${amount(data.accrued.operatingExpenses)}`} colors={colors} />
+                  <Line dot={BAR.payroll} label="Sueldos" value={`− ${amount(data.accrued.payrollCost)}`} colors={colors} />
+                  <Line
+                    dot={BAR.profit}
+                    label={profitTitle}
+                    value={amount(headline.profit)}
+                    valueColor={profitColor}
+                    strong
+                    colors={colors}
+                  />
+                </View>
+
+                <View style={card}>
+                  <Text accessibilityRole="header" style={[styles.cardTitle, { color: colors.text }]}>
+                    Plata que se movió
+                  </Text>
+                  <Text style={{ color: colors.muted }}>
+                    Lo que cobraste y pagaste de verdad en el período, en efectivo, tarjeta o transferencia. No es lo que hay en la caja.
+                  </Text>
+                  <Line icon="arrow-down-circle-outline" iconColor={tone.good} label="Entró" value={amount(data.cash.collected)} colors={colors} />
+                  <Line icon="arrow-up-circle-outline" iconColor={tone.bad} label="Salió" value={amount(data.cash.paid)} colors={colors} />
+                  <Line
+                    label="Diferencia"
+                    value={amount(data.cash.netCashFlow)}
+                    valueColor={data.cash.netCashFlow < 0 ? tone.bad : undefined}
+                    strong
+                    colors={colors}
+                  />
+                </View>
+              </>
+            )}
+
+            {data.overdue.length > 0 && (
+              <View accessibilityRole="alert" style={[styles.card, { backgroundColor: tone.badBg, borderColor: tone.bad }]}>
+                <View style={styles.heading}>
+                  <Ionicons name="alarm-outline" size={20} color={tone.bad} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>
+                    {data.overdue.length === 1 ? 'Tenés 1 cuenta vencida' : `Tenés ${data.overdue.length} cuentas vencidas`}
+                  </Text>
+                </View>
+                <Text style={{ color: tone.bad, fontWeight: '700' }}>Total: {amount(sumDue(data.overdue))}</Text>
+                <DueRows items={data.overdue.slice(0, 5)} amount={amount} colors={colors} />
+                {data.overdue.length > 5 && (
+                  <Text style={{ color: colors.muted }}>Y {data.overdue.length - 5} más.</Text>
+                )}
+                <Action label="Pagar o revisar en la web" color={accent} onPress={web} />
               </View>
             )}
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: resultColor, borderColor: colors.border },
-              ]}
-            >
-              <Text style={{ color: resultText }}>
-                Resultado neto del período
-              </Text>
-              <Text style={[styles.heroAmount, { color: resultText }]}>
-                {amount(profit)}
-              </Text>
-              <Text style={{ color: resultText, fontWeight: '700' }}>
-                {profitState}
-              </Text>
-              {profit == null && (
-                <Text style={{ color: colors.muted }}>
-                  Faltan datos para calcular la utilidad. Revisá las
-                  advertencias.
-                </Text>
-              )}
-            </View>
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <Text
-                accessibilityRole="header"
-                style={[styles.cardTitle, { color: colors.text }]}
-              >
-                Estado de resultados
-              </Text>
-              <AmountRow
-                label="Ingresos netos"
-                hint="Ventas, pedidos y reparaciones, descontando devoluciones"
-                value={amount(data.accrued.revenue)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Costos directos"
-                hint="Productos y repuestos con costo registrado"
-                value={amount(data.accrued.directCosts)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Margen bruto"
-                value={amount(data.accrued.grossProfit)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Gastos operativos"
-                value={amount(data.accrued.operatingExpenses)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Costo laboral"
-                value={amount(data.accrued.payrollCost)}
-                colors={colors}
-              />
-            </View>
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.heading}>
-                <Ionicons
-                  name="swap-vertical-outline"
-                  size={20}
-                  color={accent}
-                />
-                <Text
-                  accessibilityRole="header"
-                  style={[styles.cardTitle, { color: colors.text }]}
+
+            {data.upcomingDue.length > 0 && (
+              <View style={card}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showUpcoming }}
+                  onPress={() => setShowUpcoming((value) => !value)}
+                  style={[styles.between, styles.action]}
                 >
-                  Cobros y pagos
-                </Text>
+                  <View style={{ flexShrink: 1, gap: 2 }}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>
+                      Próximos pagos ({data.upcomingDue.length})
+                    </Text>
+                    <Text style={{ color: colors.muted }}>Total: {amount(sumDue(data.upcomingDue))}</Text>
+                  </View>
+                  <Ionicons name={showUpcoming ? 'chevron-up' : 'chevron-down'} size={20} color={colors.muted} />
+                </Pressable>
+                {showUpcoming && (
+                  <>
+                    <DueRows items={data.upcomingDue.slice(0, 10)} amount={amount} colors={colors} />
+                    {data.upcomingDue.length > 10 && (
+                      <Text style={{ color: colors.muted }}>Y {data.upcomingDue.length - 10} más.</Text>
+                    )}
+                  </>
+                )}
               </View>
-              <Text style={{ color: colors.muted }}>
-                Incluye efectivo, tarjetas y transferencias. No representa el
-                efectivo del cajón.
+            )}
+
+            {data.generatedAt && (
+              <Text style={[styles.centerText, { color: colors.muted, fontSize: 12 }]}>
+                Actualizado a las{' '}
+                {new Date(data.generatedAt).toLocaleTimeString('es-PY', {
+                  timeZone: shown!.timeZone,
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+                . Deslizá hacia abajo para actualizar.
               </Text>
-              <AmountRow
-                label="Total cobrado"
-                value={amount(data.cash.collected)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Total pagado"
-                value={amount(data.cash.paid)}
-                colors={colors}
-              />
-              <AmountRow
-                label="Flujo neto del período"
-                value={amount(data.cash.netCashFlow)}
-                colors={colors}
-              />
-            </View>
-            <Text style={{ color: colors.muted }}>
-              Los vencimientos muestran las obligaciones pendientes actuales de
-              la sucursal elegida, sin limitarse al período del resultado.
-            </Text>
-            <DueList
-              title="Vencidos"
-              items={data.overdue}
-              empty="No hay obligaciones vencidas."
-              colors={colors}
-              amount={amount}
-              onOpen={web}
-              accent={accent}
-            />
-            <DueList
-              title="Próximos vencimientos"
-              items={data.upcomingDue}
-              empty="No hay vencimientos pendientes registrados."
-              colors={colors}
-              amount={amount}
-              onOpen={web}
-              accent={accent}
-            />
-          </>
+            )}
+          </View>
         )}
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[styles.bold, { color: colors.text }]}>
-            Gestión completa
-          </Text>
-          <Text style={{ color: colors.muted }}>
-            Para registrar gastos, pagar obligaciones o gestionar nómina, abrí
-            Finanzas en la web y verificá el negocio activo.
-          </Text>
-          <Action
-            label="Abrir gestión de Finanzas en la web"
-            color={accent}
-            onPress={web}
-          />
-        </View>
+        <Pressable accessibilityRole="button" onPress={web} style={[card, styles.between]}>
+          <View style={{ flexShrink: 1, gap: 4 }}>
+            <Text style={[styles.bold, { color: colors.text }]}>Registrar gastos y pagar cuentas</Text>
+            <Text style={{ color: colors.muted }}>Gastos, cuentas a pagar y sueldos se cargan en la web.</Text>
+          </View>
+          <Ionicons name="open-outline" size={20} color={accent} />
+        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
 type Colors = ReturnType<typeof usePalette>;
-function Action({
+type IconName = keyof typeof Ionicons.glyphMap;
+
+function Chip({
   label,
-  color,
+  icon,
+  selected,
+  accent,
+  onAccent,
+  colors,
   onPress,
 }: {
   label: string;
-  color: string;
+  icon?: IconName;
+  selected: boolean;
+  accent: string;
+  onAccent: string;
+  colors: Colors;
   onPress: () => void;
 }) {
+  const fg = selected ? onAccent : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
-      style={styles.action}
+      style={[
+        styles.chip,
+        {
+          borderColor: selected ? accent : colors.border,
+          backgroundColor: selected ? accent : colors.card,
+        },
+      ]}
     >
-      <Text style={{ color, fontWeight: '600' }}>{label}</Text>
+      {icon && <Ionicons name={icon} size={16} color={fg} />}
+      <Text style={{ color: fg, fontWeight: '600' }}>{label}</Text>
     </Pressable>
   );
 }
-function AmountRow({
+
+function Action({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.action}>
+      <Text style={{ color, fontWeight: '700' }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function Tile({
+  icon,
+  label,
+  value,
+  hint,
+  valueColor,
+  colors,
+  accent,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  hint: string;
+  valueColor?: string;
+  colors: Colors;
+  accent: string;
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${value}. ${hint}`}
+      style={[styles.card, styles.tile, { backgroundColor: colors.card, borderColor: colors.border }]}
+    >
+      <View style={styles.heading}>
+        <Ionicons name={icon} size={18} color={accent} />
+        <Text style={{ color: colors.muted, fontWeight: '600' }}>{label}</Text>
+      </View>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.tileAmount, { color: valueColor ?? colors.text }]}>
+        {value}
+      </Text>
+      <Text style={{ color: colors.muted, fontSize: 12 }}>{hint}</Text>
+    </View>
+  );
+}
+
+function Line({
   label,
   hint,
   value,
+  valueColor,
+  dot,
+  icon,
+  iconColor,
+  strong,
   colors,
 }: {
   label: string;
   hint?: string;
   value: string;
+  valueColor?: string;
+  dot?: string;
+  icon?: IconName;
+  iconColor?: string;
+  strong?: boolean;
   colors: Colors;
 }) {
   return (
     <View style={[styles.row, { borderColor: colors.border }]}>
-      <View style={styles.rowLabel}>
-        <Text style={{ color: colors.text, fontWeight: '600' }}>{label}</Text>
-        {hint && (
-          <Text style={{ color: colors.muted, fontSize: 12 }}>{hint}</Text>
-        )}
+      <View style={[styles.rowLabel, styles.heading]}>
+        {dot && <View style={[styles.dot, { backgroundColor: dot }]} />}
+        {icon && <Ionicons name={icon} size={18} color={iconColor ?? colors.muted} />}
+        <View style={{ flexShrink: 1, gap: 2 }}>
+          <Text style={{ color: colors.text, fontWeight: strong ? '800' : '600' }}>{label}</Text>
+          {hint && <Text style={{ color: colors.muted, fontSize: 12 }}>{hint}</Text>}
+        </View>
       </View>
-      <Text style={[styles.amount, { color: colors.text }]}>{value}</Text>
+      <Text style={[styles.amount, { color: valueColor ?? colors.text }, strong && styles.amountStrong]}>{value}</Text>
     </View>
   );
 }
-function DueList({
-  title,
+
+function DueRows({
   items,
-  empty,
-  colors,
   amount,
-  onOpen,
-  accent,
+  colors,
 }: {
-  title: string;
   items: FinanceSummaryData['overdue'];
-  empty: string;
-  colors: Colors;
   amount: (value: number) => string;
-  onOpen: () => void;
-  accent: string;
+  colors: Colors;
 }) {
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
-      <Text
-        accessibilityRole="header"
-        style={[styles.cardTitle, { color: colors.text }]}
-      >
-        {title} ({items.length})
-      </Text>
-      {!items.length ? (
-        <Text style={{ color: colors.muted }}>{empty}</Text>
-      ) : (
-        <>
-          {items.slice(0, 10).map((item) => (
-            <View
-              key={item.id}
-              style={[styles.row, { borderColor: colors.border }]}
-            >
-              <View style={styles.rowLabel}>
-                <Text style={{ color: colors.text }}>
-                  {item.concept || 'Obligación pendiente'}
-                </Text>
-                <Text style={{ color: colors.muted }}>
-                  Vencimiento: {calendarDate(item.dueDate)}
-                </Text>
-              </View>
-              <Text style={[styles.amount, { color: colors.text }]}>
-                {amount(item.amount)}
-              </Text>
-            </View>
-          ))}
-          {items.length > 10 && (
-            <Text style={{ color: colors.muted }}>
-              Mostrando 10 de {items.length} obligaciones.
-            </Text>
-          )}
-          <Action
-            label="Ver y gestionar obligaciones en la web"
-            color={accent}
-            onPress={onOpen}
-          />
-        </>
-      )}
-    </View>
+    <>
+      {items.map((item) => (
+        <View key={item.id} style={[styles.row, { borderColor: colors.border }]}>
+          <View style={styles.rowLabel}>
+            <Text style={{ color: colors.text, fontWeight: '600' }}>{item.concept || 'Cuenta a pagar'}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>Vence el {calendarDate(item.dueDate)}</Text>
+          </View>
+          <Text style={[styles.amount, { color: colors.text }]}>{amount(item.amount)}</Text>
+        </View>
+      ))}
+    </>
   );
 }
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { padding: 16, gap: 4 },
+  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 2 },
   title: { fontSize: 24, fontWeight: '800' },
   filters: { flexGrow: 0 },
-  filterContent: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  filterContent: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
   chip: {
-    minHeight: 44,
+    minHeight: 40,
     borderWidth: 1,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  content: { padding: 16, gap: 16, paddingBottom: 40 },
-  card: { padding: 16, borderRadius: 12, borderWidth: 1, gap: 12 },
+  content: { padding: 16, gap: 14, paddingBottom: 40 },
+  noPad: { padding: 0, paddingBottom: 0 },
+  dim: { opacity: 0.55 },
+  updating: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  card: { padding: 16, borderRadius: 14, borderWidth: 1, gap: 10 },
+  center: { alignItems: 'center' },
+  centerText: { textAlign: 'center' },
+  between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   bold: { fontWeight: '700', fontSize: 16 },
   cardTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
-  heroAmount: { fontSize: 28, fontWeight: '800', flexShrink: 1 },
+  heroAmount: { fontSize: 34, fontWeight: '800' },
+  tiles: { flexDirection: 'row', gap: 12 },
+  tile: { flex: 1, gap: 6 },
+  tileAmount: { fontSize: 20, fontWeight: '800' },
   heading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden' },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    paddingTop: 12,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  rowLabel: { flexGrow: 1, flexShrink: 1, flexBasis: 150, gap: 4 },
+  rowLabel: { flexGrow: 1, flexShrink: 1, flexBasis: 150, gap: 2 },
   amount: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  amountStrong: { fontSize: 18, fontWeight: '800' },
   action: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
   empty: { alignItems: 'center', padding: 32, gap: 12 },
 });
