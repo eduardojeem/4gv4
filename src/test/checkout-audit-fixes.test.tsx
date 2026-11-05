@@ -85,7 +85,7 @@ describe('pedido mínimo', () => {
     expect(route).toContain("code: 'MIN_ORDER_NOT_REACHED'")
     expect(route).toContain('missingForMinimumOrder(checkout.minOrderAmount, subtotal)')
     const cart = read('src/components/public/cart/CartPageClient.tsx')
-    expect(cart).toContain('disabled={loading || items.length === 0 || missingForMinimum > 0}')
+    expect(cart).toContain('disabled={paymentControlBlocked || loading || items.length === 0 || missingForMinimum > 0}')
   })
 })
 

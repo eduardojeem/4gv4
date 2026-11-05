@@ -33,7 +33,7 @@ export const PATCH = withTenantAuth({}, async (request, { organization, user }) 
   try {
     await requireCommercePaymentControlsReady()
     await updatePaymentControlPolicy({ scope: 'commerce', actorId: user.id, organizationId: organization.id, ...parsed.data, revision: parsed.data.revision ?? null })
-    const { error } = await createAdminSupabase().from('audit_log').insert({ user_id: user.id, action: 'update_commerce_payment_control', resource: 'organization_settings', resource_id: organization.id, new_values: { scope: 'commerce', organization_id: organization.id, id: parsed.data.id, enabled: parsed.data.enabled } })
+    const { error } = await createAdminSupabase().from('audit_log').insert({ user_id: user.id, action: 'update_organization_settings', resource: 'organization_settings', resource_id: organization.id, new_values: { scope: 'commerce', organization_id: organization.id, id: parsed.data.id, enabled: parsed.data.enabled } })
     if (error) logger.warn('Payment control audit failed', { organizationId: organization.id })
     return NextResponse.json(await snapshot(organization.id, true, true), { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) { return failure(error) }
