@@ -69,3 +69,22 @@ describe('SubscriptionPaymentPanel', () => {
     expect(screen.queryByRole('button', { name: /^tarjeta/i })).not.toBeInTheDocument()
   })
 })
+
+const disabledAvailability = { pagopar_card: false, pagopar_qr: false, stripe: false, transfer: false }
+
+describe('subscription payment availability', () => {
+  it('shows no checkout action or billing prompt when every method is disabled', () => {
+    render(<SubscriptionPaymentPanel {...baseProps} paymentAvailability={disabledAvailability} missingFields={['RUC o CI']} />)
+    expect(screen.getByRole('status')).toHaveTextContent('No hay medios de pago disponibles')
+    expect(screen.queryByRole('button', { name: /Pagar con/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/completá tus datos/i)).not.toBeInTheDocument()
+  })
+
+  it('selects QR when card is disabled and clears it when availability changes', () => {
+    const { rerender } = render(<SubscriptionPaymentPanel {...baseProps} paymentAvailability={{ ...disabledAvailability, pagopar_qr: true }} />)
+    expect(screen.queryByRole('button', { name: /^Tarjeta/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar con QR' })).toBeEnabled()
+    rerender(<SubscriptionPaymentPanel {...baseProps} paymentAvailability={disabledAvailability} />)
+    expect(screen.queryByRole('button', { name: /Pagar con/i })).not.toBeInTheDocument()
+  })
+})

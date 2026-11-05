@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 export type FinancialClosurePaymentInput = {
   method: 'cash' | 'card' | 'transfer' | 'credit'
   amount: number
@@ -128,6 +130,8 @@ export async function closeRepairAndRegisterPayment(
     )
   }
 
+  try { if (payment) await assertCommercePayments(input.organizationId, [{ method: payment.method, amount: payment.amount }]) }
+  catch (error) { if (error instanceof PaymentControlError) throw new FinancialClosureRpcError(error.message, error.code, error.status); throw error }
   const { data, error } = await client.rpc('close_repair_and_register_payment_v2', {
     p_repair_id: input.repairId,
     p_organization_id: input.organizationId,

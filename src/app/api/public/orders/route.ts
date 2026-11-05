@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextRequest, NextResponse } from 'next/server'
 import { afterResponse, notifyOrderCreated } from '@/lib/notifications/server/business-events'
 import { z } from 'zod'
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest) {
         : {}
     ).checkout
 
+    await assertCommercePayments(organization.id, [{ method: input.paymentMethod }, ...(input.storeCreditAmount > 0 ? [{ method: 'store_credit' }] : [])])
     if (checkout.commerceMode !== 'cart') {
       return NextResponse.json(
         { success: false, error: 'La tienda no tiene habilitados los pedidos por carrito.' },
@@ -444,6 +447,7 @@ export async function POST(request: NextRequest) {
     }))
     return NextResponse.json({ success: true, data: normalizeOrder(fullOrder) }, { status: 201 })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     const message = error instanceof Error
       ? error.message
       : String((error as { message?: unknown } | null)?.message ?? '')

@@ -5,6 +5,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { readBoundedBody } from '@/lib/saas/bank-transfer-upload'
 import { BankTransferError } from '@/lib/saas/bank-transfers'
+import { getBrowserRequestOrigin } from '@/lib/http/app-origin'
 
 export class TransferApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
@@ -14,7 +15,7 @@ export const transferIdSchema = z.string().uuid()
 
 export function requireTransferMutation(request: Request) {
   const origin = request.headers.get('origin')
-  if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
+  if ((origin && origin !== getBrowserRequestOrigin(request)) || request.headers.get('sec-fetch-site') === 'cross-site') {
     throw new TransferApiError('El origen de la solicitud no está autorizado.', 403)
   }
 }

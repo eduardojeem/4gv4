@@ -8,6 +8,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.f
 vi.mock('@/app/dashboard/pos/contexts/POSCustomerContext', () => ({ usePOSCustomer: () => ({ activeCustomer: state.customer, refreshCustomers: vi.fn() }) }))
 vi.mock('@/hooks/use-credit-system', () => ({ useCreditSystem: () => ({ loadCreditData: vi.fn() }) }))
 vi.mock('@/hooks/use-permissions', () => ({ usePermissions: () => ({ hasPermission: () => state.canEdit }) }))
+vi.mock('@/hooks/use-commerce-payment-controls', () => ({ useCommercePaymentControls: () => ({ allows: () => true, ready: true, error: null }) }))
 
 import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import { minimumCreditDownPayment } from '@/app/dashboard/pos/lib/cart-credit-plans'

@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto'
+import { assertSubscriptionPaymentEnabled } from '@/lib/payments/subscription-controls'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import {
   createPagoparOrder,
   getPagoparAmountInPyg,
@@ -59,6 +61,9 @@ export async function createSubscriptionPagoparCheckout(params: {
   correlationId?: string
 }) {
   const { organization, userEmail, targetPlanCode, canChangePlan, paymentMethod, correlationId } = params
+
+  try { await assertSubscriptionPaymentEnabled(paymentMethod === 'qr' ? 'pagopar_qr' : 'pagopar_card') }
+  catch (error) { if (error instanceof PaymentControlError) throw new SubscriptionCheckoutError(error.message, error.status); throw error }
 
   if (!isPagoparConfigured()) {
     throw new SubscriptionCheckoutError('Pagopar no está configurado.', 501)

@@ -37,13 +37,12 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SubscriptionPaymentPanel } from '@/components/admin/subscriptions/SubscriptionPaymentPanel'
-import { isStripeCheckoutEnabled } from '@/lib/payments/stripe'
+import { getSubscriptionPaymentAvailability } from '@/lib/payments/subscription-controls'
 import {
   applySubscriptionDiscount,
   describeSubscriptionDiscount,
   findAvailableSubscriptionDiscount,
 } from '@/lib/saas/subscription-discount'
-import { isPagoparRecurringEnabled } from '@/lib/payments/pagopar-recurring'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
 
@@ -197,6 +196,7 @@ export default async function AdminSubscriptionsPage() {
   if (!organization || !['owner', 'admin'].includes(organization.role)) redirect('/forbidden')
 
   const state = await getCurrentOrganizationSubscription(organization.id)
+  const paymentAvailability = await getSubscriptionPaymentAvailability()
   const productGrace = await getProductGraceStatus(organization.id)
 
   const subscription = state.subscription
@@ -293,7 +293,7 @@ export default async function AdminSubscriptionsPage() {
                 </Link>
               </Button>
             )}
-            {canChangePlan && isPagoparRecurringEnabled() && (
+            {canChangePlan && (
               <Button asChild variant="outline" className="h-10 gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/autopay">
                   <RefreshCw className="h-4 w-4 text-primary" />
@@ -411,8 +411,8 @@ export default async function AdminSubscriptionsPage() {
         planName={state.currentPlan.name}
         planAmount={discount ? money(applySubscriptionDiscount(state.currentPlan.price_monthly, discount), state.currentPlan.currency) : regularAmount}
         discountNote={discount ? `${describeSubscriptionDiscount(discount)} con tarjeta o QR · precio normal ${regularAmount}` : undefined}
-        stripeEnabled={isStripeCheckoutEnabled()}
-        canPayByTransfer
+        paymentAvailability={paymentAvailability}
+        canPayByTransfer={paymentAvailability.transfer}
       />
 
       {/* ── Cupos, planes, pagos y datos fiscales ────────────────────────── */}
@@ -426,6 +426,7 @@ export default async function AdminSubscriptionsPage() {
         subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
         canRedeemCodes={['owner', 'admin'].includes(organization.role)}
+        promoEnabled={paymentAvailability.promo}
         averageUsage={averageUsage}
       />
 

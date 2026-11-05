@@ -1,3 +1,6 @@
+import { recoverCollectionReplay } from '@/lib/payments/collection-replay'
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { z } from 'zod'
 import { collectionRequestSchema, collectionResultSchema, type CollectionResult } from './collection-contract'
 
@@ -27,6 +30,17 @@ export async function collectCustomerPayment(admin: RpcClient, input: {
   if (!ids.success) throw new CollectionError('No se pudo validar el cliente, la sucursal o quién cobra.', 403, 'COLLECTION_FORBIDDEN')
   const parsed = collectionRequestSchema.safeParse(input.request)
   if (!parsed.success) throw new CollectionError(parsed.error.issues[0]?.message || 'Cobro inválido.', 400, 'COLLECTION_INVALID_REQUEST')
+  try { await assertCommercePayments(input.organizationId, [{ method: parsed.data.paymentMethod }]) }
+  catch (error) {
+    if (error instanceof PaymentControlError) {
+      try {
+        const replay = await recoverCollectionReplay({ ...input, request: parsed.data })
+        if (replay) return replay
+      } catch { throw new CollectionError('No se pudo comprobar el resultado del cobro. Reintentá con el mismo identificador.', 503, 'COLLECTION_REPLAY_UNAVAILABLE') }
+      throw new CollectionError(error.message, error.status, error.code)
+    }
+    throw error
+  }
   const { data, error } = await admin.rpc('collect_customer_payment_atomic', {
     p_organization_id: input.organizationId, p_customer_id: input.customerId,
     p_actor_id: input.actorId, p_branch_id: input.branchId, p_request: parsed.data,

@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { FinancialClosureRpcError } from './financial-closure-rpc'
 
 type RpcClient = {
@@ -38,6 +40,8 @@ const ERROR_DETAILS: Record<string, { status: number; message: string }> = {
 }
 
 export async function registerUnpricedRepairDeposit(client: RpcClient, input: UnpricedRepairDepositInput) {
+  try { await assertCommercePayments(input.organizationId, [{ method: input.method, amount: input.amount }]) }
+  catch (error) { if (error instanceof PaymentControlError) throw new FinancialClosureRpcError(error.message, error.code, error.status); throw error }
   const { data, error } = await client.rpc('register_unpriced_repair_deposit', {
     p_repair_id: input.repairId,
     p_organization_id: input.organizationId,

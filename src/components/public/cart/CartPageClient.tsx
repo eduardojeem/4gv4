@@ -267,7 +267,7 @@ export function CartPageClient({
     : '/login?redirect=/carrito'
   const { user, loading: loadingAuth, refreshUser } = useAuth()
   const { items, subtotal, setQuantity, setAvailableStock, setUnitPrice, removeItem, clear } = usePublicCart()
-  const { settings: siteSettings } = useWebsiteSettings()
+  const { settings: siteSettings, error: settingsError } = useWebsiteSettings()
   const checkout = siteSettings?.checkout ?? getWebsiteSettingsDefaults().checkout
   const pickupAddress = siteSettings?.company_info?.address?.trim() ?? ''
   const pickupMapsUrl = siteSettings?.company_info?.mapsUrl?.trim() ?? ''
@@ -310,6 +310,9 @@ export function CartPageClient({
   const [validatingPromotion, setValidatingPromotion] = useState(false)
   const [appliedPromotion, setAppliedPromotion] = useState<{ code: string; name: string; discountAmount: number } | null>(null)
   const [storeCreditAmount, setStoreCreditAmount] = useState(0)
+  const paymentControlBlocked = !siteSettings || Boolean(settingsError)
+    || checkout.payment[PM_KEY_MAP[paymentMethod]]?.enabled === false
+    || (storeCreditAmount > 0 && siteSettings.paymentControls?.store_credit !== true)
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [loading,             setLoading]             = useState(false)
@@ -485,7 +488,7 @@ export function CartPageClient({
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function submitOrder() {
-    if (!isValid) return
+    if (!isValid || paymentControlBlocked) return
 
     setShowConfirmation(false)
     setLoading(true)
@@ -1183,19 +1186,21 @@ export function CartPageClient({
                 )}
               </div>
 
-              <PublicStoreCredit
+              {siteSettings?.paymentControls?.store_credit === true && <PublicStoreCredit
                 authenticated={Boolean(user)}
                 organizationSlug={organizationSlug}
                 orderTotal={total}
                 amount={storeCreditAmount}
                 onAmountChange={setStoreCreditAmount}
-              />
+              />}
+              {storeCreditAmount > 0 && siteSettings?.paymentControls?.store_credit !== true && <Button type="button" variant="outline" onClick={() => setStoreCreditAmount(0)}>Quitar saldo a favor no disponible</Button>}
 
               {/* ── Payment ── */}
               <div className="space-y-3 rounded-2xl border p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <CreditCard className="h-3.5 w-3.5" /> Método de pago
                 </p>
+                {paymentControlBlocked && <p role="status" className="text-sm text-muted-foreground">{settingsError ? 'No se pudieron confirmar los medios de pago. Actualizá la página para reintentar.' : !siteSettings ? 'Consultando medios de pago…' : 'Seleccioná un medio habilitado. Si no hay opciones, la tienda no recibe pedidos por este canal en este momento.'}</p>}
                 {/* Only show enabled payment methods from settings */}
                 {(() => {
                   const enabled = (
@@ -1351,7 +1356,7 @@ export function CartPageClient({
               {/* ── Submit ── */}
               <Button
                 className="w-full h-12 rounded-2xl text-base font-bold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                disabled={loading || items.length === 0 || missingForMinimum > 0}
+                disabled={paymentControlBlocked || loading || items.length === 0 || missingForMinimum > 0}
                 onClick={reviewOrder}
               >
                 {loading
@@ -1513,7 +1518,7 @@ export function CartPageClient({
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" disabled={loading} onClick={() => setShowConfirmation(false)}>Volver y editar</Button>
-            <Button type="button" disabled={loading} onClick={() => void submitOrder()} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+            <Button type="button" disabled={loading || paymentControlBlocked} onClick={() => void submitOrder()} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {loading ? 'Procesando…' : 'Confirmar pedido'}
             </Button>

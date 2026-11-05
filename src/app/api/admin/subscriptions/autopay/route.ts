@@ -1,3 +1,4 @@
+import { getSubscriptionPaymentAvailability } from '@/lib/payments/subscription-controls'
 import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getAppReturnOrigin, getBrowserRequestOrigin } from '@/lib/http/app-origin'
@@ -51,7 +52,7 @@ export async function GET() {
   if ('response' in context) return context.response
 
   try {
-    return NextResponse.json(await getAutopayStatus(context.organization.id))
+    return NextResponse.json({ ...await getAutopayStatus(context.organization.id), paymentAvailability: await getSubscriptionPaymentAvailability() })
   } catch (error) {
     return errorResponse(error)
   }

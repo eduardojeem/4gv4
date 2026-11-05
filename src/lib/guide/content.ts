@@ -1138,6 +1138,40 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: 'payment-controls',
+    navKey: 'payment-controls',
+    title: 'Medios de cobro',
+    summary: 'Qué medios de cobro acepta tu comercio en el POS, reparaciones, cobros de crédito y la tienda.',
+    group: 'administration',
+    href: '/admin/billing/payment-methods',
+    permissions: ['settings.read'],
+    keywords: ['medios de cobro', 'efectivo', 'tarjeta', 'transferencia', 'qr', 'billetera', 'credito', 'saldo a favor', 'deshabilitar'],
+    steps: [
+      {
+        title: 'Elegí qué medios aceptás',
+        description: 'Activá o desactivá efectivo, tarjeta, transferencia, QR, billetera digital, crédito y saldo a favor. Solo dueños y administradores pueden cambiarlo.',
+      },
+      {
+        title: 'Se aplica en todos lados',
+        description: 'El POS, la app, los cobros de reparaciones y de créditos y la tienda online muestran solo los medios habilitados, y el servidor rechaza un cobro con un medio desactivado.',
+      },
+      {
+        title: 'Los cambios quedan registrados',
+        description: 'Cada cambio guarda quién lo hizo y cuándo. Los cobros ya registrados y los reembolsos no cambian.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Dejé de aceptar transferencias y no quiero que el cajero las use por error',
+        setup: [
+          'Entrás a Medios de cobro y desactivás Transferencia.',
+          'En el POS deja de aparecer como opción, también en el pago mixto.',
+        ],
+        result: 'Nadie puede registrar una venta nueva con transferencia hasta que la vuelvas a activar.',
+      },
+    ],
+  },
+  {
     id: 'subscriptions',
     navKey: 'subscriptions',
     title: 'Suscripción',

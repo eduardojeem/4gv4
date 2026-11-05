@@ -82,3 +82,12 @@ describe('Cambiar plan', () => {
     expect(screen.queryByRole('button', { name: /^transferencia/i })).not.toBeInTheDocument()
   })
 })
+
+it('keeps free changes available but prevents paid checkout when all payment methods are off', async () => {
+  const fetchMock = mockData({ paymentAvailability: { pagopar_card: false, pagopar_qr: false, stripe: false, transfer: false } })
+  render(<ChangePlanPage />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Elegir Pro' }))
+  expect(screen.getByRole('button', { name: 'Sin medios de pago disponibles' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('No hay medios de pago disponibles')
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+})

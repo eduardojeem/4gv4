@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback } from 'react'
+import { useCommercePaymentControls } from '@/hooks/use-commerce-payment-controls'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -93,6 +94,7 @@ export function PaymentMethods({
   productCreditPlans = [],
   setShowCreditHistory,
 }: PaymentMethodsProps) {
+  const controls = useCommercePaymentControls()
   
   const {
     isMixedPayment,
@@ -245,7 +247,12 @@ export function PaymentMethods({
     { id: 'card', label: paymentMethodLabels.card, icon: CreditCard, color: 'text-muted-foreground' },
     { id: 'transfer', label: paymentMethodLabels.transfer, icon: Users, color: 'text-muted-foreground' },
     { id: 'credit', label: paymentMethodLabels.credit, icon: Clock, color: 'text-muted-foreground' }
-  ]
+  ].filter(method => controls.allows(method.id))
+  const policyReady = controls.ready
+  const currentMethodAllowed = controls.allows(paymentMethod)
+  React.useEffect(() => {
+    if (policyReady && !isMixedPayment && paymentMethod && !currentMethodAllowed) setPaymentMethod('')
+  }, [policyReady, currentMethodAllowed, isMixedPayment, paymentMethod, setPaymentMethod])
   const existingCreditPrincipal = React.useMemo(
     () => paymentSplit
       .filter(split => split.method === 'credit')
@@ -287,6 +294,7 @@ export function PaymentMethods({
 
   return (
     <div className="space-y-4">
+      {(!controls.ready || paymentMethods.length === 0) && <p role="status" className="rounded-lg border p-3 text-sm text-muted-foreground">{controls.error || (controls.ready ? 'No hay medios de cobro habilitados.' : 'Consultando medios de cobro…')}</p>}
       <CreditFilePaymentSummary customerId={activeCustomer ? String(activeCustomer.id) : undefined} mixed={isMixedPayment} method={paymentMethod} splits={paymentSplit} formatAmount={formatCurrency} />
       {/* Toggle entre pago simple y mixto */}
       <div className="flex items-center justify-between gap-3">
@@ -300,7 +308,7 @@ export function PaymentMethods({
           onClick={() => {
             const nextMixed = !isMixedPayment
             setIsMixedPayment(nextMixed)
-            setPaymentMethod(nextMixed ? '' : 'cash')
+            setPaymentMethod(nextMixed ? '' : paymentMethods[0]?.id ?? '')
             setSplitAmount(0)
             if (!nextMixed) setPaymentSplit([])
           }}

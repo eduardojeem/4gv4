@@ -6,6 +6,7 @@ import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/sa
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { restrictPublicSettingsToModules } from '@/lib/website/public-section-availability'
 import { resolvePublicCheckout } from '@/lib/website/commerce-mode'
+import { readPaymentControlPolicy } from '@/lib/payments/control-store'
 import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 
 /**
@@ -40,6 +41,10 @@ export async function GET(request: NextRequest) {
     })
 
     const normalized = applyWebsiteSettingsDefaults(settingsObj)
+    const { flags } = await readPaymentControlPolicy('commerce', organization.id)
+    for (const method of ['cash', 'card', 'transfer', 'digital_wallet'] as const) {
+      normalized.checkout.payment[method].enabled = normalized.checkout.payment[method].enabled && flags[method]
+    }
 
     // When the tenant hasn't customized its public name, fall back to the
     // organization's real name (never a hardcoded brand).
@@ -97,20 +102,15 @@ export async function GET(request: NextRequest) {
       success: true,
       data: await restrictPublicSettingsToModules(normalized, organization.id),
       organization: toPublicOrganizationPayload(organization),
+      paymentControls: flags,
     })
-    // 30 s fresh, luego sirve el cache mientras revalida en background.
-    // El `s-maxage` aplica al CDN/edge (ej: Vercel). `private` queda
-    // excluido a propósito: los settings públicos son los mismos para
-    // todos los visitantes del mismo org.
-    response.headers.set(
-      'Cache-Control',
-      'public, max-age=30, s-maxage=60, stale-while-revalidate=300'
-    )
+    // Payment availability must reflect the current merchant policy.
+    response.headers.set('Cache-Control', 'no-store')
     return response
   } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch website settings' },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
     )
   }
 }

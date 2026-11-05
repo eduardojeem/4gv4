@@ -9,11 +9,14 @@ const layoutSource = readFileSync(resolve(process.cwd(), 'src/components/admin/l
 
 describe('admin navigation information architecture', () => {
   it('groups sections by user intent', () => {
-    expect(adminNavCategories.map((category) => category.id)).toEqual(['analytics', 'operations', 'team', 'digital', 'system', 'help'])
+    expect(adminNavCategories.map((category) => category.id)).toEqual(['analytics', 'operations', 'team', 'digital', 'billing', 'system', 'help'])
     expect(getCategoryByItemKey('reports')?.id).toBe('analytics')
     expect(getCategoryByItemKey('finances')?.id).toBe('operations')
     expect(getCategoryByItemKey('users')?.id).toBe('team')
     expect(getCategoryByItemKey('website')?.id).toBe('digital')
+    expect(getCategoryByItemKey('payment-controls')?.id).toBe('billing')
+    expect(getCategoryByItemKey('subscriptions')?.id).toBe('billing')
+    expect(getNavItemByKey('payment-controls')?.permissions).toContain('settings.read')
     expect(getCategoryByItemKey('settings')?.id).toBe('system')
   })
 

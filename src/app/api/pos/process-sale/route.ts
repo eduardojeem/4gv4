@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextResponse, type NextRequest } from 'next/server'
 import { afterResponse, notifySaleCreated } from '@/lib/notifications/server/business-events'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -581,6 +583,16 @@ export const POST = withTenantAuth(
     }
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
+    try {
+      await assertCommercePayments(organization.id, [
+        ...payments.map(p => ({ method: p.payment_method, channel: p.channel, amount: p.amount })),
+        ...(credit?.first_payment ? [{ method: credit.first_payment.method }] : []),
+        ...(storeCreditAmount > 0 ? [{ method: 'store_credit' }] : []),
+      ])
+    } catch (error) {
+      if (error instanceof PaymentControlError) return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status })
+      throw error
+    }
     const atomicSaleArgs = {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,

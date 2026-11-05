@@ -11,18 +11,20 @@ import { cn } from '@/lib/utils'
 export type SubscriptionPaymentMethod = PagoparPaymentMethod | 'stripe' | 'transfer'
 
 type PagoparPaymentMethodSelectorProps = {
-  value: SubscriptionPaymentMethod
+  value: SubscriptionPaymentMethod | null
   onChange: (method: SubscriptionPaymentMethod) => void
   disabled?: boolean
   /** Formas de pago visibles pero no elegibles (por ejemplo, faltan datos). */
   disabledMethods?: SubscriptionPaymentMethod[]
   className?: string
+  includeCard?: boolean
+  includeQr?: boolean
   includeStripe?: boolean
   includeTransfer?: boolean
 }
 
 const options: Array<{
-  value: SubscriptionPaymentMethod
+  value: SubscriptionPaymentMethod | null
   label: string
   description: string
   icon: typeof CreditCard
@@ -65,12 +67,15 @@ export function PagoparPaymentMethodSelector({
   disabled = false,
   disabledMethods = [],
   className,
+  includeCard = true,
+  includeQr = true,
   includeStripe = false,
   includeTransfer = false,
 }: PagoparPaymentMethodSelectorProps) {
   const visibleOptions = options.filter((option) =>
-    (option.value !== 'stripe' || includeStripe) && (option.value !== 'transfer' || includeTransfer),
+    (option.value !== 'card' || includeCard) && (option.value !== 'qr' || includeQr) && (option.value !== 'stripe' || includeStripe) && (option.value !== 'transfer' || includeTransfer),
   )
+  if (!visibleOptions.length) return <p role="status" className="text-sm text-muted-foreground">No hay medios de pago disponibles. Contactá con soporte para contratar o renovar tu plan.</p>
   const onlyPagopar = !includeStripe && !includeTransfer
 
   return (

@@ -1,4 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { assertSubscriptionPaymentEnabled } from '@/lib/payments/subscription-controls'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { buildPromoApplication, normalizePromoCode, type PromoBenefit, type SubscriptionSnapshot } from '@/lib/superadmin/promo-codes'
 
 type RedeemPromoInput = {
@@ -13,6 +15,8 @@ export type RedeemPromoResult =
   | { success: false; error: string; status: number }
 
 export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<RedeemPromoResult> {
+  try { await assertSubscriptionPaymentEnabled('promo') }
+  catch (error) { return { success: false, error: error instanceof PaymentControlError ? error.message : 'No se pudo verificar la disponibilidad de códigos.', status: error instanceof PaymentControlError ? error.status : 503 } }
   const admin = createAdminSupabase()
   const now = new Date()
   let promoQuery = admin.from('subscription_promo_codes').select('*')

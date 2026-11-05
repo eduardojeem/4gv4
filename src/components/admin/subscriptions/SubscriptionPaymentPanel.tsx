@@ -10,6 +10,7 @@ import {
 } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 
 type SubscriptionPaymentPanelProps = {
+  paymentAvailability?: { pagopar_card: boolean; pagopar_qr: boolean; stripe: boolean; transfer: boolean }
   missingFields?: string[]
   isPaidPlan: boolean
   planName: string
@@ -37,6 +38,7 @@ export function getPagoparCheckoutErrorMessage(
  * Pagopar, transferencia con comprobante y, solo si se habilita, Stripe.
  */
 export function SubscriptionPaymentPanel({
+  paymentAvailability,
   missingFields = [],
   isPaidPlan,
   planName,
@@ -45,12 +47,22 @@ export function SubscriptionPaymentPanel({
   stripeEnabled = false,
   canPayByTransfer = false,
 }: SubscriptionPaymentPanelProps) {
+  stripeEnabled = paymentAvailability?.stripe ?? stripeEnabled
+  canPayByTransfer = paymentAvailability?.transfer ?? canPayByTransfer
+  const cardEnabled = paymentAvailability?.pagopar_card ?? true
+  const qrEnabled = paymentAvailability?.pagopar_qr ?? true
+  const availableMethods: SubscriptionPaymentMethod[] = [
+    ...(cardEnabled ? ['card' as const] : []), ...(qrEnabled ? ['qr' as const] : []),
+    ...(stripeEnabled ? ['stripe' as const] : []), ...(canPayByTransfer ? ['transfer' as const] : []),
+  ]
   const billingIncomplete = missingFields.length > 0
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>(
-    billingIncomplete && canPayByTransfer ? 'transfer' : 'card',
+  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod | null>(
+    billingIncomplete && canPayByTransfer ? 'transfer' : availableMethods[0] ?? null,
   )
+
+  const effectiveMethod = paymentMethod && availableMethods.includes(paymentMethod) ? paymentMethod : null
 
   // «Cambiar de plan» crea la solicitud de transferencia y vuelve acá con
   // #pay-transfer para mostrar los datos bancarios y subir el comprobante.
@@ -65,11 +77,11 @@ export function SubscriptionPaymentPanel({
   // En el plan gratuito no hay mes que pagar: tarjeta y QR se eligen junto con
   // el plan nuevo en «Cambiar de plan»; la transferencia deja elegir el plan acá.
   if (!isPaidPlan) {
-    if (!canPayByTransfer) return null
+    if (!canPayByTransfer) return <section id="pay" className="space-y-3">{availableMethods.length === 0 && <p role="status">No hay medios de pago disponibles. Contactá con soporte para contratar tu plan.</p>}<BankTransferPayment canPay allowCreate={false} /></section>
     return (
       <section id="pay" aria-label="Pagar por transferencia" className="scroll-mt-24 space-y-3">
         <p className="text-sm text-muted-foreground">
-          Para pagar con tarjeta o QR elegí el plan en «Cambiar de plan». También podés contratarlo por transferencia bancaria:
+          Podés contratar un plan por transferencia bancaria:
         </p>
         <BankTransferPayment canPay />
       </section>
@@ -77,7 +89,7 @@ export function SubscriptionPaymentPanel({
   }
 
   const providerName = paymentMethod === 'stripe' ? 'Stripe' : 'Pagopar'
-  const isCheckout = paymentMethod !== 'transfer'
+  const isCheckout = effectiveMethod !== null && effectiveMethod !== 'transfer'
   const checkoutBlocked = isCheckout && billingIncomplete
 
   function selectMethod(method: SubscriptionPaymentMethod) {
@@ -87,7 +99,7 @@ export function SubscriptionPaymentPanel({
   }
 
   async function startPayment() {
-    if (checkoutBlocked) return
+    if (checkoutBlocked || !effectiveMethod) return
 
     setStatus('loading')
     setMessage(null)
@@ -144,13 +156,15 @@ export function SubscriptionPaymentPanel({
         </div>
         <p className="text-sm text-muted-foreground">
           {planName} · <strong className="font-semibold text-foreground">{planAmount}</strong>/mes
-          {discountNote && <span className="block text-xs text-emerald-700 dark:text-emerald-300">{discountNote}</span>}
+          {discountNote && (cardEnabled || qrEnabled) && <span className="block text-xs text-emerald-700 dark:text-emerald-300">{discountNote}</span>}
         </p>
       </div>
 
       <div className="mt-5 space-y-4">
         <PagoparPaymentMethodSelector
-          value={paymentMethod}
+          value={effectiveMethod}
+          includeCard={cardEnabled}
+          includeQr={qrEnabled}
           onChange={selectMethod}
           disabled={status === 'loading'}
           disabledMethods={billingIncomplete ? CHECKOUT_METHODS : []}
@@ -158,7 +172,7 @@ export function SubscriptionPaymentPanel({
           includeTransfer={canPayByTransfer}
         />
 
-        {billingIncomplete && (
+        {billingIncomplete && (cardEnabled || qrEnabled || stripeEnabled) && (
           <div
             role="status"
             className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
@@ -166,7 +180,7 @@ export function SubscriptionPaymentPanel({
             <div className="flex items-start gap-2.5">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-600 dark:text-amber-400" />
               <div className="min-w-0">
-                <p className="font-semibold">Para pagar con tarjeta o QR completá tus datos de facturación</p>
+                <p className="font-semibold">Para pagar en línea completá tus datos de facturación</p>
                 <p className="mt-1 text-xs opacity-80">Falta: {missingFields.join(', ')}.</p>
                 <a
                   href="#billing-form"
@@ -179,6 +193,7 @@ export function SubscriptionPaymentPanel({
           </div>
         )}
 
+        {effectiveMethod === null && availableMethods.length > 0 && <p role="status">Elegí un medio de pago disponible.</p>}
         {isCheckout ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button
@@ -200,10 +215,11 @@ export function SubscriptionPaymentPanel({
               Te llevamos a {providerName} para completar el pago. El plan se renueva cuando el cobro se confirma.
             </p>
           </div>
-        ) : (
+        ) : effectiveMethod === 'transfer' ? (
           <BankTransferPayment canPay={canPayByTransfer} embedded />
-        )}
+        ) : null}
 
+        {!canPayByTransfer && <BankTransferPayment canPay allowCreate={false} />}
         {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
       </div>
     </section>

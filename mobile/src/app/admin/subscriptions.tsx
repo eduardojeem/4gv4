@@ -173,20 +173,20 @@ export default function SubscriptionsAdminScreen() {
                     <Ionicons name="wallet-outline" size={18} color={palette.success} />
                     <Text style={[styles.cardTitle, { color: colors.text }]}>Pagar la suscripción</Text>
                   </View>
-                  {missingBilling.length > 0 && (
+                  {missingBilling.length > 0 && (data.paymentAvailability.pagopar_card || data.paymentAvailability.pagopar_qr || data.paymentAvailability.stripe) && (
                     <Text style={[styles.small, { color: '#B45309' }]}>
-                      Para pagar con tarjeta o QR completá tus datos de facturación (falta: {missingBilling.join(', ')}).
+                      Para pagar en línea completá tus datos de facturación (falta: {missingBilling.join(', ')}).
                     </Text>
                   )}
-                  <Pressable onPress={() => void openWeb('/admin/subscriptions#pay')} style={[styles.primaryBtn, { backgroundColor: palette.success }]}>
+                  {(data.paymentAvailability.pagopar_card || data.paymentAvailability.pagopar_qr || data.paymentAvailability.stripe || data.paymentAvailability.transfer) ? <Pressable onPress={() => void openWeb('/admin/subscriptions#pay')} style={[styles.primaryBtn, { backgroundColor: palette.success }]}>
                     <Ionicons name="card-outline" size={16} color="#fff" />
-                    <Text style={styles.primaryText}>Pagar con tarjeta o QR</Text>
-                  </Pressable>
+                    <Text style={styles.primaryText}>Ver medios de pago disponibles</Text>
+                  </Pressable> : <Text style={[styles.small, { color: colors.muted }]}>No hay medios de pago disponibles. Contactá con soporte para renovar tu plan.</Text>}
                   <Pressable onPress={() => void openWeb('/admin/subscriptions/change-plan')} style={[styles.outlineBtn, styles.centered, { borderColor: colors.border }]}>
                     <Text style={[styles.bold, { color: colors.text }]}>Cambiar de plan</Text>
                   </Pressable>
                 </View>
-                <SubscriptionTransferCard onChanged={reload} />
+                <SubscriptionTransferCard onChanged={reload} allowCreate={data.paymentAvailability.transfer} />
               </>
             ) : (
               <View style={[styles.notice, { borderColor: colors.border }]}>

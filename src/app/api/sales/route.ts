@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
@@ -89,6 +91,7 @@ export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' 
       }
     })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Sales API error', { error })
     return NextResponse.json(
       { success: false, error: 'Failed to fetch sales' },
@@ -120,6 +123,7 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
     }
     
     const validated = validationResult.data
+    await assertCommercePayments(organization.id, [{ method: validated.payment_method }])
 
     // Auto-detect customer_id for logged-in customers if not provided
     let finalCustomerId = validated.customer_id
@@ -298,6 +302,7 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       data: completeSale || sale
     }, { status: 201 })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Sale creation error', { error })
     return NextResponse.json(
       { success: false, error: 'Failed to create sale' },
@@ -361,6 +366,7 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
       data: sale
     })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Sale update error', { error })
     return NextResponse.json(
       { success: false, error: 'Failed to update sale' },

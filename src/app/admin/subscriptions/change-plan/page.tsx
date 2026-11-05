@@ -37,6 +37,7 @@ type PageData = {
   currentPlan: CommercialPlan
   usage: OrganizationUsage
   plans: CommercialPlan[]
+  paymentAvailability?: { pagopar_card: boolean; pagopar_qr: boolean; stripe: boolean; transfer: boolean }
   stripeEnabled?: boolean
   billingMissingFields?: string[]
   /** Vencimiento del mes ya pagado, si sigue vigente. */
@@ -224,9 +225,13 @@ function PlanChangeDialog({
   const missing = data.billingMissingFields ?? []
   // La base acepta transferencias para renovar el plan actual o para salir de
   // Gratuito; entre planes pagos el cambio va por tarjeta o QR.
-  const transferAllowed = data.currentPlan.price_monthly <= 0
-  const [method, setMethod] = useState<SubscriptionPaymentMethod>(
-    missing.length > 0 && transferAllowed ? 'transfer' : 'card',
+  const transferAllowed = data.currentPlan.price_monthly <= 0 && (data.paymentAvailability?.transfer ?? true)
+  const cardEnabled = data.paymentAvailability?.pagopar_card ?? true
+  const qrEnabled = data.paymentAvailability?.pagopar_qr ?? true
+  const stripeEnabled = data.paymentAvailability?.stripe ?? data.stripeEnabled === true
+  const firstMethod = cardEnabled ? 'card' : qrEnabled ? 'qr' : stripeEnabled ? 'stripe' : transferAllowed ? 'transfer' : null
+  const [method, setMethod] = useState<SubscriptionPaymentMethod | null>(
+    missing.length > 0 && transferAllowed ? 'transfer' : firstMethod,
   )
 
   if (!target) return null
@@ -237,7 +242,7 @@ function PlanChangeDialog({
   const paidUntil = data.paidPeriodEndsAt ?? null
   const scheduledDowngrade = !isPaidTarget && Boolean(paidUntil)
   const proration = data.prorations?.[target.code] ?? null
-  const checkoutBlocked = isPaidTarget && missing.length > 0 && CHECKOUT_METHODS.includes(method)
+  const checkoutBlocked = isPaidTarget && missing.length > 0 && method !== null && CHECKOUT_METHODS.includes(method)
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose() }}>
@@ -292,12 +297,14 @@ function PlanChangeDialog({
               onChange={setMethod}
               disabled={busy}
               disabledMethods={missing.length > 0 ? CHECKOUT_METHODS : []}
-              includeStripe={data.stripeEnabled === true}
+              includeCard={cardEnabled}
+              includeQr={qrEnabled}
+              includeStripe={stripeEnabled}
               includeTransfer={transferAllowed}
             />
-            {missing.length > 0 && (
+            {missing.length > 0 && (cardEnabled || qrEnabled || stripeEnabled) && (
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Para pagar con tarjeta o QR completá tus datos de facturación (falta: {missing.join(', ')}).{' '}
+                Para pagar en línea completá tus datos de facturación (falta: {missing.join(', ')}).{' '}
                 <Link href="/admin/subscriptions#billing-form" className="font-semibold underline underline-offset-2">
                   Completar datos
                 </Link>
@@ -321,9 +328,9 @@ function PlanChangeDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Volver</Button>
-          <Button type="button" onClick={() => onConfirm(method)} disabled={busy || checkoutBlocked}>
+          <Button type="button" onClick={() => onConfirm(method ?? 'card')} disabled={busy || checkoutBlocked || (isPaidTarget && !method)}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {confirmLabel(target, method, scheduledDowngrade)}
+            {isPaidTarget && !method ? 'Sin medios de pago disponibles' : confirmLabel(target, method ?? 'card', scheduledDowngrade)}
           </Button>
         </DialogFooter>
       </DialogContent>
