@@ -21,7 +21,7 @@ const RECEIPT_MAX_BYTES = 3 * 1024 * 1024;
  * Pago por transferencia desde la app: generar la solicitud, ver los datos
  * bancarios, subir la foto del comprobante y cancelar si se eligió mal el plan.
  */
-export function SubscriptionTransferCard({ onChanged }: { onChanged?: () => void }) {
+export function SubscriptionTransferCard({ onChanged, allowCreate = true }: { onChanged?: () => void; allowCreate?: boolean }) {
   const colors = usePalette();
   const [overview, setOverview] = useState<TransferOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +112,11 @@ export function SubscriptionTransferCard({ onChanged }: { onChanged?: () => void
       {error && <Text style={[styles.small, { color: palette.danger }]}>{error}</Text>}
       {!overview && !error && <ActivityIndicator color={palette.primary} />}
 
-      {overview && !overview.enabled && (
+      {overview && (!overview.enabled || !allowCreate) && (
         <Text style={[styles.small, { color: colors.muted }]}>El pago por transferencia no está disponible en este momento.</Text>
       )}
 
-      {overview?.enabled && !open && (
+      {allowCreate && overview?.enabled && !open && (
         overview.plans.length === 0 ? (
           <Text style={[styles.small, { color: colors.muted }]}>No hay planes disponibles para pagar por transferencia.</Text>
         ) : (

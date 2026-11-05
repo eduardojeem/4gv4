@@ -1,3 +1,4 @@
+import { getSubscriptionPaymentAvailability } from '@/lib/payments/subscription-controls'
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { getCurrentOrganizationSubscription } from '@/lib/saas/subscription-service'
@@ -16,7 +17,8 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
 
   try {
     const data = await getCurrentOrganizationSubscription(organizationId)
-    return NextResponse.json({ success: true, data })
+    const paymentAvailability = await getSubscriptionPaymentAvailability()
+    return NextResponse.json({ success: true, data: { ...data, paymentAvailability } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'No se pudo cargar la información de suscripción.'
     return NextResponse.json({ success: false, error: message }, { status: 500 })

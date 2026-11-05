@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto'
+import { assertSubscriptionPaymentEnabled } from '@/lib/payments/subscription-controls'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getStripe, getStripeReturnOrigin, isStripeCheckoutEnabled, toStripeUnitAmount } from '@/lib/payments/stripe'
 import {
@@ -26,6 +28,9 @@ export async function createSubscriptionStripeCheckout(params: {
   correlationId?: string
 }) {
   const { organization, userEmail, targetPlanCode, canChangePlan, requestOrigin, correlationId } = params
+
+  try { await assertSubscriptionPaymentEnabled('stripe') }
+  catch (error) { if (error instanceof PaymentControlError) throw new SubscriptionCheckoutError(error.message, error.status); throw error }
 
   if (!isStripeCheckoutEnabled()) {
     throw new SubscriptionCheckoutError('El pago con Stripe no está disponible por ahora.', 501)

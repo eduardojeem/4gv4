@@ -1,5 +1,6 @@
 import { BottomSheet } from './bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
+import { usePaymentControls } from '@/lib/payment-controls';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import {
@@ -740,6 +741,7 @@ export function CostsSheet({ repair, visible, onClose, onSaved }: { repair: Repa
 
 export function PaymentSheet({ repair, visible, onClose, onSaved }: { repair: Repair; visible: boolean; onClose: () => void; onSaved: (repair: Repair) => void }) {
   const colors = usePalette();
+  const controls = usePaymentControls(visible);
   const { balance, quoted } = money(repair);
   // Sin precio todavía, lo que se recibe es un anticipo (la API lo exige así).
   const purpose: 'payment' | 'deposit' = quoted ? 'payment' : 'deposit';
@@ -754,7 +756,9 @@ export function PaymentSheet({ repair, visible, onClose, onSaved }: { repair: Re
   const value = digits(amount);
   const needsReference = method === 'card' || method === 'transfer';
   const problem =
-    value <= 0
+    !controls.ready ? controls.error || 'Consultando medios de cobro…'
+      : !controls.allows(method) ? 'Elegí un medio de cobro habilitado.'
+      : value <= 0
       ? 'Escribí el monto.'
       : purpose === 'payment' && value > balance
         ? `El saldo es ${formatGs(balance)}: no se puede cobrar más.`
@@ -805,10 +809,12 @@ export function PaymentSheet({ repair, visible, onClose, onSaved }: { repair: Re
         />
       }>
       <View style={styles.chips}>
-        {PAY_METHODS.map((item) => (
+        {PAY_METHODS.filter(item => controls.allows(item.key)).map((item) => (
           <Chip key={item.key} label={item.label} icon={item.icon} selected={method === item.key} onPress={() => setMethod(item.key)} colors={colors} />
         ))}
       </View>
+      {(!controls.ready || !PAY_METHODS.some(item => controls.allows(item.key))) && <Text style={{ color: colors.muted }}>{controls.error || (controls.ready ? 'No hay medios de cobro habilitados.' : 'Consultando medios de cobro…')}</Text>}
+      {controls.error && <Pressable onPress={controls.retry} accessibilityRole="button"><Text style={{ color: colors.text }}>Reintentar medios de cobro</Text></Pressable>}
       <Field label="Monto" colors={colors}>
         <Text style={[styles.prefix, { color: colors.muted }]}>Gs.</Text>
         <TextInput value={amount} onChangeText={(v) => setAmount(pretty(v))} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.text }]} />

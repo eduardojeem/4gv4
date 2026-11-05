@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { assertSubscriptionPaymentEnabled } from '@/lib/payments/subscription-controls'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { sendEmail } from '@/lib/email/resend'
 import { renderAutopayFailedEmail } from '@/lib/email/templates'
 import {
@@ -129,6 +131,11 @@ function assertAvailable() {
   }
 }
 
+async function assertNewAutopayAllowed() {
+  try { await assertSubscriptionPaymentEnabled('autopay') }
+  catch (error) { if (error instanceof PaymentControlError) throw new AutopayError(error.message, error.status); throw error }
+}
+
 async function getAutopayRow(organizationId: string) {
   const { data, error } = await createAdminSupabase()
     .from('subscription_autopay')
@@ -170,6 +177,7 @@ export async function startAutopayCardRegistration(params: {
   returnUrl: string
 }) {
   assertAvailable()
+  await assertNewAutopayAllowed()
   const state = await getCurrentOrganizationSubscription(params.organizationId)
   const email = state.billingProfile?.billing_email?.trim() || params.userEmail?.trim()
   const phone = state.billingProfile?.phone?.trim()
@@ -237,6 +245,7 @@ export async function completeAutopayCardRegistration(params: {
 
 export async function setAutopayEnabled(organizationId: string, enabled: boolean) {
   assertAvailable()
+  if (enabled) await assertNewAutopayAllowed()
   const row = await getAutopayRow(organizationId)
   if (enabled && row?.card_status !== 'active') {
     throw new AutopayError('Guardá una tarjeta antes de activar el débito automático.', 400)

@@ -1,3 +1,4 @@
+vi.mock('@/lib/payments/control-store', () => ({ assertCommercePayments: vi.fn().mockResolvedValue(undefined) }))
 // @vitest-environment node
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

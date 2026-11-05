@@ -27,7 +27,7 @@ async function request(method: 'GET' | 'POST' | 'DELETE', body?: Record<string, 
 }
 
 export default function SubscriptionAutopayPage() {
-  const [status, setStatus] = useState<AutopayStatus | null>(null)
+  const [status, setStatus] = useState<(AutopayStatus & { paymentAvailability?: { autopay: boolean } }) | null>(null)
   const [formUrl, setFormUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>('load')
   const [notice, setNotice] = useState<Notice>(null)
@@ -113,6 +113,7 @@ export default function SubscriptionAutopayPage() {
 
       {status?.available && (
         <>
+          {status.paymentAvailability?.autopay !== true && <p role="status" className="text-sm text-muted-foreground">Las nuevas adhesiones están deshabilitadas. Los débitos ya consentidos y la gestión de tu tarjeta se conservan.</p>}
           {status.suspended && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -169,7 +170,7 @@ export default function SubscriptionAutopayPage() {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={startCardForm} disabled={busy !== null} className="gap-2">
+              <Button type="button" onClick={startCardForm} disabled={busy !== null || status.paymentAvailability?.autopay !== true} className="gap-2">
                 {busy === 'start' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {status.card ? 'Cambiar tarjeta' : 'Guardar tarjeta'}
               </Button>

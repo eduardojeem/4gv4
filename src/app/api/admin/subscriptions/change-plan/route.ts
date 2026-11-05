@@ -1,3 +1,4 @@
+import { getSubscriptionPaymentAvailability } from '@/lib/payments/subscription-controls'
 import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
@@ -16,7 +17,7 @@ import {
   SubscriptionCheckoutError,
 } from '@/lib/saas/pagopar-subscription-checkout'
 import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
-import { getBrowserRequestOrigin, isStripeCheckoutEnabled } from '@/lib/payments/stripe'
+import { getBrowserRequestOrigin } from '@/lib/payments/stripe'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 import { BankTransferError, createBankTransferRequest } from '@/lib/saas/bank-transfers'
 import { prorationForChange } from '@/lib/saas/subscription-proration'
@@ -44,13 +45,15 @@ export async function GET() {
   }
 
   try {
-    const [data, state] = await Promise.all([
+    const [data, state, paymentAvailability] = await Promise.all([
       getChangePlanData(organization.id),
       getCurrentOrganizationSubscription(organization.id),
+      getSubscriptionPaymentAvailability(),
     ])
     return NextResponse.json({
       ...data,
-      stripeEnabled: isStripeCheckoutEnabled(),
+      paymentAvailability,
+      stripeEnabled: paymentAvailability.stripe,
       billingMissingFields: getMissingBillingFields(state.billingProfile),
       paidPeriodEndsAt: activePaidPeriodEnd(state),
       cancelScheduled: state.subscription?.cancel_at_period_end === true,

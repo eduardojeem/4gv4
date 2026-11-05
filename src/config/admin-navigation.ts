@@ -183,9 +183,17 @@ const rawAdminNavCategories: NavCategory[] = [
         ],
     },
     {
-        id: 'system',
-        label: 'Sistema',
+        id: 'billing',
+        label: 'Facturación',
         items: [
+            {
+                key: 'payment-controls',
+                label: 'Medios de cobro',
+                icon: Banknote,
+                href: '/admin/billing/payment-methods',
+                description: 'Cobros del comercio: POS, reparaciones y tienda',
+                permissions: ['settings.read'],
+            },
             {
                 key: 'subscriptions',
                 label: 'Suscripción',
@@ -194,6 +202,12 @@ const rawAdminNavCategories: NavCategory[] = [
                 description: 'Plan, pagos, límites y facturación',
                 permissions: ['billing.manage'],
             },
+        ],
+    },
+    {
+        id: 'system',
+        label: 'Sistema',
+        items: [
             {
                 key: 'security',
                 label: 'Seguridad',

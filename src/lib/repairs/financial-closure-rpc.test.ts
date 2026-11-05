@@ -1,3 +1,4 @@
+vi.mock('@/lib/payments/control-store', () => ({ assertCommercePayments: vi.fn().mockResolvedValue(undefined) }))
 import { describe, expect, it, vi } from 'vitest'
 import {
   closeRepairAndRegisterPayment,

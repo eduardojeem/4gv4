@@ -70,6 +70,7 @@ export type SubscriptionsClientViewProps = {
   billingProfile: BillingProfile | null
   subscriptionStatus: string
   canChangePlan: boolean
+  promoEnabled?: boolean
   canRedeemCodes: boolean
   averageUsage: number
 }
@@ -317,6 +318,7 @@ export function SubscriptionsClientView({
   subscriptionStatus,
   canChangePlan,
   canRedeemCodes,
+  promoEnabled = true,
   averageUsage,
 }: SubscriptionsClientViewProps) {
   const [activeTab, setActiveTab] = useState<string>('overview')
@@ -727,7 +729,7 @@ export function SubscriptionsClientView({
         {/* TAB 3: PAYMENT & BILLING HISTORY */}
         <TabsContent value="payments" className="space-y-6 border-t-2 border-emerald-200 pt-5 focus-visible:outline-none dark:border-emerald-500/30">
           {/* El cupón es otra forma de pagar o extender el plan: va con los pagos. */}
-          <PromoCodeRedeemer canRedeem={canRedeemCodes} />
+          {promoEnabled !== false && <PromoCodeRedeemer canRedeem={canRedeemCodes} />}
 
           <Card id="payment-history" className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
             <CardHeader className="border-b border-border pb-4">

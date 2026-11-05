@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import type { createAdminSupabase } from '@/lib/supabase/admin'
 import {
   buildCreditInstallmentPlan,
@@ -44,6 +46,8 @@ export async function createCreditAccount(input: CreateCreditAccountInput): Prom
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.actorId ?? '')) {
     throw new CreditAccountError('No se pudo validar quién concede el crédito.', 403)
   }
+  try { await assertCommercePayments(input.organizationId, [{ method: 'credit' }]) }
+  catch (error) { if (error instanceof PaymentControlError) throw new CreditAccountError(error.message, error.status); throw error }
   const startedAt = new Date()
   const plan = buildCreditInstallmentPlan({
     principalAmount: input.amount,

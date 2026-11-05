@@ -156,6 +156,7 @@ const navItems: NavItem[] = [
     section: 'billing',
     children: [
       { title: 'Resumen', href: '/superadmin/billing', icon: Banknote },
+      { title: 'Medios de pago', href: '/superadmin/billing/payment-methods', icon: CreditCard, description: 'Habilitá o pausá los medios para pagar planes' },
       { title: 'Pagos por transferencia', href: '/superadmin/billing/transfers', icon: Banknote, description: 'Revisá comprobantes y administrá la cuenta receptora' },
       { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard },
       { title: 'Pagos', href: '/superadmin/invoices', icon: FileText },

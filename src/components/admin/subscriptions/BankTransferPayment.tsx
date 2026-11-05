@@ -29,7 +29,7 @@ async function responseBody(response: Response) {
 }
 
 /** embedded: va dentro del bloque de pago, sin su propia tarjeta ni título. */
-export function BankTransferPayment({ canPay, embedded = false }: { canPay: boolean; embedded?: boolean }) {
+export function BankTransferPayment({ canPay, embedded = false, allowCreate = true }: { canPay: boolean; embedded?: boolean; allowCreate?: boolean }) {
  const router = useRouter()
  const { scope, currentScope } = useTenantScope()
  const [loaded, setLoaded] = useState<{scope:string;data:TransferData} | null>(null)
@@ -66,7 +66,7 @@ export function BankTransferPayment({ canPay, embedded = false }: { canPay: bool
   if(request.status==='approved')router.refresh()
  }
  const create = async () => {
-  if(!selected || busy || !canPay)return
+  if(!selected || busy || !canPay || !allowCreate)return
   setBusy(true);setError(null)
   try {
    const body=await responseBody(await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planCode:selected})}))
@@ -109,7 +109,7 @@ export function BankTransferPayment({ canPay, embedded = false }: { canPay: bool
    {error&&<div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
    {loading&&!data&&<p role="status" className="flex gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin"/>Cargando transferencias…</p>}
    {data&&<>
-    {!data.settings.enabled ? <p className="text-sm text-muted-foreground">El pago por transferencia no está disponible en este momento.</p> :
+    {!allowCreate || !data.settings.enabled ? <p className="text-sm text-muted-foreground">El pago por transferencia no está disponible en este momento.</p> :
      data.plans.length===0 ? <p className="text-sm text-muted-foreground">No hay planes elegibles para pagar por transferencia en este momento.</p> :
      <div className="space-y-3 rounded-xl border p-4">
       <label htmlFor="transfer-plan" className="text-sm font-medium">Plan para un período mensual</label>

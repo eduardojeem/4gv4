@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View
 import { BottomSheet } from '@/components/bottom-sheet';
 import { PosCreditPanel } from '@/components/pos-credit-panel';
 import { formatGs } from '@/lib/marketplace';
+import { usePaymentControls } from '@/lib/payment-controls';
 import { palette, usePalette } from '@/lib/palette';
 import { isWholesaleCustomer, type PayMethod, type PaymentInput, type PosCustomer } from '@/lib/pos';
 import { buildCreditPlan, DEFAULT_TERMS, fetchCreditStatus, firstPaymentError, installmentAmountsError, minimumDownPayment, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
@@ -73,6 +74,7 @@ export function PosCheckout({
   onConfirm: (payments: PaymentInput[], change: number, credit: CreditTerms | null) => void;
 }) {
   const colors = usePalette();
+  const controls = usePaymentControls(visible);
   const [method, setMethod] = useState<PayMethod | 'mixed'>('cash');
   const [received, setReceived] = useState('');
   const [cardLast4, setCardLast4] = useState('');
@@ -103,7 +105,9 @@ export function PosCheckout({
   const downAmount = method === 'credit' ? Math.min(total, digits(down)) : 0;
   const plan = buildCreditPlan(total - downAmount, terms);
   const minimumDown = creditStatus ? minimumDownPayment(total, creditStatus.available, terms.interestRate) : null;
-  const methods = METHODS.filter((item) => item.key !== 'credit' || creditEnabled);
+  const methods = METHODS.filter(item => item.key === 'mixed'
+    ? controls.allows('cash') && (controls.allows('card') || controls.allows('transfer'))
+    : controls.allows(item.key) && (item.key !== 'credit' || creditEnabled));
 
   const receivedAmount = digits(received);
   const change = method === 'cash' && receivedAmount > total ? receivedAmount - total : 0;
@@ -111,6 +115,11 @@ export function PosCheckout({
   const otherPart = total - cashPart;
 
   const problem = (() => {
+    if (!controls.ready) return controls.error || 'Consultando medios de cobro…';
+    if (!methods.some(item => item.key === method)) return 'Elegí un medio de cobro habilitado.';
+    if (method === 'mixed' && (!controls.allows('cash') || !controls.allows(mixOther))) return 'El pago mixto contiene un medio deshabilitado.';
+    if (method === 'credit' && downAmount > 0 && !controls.allows(downMethod)) return 'Elegí un medio habilitado para la entrega inicial.';
+    if (method === 'credit' && terms.timing === 'at_start' && terms.firstPayment && !controls.allows(terms.firstPayment.method)) return 'Elegí un medio habilitado para la primera cuota.';
     if (method === 'cash') return receivedAmount > 0 && receivedAmount < total ? `Faltan ${formatGs(total - receivedAmount)}.` : null;
     if (method === 'card') return !/^\d{4}$/.test(cardLast4) ? 'Anotá los últimos 4 dígitos de la tarjeta.' : null;
     if (method === 'transfer') return !reference.trim() ? 'Anotá la referencia de la transferencia.' : null;
@@ -162,7 +171,7 @@ export function PosCheckout({
       footer={
         <View style={styles.footer}>
           {problem ? <Text style={[styles.small, styles.center, { color: colors.muted }]}>{problem}</Text> : null}
-          <Pressable onPress={confirm} disabled={saving} style={[styles.confirm, { opacity: saving || problem ? 0.55 : 1 }]}>
+          <Pressable onPress={confirm} disabled={saving || Boolean(problem)} style={[styles.confirm, { opacity: saving || problem ? 0.55 : 1 }]}>
             {saving ? <ActivityIndicator color="#fff" /> : <Ionicons name="checkmark-circle" size={22} color="#fff" />}
             <Text style={styles.confirmText}>
               {saving
@@ -282,7 +291,7 @@ export function PosCheckout({
         <>
           <MoneyField label="Parte en efectivo" value={mixCash} onChange={setMixCash} colors={colors} />
           <View style={styles.methods}>
-            {(['card', 'transfer'] as const).map((key) => (
+            {(['card', 'transfer'] as const).filter(key => controls.allows(key)).map((key) => (
               <Pressable key={key} onPress={() => setMixOther(key)} style={[styles.chip, { borderColor: mixOther === key ? palette.primary : colors.border, backgroundColor: mixOther === key ? 'rgba(37,99,235,0.08)' : colors.background }]}>
                 <Text style={[styles.billText, { color: mixOther === key ? palette.primary : colors.text }]}>Resto con {key === 'card' ? 'tarjeta' : 'transferencia'}</Text>
               </Pressable>

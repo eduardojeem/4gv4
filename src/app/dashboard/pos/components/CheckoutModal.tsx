@@ -2,6 +2,7 @@
 
 import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import React, { memo } from 'react'
+import { useCommercePaymentControls } from '@/hooks/use-commerce-payment-controls'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import {
@@ -155,6 +156,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   onOpenRegister,
   onCancel
 }) => {
+  const paymentControls = useCommercePaymentControls()
   const {
     isCheckoutOpen,
     paymentStatus,
@@ -169,7 +171,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     creditTerms,
     setCreditTerms,
     paymentSplit,
-    storeCreditApplied
+    storeCreditApplied,
+    setStoreCreditApplied
   } = useCheckout()
 
   const {
@@ -242,6 +245,10 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     : null
 
   const initialPaymentError = confirmationHasCredit ? firstPaymentError(creditTerms.firstPayment, confirmationCreditSummary.installmentAmount, confirmationCreditSummary.firstInstallmentTiming) : null
+  const paymentControlsBlocked = !paymentControls.ready
+    || (storeCreditApplied > 0 && !paymentControls.allows('store_credit'))
+    || (isMixedPayment ? paymentSplit.some(split => split.amount > 0 && !paymentControls.allows(split.method)) : amountDue > 0 && !paymentControls.allows(paymentMethod))
+    || (confirmationHasCredit && Boolean(creditTerms.firstPayment) && !paymentControls.allows(creditTerms.firstPayment?.method))
   const paymentLabel = isMixedPayment
     ? confirmationHasCredit ? 'Pago mixto con crédito' : 'Pago mixto'
     : paymentMethod === 'cash' ? 'Efectivo'
@@ -251,11 +258,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             : 'Sin seleccionar'
 
   const confirmPendingSale = React.useCallback(() => {
-    if (cart.length === 0 || paymentStatus === 'processing' || confirmationSubmittedRef.current || !pendingConfirmation) return
+    if (cart.length === 0 || paymentStatus === 'processing' || confirmationSubmittedRef.current || !pendingConfirmation || paymentControlsBlocked) return
     confirmationSubmittedRef.current = true
     if (pendingConfirmation === 'mixed') processMixedPayment()
     else processSale()
-  }, [cart.length, paymentStatus, pendingConfirmation, processMixedPayment, processSale])
+  }, [cart.length, paymentStatus, pendingConfirmation, processMixedPayment, processSale, paymentControlsBlocked])
 
   // Mientras se procesa el cobro no se puede cambiar que reparaciones van en la
   // venta: antes el clic seguia funcionando aunque el teclado estaba bloqueado.
@@ -577,13 +584,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               </div>
             )}
 
-            <StoreCreditPanel
+            {paymentControls.allows('store_credit') && <StoreCreditPanel
               // Tras un canje de puntos el saldo a favor cambió: se recarga.
               key={`${selectedCustomer || 'sin-cliente'}:${redeemVersion}`}
               customerId={selectedCustomer}
               cartTotal={cartCalculations.total}
               formatCurrency={formatCurrency}
-            />
+            />}
+            {storeCreditApplied > 0 && !paymentControls.allows('store_credit') && <Button variant="outline" onClick={() => setStoreCreditApplied(0)}>Quitar saldo a favor no disponible</Button>}
+            {paymentControlsBlocked && <p role="status" className="rounded-xl border p-3 text-sm text-muted-foreground">{paymentControls.error || (!paymentControls.ready ? 'Consultando medios de cobro…' : 'Revisá los medios habilitados: el pago contiene una opción deshabilitada.')}</p>}
 
             <div className="flex items-center gap-3 border-b pb-3 pt-2">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
@@ -676,7 +685,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                       onClick={() => openSaleConfirmation('sale')}
                       disabled={
-                        !isRegisterOpen ||
+                        paymentControlsBlocked || !isRegisterOpen ||
                         cart.length === 0 ||
                         paymentStatus === 'processing' ||
                         !activeCustomer ||
@@ -705,7 +714,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                       onClick={() => openSaleConfirmation('sale')}
                       disabled={
-                        !isRegisterOpen ||
+                        paymentControlsBlocked || !isRegisterOpen ||
                         cart.length === 0 ||
                         paymentStatus === 'processing' ||
                         !paymentMethod ||
@@ -729,7 +738,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <Button
                   className="pos-button-primary pos-button-confirm-sale min-h-12 h-auto w-full whitespace-normal break-words py-3 text-base font-semibold shadow-md"
                   onClick={() => openSaleConfirmation('mixed')}
-                  disabled={!isRegisterOpen || cart.length === 0 || paymentStatus === 'processing' || !mixedPaymentValidation.valid || !!initialPaymentError}
+                  disabled={paymentControlsBlocked || !isRegisterOpen || cart.length === 0 || paymentStatus === 'processing' || !mixedPaymentValidation.valid || !!initialPaymentError}
                 >
                   {paymentStatus === 'processing' ? (
                     <span className="flex items-center justify-center gap-2">

@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextResponse } from 'next/server'
 import { afterResponse, notifyOrderCreated } from '@/lib/notifications/server/business-events'
 import { z } from 'zod'
@@ -193,6 +195,7 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
       },
     })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Orders API GET error', { error })
     return NextResponse.json({ success: false, error: 'No se pudieron cargar los pedidos.' }, { status: 500 })
   }
@@ -207,6 +210,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', modu
     }
 
     const input = validation.data
+    await assertCommercePayments(organization.id, [{ method: input.paymentMethod }])
     if (input.fulfillmentType === 'DELIVERY') {
       const { effectiveModules } = await getOrganizationPlanInfo(organization.id)
       if (!effectiveModules.includes('delivery')) {
@@ -229,6 +233,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', modu
         strict: Boolean(requestedBranchId),
       })
     } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
       return NextResponse.json({
         success: false,
         error: error instanceof Error ? error.message : 'No se pudo validar la sucursal.',
@@ -436,6 +441,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', modu
     }))
     return NextResponse.json({ success: true, data: normalizeOrder(fullOrder) }, { status: 201 })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Orders API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear el pedido.' }, { status: 500 })
   }

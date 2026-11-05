@@ -1,3 +1,5 @@
+import { assertCommercePayments } from '@/lib/payments/control-store'
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -63,6 +65,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       }, { status: 422 })
     }
 
+    await assertCommercePayments(organization.id, [{ method: validation.data.paymentMethod }])
     const admin = createAdminSupabase()
     const { error: paymentError } = await admin.rpc('record_customer_order_collection_atomic', {
       p_organization_id: organization.id,
@@ -110,6 +113,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
 
     return NextResponse.json({ success: true, data: normalizeOrder(data), loyaltyPoints: loyalty.points })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     logger.error('Orders payment API error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el pago.' }, { status: 500 })
   }

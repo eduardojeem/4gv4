@@ -1,3 +1,4 @@
+import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   fetchRepairById,
@@ -202,6 +203,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       loyalty: { awarded: loyalty.awarded },
     })
   } catch (error) {
+    if (error instanceof PaymentControlError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     if (error instanceof FinancialClosureRpcError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     }

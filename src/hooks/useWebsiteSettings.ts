@@ -6,6 +6,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { getHydrationSafeWebsiteSettingsState } from '@/lib/website/hydration-state'
 
 type FetchError = Error & { status?: number }
+type PublicWebsiteSettings = WebsiteSettings & { paymentControls?: Record<string, boolean> }
 
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
 const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
@@ -16,8 +17,8 @@ const getServerHydrationSnapshot = () => false
 
 // Fetcher estable a nivel de módulo — la URL se construye desde la key de SWR,
 // así todos los componentes comparten la misma referencia de función.
-async function publicSettingsFetcher(url: string): Promise<WebsiteSettings> {
-  const res = await fetch(url)
+async function publicSettingsFetcher(url: string): Promise<PublicWebsiteSettings> {
+  const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
     const message = errBody?.error || res.statusText || 'Error'
@@ -26,7 +27,7 @@ async function publicSettingsFetcher(url: string): Promise<WebsiteSettings> {
     throw err
   }
   const data = await res.json()
-  return data.data as WebsiteSettings
+  return { ...data.data, paymentControls: data.paymentControls } as PublicWebsiteSettings
 }
 
 export function useWebsiteSettings() {
@@ -39,7 +40,7 @@ export function useWebsiteSettings() {
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, publicSettingsFetcher)
+  const { data, error, isLoading } = useSWR<PublicWebsiteSettings>(cacheKey, publicSettingsFetcher)
 
   // Sin Realtime: website_settings no está en la publicación
   // supabase_realtime, y cada visitante de la tienda abría un canal que
