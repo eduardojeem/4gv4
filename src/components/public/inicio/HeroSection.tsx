@@ -1,6 +1,7 @@
 'use client'
 
-import { WhatsAppIcon } from '@/components/public/SocialIcons'
+import { WhatsAppIcon, SOCIAL_ICONS } from '@/components/public/SocialIcons'
+import { getSocialLinks } from '@/lib/public/social-links'
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
@@ -386,14 +387,76 @@ function ClassicHeroSection({
                   </div>
                 )}
 
-                {/* Estadísticas de Confianza */}
-                {heroStats.enabled !== false && (
-                  <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/40 p-3.5 text-center border border-border/40">
-                    <AnimatedStat value={heroStats.repairs || '100%'} label={capabilities?.metricLabels[0] ?? 'Garantía'} />
-                    <AnimatedStat value={heroStats.satisfaction || '4.9★'} label={capabilities?.metricLabels[1] ?? 'Valoración'} />
-                    <AnimatedStat value={heroStats.avgTime || '24h'} label={capabilities?.metricLabels[2] ?? 'Despacho'} />
-                  </div>
-                )}
+                {/* Elementos de Confianza: Estadísticas y/o Redes Sociales */}
+                {heroStats.enabled !== false && (() => {
+                  const displayMode = heroStats.displayMode || (heroStats.showSocial ? 'both' : 'stats')
+                  const showStats = displayMode === 'stats' || displayMode === 'both'
+                  const socialLinks = getSocialLinks(companyInfo)
+                  const showSocials = (displayMode === 'social' || displayMode === 'both') && (socialLinks.length > 0 || Boolean(phoneClean))
+
+                  return (
+                    <div className="space-y-2.5">
+                      {showStats && (
+                        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/40 p-3.5 text-center border border-border/40">
+                          <AnimatedStat
+                            value={heroStats.repairs || '100%'}
+                            label={heroStats.labels?.repairs || (capabilities?.metricLabels[0] ?? 'Garantía')}
+                          />
+                          <AnimatedStat
+                            value={heroStats.satisfaction || '4.9★'}
+                            label={heroStats.labels?.satisfaction || (capabilities?.metricLabels[1] ?? 'Valoración')}
+                          />
+                          <AnimatedStat
+                            value={heroStats.avgTime || '24h'}
+                            label={heroStats.labels?.avgTime || (capabilities?.metricLabels[2] ?? 'Despacho')}
+                          />
+                        </div>
+                      )}
+
+                      {showSocials && (
+                        <div className="rounded-2xl border border-border/50 bg-background/80 p-2.5 backdrop-blur-xs">
+                          <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-semibold text-muted-foreground">
+                            <span>Canales oficiales de confianza</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">Verificados</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {socialLinks.map((social) => {
+                              const Icon = SOCIAL_ICONS[social.platform]
+                              return (
+                                <a
+                                  key={social.platform}
+                                  href={social.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`${social.label}: ${social.handle}`}
+                                  aria-label={`${social.label} oficial: ${social.handle}`}
+                                  className="group/soc flex items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-semibold text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-2xs"
+                                >
+                                  <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                  <span className="truncate max-w-[120px] text-[11px] group-hover/soc:text-primary">
+                                    {social.handle}
+                                  </span>
+                                </a>
+                              )
+                            })}
+                            {phoneClean && (
+                              <a
+                                href={`https://wa.me/${phoneClean}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="WhatsApp oficial de atención"
+                                className="group/wa flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 transition-all hover:-translate-y-0.5 hover:bg-emerald-500/20 hover:shadow-2xs"
+                              >
+                                <WhatsAppIcon className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                <span className="text-[11px]">WhatsApp</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Accesos Rápidos de Compra (duplican los CTA del hero en movil) */}
                 <div className="hidden lg:block space-y-2">

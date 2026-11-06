@@ -164,11 +164,19 @@ const statValue = (label: string) =>
 
 export const HeroStatsSchema = z.object({
   enabled: z.boolean().optional().default(true),
+  displayMode: z.enum(['stats', 'social', 'both']).optional().default('stats'),
+  showSocial: z.boolean().optional(),
   repairs: statValue('la primera estadística'),
   satisfaction: statValue('la segunda estadística'),
   avgTime: statValue('la tercera estadística'),
+  labels: z.object({
+    repairs: z.string().trim().max(30, 'Etiqueta no puede exceder 30 caracteres').optional(),
+    satisfaction: z.string().trim().max(30, 'Etiqueta no puede exceder 30 caracteres').optional(),
+    avgTime: z.string().trim().max(30, 'Etiqueta no puede exceder 30 caracteres').optional(),
+  }).optional(),
 }).superRefine((value, ctx) => {
   if (value.enabled === false) return
+  if (value.displayMode === 'social') return
   for (const key of ['repairs', 'satisfaction', 'avgTime'] as const) {
     if (!value[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'Completá la estadística o desactivá el bloque' })
   }

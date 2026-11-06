@@ -32,12 +32,14 @@ import {
   Save,
   Scissors,
   Search,
+  Share2,
   ShoppingBag,
   Sparkles,
   Type,
   Wand2,
   Wrench,
 } from 'lucide-react'
+import { InstagramIcon, FacebookIcon, TikTokIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
 import type { CompanyInfo, HeroContent, HeroStats } from '@/types/website-settings'
 import type { WebsiteSectionAnchor, WebsiteSectionId } from '@/lib/website/setup-checklist'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
@@ -158,6 +160,15 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
   const fromBusiness = heroFromBusiness(company)
   const hasWhatsApp = Boolean((company?.whatsapp || company?.phone || '').replace(/\D/g, ''))
 
+  const socialNetworks = [
+    { id: 'instagram', label: 'Instagram', value: company?.instagram, Icon: InstagramIcon, placeholder: '@tu_tienda', color: 'text-pink-600 bg-pink-500/10 border-pink-500/20' },
+    { id: 'whatsapp', label: 'WhatsApp', value: company?.whatsapp || company?.phone, Icon: WhatsAppIcon, placeholder: '0981...', color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' },
+    { id: 'facebook', label: 'Facebook', value: company?.facebook, Icon: FacebookIcon, placeholder: 'tu_pagina', color: 'text-blue-600 bg-blue-500/10 border-blue-500/20' },
+    { id: 'tiktok', label: 'TikTok', value: company?.tiktok, Icon: TikTokIcon, placeholder: '@tu_tienda', color: 'text-foreground bg-foreground/10 border-border' },
+  ]
+  const hasConfiguredSocials = socialNetworks.some((s) => Boolean(s.value?.trim()))
+  const displayMode = heroStats.displayMode || (heroStats.showSocial ? 'both' : 'stats')
+
   // En las plantillas que no son Clásica, los banners activos ocupan el lugar de la portada.
   const bannersReplaceHero = storefrontStyle !== 'classic' &&
     settings?.promotional_carousel?.enabled !== false &&
@@ -200,6 +211,19 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
 
   const updateStat = <K extends keyof HeroStats>(field: K, value: HeroStats[K]) => {
     setHeroStatsDraft((s) => ({ ...(s ?? heroStats), [field]: value }))
+  }
+
+  const updateStatLabel = (key: 'repairs' | 'satisfaction' | 'avgTime', value: string) => {
+    setHeroStatsDraft((s) => {
+      const current = s ?? heroStats
+      return {
+        ...current,
+        labels: {
+          ...current.labels,
+          [key]: value,
+        },
+      }
+    })
   }
 
   const applyHeroPreset = (preset: HeroPreset) => {
@@ -579,13 +603,40 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                       </p>
                     )}
                     {fields.stats && heroStats.enabled !== false && (
-                      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl border bg-muted/40 p-2.5 text-center">
-                        {[heroStats.repairs, heroStats.satisfaction, heroStats.avgTime].map((value, index) => (
-                          <div key={capabilities.metricLabels[index]}>
-                            <div className="text-sm font-extrabold text-foreground">{value || '—'}</div>
-                            <div className="text-[9px] text-muted-foreground">{capabilities.metricLabels[index]}</div>
+                      <div className="mt-4 space-y-2">
+                        {displayMode !== 'social' && (
+                          <div className="grid grid-cols-3 gap-1.5 rounded-xl border bg-muted/40 p-2.5 text-center">
+                            {[heroStats.repairs, heroStats.satisfaction, heroStats.avgTime].map((value, index) => {
+                              const key = (['repairs', 'satisfaction', 'avgTime'] as const)[index]
+                              const customLabel = heroStats.labels?.[key]
+                              const defaultLabel = capabilities.metricLabels[index]
+                              return (
+                                <div key={defaultLabel}>
+                                  <div className="text-sm font-extrabold text-foreground">{value || '—'}</div>
+                                  <div className="text-[9px] text-muted-foreground">{customLabel || defaultLabel}</div>
+                                </div>
+                              )
+                            })}
                           </div>
-                        ))}
+                        )}
+                        {(displayMode === 'social' || displayMode === 'both') && (
+                          <div className="rounded-xl border bg-background/80 p-2 shadow-2xs">
+                            <span className="block text-[8px] font-bold text-muted-foreground mb-1 uppercase tracking-wider text-center">
+                              Canales oficiales verificados
+                            </span>
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              {socialNetworks.filter(s => Boolean(s.value)).map(s => {
+                                const Icon = s.Icon
+                                return (
+                                  <span key={s.id} className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-medium text-foreground">
+                                    <Icon className="h-2.5 w-2.5 shrink-0 text-primary" />
+                                    <span className="truncate max-w-[75px]">{s.value}</span>
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -819,35 +870,235 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           )}
 
           {fields.stats && (
-            <SectionCard icon={BarChart3} title="Números de confianza" description="Tres cifras reales de tu negocio debajo de la portada.">
+            <SectionCard icon={BarChart3} title="Números de confianza" description="Cifras reales y/o canales oficiales verificados en tu portada.">
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3">
-                  <Label htmlFor="hero-stats-enabled" className="cursor-pointer text-sm">Mostrar los números</Label>
+                  <Label htmlFor="hero-stats-enabled" className="cursor-pointer text-sm">Mostrar elementos de confianza</Label>
                   <Switch
                     id="hero-stats-enabled"
                     checked={heroStats.enabled !== false}
                     onCheckedChange={(checked) => updateStat('enabled', checked)}
                   />
                 </div>
+
                 {heroStats.enabled !== false && (
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {(['repairs', 'satisfaction', 'avgTime'] as const).map((key, index) => (
-                      <div key={key} className="space-y-1.5">
-                        <Label htmlFor={key} className="text-xs font-semibold">
-                          Métrica {index + 1} ({capabilities.metricLabels[index]})
-                        </Label>
-                        <Input
-                          id={key}
-                          value={heroStats[key] ?? ''}
-                          onChange={(e) => updateStat(key, e.target.value)}
-                          maxLength={20}
-                          className="h-10"
-                        />
+                  <div className="space-y-4">
+                    {/* Selector de modo: Estadísticas / Redes sociales / Ambos */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        ¿Qué querés mostrar en este bloque?
+                      </Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateStat('displayMode', 'stats')}
+                          className={cn(
+                            'flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
+                            displayMode === 'stats'
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-border bg-background hover:bg-muted/50'
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                            <BarChart3 className="h-3.5 w-3.5 text-primary" />
+                            Cifras y estadísticas
+                          </span>
+                          <span className="text-[11px] text-muted-foreground leading-snug">
+                            3 números destacados como garantía, valoración y despacho.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => updateStat('displayMode', 'social')}
+                          className={cn(
+                            'flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
+                            displayMode === 'social'
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-border bg-background hover:bg-muted/50'
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                            <Share2 className="h-3.5 w-3.5 text-primary" />
+                            Redes sociales oficiales
+                          </span>
+                          <span className="text-[11px] text-muted-foreground leading-snug">
+                            Instagram, WhatsApp, Facebook y TikTok verificados.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => updateStat('displayMode', 'both')}
+                          className={cn(
+                            'flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
+                            displayMode === 'both'
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-border bg-background hover:bg-muted/50'
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                            Ambos combinados
+                          </span>
+                          <span className="text-[11px] text-muted-foreground leading-snug">
+                            Muestra las 3 cifras y los accesos rápidos a tus redes.
+                          </span>
+                        </button>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Configuración de Cifras (si está en 'stats' o 'both') */}
+                    {(displayMode === 'stats' || displayMode === 'both') && (
+                      <div className="space-y-3 rounded-xl border bg-card p-3.5 shadow-2xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+                          <span className="text-xs font-bold text-foreground">
+                            Cifras destacadas ({capabilities.businessLabel})
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1.5"
+                            onClick={() => {
+                              setHeroStatsDraft((s) => ({
+                                ...(s ?? heroStats),
+                                repairs: verticalDef.stats.repairs,
+                                satisfaction: verticalDef.stats.satisfaction,
+                                avgTime: verticalDef.stats.avgTime,
+                              }))
+                              toast.success(`Cifras recomendadas para ${verticalDef.verticalLabel} cargadas`)
+                            }}
+                          >
+                            <Sparkles className="h-3 w-3 text-primary" />
+                            Cargar sugerencias de rubro
+                          </Button>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {(['repairs', 'satisfaction', 'avgTime'] as const).map((key, index) => {
+                            const statIdeas = index === 0
+                              ? ['100%', '5.000+', '10K+', '15 años', '500+']
+                              : index === 1
+                                ? ['4.9★', '99%', '99.5%', 'Excelente', 'Top']
+                                : ['24h', 'En el día', 'Express', '24-48h', 'Sin espera']
+                            return (
+                              <div key={key} className="space-y-1.5">
+                                <Label htmlFor={key} className="text-xs font-semibold">
+                                  Métrica {index + 1} ({capabilities.metricLabels[index]})
+                                </Label>
+                                <Input
+                                  id={key}
+                                  value={heroStats[key] ?? ''}
+                                  onChange={(e) => updateStat(key, e.target.value)}
+                                  placeholder={verticalDef.stats[key] || 'Ej: 100%'}
+                                  maxLength={20}
+                                  className="h-10"
+                                />
+                                <Ideas items={statIdeas} current={heroStats[key]} onPick={(val) => updateStat(key, val)} />
+                                <div className="pt-1">
+                                  <Label htmlFor={`${key}-label`} className="text-[11px] font-medium text-muted-foreground">
+                                    Texto de la métrica (opcional)
+                                  </Label>
+                                  <Input
+                                    id={`${key}-label`}
+                                    value={heroStats.labels?.[key] ?? ''}
+                                    onChange={(e) => updateStatLabel(key, e.target.value)}
+                                    placeholder={capabilities.metricLabels[index]}
+                                    maxLength={30}
+                                    className="mt-1 h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Usá cifras reales: los ejemplos de los textos de rubro no son datos de tu negocio.</p>
+                      </div>
+                    )}
+
+                    {/* Configuración de Redes Sociales (si está en 'social' o 'both') */}
+                    {(displayMode === 'social' || displayMode === 'both') && (
+                      <div className="space-y-3 rounded-xl border bg-card p-3.5 shadow-2xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+                          <div>
+                            <span className="text-xs font-bold text-foreground">
+                              Canales y Redes Oficiales
+                            </span>
+                            <p className="text-[11px] text-muted-foreground">
+                              Tus clientes hacen clic y van directo a tu perfil para seguirte o consultarte.
+                            </p>
+                          </div>
+                          {onNavigate && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1 text-primary"
+                              onClick={() => onNavigate('company')}
+                            >
+                              Editar redes en Negocio <ArrowRight className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+
+                        {!hasConfiguredSocials && (
+                          <div role="note" className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-foreground">
+                            <span>Aún no cargaste tus redes sociales. Completalas para que aparezcan en tu portada.</span>
+                            {onNavigate && (
+                              <Button type="button" size="sm" variant="outline" className="h-7 text-xs self-start sm:self-center" onClick={() => onNavigate('company')}>
+                                Cargar redes
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {socialNetworks.map((net) => {
+                            const Icon = net.Icon
+                            const hasVal = Boolean(net.value?.trim())
+                            return (
+                              <div
+                                key={net.id}
+                                className={cn(
+                                  'flex items-center justify-between gap-2 rounded-lg border p-2.5 text-xs',
+                                  hasVal ? 'bg-background' : 'bg-muted/30 opacity-70 border-dashed'
+                                )}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md border', net.color)}>
+                                    <Icon className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-foreground leading-tight">{net.label}</p>
+                                    <p className="truncate text-[11px] text-muted-foreground">
+                                      {hasVal ? net.value : 'Sin configurar'}
+                                    </p>
+                                  </div>
+                                </div>
+                                {hasVal ? (
+                                  <span className="shrink-0 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                    Conectado
+                                  </span>
+                                ) : (
+                                  onNavigate && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onNavigate('company')}
+                                      className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                                    >
+                                      Cargar
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">Usá cifras reales: los ejemplos de los textos de rubro no son datos de tu negocio.</p>
               </div>
             </SectionCard>
           )}
