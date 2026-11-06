@@ -41,9 +41,16 @@ export interface CompanyInfo {
 }
 export interface HeroStats {
   enabled?: boolean
+  displayMode?: 'stats' | 'social' | 'both'
+  showSocial?: boolean
   repairs: string
   satisfaction: string
   avgTime: string
+  labels?: {
+    repairs?: string
+    satisfaction?: string
+    avgTime?: string
+  }
 }
 
 export interface HeroContent {
