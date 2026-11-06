@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
-import { buildCreditInstallmentPlan, isValidCreditInterestRate, MAX_CREDIT_INSTALLMENTS } from '@/lib/credits/installments'
+import { resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 import type { InstallmentPlanOption } from '@/types/public'
 
 interface InstallmentSelectorProps {
@@ -23,30 +23,18 @@ interface InstallmentSelectorProps {
 export function InstallmentSelector({ price, plans, compact = false, className }: InstallmentSelectorProps) {
   const options = useMemo(() => {
     if (!price || price <= 0 || !Array.isArray(plans)) return []
-    return plans
-      // Solo planes que el POS puede vender: mismos topes que el servidor.
-      .filter((plan) => plan && Number.isInteger(Number(plan.count)) && Number(plan.count) >= 1 && Number(plan.count) <= MAX_CREDIT_INSTALLMENTS && isValidCreditInterestRate(plan.rate ?? 0))
-      .sort((a, b) => a.count - b.count)
-      .map((plan) => {
-        const built = buildCreditInstallmentPlan({
-          principalAmount: price,
-          interestRate: plan.rate ?? 0,
-          installmentCount: plan.count,
-          frequency: 'monthly',
-        })
-        return {
-          count: plan.count,
-          perInstallment: built.installments[0]?.amount ?? 0,
-          financedTotal: built.financedTotal,
-          hasInterest: built.interestAmount > 0,
-        }
-      })
+    return [...plans].sort((a, b) => a.count - b.count).flatMap(plan => {
+      const result = resolveConfiguredCreditPlan(price, plan)
+      if (!result.plan) return []
+      const built = result.plan
+      return [{ count: plan.count, perInstallment: built.installments[0]?.amount ?? 0, lastInstallment: built.installments.at(-1)?.amount ?? 0, financedTotal: built.financedTotal, hasInterest: built.interestAmount > 0 }]
+    })
   }, [price, plans])
 
   // Por defecto seleccionamos la opción con más cuotas (la cuota más baja).
   const [selectedCount, setSelectedCount] = useState<number | null>(null)
 
-  if (options.length === 0) return null
+  if (options.length === 0) return plans.some(plan => plan.mode === 'amount') ? <p className="text-xs text-muted-foreground">No hay un plan de cuotas compatible con este precio.</p> : null
 
   const active =
     options.find((opt) => opt.count === selectedCount) ?? options[options.length - 1]
@@ -110,6 +98,7 @@ export function InstallmentSelector({ price, plans, compact = false, className }
             compact ? 'text-[11px]' : 'text-xs',
           )}
         >
+          {active.lastInstallment !== active.perInstallment && <span className="block">Última cuota {formatPrice(active.lastInstallment)}</span>}
           {active.hasInterest
             ? `Total financiado ${formatPrice(active.financedTotal)}`
             : 'Sin interés'}

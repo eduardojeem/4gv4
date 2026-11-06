@@ -1,3 +1,4 @@
+import { resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 
 import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import React from 'react'
@@ -64,8 +65,8 @@ export function CreditStatusPanel({
   const { policy } = creditPolicy
   const fractionDigits = creditFractionDigits()
   const scheduleMode: CreditScheduleMode = terms.scheduleMode ?? 'percent'
-  const amountsAllowed = creditPolicy.canOverride || (policy.allowCustomTerms && policy.allowInstallmentAmounts)
-  const scheduleModes: CreditScheduleMode[] = amountsAllowed ? ['percent', 'installment_amount', 'custom'] : ['percent']
+  const amountsAllowed = creditPolicy.canOverride || policy.allowInstallmentAmounts
+  const scheduleModes: CreditScheduleMode[] = amountsAllowed ? policy.allowCustomTerms || creditPolicy.canOverride ? ['percent', 'installment_amount', 'custom'] : ['percent', 'installment_amount'] : ['percent']
   const maxInstallments = creditPolicy.canOverride ? MAX_CREDIT_INSTALLMENTS : policy.maxInstallments
   const maxInterestRate = creditPolicy.canOverride ? MAX_CREDIT_INTEREST_RATE : policy.maxInterestRate
   const frequencyAllowed = (frequency: CreditFrequency) => creditPolicy.canOverride || policy.allowedFrequencies.includes(frequency)
@@ -73,7 +74,7 @@ export function CreditStatusPanel({
   const amountsError = amounts && cartTotal > 0 ? installmentAmountsError(cartTotal, amounts) : null
   const policyPlans = React.useMemo(() => [
     ...creditPolicy.defaultPlans,
-    ...(suggestion ? [{ count: suggestion.count, rate: suggestion.interestRate, frequency: suggestion.frequency }] : []),
+    ...(suggestion ? [{ count: suggestion.count, rate: suggestion.interestRate, frequency: suggestion.frequency, mode: suggestion.mode, installmentAmount: suggestion.installmentAmount }] : []),
   ], [creditPolicy.defaultPlans, suggestion])
   // La entrega mínima la controla el servidor con el total de la venta.
   const policyMessage = creditPolicy.loaded
@@ -83,6 +84,7 @@ export function CreditStatusPanel({
       frequency: terms.frequency,
       mode: scheduleMode,
       downPaymentPercent: 0,
+      installmentAmounts: amounts ?? undefined,
     }, policyPlans)
     : null
   const resizeAmounts = (count: number): number[] => {
@@ -104,6 +106,7 @@ export function CreditStatusPanel({
     suggestion.count !== terms.count
     || suggestion.interestRate !== terms.interestRate
     || suggestion.frequency !== terms.frequency
+    || (suggestion.mode === 'amount' ? scheduleMode !== 'installment_amount' || suggestion.installmentAmount !== terms.installmentAmount : scheduleMode !== 'percent')
   ))
 
   return (
@@ -135,6 +138,11 @@ export function CreditStatusPanel({
           <span className="text-base font-bold text-blue-900 dark:text-blue-100">{formatCurrency(cartTotal)}</span>
         </div>
         
+        {creditPolicy.defaultPlans.length > 0 && <div className="space-y-2 rounded-lg border p-3"><p className="text-xs font-semibold">Planes globales del comercio</p><div className="grid gap-2 sm:grid-cols-2">{creditPolicy.defaultPlans.map((option, index) => {
+          const result = resolveConfiguredCreditPlan(cartTotal, option, option.frequency)
+          const blocked = result.error || (option.mode === 'amount' && !amountsAllowed ? 'Las reglas no permiten cuotas por monto.' : null)
+          return <div key={index}><button type="button" disabled={Boolean(blocked)} className="min-h-11 w-full rounded-lg border bg-background px-3 py-2 text-left text-xs disabled:opacity-50" onClick={() => onTermsChange({ ...terms, count: option.count, frequency: option.frequency, interestRate: result.plan?.interestRate ?? option.rate, scheduleMode: option.mode === 'amount' ? 'installment_amount' : 'percent', installmentAmount: option.mode === 'amount' ? option.installmentAmount : undefined })}>{option.count} cuotas · {option.mode === 'amount' ? formatCurrency(option.installmentAmount ?? 0) + ' fijos' : option.rate + '%'} · {frequencyLabel[option.frequency]}</button>{blocked && <p className="mt-1 text-xs text-destructive">{blocked}</p>}</div>
+        })}</div></div>}
         {/* Límite de crédito total */}
         <div className="flex items-center justify-between p-2 bg-white/40 dark:bg-gray-900/20 rounded-md">
           <span className="text-xs text-blue-600 dark:text-blue-400">Límite de crédito:</span>

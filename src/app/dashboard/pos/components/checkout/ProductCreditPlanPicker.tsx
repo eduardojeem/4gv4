@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, CreditCard, Info } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 import { cn } from '@/lib/utils'
 
 import type { CreditPlanSuggestion } from '../../contexts/CheckoutContext'
@@ -51,12 +51,8 @@ export function ProductCreditPlanPicker({
       <div role="region" aria-label="Lista de planes de crédito" tabIndex={0} className="grid max-h-56 gap-1.5 overflow-y-auto overscroll-contain p-1 sm:grid-cols-2 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {plans.map(plan => {
           const allocation = getProductCreditAllocation(plan, cartTotal)
-          const calculation = buildCreditInstallmentPlan({
-            principalAmount: allocation.financedPrincipal,
-            interestRate: plan.interestRate,
-            installmentCount: plan.count,
-            frequency: plan.frequency,
-          })
+          const resolved = resolveConfiguredCreditPlan(allocation.financedPrincipal, { count: plan.count, rate: plan.interestRate, ...(plan.mode === 'amount' ? { mode: 'amount' as const, installmentAmount: plan.installmentAmount } : {}) }, plan.frequency)
+          const calculation = resolved.plan
           const isSelected = Boolean(selectedPlan
             && selectedPlan.productId === plan.productId
             && selectedPlan.count === plan.count
@@ -69,6 +65,7 @@ export function ProductCreditPlanPicker({
               variant="outline"
               aria-label={`Elegir ${plan.count} cuotas de ${plan.productName}`}
               aria-pressed={isSelected}
+              disabled={Boolean(resolved.error)}
               onClick={() => onSelect(plan)}
               className={cn(
                 'h-auto min-h-11 min-w-0 items-start justify-start gap-1.5 whitespace-normal px-2 py-2 text-left',
@@ -81,12 +78,13 @@ export function ProductCreditPlanPicker({
                 <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-xs font-semibold">{plan.count} cuotas</span>
                   <span className="text-xs font-medium text-sky-700 dark:text-sky-300">
-                    {formatCurrency(calculation.installments[0]?.amount ?? 0)}/mes
+                    {formatCurrency(calculation?.installments[0]?.amount ?? plan.installmentAmount ?? 0)}/mes
                   </span>
                 </span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {plan.interestRate === 0 ? 'Sin interés' : `Interés ${plan.interestRate}%`} · Total {formatCurrency(calculation.financedTotal)}
+                  {plan.mode === 'amount' ? 'Monto fijo' : plan.interestRate === 0 ? 'Sin interés' : `Interés ${plan.interestRate}%`} · Total {formatCurrency(calculation?.financedTotal ?? plan.count * (plan.installmentAmount ?? 0))}
                 </span>
+                {resolved.error && <span className="mt-1 block text-xs text-destructive">{resolved.error}</span>}
                 {allocation.dueNow > 0 && (
                   <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-300">
                     Financia {formatCurrency(allocation.financedPrincipal)} · Pagar ahora {formatCurrency(allocation.dueNow)}

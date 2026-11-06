@@ -1,5 +1,7 @@
+import { resolveConfiguredCreditPlan } from './plan-definition'
+import { normalizeCreditPosPolicy } from './pos-credit-policy'
 import type { CreditPlanDefault, ProductCreditDefaults } from '@/types/website-settings'
-import { buildCreditInstallmentPlan, type CreditFrequency } from '@/lib/credits/installments'
+import { roundToCurrencyUnit, type CreditFrequency } from '@/lib/credits/installments'
 
 /**
  * Predeterminados de productos a credito: resuelve sobre que precio se
@@ -35,7 +37,7 @@ function toAmount(value: unknown): number {
 }
 
 function roundMoney(value: number) {
-  return Number(value.toFixed(2))
+  return roundToCurrencyUnit(value)
 }
 
 /**
@@ -79,6 +81,8 @@ export type CreditPlanPreview = {
   rate: number
   /** Valor de cada cuota (la ultima puede diferir por centavos de redondeo). */
   installmentAmount: number
+  lastInstallmentAmount: number
+  error: string | null
   /** Total financiado con recargo, sin contar la entrega inicial. */
   financedTotal: number
   /** Lo que termina pagando el cliente: entrega inicial + total financiado. */
@@ -95,17 +99,17 @@ export function buildCreditPlanPreview(
   base: ResolvedCreditBase,
   frequency: CreditFrequency,
 ): CreditPlanPreview {
-  const built = buildCreditInstallmentPlan({
-    principalAmount: base.financedAmount,
-    interestRate: plan.rate,
-    installmentCount: plan.count,
-    frequency,
-  })
+  const resolved = resolveConfiguredCreditPlan(base.financedAmount, plan, frequency)
+  const built = resolved.plan
+  if (!built) return { count: plan.count, rate: 0, installmentAmount: plan.installmentAmount ?? 0, lastInstallmentAmount: plan.installmentAmount ?? 0, financedTotal: plan.count * (plan.installmentAmount ?? 0), totalWithDownPayment: plan.count * (plan.installmentAmount ?? 0) + base.downPayment, error: resolved.error }
+
 
   return {
     count: built.installmentCount,
-    rate: plan.rate,
+    rate: built.interestRate,
+    error: null,
     installmentAmount: built.installments[0]?.amount ?? 0,
+    lastInstallmentAmount: built.installments.at(-1)?.amount ?? 0,
     financedTotal: built.financedTotal,
     totalWithDownPayment: roundMoney(built.financedTotal + base.downPayment),
   }
@@ -128,11 +132,27 @@ export function buildCreditPlanPreviews(
 export function toProductInstallmentPlans(defaults: ProductCreditDefaults): CreditPlanDefault[] {
   return [...defaults.plans]
     .sort((a, b) => a.count - b.count)
-    .map((plan) => ({ count: plan.count, rate: plan.rate }))
+    .map((plan) => plan.mode === 'amount' ? { count: plan.count, rate: 0, mode: 'amount' as const, installmentAmount: plan.installmentAmount } : { count: plan.count, rate: plan.rate })
 }
 
 export const CREDIT_BASE_LABELS: Record<ResolvedCreditBase['source'], string> = {
   sale: 'Precio de venta',
   offer: 'Precio de oferta',
   cost: 'Precio de costo',
+}
+
+/** Explain contradictions without silently changing the business policy. */
+export function creditDefaultsWarnings(defaults: ProductCreditDefaults): string[] {
+  const policy = normalizeCreditPosPolicy(defaults.posPolicy)
+  const warnings: string[] = []
+  if (defaults.plans.some(plan => plan.mode === 'amount') && !policy.allowInstallmentAmounts) warnings.push('Hay planes por monto, pero las reglas del POS no permiten cuotas por monto.')
+  if (policy.allowCustomTerms) {
+    if (defaults.plans.some(plan => plan.count > policy.maxInstallments)) warnings.push('Hay planes con más cuotas que el máximo del POS: un cajero no podrá venderlos con estas reglas.')
+    if (defaults.plans.some(plan => plan.rate > policy.maxInterestRate)) warnings.push('Hay planes con un recargo mayor al máximo del POS: un cajero no podrá venderlos con estas reglas.')
+    if (defaults.plans.length && !policy.allowedFrequencies.includes(defaults.frequency)) warnings.push('La frecuencia de los planes globales no está permitida por las reglas del POS.')
+  } else {
+    warnings.push('Solo planes configurados: sus cantidades, recargos y frecuencias se aceptan como excepciones a los máximos de condiciones personalizadas. Al cajero siempre se le exige la entrega mínima.')
+    if (!defaults.plans.length) warnings.push('No hay planes globales. Un cajero necesitará un plan configurado en los productos para vender a crédito.')
+  }
+  return warnings
 }

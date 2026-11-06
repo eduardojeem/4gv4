@@ -85,6 +85,7 @@ export function PosCheckout({
   // Crédito: condiciones, entrega inicial y la línea del cliente.
   const [terms, setTerms] = useState<CreditTerms>(DEFAULT_TERMS);
   const [down, setDown] = useState('');
+  const [creditRules, setCreditRules] = useState({ ready: false, minimumPercent: 0 });
   const [downMethod, setDownMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [line, setLine] = useState<{ customerId: string; status: CreditStatus | null; error: string | null } | null>(null);
 
@@ -104,7 +105,7 @@ export function PosCheckout({
   const creditStatus = lineReady ? (line?.status ?? null) : null;
   const downAmount = method === 'credit' ? Math.min(total, digits(down)) : 0;
   const plan = buildCreditPlan(total - downAmount, terms);
-  const minimumDown = creditStatus ? minimumDownPayment(total, creditStatus.available, terms.interestRate) : null;
+  const minimumDown = creditStatus && (terms.mode ?? 'percent') === 'percent' ? minimumDownPayment(total, creditStatus.available, terms.interestRate) : null;
   const methods = METHODS.filter(item => item.key === 'mixed'
     ? controls.allows('cash') && (controls.allows('card') || controls.allows('transfer'))
     : controls.allows(item.key) && (item.key !== 'credit' || creditEnabled));
@@ -124,6 +125,8 @@ export function PosCheckout({
     if (method === 'card') return !/^\d{4}$/.test(cardLast4) ? 'Anotá los últimos 4 dígitos de la tarjeta.' : null;
     if (method === 'transfer') return !reference.trim() ? 'Anotá la referencia de la transferencia.' : null;
     if (method === 'credit') {
+      if (!creditRules.ready) return 'Verificá las reglas de crédito antes de confirmar.';
+      if (total > 0 && downAmount * 100 / total + 1e-9 < creditRules.minimumPercent) return 'La entrega mínima es del ' + creditRules.minimumPercent + '%.';
       if (!customer) return 'Elegí el cliente: la venta a crédito necesita uno.';
       if (!lineReady) return 'Revisando la línea de crédito del cliente…';
       if (!creditStatus) return line?.error ?? 'No se pudo leer el crédito del cliente.';
@@ -256,6 +259,7 @@ export function PosCheckout({
       {method === 'credit' &&
         (customer ? (
           <PosCreditPanel
+            onPolicyChange={setCreditRules}
             status={creditStatus}
             loading={!lineReady}
             error={lineReady ? (line?.error ?? null) : null}

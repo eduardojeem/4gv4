@@ -1,3 +1,4 @@
+import { useAuth } from '@/contexts/auth-context'
 import { useState, useSyncExternalStore } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
@@ -54,12 +55,15 @@ export function useWebsiteSettings() {
   }
 }
 
+type AdminSettings = WebsiteSettings & { __creditDefaultsRevision?: string; __organizationId?: string }
+type VersionOptions = { revision?: string; organizationId?: string }
+
 // Fetcher para el panel admin (autenticado, sin caché agresiva).
-async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
+async function adminSettingsFetcher(url: string): Promise<AdminSettings> {
   const adminRes = await fetch(url, { cache: 'no-store' })
   if (adminRes.ok) {
     const adminData = await adminRes.json()
-    return adminData.data as WebsiteSettings
+    return { ...adminData.data, __creditDefaultsRevision: adminData.creditDefaultsRevision, __organizationId: adminData.organizationId } as AdminSettings
   }
   const errBody = await adminRes.json().catch(() => ({}))
   const message = errBody?.error || adminRes.statusText || 'Error'
@@ -69,6 +73,8 @@ async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
 }
 
 export function useAdminWebsiteSettings() {
+  const { user } = useAuth()
+  const adminCacheKey = ADMIN_WEBSITE_SETTINGS_CACHE_KEY + '?context=' + encodeURIComponent(user?.id ?? '') + '&organization=' + encodeURIComponent(user?.organization?.id ?? '')
   // Ligado a la caché del proveedor de la app: el `mutate` global de 'swr'
   // escribiría en otra caché y el guardado no se vería hasta recargar.
   const { mutate: mutateCache } = useSWRConfig()
@@ -76,7 +82,7 @@ export function useAdminWebsiteSettings() {
   const [isInitializing, setIsInitializing] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const { data, error, isLoading, mutate: swrMutate } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, adminSettingsFetcher, {
+  const { data, error, isLoading, mutate: swrMutate } = useSWR<AdminSettings>(adminCacheKey, adminSettingsFetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,
@@ -96,21 +102,21 @@ export function useAdminWebsiteSettings() {
     }
   }
 
-  const updateSettings = async (values: Partial<WebsiteSettings>) => {
+  const updateSettings = async (values: Partial<WebsiteSettings>, version?: VersionOptions) => {
     const previous = data
 
     try {
       setIsSaving(true)
 
       // Optimistically update cache
-      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
+      await mutateCache(adminCacheKey, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
         return { ...current, ...values } as WebsiteSettings
       }, false)
 
       const res = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(version?.revision ? { 'X-Credit-Defaults-Revision': version.revision } : {}), ...(version?.organizationId ? { 'X-Organization-ID': version.organizationId } : {}) },
         body: JSON.stringify({ values })
       })
 
@@ -121,17 +127,17 @@ export function useAdminWebsiteSettings() {
       }
 
       const persistedValues = body?.data ?? values
-      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
+      await mutateCache(adminCacheKey, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
-        return { ...current, ...persistedValues } as WebsiteSettings
+        return { ...current, ...persistedValues, ...(body.creditDefaultsRevision ? { __creditDefaultsRevision: body.creditDefaultsRevision, __organizationId: body.organizationId } : {}) } as AdminSettings
       }, false)
 
       // Revalidate to ensure server truth
-      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+      if (!version) await mutateCache(adminCacheKey)
       return { success: true }
     } catch (err) {
       // Rollback on error
-      if (previous) await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, previous, false)
+      if (previous) await mutateCache(adminCacheKey, previous, false)
       const message = err instanceof Error ? err.message : 'Failed to update setting'
       return { success: false, error: message }
     } finally {
@@ -139,8 +145,8 @@ export function useAdminWebsiteSettings() {
     }
   }
 
-  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) =>
-    updateSettings({ [key]: value } as Pick<WebsiteSettings, K>)
+  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K], version?: VersionOptions) =>
+    updateSettings({ [key]: value } as Pick<WebsiteSettings, K>, version)
 
   const initializeMissingSettings = async () => {
     try {
@@ -156,7 +162,7 @@ export function useAdminWebsiteSettings() {
         throw new Error(message)
       }
 
-      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+      await mutateCache(adminCacheKey)
       return {
         success: true,
         insertedCount: Number(body?.insertedCount || 0),
@@ -172,6 +178,8 @@ export function useAdminWebsiteSettings() {
 
   return {
     settings: data ?? null,
+    creditDefaultsRevision: data?.__creditDefaultsRevision,
+    organizationId: data?.__organizationId,
     isLoading,
     error: error ? (error as Error).message : null,
     isSaving,
@@ -180,7 +188,7 @@ export function useAdminWebsiteSettings() {
     updateSetting,
     updateSettings,
     initializeMissingSettings,
-    refetch: () => mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY),
+    refetch: () => mutateCache(adminCacheKey),
     refresh,
   }
 }

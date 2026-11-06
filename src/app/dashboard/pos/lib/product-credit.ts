@@ -1,70 +1,39 @@
-import { buildCreditInstallmentPlan, isValidCreditInterestRate, MAX_CREDIT_INSTALLMENTS } from '@/lib/credits/installments'
+import { resolveConfiguredCreditPlan, CreditPlanDefinitionSchema } from '@/lib/credits/plan-definition'
 import type { InstallmentPlanOption } from '@/types/product-unified'
 
 export type ProductCreditSource = {
   installments_enabled?: boolean | null
   installments_plans?: InstallmentPlanOption[] | null
 }
-
 export type ProductCreditPlan = {
-  count: number
-  rate: number
-  frequency: 'monthly'
-  installmentAmount: number
-  interestAmount: number
-  financedTotal: number
+  count: number; rate: number; frequency: 'monthly'
+  installmentAmount: number; interestAmount: number; financedTotal: number
+  mode?: 'percent' | 'amount'; error?: string
 }
-
-function isValidPlan(plan: InstallmentPlanOption): boolean {
-  return Number.isInteger(plan.count)
-    && plan.count >= 1
-    && plan.count <= MAX_CREDIT_INSTALLMENTS
-    && isValidCreditInterestRate(plan.rate)
-}
-
-export function getProductCreditPlans(
-  product: ProductCreditSource,
-  price: number,
-): ProductCreditPlan[] {
-  const effectivePrice = Number(price)
-  if (!product.installments_enabled || !Number.isFinite(effectivePrice) || effectivePrice <= 0) {
-    return []
+export function getProductCreditPlans(product: ProductCreditSource, price: number): ProductCreditPlan[] {
+  if (!product.installments_enabled || !Number.isFinite(price) || price <= 0) return []
+  const definitions = new Map<string, InstallmentPlanOption>()
+  for (const raw of product.installments_plans ?? []) {
+    const parsed = CreditPlanDefinitionSchema.safeParse(raw)
+    if (parsed.success) definitions.set(parsed.data.count + ':' + (parsed.data.mode === 'amount' ? 'amount:' + parsed.data.installmentAmount : parsed.data.rate), parsed.data)
   }
-
-  const uniquePlans = new Map<string, InstallmentPlanOption>()
-  for (const plan of product.installments_plans ?? []) {
-    if (isValidPlan(plan)) uniquePlans.set(`${plan.count}:${plan.rate}`, plan)
-  }
-
-  return [...uniquePlans.values()]
-    .sort((left, right) => left.count - right.count || left.rate - right.rate)
-    .map(({ count, rate }) => {
-      const calculated = buildCreditInstallmentPlan({
-        principalAmount: effectivePrice,
-        installmentCount: count,
-        interestRate: rate,
-        frequency: 'monthly',
-      })
-
-      return {
-        count,
-        rate,
-        frequency: 'monthly' as const,
-        installmentAmount: calculated.installments[0]?.amount ?? 0,
-        interestAmount: calculated.interestAmount,
-        financedTotal: calculated.financedTotal,
-      }
-    })
+  return [...definitions.values()].sort((a, b) => a.count - b.count || a.rate - b.rate).flatMap(definition => {
+    const result = resolveConfiguredCreditPlan(price, definition)
+    if (result.error && definition.mode !== 'amount') return []
+    const calculated = result.plan
+    return [{
+      count: definition.count, rate: calculated?.interestRate ?? definition.rate, frequency: 'monthly' as const,
+      installmentAmount: calculated?.installments[0]?.amount ?? definition.installmentAmount ?? 0,
+      interestAmount: calculated?.interestAmount ?? 0,
+      financedTotal: calculated?.financedTotal ?? definition.count * (definition.installmentAmount ?? 0),
+      ...(definition.mode === 'amount' ? { mode: 'amount' as const } : {}),
+      ...(result.error ? { error: result.error } : {}),
+    }]
+  })
 }
-
 export function hasProductCredit(product: ProductCreditSource): boolean {
-  return getProductCreditPlans(product, 1).length > 0
+  return Boolean(product.installments_enabled && product.installments_plans?.some(plan => CreditPlanDefinitionSchema.safeParse(plan).success))
 }
-
-export function getFeaturedProductCreditPlan(
-  product: ProductCreditSource,
-  price: number,
-): ProductCreditPlan | null {
-  const plans = getProductCreditPlans(product, price)
-  return plans.sort((left, right) => right.count - left.count || left.rate - right.rate)[0] ?? null
+export function getFeaturedProductCreditPlan(product: ProductCreditSource, price: number): ProductCreditPlan | null {
+  return getProductCreditPlans(product, price).filter(plan => !plan.error).sort((a, b) => b.count - a.count || a.rate - b.rate)[0] ?? null
 }

@@ -2,10 +2,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const tasks = vi.hoisted(() => ({ reconcile: vi.fn(), autopay: vi.fn(), grace: vi.fn() }))
+const tasks = vi.hoisted(() => ({ reconcile: vi.fn(), autopay: vi.fn(), grace: vi.fn(), reminders: vi.fn(), deletions: vi.fn() }))
 vi.mock('@/lib/saas/pagopar-reconciliation', () => ({ reconcilePendingPagoparPayments: tasks.reconcile }))
 vi.mock('@/lib/saas/subscription-autopay', () => ({ runSubscriptionAutopay: tasks.autopay }))
 vi.mock('@/lib/saas/plan-grace-notifications', () => ({ sendPlanGraceNotifications: tasks.grace }))
+vi.mock('@/lib/saas/subscription-notifications', () => ({ sendSubscriptionReminders: tasks.reminders }))
+vi.mock('@/lib/account/account-deletion', () => ({ completeDueAccountDeletions: tasks.deletions }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
 
 const { GET } = await import('@/app/api/cron/daily/route')
@@ -34,11 +36,13 @@ describe('/api/cron/daily', () => {
     expect(tasks.reconcile).not.toHaveBeenCalled()
   })
 
-  it('corre las tres tareas y una que falla no frena a las demás', async () => {
+  it('corre las cinco tareas y una que falla no frena a las demás', async () => {
     vi.stubEnv('CRON_SECRET', 'secreto')
     tasks.reconcile.mockRejectedValue(new Error('Pagopar caído'))
     tasks.autopay.mockResolvedValue({ charged: 1 })
     tasks.grace.mockResolvedValue({ sent: 2 })
+    tasks.reminders.mockResolvedValue({ sent: 0 })
+    tasks.deletions.mockResolvedValue({ completed: 0 })
 
     const response = await call('Bearer secreto')
     const body = await response.json()
@@ -47,6 +51,9 @@ describe('/api/cron/daily', () => {
     expect(body.results.pagoparReconcile).toEqual({ ok: false, error: 'Pagopar caído' })
     expect(body.results.subscriptionAutopay).toEqual({ ok: true, data: { charged: 1 } })
     expect(body.results.planGraceNotifications).toEqual({ ok: true, data: { sent: 2 } })
+    expect(body.results.subscriptionReminders).toEqual({ ok: true, data: { sent: 0 } })
+    expect(body.results.accountDeletions).toEqual({ ok: true, data: { completed: 0 } })
+    expect(tasks.deletions).toHaveBeenCalledOnce()
   })
 
   it('está programada en el cron de Vercel', () => {

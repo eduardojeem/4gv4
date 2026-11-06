@@ -75,6 +75,25 @@ describe('ProductCreditDefaultsEditor', () => {
     expect(screen.getByTestId('plan-row-12')).toBeInTheDocument()
   })
 
+  it('guarda un monto fijo sin convertirlo en porcentaje', async () => {
+    render(<ProductCreditDefaultsEditor />)
+    const row = within(screen.getByTestId('plan-row-6'))
+    fireEvent.click(row.getByRole('button', { name: 'Monto fijo' }))
+    fireEvent.change(row.getByLabelText('Monto fijo del plan de 6 cuotas'), { target: { value: '200.000' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }))
+    await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
+    expect(updateSetting.mock.calls[0][1].plans.find((plan: { count: number }) => plan.count === 6)).toEqual({ count: 6, rate: 0, mode: 'amount', installmentAmount: 200000 })
+  })
+
+  it('advierte si el monto no cubre el ejemplo sin cambiar el monto escrito', () => {
+    render(<ProductCreditDefaultsEditor />)
+    const row = within(screen.getByTestId('plan-row-6'))
+    fireEvent.click(row.getByRole('button', { name: 'Monto fijo' }))
+    fireEvent.change(row.getByLabelText('Monto fijo del plan de 6 cuotas'), { target: { value: '100000' } })
+    expect(row.getByLabelText('Monto fijo del plan de 6 cuotas')).toHaveValue('100000')
+    expect(row.getByText(/no cubren el monto/i)).toBeInTheDocument()
+  })
+
   it('permite editar el recargo de un plan existente', () => {
     render(<ProductCreditDefaultsEditor />)
 
@@ -110,17 +129,58 @@ describe('ProductCreditDefaultsEditor', () => {
     expect(value.plans.find((plan: { count: number }) => plan.count === 6).rate).toBe(15)
   })
 
-  it('recorta valores fuera de rango antes de guardar', async () => {
+  it('rechaza una entrega fuera de rango sin corregirla silenciosamente', async () => {
     render(<ProductCreditDefaultsEditor />)
-
-    // 250% de entrega inicial no tiene sentido: el maximo es 90.
     fireEvent.change(screen.getByLabelText('Entrega inicial (%)'), { target: { value: '250' } })
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }))
+    expect(screen.getByRole('button', { name: /Guardar cambios/i })).toBeDisabled()
+    expect(screen.getByLabelText('Entrega inicial (%)')).toHaveAttribute('aria-invalid', 'true')
+    expect(updateSetting).not.toHaveBeenCalled()
+  })
 
+  it('permite vaciar un número y bloquea el guardado hasta corregirlo', () => {
+    render(<ProductCreditDefaultsEditor />)
+    fireEvent.change(screen.getByLabelText('Recargo del plan de 6 cuotas'), { target: { value: '' } })
+    expect(screen.getByLabelText('Recargo del plan de 6 cuotas')).toHaveValue('')
+    expect(screen.getByRole('button', { name: /Guardar cambios/i })).toBeDisabled()
+  })
+
+  it('conserva la escritura de decimales y guarda el mismo valor validado', async () => {
+    render(<ProductCreditDefaultsEditor />)
+    const field = screen.getByLabelText('Recargo del plan de 6 cuotas')
+    fireEvent.change(field, { target: { value: '12,' } })
+    expect(field).toHaveValue('12,')
+    fireEvent.change(field, { target: { value: '12,5' } })
+    expect(field).toHaveValue('12,5')
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }))
     await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
-    const value = updateSetting.mock.calls[0][1]
-    expect(value.downPaymentPercent).toBe(90)
-    expect(ProductCreditDefaultsSchema.safeParse(value).success).toBe(true)
+    expect(updateSetting.mock.calls[0][1].plans.find((plan: { count: number }) => plan.count === 6).rate).toBe(12.5)
+  })
+
+  it('deja de marcar cambios cuando se restaura el valor original', () => {
+    render(<ProductCreditDefaultsEditor />)
+    const field = screen.getByLabelText('Recargo del plan de 6 cuotas')
+    fireEvent.change(field, { target: { value: '15' } })
+    fireEvent.change(field, { target: { value: '10' } })
+    expect(screen.queryByText('Sin guardar')).not.toBeInTheDocument()
+  })
+
+  it('advierte al cerrar la pestaña con cambios pendientes', () => {
+    render(<ProductCreditDefaultsEditor />)
+    fireEvent.change(screen.getByLabelText('Recargo del plan de 6 cuotas'), { target: { value: '15' } })
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('bloquea los campos mientras persiste el cambio', async () => {
+    let finish!: (value: { success: boolean }) => void
+    updateSetting.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    render(<ProductCreditDefaultsEditor />)
+    fireEvent.change(screen.getByLabelText('Recargo del plan de 6 cuotas'), { target: { value: '15' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }))
+    expect(screen.getByLabelText('Recargo del plan de 6 cuotas')).toBeDisabled()
+    finish({ success: true })
+    await waitFor(() => expect(screen.getByLabelText('Recargo del plan de 6 cuotas')).toBeEnabled())
   })
 
   it('cambiar la base de venta a costo cambia los importes mostrados', () => {

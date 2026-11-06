@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View
 
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
-import { fetchCreditPolicy, FREQUENCY_LABEL, OPEN_POLICY, shortDate, type CreditFrequency, type CreditPlan, type CreditPolicyState, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
+import { buildCreditPlan, installmentAmountsError, fetchCreditPolicy, FREQUENCY_LABEL, OPEN_POLICY, shortDate, type CreditFrequency, type CreditPlan, type CreditPolicyState, type CreditStatus, type CreditTerms } from '@/lib/pos-credit';
 
 type Colors = ReturnType<typeof usePalette>;
 
@@ -32,6 +32,7 @@ export function PosCreditPanel({
   plan,
   minimumDown,
   colors,
+  onPolicyChange,
 }: {
   status: CreditStatus | null;
   loading: boolean;
@@ -45,22 +46,34 @@ export function PosCreditPanel({
   plan: CreditPlan;
   minimumDown: number | null;
   colors: Colors;
+  onPolicyChange: (state: { ready: boolean; minimumPercent: number }) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [customCount, setCustomCount] = useState(!COUNTS.includes(terms.count));
   const [rules, setRules] = useState<CreditPolicyState>(OPEN_POLICY);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+  const [policyLoaded, setPolicyLoaded] = useState(false);
+  const [policyAttempt, setPolicyAttempt] = useState(0);
   useEffect(() => {
     let active = true;
-    void fetchCreditPolicy().then((next) => { if (active) setRules(next); });
+    onPolicyChange({ ready: false, minimumPercent: 0 });
+    void fetchCreditPolicy().then(next => {
+      if (!active) return;
+      setRules(next); setPolicyError(null); setPolicyLoaded(true);
+      onPolicyChange({ ready: true, minimumPercent: next.canOverride ? 0 : next.policy.minDownPaymentPercent });
+    }).catch(() => {
+      if (active) { setPolicyError('No se pudieron verificar las reglas. Reintentá antes de confirmar.'); setPolicyLoaded(false); }
+    });
     return () => { active = false; };
-  }, []);
+  }, [policyAttempt, onPolicyChange]);
   const { policy, canOverride } = rules;
-  const amountsAllowed = canOverride || (policy.allowCustomTerms && policy.allowInstallmentAmounts);
+  const amountsAllowed = canOverride || policy.allowInstallmentAmounts;
   const maxCount = canOverride ? 60 : policy.maxInstallments;
   const maxRate = canOverride ? 100 : policy.maxInterestRate;
   const mode = amountsAllowed ? terms.mode ?? 'percent' : 'percent';
 
-  if (loading) return <ActivityIndicator color={palette.primary} />;
+  if (policyError) return <View><Text style={styles.error}>{policyError}</Text><Pressable accessibilityRole="button" onPress={() => { setPolicyError(null); setPolicyAttempt(value => value + 1); }}><Text style={[styles.label, { color: palette.primary }]}>Reintentar reglas de crédito</Text></Pressable></View>;
+  if (!policyLoaded || loading) return <ActivityIndicator color={palette.primary} />;
   if (error) return <Text style={styles.error}>{error}</Text>;
   if (!status) return null;
 
@@ -92,7 +105,7 @@ export function PosCreditPanel({
         <Text style={[styles.small, { color: palette.danger, fontWeight: '700' }]}>Tiene {formatGs(status.overdue)} en cuotas vencidas.</Text>
       )}
 
-      <Text style={[styles.label, { color: colors.text }]}>Entrega inicial (opcional)</Text>
+      <Text style={[styles.label, { color: colors.text }]}>{policy.minDownPaymentPercent > 0 ? 'Entrega mínima del ' + policy.minDownPaymentPercent + '%' : 'Entrega inicial (opcional)'}</Text>
       <View style={[styles.money, { borderColor: colors.border, backgroundColor: colors.background }]}>
         <Text style={[styles.prefix, { color: colors.muted }]}>Gs.</Text>
         <TextInput value={down} onChangeText={(value) => onDown(pretty(value))} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.moneyInput, { color: colors.text }]} />
@@ -113,9 +126,18 @@ export function PosCreditPanel({
         </Pressable>
       )}
 
+      {!!rules.defaultPlans.length && <View><Text style={[styles.label, { color: colors.text }]}>Planes del comercio</Text><View style={styles.chips}>{rules.defaultPlans.map(option => {
+        const fixed = option.mode === 'amount';
+        const candidate: CreditTerms = { ...terms, count: option.count, interestRate: option.rate, frequency: option.frequency, mode: fixed ? 'installment_amount' : 'percent', installmentAmount: option.installmentAmount };
+        const problem = fixed ? (!amountsAllowed ? 'Las cuotas por monto están deshabilitadas.' : installmentAmountsError(plan.principal, candidate)) : null;
+        const calculated = buildCreditPlan(plan.principal, candidate);
+        return <View key={option.count + ':' + option.rate + ':' + option.frequency}><Chip label={option.count + ' cuotas · ' + (fixed ? formatGs(option.installmentAmount ?? 0) : option.rate + '%') + ' · ' + FREQUENCY_LABEL[option.frequency]} disabled={Boolean(problem)} selected={terms.count === option.count && terms.frequency === option.frequency && (fixed ? terms.mode === 'installment_amount' && terms.installmentAmount === option.installmentAmount : (terms.mode ?? 'percent') === 'percent' && terms.interestRate === option.rate)} onPress={() => { setCustomCount(!COUNTS.includes(option.count)); onTerms({ ...candidate, interestRate: fixed ? calculated.interestRate : option.rate }); }} colors={colors} />{problem && <Text style={styles.error}>{problem}</Text>}</View>;
+      })}</View></View>}
+      {canOverride && <Text style={[styles.small, { color: colors.muted }]}>Como dueño o administrador podés exceder estas reglas. La venta queda marcada como excepción.</Text>}
+      {!policy.allowCustomTerms && !canOverride && <Text style={[styles.small, { color: colors.muted }]}>Solo se aceptan planes configurados en el comercio o en los productos. El servidor verifica el plan al confirmar.</Text>}
       <Text style={[styles.label, { color: colors.text }]}>Cuotas</Text>
       <View style={styles.chips}>
-        {COUNTS.map((count) => (
+        {COUNTS.filter(count => canOverride || !policy.allowCustomTerms || count <= maxCount).map((count) => (
           <Chip
             key={count}
             label={String(count)}
@@ -303,13 +325,14 @@ function Stat({ label, value, tone, colors }: { label: string; value: string; to
   );
 }
 
-function Chip({ label, selected, onPress, colors, small }: { label: string; selected: boolean; onPress: () => void; colors: Colors; small?: boolean }) {
+function Chip({ label, selected, onPress, colors, small, disabled }: { label: string; selected: boolean; onPress: () => void; colors: Colors; small?: boolean; disabled?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      style={[styles.chip, small && styles.chipSmall, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? 'rgba(37,99,235,0.08)' : colors.background }]}>
+      disabled={disabled}
+      accessibilityState={{ selected, disabled }}
+      style={[styles.chip, disabled && { opacity: 0.45 }, small && styles.chipSmall, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? 'rgba(37,99,235,0.08)' : colors.background }]}>
       <Text style={[styles.chipText, { color: selected ? palette.primary : colors.text }]}>{label}</Text>
     </Pressable>
   );

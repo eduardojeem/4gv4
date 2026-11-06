@@ -1,3 +1,4 @@
+import { CreditPlanDefinitionSchema } from '@/lib/credits/plan-definition'
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -19,11 +20,7 @@ export const GET = withTenantAuth({ permission: 'pos.sales.create', module: 'pos
     return NextResponse.json({ success: false, error: 'No se pudieron leer las reglas de crédito.' }, { status: 503 })
   }
   const value = (data?.value ?? null) as { posPolicy?: unknown; plans?: unknown; frequency?: unknown } | null
-  const plans = Array.isArray(value?.plans)
-    ? (value.plans as Array<{ count?: unknown; rate?: unknown }>)
-      .map(plan => ({ count: Number(plan?.count), rate: Number(plan?.rate) }))
-      .filter(plan => Number.isInteger(plan.count) && Number.isFinite(plan.rate))
-    : []
+  const plans = Array.isArray(value?.plans) ? value.plans.flatMap(raw => { const parsed = CreditPlanDefinitionSchema.safeParse(raw); return parsed.success ? [parsed.data] : [] }) : []
   const frequency = value?.frequency === 'weekly' || value?.frequency === 'biweekly' ? value.frequency : 'monthly'
   return NextResponse.json({
     success: true,

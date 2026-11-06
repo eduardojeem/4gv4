@@ -8,7 +8,11 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const access = vi.hoisted(() => ({ role: 'owner' }))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ loading: false, user: { id: 'owner', role: 'admin', organization: { id: 'org', role: access.role } } }) }))
+beforeEach(() => { access.role = 'owner' })
 
 vi.mock('@/components/auth/permission-guard', () => ({
   RouteGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -41,6 +45,12 @@ const productsPage = readFileSync(
 )
 
 describe('/dashboard/products/credit-defaults', () => {
+  it('no ofrece el editor a personal sin administración del comercio activo', () => {
+    access.role = 'vendedor'
+    render(<ProductCreditDefaultsPage />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Solo el dueño o un administrador')
+    expect(screen.queryByText('Cargando configuración...')).not.toBeInTheDocument()
+  })
   it('monta la página sin errores', () => {
     expect(() => render(<ProductCreditDefaultsPage />)).not.toThrow()
   })

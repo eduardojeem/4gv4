@@ -20,6 +20,8 @@ export type CartProductCreditPlan = {
   count: number
   interestRate: number
   frequency: 'monthly'
+  mode?: 'percent' | 'amount'
+  installmentAmount?: number
   productSubtotal: number
   cartSubtotal: number
 }
@@ -134,6 +136,7 @@ export function getCartProductCreditPlans(
     count: plan.count,
     interestRate: plan.rate,
     frequency: plan.frequency,
+    ...(plan.mode === 'amount' ? { mode: 'amount' as const, installmentAmount: plan.installmentAmount } : {}),
     productSubtotal: item.price * item.quantity,
     cartSubtotal,
     }))

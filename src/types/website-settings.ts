@@ -1,3 +1,4 @@
+import type { CreditPlanDefinition } from '@/lib/credits/plan-definition'
 import type { CreditPosPolicy } from '@/lib/credits/pos-credit-policy'
 
 export interface CompanyInfo {
@@ -81,11 +82,8 @@ export interface OffersSectionSettings {
   carousel: OffersCarouselSettings
 }
 
-/** Un plan de cuotas: cantidad y recargo porcentual sobre la base. */
-export interface CreditPlanDefault {
-  count: number
-  rate: number
-}
+/** Plan por porcentaje o monto fijo; los planes sin modo conservan el porcentaje heredado. */
+export type CreditPlanDefault = CreditPlanDefinition
 
 /**
  * Predeterminados del modulo de productos a credito.

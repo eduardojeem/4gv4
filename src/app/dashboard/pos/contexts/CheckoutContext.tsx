@@ -13,6 +13,8 @@ export type CreditPlanSuggestion = {
   count: number
   interestRate: number
   frequency: 'monthly'
+  mode?: 'percent' | 'amount'
+  installmentAmount?: number
 }
 
 interface CheckoutContextType {
@@ -114,8 +116,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       count: suggestion.count,
       interestRate: suggestion.interestRate,
       frequency: suggestion.frequency,
-      // Un plan del producto es siempre por recargo %.
-      scheduleMode: 'percent',
+      scheduleMode: suggestion.mode === 'amount' ? 'installment_amount' : 'percent',
+      installmentAmount: suggestion.mode === 'amount' ? suggestion.installmentAmount : undefined,
     }))
   }, [])
 

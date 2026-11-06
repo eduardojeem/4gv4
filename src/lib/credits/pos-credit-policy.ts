@@ -1,3 +1,4 @@
+import { CreditPlanDefinitionSchema, type CreditPlanDefinition } from './plan-definition'
 import {
   MAX_CREDIT_INSTALLMENTS,
   MAX_CREDIT_INTEREST_RATE,
@@ -69,7 +70,7 @@ export function canOverrideCreditPosPolicy(role: string | null | undefined): boo
   return role === 'owner' || role === 'admin'
 }
 
-export type CreditPlanOption = { count: number; rate: number; frequency: CreditFrequency }
+export type CreditPlanOption = CreditPlanDefinition & { frequency: CreditFrequency }
 
 export type CreditTermsToCheck = {
   installmentCount: number
@@ -79,6 +80,7 @@ export type CreditTermsToCheck = {
   mode: CreditScheduleMode
   /** Entrega en % del total de la venta. */
   downPaymentPercent: number
+  installmentAmounts?: number[]
 }
 
 const FREQUENCY_LABEL: Record<CreditFrequency, string> = { weekly: 'semanal', biweekly: 'quincenal', monthly: 'mensual' }
@@ -96,17 +98,14 @@ export function creditPosPolicyViolation(
   if (terms.downPaymentPercent + 1e-9 < policy.minDownPaymentPercent) {
     return `La entrega inicial tiene que ser de al menos ${policy.minDownPaymentPercent}% del total.`
   }
+  if (terms.mode !== 'percent' && !policy.allowInstallmentAmounts) return 'Este negocio no permite cargar cuotas por monto.'
   if (!policy.allowCustomTerms) {
-    if (terms.mode !== 'percent') return 'Este negocio solo vende a crédito con los planes configurados.'
-    const matches = plans.some(plan => (
-      plan.count === terms.installmentCount
-      && Math.abs(plan.rate - terms.interestRate) < 1e-9
-      && plan.frequency === terms.frequency
-    ))
-    return matches ? null : 'Elegí uno de los planes de cuotas configurados para estos productos.'
-  }
-  if (terms.mode !== 'percent' && !policy.allowInstallmentAmounts) {
-    return 'Este negocio no permite cargar cuotas por monto.'
+    const matches = plans.some(plan => {
+      if (plan.count !== terms.installmentCount || plan.frequency !== terms.frequency) return false
+      if (plan.mode === 'amount') return terms.mode !== 'percent' && terms.installmentAmounts?.length === plan.count && terms.installmentAmounts.every(amount => amount === plan.installmentAmount)
+      return terms.mode === 'percent' && Math.abs(plan.rate - terms.interestRate) < 1e-9
+    })
+    return matches ? null : 'Elegí uno de los planes configurados para estos productos.'
   }
   if (terms.installmentCount > policy.maxInstallments) {
     return `El máximo es de ${policy.maxInstallments} cuotas.`
@@ -123,24 +122,23 @@ export function creditPosPolicyViolation(
 /** Planes ofrecidos en la venta: los de los productos y los predeterminados. */
 export function creditPlanOptions(input: {
   products: Array<{ installments_enabled?: boolean | null; installments_plans?: unknown }>
-  defaults?: { plans?: Array<{ count: number; rate: number }>; frequency?: CreditFrequency } | null
+  defaults?: { plans?: CreditPlanDefinition[]; frequency?: CreditFrequency } | null
 }): CreditPlanOption[] {
   const options = new Map<string, CreditPlanOption>()
-  const add = (count: unknown, rate: unknown, frequency: CreditFrequency) => {
-    const c = Number(count)
-    const r = Number(rate)
-    if (!Number.isInteger(c) || c < 1 || c > MAX_CREDIT_INSTALLMENTS) return
-    if (!Number.isFinite(r) || r < 0 || r > MAX_CREDIT_INTEREST_RATE) return
-    options.set(`${c}:${r}:${frequency}`, { count: c, rate: r, frequency })
+  const add = (raw: unknown, frequency: CreditFrequency) => {
+    const parsed = CreditPlanDefinitionSchema.safeParse(raw)
+    if (!parsed.success) return
+    const plan = parsed.data
+    options.set(`${plan.count}:${plan.mode === 'amount' ? 'amount:' + plan.installmentAmount : plan.rate}:${frequency}`, { ...plan, frequency })
   }
   for (const product of input.products) {
     if (!product.installments_enabled || !Array.isArray(product.installments_plans)) continue
     for (const plan of product.installments_plans as Array<{ count?: unknown; rate?: unknown }>) {
       // El POS ofrece los planes del producto en cuotas mensuales.
-      add(plan?.count, plan?.rate, 'monthly')
+      add(plan, 'monthly')
     }
   }
   const defaultFrequency = input.defaults?.frequency ?? 'monthly'
-  for (const plan of input.defaults?.plans ?? []) add(plan.count, plan.rate, defaultFrequency)
+  for (const plan of input.defaults?.plans ?? []) add(plan, defaultFrequency)
   return [...options.values()].sort((a, b) => a.count - b.count || a.rate - b.rate)
 }

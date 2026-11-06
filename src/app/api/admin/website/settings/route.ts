@@ -1,3 +1,4 @@
+import { CreditDefaultsConflict, saveCreditDefaults } from '@/lib/credits/save-credit-defaults'
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
@@ -47,7 +48,7 @@ async function handler(
     // Load website_settings + org data in parallel for fallback hydration
     const settingsQuery = adminSupabase
       .from('website_settings')
-      .select('organization_id, key, value')
+      .select('organization_id, key, value, updated_at')
       .eq('organization_id', orgId)
 
     const [
@@ -95,7 +96,9 @@ async function handler(
 
     return NextResponse.json({
       success: true,
-      data: normalized
+      data: normalized,
+      organizationId: orgId,
+      creditDefaultsRevision: settings?.find(row => row.key === 'product_credit_defaults')?.updated_at ?? (settings?.some(row => row.key === 'product_credit_defaults') ? 'unversioned' : 'missing'),
     })
   } catch (error) {
     const errorDetails = error instanceof Error ? {
@@ -160,6 +163,15 @@ async function updateHandler(
     }
 
     const adminSupabase = createAdminSupabase()
+    if (validatedEntries.some(entry => entry.key === 'product_credit_defaults')) {
+      const revision = request.headers.get('x-credit-defaults-revision')
+      if (!revision || validatedEntries.length !== 1) return NextResponse.json({ success: false, error: 'Recargá los predeterminados antes de guardar. Guardalos por separado.', code: 'CREDIT_DEFAULTS_VERSION_REQUIRED' }, { status: 409 })
+      if (request.headers.get('x-organization-id') !== orgId) return NextResponse.json({ success: false, error: 'El comercio activo cambió. Tu borrador no se guardó.', code: 'ORGANIZATION_CHANGED' }, { status: 409 })
+      const persisted = await saveCreditDefaults(adminSupabase, { organizationId: orgId, actorId: context.user.id, revision, value: validatedEntries[0].value as NonNullable<WebsiteSettings['product_credit_defaults']> })
+      const auditClient = await createClient()
+      try { await auditClient.from('audit_log').insert({ organization_id: orgId, user_id: context.user.id, action: 'update_website_settings_batch', resource: 'website_settings', new_values: { keys: ['product_credit_defaults'] } }) } catch { console.warn('Credit defaults saved; audit unavailable') }
+      return NextResponse.json({ success: true, data: { product_credit_defaults: persisted.value }, organizationId: orgId, creditDefaultsRevision: persisted.updated_at })
+    }
     const marketplaceEntries = validatedEntries.filter(({ key }) => key === 'company_info' || key === 'hero_content')
     let hasMarketplaceChanges = false
     if (marketplaceEntries.length) {
@@ -211,6 +223,7 @@ async function updateHandler(
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
+    if (error instanceof CreditDefaultsConflict) return NextResponse.json({ success: false, error: error.message, code: error.status === 409 ? 'CREDIT_DEFAULTS_CONFLICT' : 'CREDIT_DEFAULTS_SAVE_FAILED' }, { status: error.status })
     console.error('Website settings batch update error', { error })
     return NextResponse.json(
       { success: false, error: 'No se pudieron guardar las configuraciones' },
