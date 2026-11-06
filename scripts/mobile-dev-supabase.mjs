@@ -41,8 +41,15 @@ function ensureIsolatedProject() {
   const targetConfig = join(localSupabaseDir, 'config.toml');
   if (!existsSync(targetConfig)) {
     let config = readFileSync(sourceConfig, 'utf8').replace(/^project_id\s*=.*$/m, 'project_id = "mitiendapy-mobile-dev"');
-    config += '\n[api]\nport = 55321\n\n[db]\nport = 55322\n\n[studio]\nport = 55323\n\n[inbucket]\nport = 55324\n';
+    config += '\n[api]\nport = 55321\n\n[db]\nport = 55322\n\n[studio]\nport = 55323\n\n[local_smtp]\nport = 55324\n';
     writeFileSync(targetConfig, config, 'utf8');
+  }
+
+  // El CLI actual de Supabase ya no acepta [inbucket] (ahora es [local_smtp]) y
+  // no arranca con una configuración vieja: se renombra la sección en el lugar.
+  const savedConfig = readFileSync(targetConfig, 'utf8');
+  if (/^\[inbucket\][ \t]*$/m.test(savedConfig)) {
+    writeFileSync(targetConfig, savedConfig.replace(/^\[inbucket\][ \t]*$/m, '[local_smtp]'), 'utf8');
   }
 
   const config = readFileSync(targetConfig, 'utf8').replace(/\r\n/g, '\n');
