@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { BrandColorScope, StorefrontTemplateThumbnail } from '@/components/admin/website/StorefrontTemplateThumbnail'
+import { StorefrontAppearancePreview } from '@/components/admin/website/StorefrontAppearancePreview'
+import { getPremiumHeroForVertical } from '@/lib/website/premium-hero'
 import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import {
@@ -24,7 +26,7 @@ import {
   STOREFRONT_PREVIEW_UPDATE,
   type StorefrontPreviewDraft,
 } from '@/lib/website/storefront-preview-message'
-import type { CompanyInfo } from '@/types/website-settings'
+import type { CompanyInfo, PublicCommerceMode } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
 
 type PreviewPage = 'inicio' | 'productos' | 'ofertas'
@@ -66,6 +68,7 @@ interface StorefrontTemplatePreviewDialogProps {
   /** Sin la agenda (módulo Servicios) no se ofrece la plantilla «Servicios». */
   servicesAvailable?: boolean
   catalogAvailable?: boolean
+  commerceMode?: PublicCommerceMode
 }
 
 export function StorefrontTemplatePreviewDialog({
@@ -78,6 +81,7 @@ export function StorefrontTemplatePreviewDialog({
   storePath,
   servicesAvailable,
   catalogAvailable,
+  commerceMode,
 }: StorefrontTemplatePreviewDialogProps) {
   // Se monta al abrirse (ver StorefrontAppearanceEditor): arranca desde lo elegido en el formulario.
   const [look, setLook] = useState<StorefrontLook>(initial)
@@ -87,7 +91,8 @@ export function StorefrontTemplatePreviewDialog({
   const [isLoading, setIsLoading] = useState(true)
   const update = (patch: Partial<StorefrontLook>) => setLook((current) => ({ ...current, ...patch }))
 
-  const candidateStyle = resolveStorefrontStyle(look.storefrontStyle, businessVertical, { servicesAvailable, catalogAvailable })
+  const verticalDef = getPremiumHeroForVertical(businessVertical)
+  const candidateStyle = resolveStorefrontStyle(look.storefrontStyle, businessVertical, { servicesAvailable, catalogAvailable, commerceMode })
   const meta = STOREFRONT_TEMPLATES_METADATA[candidateStyle]
   const templateLabel = look.storefrontStyle === 'auto' ? `Automático (${STOREFRONT_STYLE_LABELS[candidateStyle]})` : STOREFRONT_STYLE_LABELS[candidateStyle]
   const colorLabel = look.brandColor === 'custom' ? 'personalizado' : BRAND_COLORS.find((color) => color.key === look.brandColor)?.name ?? look.brandColor
@@ -173,11 +178,17 @@ export function StorefrontTemplatePreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[92dvh] sm:w-[96vw] sm:max-w-[1400px] sm:rounded-2xl">
         <div className="shrink-0 border-b px-4 py-3 pr-12 sm:px-6">
-          <DialogTitle className="text-base font-semibold">Diseñá tu tienda</DialogTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <DialogTitle className="text-base font-semibold">Diseñá tu tienda</DialogTitle>
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              <span aria-hidden="true">{verticalDef.icon}</span>
+              <span>{verticalDef.verticalLabel}</span>
+            </span>
+          </div>
           <DialogDescription className="mt-0.5 text-xs">
             {storePath
               ? 'Elegí la plantilla, el color y el encabezado: tu tienda real cambia al instante. Nada se publica hasta que guardes.'
-              : 'Elegí la plantilla, el color y el encabezado. Nada se publica hasta que guardes.'}
+              : 'Elegí la plantilla, el color y el encabezado de acuerdo a tu rubro. Nada se publica hasta que guardes.'}
           </DialogDescription>
         </div>
 
@@ -208,8 +219,8 @@ export function StorefrontTemplatePreviewDialog({
                 <>
                   <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor}>
                     <div role="radiogroup" aria-label="Plantillas" className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-1">
-                      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable, catalogAvailable, businessVertical })).map((option) => {
-                        const optionStyle = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable, catalogAvailable })
+                      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable, catalogAvailable, businessVertical, commerceMode })).map((option) => {
+                        const optionStyle = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable, catalogAvailable, commerceMode })
                         const selected = look.storefrontStyle === option.value
                         const label = option.value === 'auto' ? 'Automático' : option.label
                         return (
@@ -316,18 +327,34 @@ export function StorefrontTemplatePreviewDialog({
                   </div>
                 </>
               ) : (
-                <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto p-6 text-center">
-                  <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor} className="w-full max-w-md">
-                    <StorefrontTemplateThumbnail style={candidateStyle} className="w-full rounded-xl border p-4 shadow-sm" />
-                  </BrandColorScope>
-                  <div className="max-w-md space-y-1.5">
-                    <p className="flex items-center justify-center gap-1.5 text-sm font-semibold">
-                      <Globe aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
-                      Tu tienda todavía no está publicada
-                    </p>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Cuando la publiques en «Enlace y publicación», acá vas a ver tu tienda real con tus productos mientras la diseñás.
-                    </p>
+                <div className="flex h-full flex-col items-center justify-start overflow-y-auto p-4 sm:p-6">
+                  <div
+                    className={cn(
+                      'w-full max-w-2xl overflow-hidden rounded-2xl border bg-card shadow-md transition-all',
+                      device === 'mobile' && 'max-w-xs',
+                      device === 'tablet' && 'max-w-md'
+                    )}
+                  >
+                    <StorefrontAppearancePreview
+                      value={{
+                        name: 'Tu tienda',
+                        brandColor: look.brandColor as CompanyInfo['brandColor'],
+                        customBrandColor: look.customBrandColor,
+                        headerStyle: look.headerStyle,
+                        showTopBar: look.showTopBar,
+                      }}
+                      style={candidateStyle}
+                      businessVertical={businessVertical}
+                      heroEnabled={false}
+                    />
+                    <div className="border-t bg-muted/30 p-2.5 text-center">
+                      <p className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                        <Globe aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
+                        <span>Tu tienda todavía no está publicada</span>
+                        <span className="hidden text-muted-foreground/60 sm:inline">·</span>
+                        <span>Vista previa interactiva para <strong>{verticalDef.verticalLabel}</strong></span>
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

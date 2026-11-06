@@ -23,7 +23,8 @@ import {
   suggestStorefrontAppearance,
   type StorefrontStylePreference,
 } from '@/lib/website/storefront-style'
-import type { CompanyInfo } from '@/types/website-settings'
+import { getPremiumHeroForVertical } from '@/lib/website/premium-hero'
+import type { CompanyInfo, PublicCommerceMode } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
@@ -41,6 +42,8 @@ interface StorefrontAppearanceEditorProps {
   businessVertical?: string | null
   /** `/slug` de la tienda ya publicada; sin publicar, la vista real no existe. */
   storePath: string | null
+  /** Modo de venta resuelto de la tienda (cart | whatsapp | catalog). */
+  commerceMode?: PublicCommerceMode
 }
 
 export function StorefrontAppearanceEditor({
@@ -49,9 +52,12 @@ export function StorefrontAppearanceEditor({
   customColorError,
   businessVertical,
   storePath,
+  commerceMode,
 }: StorefrontAppearanceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [suggestionDismissed, setSuggestionDismissed] = useState(false)
+  const [previewHeroActive, setPreviewHeroActive] = useState(false)
+
   // «Servicios» arma la portada con la agenda: sin el módulo se ofrece el resto.
   const { effectiveModules } = useSubscriptionStatus()
   const servicesAvailable = effectiveModules.includes('services')
@@ -59,20 +65,22 @@ export function StorefrontAppearanceEditor({
   const catalogAvailable = effectiveModules.includes('inventory')
 
   const stylePreference = (value.storefrontStyle || 'auto') as StorefrontStylePreference
-  const activeStyle = resolveStorefrontStyle(stylePreference, businessVertical, { servicesAvailable, catalogAvailable })
+  const activeStyle = resolveStorefrontStyle(stylePreference, businessVertical, { servicesAvailable, catalogAvailable, commerceMode })
   // La plantilla guardada ya no corresponde (sin agenda, sin productos o de otro rubro): la tienda usa otra.
-  const styleFallback = !isStorefrontStyleAvailable(stylePreference, { servicesAvailable, catalogAvailable, businessVertical })
+  const styleFallback = !isStorefrontStyleAvailable(stylePreference, { servicesAvailable, catalogAvailable, businessVertical, commerceMode })
   const brandColor = value.brandColor || 'blue'
   const headerOption = headerOptionFor(value.headerStyle)
   const templateMeta = STOREFRONT_TEMPLATES_METADATA[activeStyle]
 
+  const verticalDef = useMemo(() => getPremiumHeroForVertical(businessVertical), [businessVertical])
+
   const suggestion = useMemo(
-    () => suggestStorefrontAppearance({ businessVertical, name: value.name, slogan: value.slogan, description: value.description, servicesAvailable, catalogAvailable }),
-    [businessVertical, value.name, value.slogan, value.description, servicesAvailable, catalogAvailable]
+    () => suggestStorefrontAppearance({ businessVertical, name: value.name, slogan: value.slogan, description: value.description, servicesAvailable, catalogAvailable, commerceMode }),
+    [businessVertical, value.name, value.slogan, value.description, servicesAvailable, catalogAvailable, commerceMode]
   )
   // Si «Automático» ya da la plantilla sugerida, se queda en Automático para seguir al rubro.
   const suggestedPreference: StorefrontStylePreference =
-    resolveStorefrontStyle('auto', businessVertical, { servicesAvailable, catalogAvailable }) === suggestion.style ? 'auto' : suggestion.style
+    resolveStorefrontStyle('auto', businessVertical, { servicesAvailable, catalogAvailable, commerceMode }) === suggestion.style ? 'auto' : suggestion.style
   const followsSuggestion =
     activeStyle === suggestion.style && brandColor === suggestion.brandColor && headerOption === suggestion.headerStyle
   const suggestedColorName = BRAND_COLORS.find((color) => color.key === suggestion.brandColor)?.name ?? suggestion.brandColor
@@ -93,7 +101,30 @@ export function StorefrontAppearanceEditor({
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
-      <div className="min-w-0 space-y-8">
+      <div className="min-w-0 space-y-6">
+        {/* Banner contextual del rubro de la organización */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-border/80 bg-gradient-to-r from-primary/10 via-muted/30 to-background p-4 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-background border border-border shadow-xs text-xl">
+              {verticalDef.icon}
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rubro del comercio</span>
+                <span className="rounded-full bg-primary/15 px-2 py-0.2 text-[10px] font-bold text-primary">
+                  Recomendado
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-foreground">
+                {verticalDef.verticalLabel}
+              </h3>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground sm:text-right max-w-xs">
+            Plantilla sugerida: <strong className="text-foreground">{STOREFRONT_STYLE_LABELS[suggestion.style]}</strong>.
+          </p>
+        </div>
+
         {!followsSuggestion && !suggestionDismissed && (
           <div className="flex items-start gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -101,7 +132,7 @@ export function StorefrontAppearanceEditor({
             </span>
             <div className="min-w-0 flex-1 space-y-2">
               <div>
-                <p className="text-sm font-semibold">Sugerencia para tu tienda</p>
+                <p className="text-sm font-semibold">Sugerencia para tu rubro ({verticalDef.verticalLabel})</p>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Plantilla <span className="font-medium text-foreground">{STOREFRONT_STYLE_LABELS[suggestion.style]}</span>, color{' '}
                   <span className="font-medium text-foreground">{suggestedColorName}</span> y encabezado{' '}
@@ -127,7 +158,7 @@ export function StorefrontAppearanceEditor({
           number={1}
           id="storefrontStyleLabel"
           title="Plantilla"
-          hint="Define cómo se ven el inicio y las fotos de tus productos."
+          hint="Define cómo se ven el inicio y las fotos de tus productos según tu rubro."
           action={
             <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)} className="h-8 gap-1.5">
               <Eye aria-hidden="true" className="h-3.5 w-3.5" />
@@ -143,6 +174,7 @@ export function StorefrontAppearanceEditor({
               suggestedStyle={followsSuggestion ? undefined : suggestedPreference}
               servicesAvailable={servicesAvailable}
               catalogAvailable={catalogAvailable}
+              commerceMode={commerceMode}
             />
             {styleFallback && (
               <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
@@ -304,13 +336,26 @@ export function StorefrontAppearanceEditor({
         </Step>
       </div>
 
-      {/* Vista previa fija mientras se edita */}
-      <aside className="lg:sticky lg:top-4 lg:self-start">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-semibold">Vista previa</p>
-          <span className="text-xs text-muted-foreground">Se actualiza al instante</span>
+      {/* Vista previa fija mientras se edita (adaptada en tiempo real al rubro) */}
+      <aside className="lg:sticky lg:top-4 lg:self-start space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Vista previa ({verticalDef.verticalLabel})</p>
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Label htmlFor="previewHeroToggle" className="cursor-pointer text-[11px]">Portada</Label>
+            <Switch
+              id="previewHeroToggle"
+              checked={previewHeroActive}
+              onCheckedChange={setPreviewHeroActive}
+              className="scale-75"
+            />
+          </div>
         </div>
-        <StorefrontAppearancePreview value={value} style={activeStyle} />
+        <StorefrontAppearancePreview
+          value={value}
+          style={activeStyle}
+          businessVertical={businessVertical}
+          heroEnabled={previewHeroActive}
+        />
         <Button type="button" variant="secondary" onClick={() => setPreviewOpen(true)} className="mt-3 w-full gap-1.5">
           <Eye aria-hidden="true" className="h-4 w-4" />
           {storePath ? 'Ver con mis productos' : 'Comparar plantillas'}
@@ -330,7 +375,8 @@ export function StorefrontAppearanceEditor({
           suggestedStyle={followsSuggestion ? undefined : suggestedPreference}
           storePath={storePath}
           servicesAvailable={servicesAvailable}
-              catalogAvailable={catalogAvailable}
+          catalogAvailable={catalogAvailable}
+          commerceMode={commerceMode}
         />
       )}
     </div>

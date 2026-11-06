@@ -1,6 +1,7 @@
 'use client'
 
 import { WholesaleHeader } from '@/components/public/wholesale/WholesaleHeader'
+import { CatalogBasicHeader } from '@/components/public/catalog-basic/CatalogBasicHeader'
 
 import { WhatsAppIcon, InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/public/SocialIcons'
 
@@ -256,6 +257,7 @@ export function PublicHeader({
   }
 
   if (storefrontStyle === 'wholesale-pro') return <WholesaleHeader settings={effectiveSettings ?? null} />
+  if (storefrontStyle === 'catalog-basic') return <CatalogBasicHeader settings={effectiveSettings ?? null} />
 
   return (
     <header

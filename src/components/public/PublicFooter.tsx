@@ -1,6 +1,7 @@
 'use client'
 
 import { WholesaleFooter } from '@/components/public/wholesale/WholesaleFooter'
+import { CatalogBasicFooter } from '@/components/public/catalog-basic/CatalogBasicFooter'
 
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
@@ -67,6 +68,7 @@ export function PublicFooter({
       : `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`)
 
   if (style === 'wholesale-pro') return <WholesaleFooter company={company} prefix={tenantPrefix} />
+  if (style === 'catalog-basic') return <CatalogBasicFooter company={company} prefix={tenantPrefix} />
 
   return (
     <footer className={isBeauty

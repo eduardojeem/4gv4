@@ -905,10 +905,16 @@ export function ProductDetailInteractive({
         {/* ── CARD DE ACCIONES: CARRITO Y WHATSAPP MEJORADO ── */}
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-xs">
           <h3 className="font-semibold text-foreground">
-            {isInStock ? '¿Te interesa este producto?' : 'Combinación temporalmente agotada'}
+            {commerceMode === 'catalog'
+              ? 'Consultar por este producto'
+              : isInStock
+              ? '¿Te interesa este producto?'
+              : 'Combinación temporalmente agotada'}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {precioOculto
+            {commerceMode === 'catalog'
+              ? 'Podés consultar la disponibilidad y sacarte dudas directamente con el comercio.'
+              : precioOculto
               ? 'Preguntanos el precio por WhatsApp: te respondemos con el producto y la variante que elegiste.'
               : isInStock
               ? 'Agregalo a tu carrito o contactanos directamente por WhatsApp con el producto y variante listos.'
@@ -928,24 +934,38 @@ export function ProductDetailInteractive({
               </Button>
             )}
 
-            <Button
-              size="lg"
-              variant={commerceMode === 'whatsapp' || precioOculto ? 'default' : 'outline'}
-              className={cn(
-                'w-full gap-2 rounded-xl text-sm font-semibold transition-all',
-                commerceMode === 'whatsapp' || precioOculto
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
-                  : 'border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-              )}
-              onClick={() => handleContact('whatsapp')}
-            >
-              <WhatsAppIcon className="h-4 w-4" />
-              {precioOculto
-                ? 'Preguntar el precio por WhatsApp'
-                : isInStock
-                ? 'Consultar / Pedir por WhatsApp'
-                : 'Consultar reposición por WhatsApp'}
-            </Button>
+            {commerceMode === 'catalog' ? (
+              phoneClean ? (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2 rounded-xl text-sm font-semibold border-border/80 text-foreground hover:bg-muted"
+                  onClick={() => handleContact('whatsapp')}
+                >
+                  <WhatsAppIcon className="h-4 w-4 text-emerald-600" />
+                  Consultar disponibilidad
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                size="lg"
+                variant={commerceMode === 'whatsapp' || precioOculto ? 'default' : 'outline'}
+                className={cn(
+                  'w-full gap-2 rounded-xl text-sm font-semibold transition-all',
+                  commerceMode === 'whatsapp' || precioOculto
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
+                    : 'border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                )}
+                onClick={() => handleContact('whatsapp')}
+              >
+                <WhatsAppIcon className="h-4 w-4" />
+                {precioOculto
+                  ? 'Preguntar el precio por WhatsApp'
+                  : isInStock
+                  ? 'Consultar / Pedir por WhatsApp'
+                  : 'Consultar reposición por WhatsApp'}
+              </Button>
+            )}
 
             {!precioOculto && commerceMode === 'cart' && (
               <div className="grid grid-cols-2 gap-2">

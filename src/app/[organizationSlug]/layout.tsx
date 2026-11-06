@@ -69,6 +69,7 @@ export default async function OrganizationPublicLayout({
   const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization.business_vertical, {
     servicesAvailable: servicesModuleEnabled,
     catalogAvailable: catalogEnabled,
+    commerceMode: settings?.checkout?.commerceMode,
   })
 
   return (

@@ -3,6 +3,7 @@ import {describe,it,expect,vi} from 'vitest'
 import type {WebsiteSettings} from '@/types/website-settings'
 vi.mock('next/navigation',()=>({usePathname:()=>'/synthetic/inicio'}))
 vi.mock('@/hooks/usePublicCategories',()=>({usePublicCategories:()=>({categories:[{id:'c1',name:'Herramientas',subcategories:[{id:'c2',name:'Manuales'}]}]})}))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: null, signOut: vi.fn() }) }))
 vi.mock('@/components/public/cart/PublicCartButton',()=>({PublicCartButton:()=> <button>Carrito compartido</button>}))
 import {WholesaleHeader} from '@/components/public/wholesale/WholesaleHeader'
 describe('WholesaleHeader',()=>{

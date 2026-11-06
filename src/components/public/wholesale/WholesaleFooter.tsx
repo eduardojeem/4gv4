@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Phone, Mail, MapPin, ExternalLink, Clock, User } from 'lucide-react'
+import { Phone, Mail, MapPin, ExternalLink, Clock, UserPlus, LogIn, ShoppingBag, Truck } from 'lucide-react'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -17,7 +17,10 @@ export function WholesaleFooter({ company, prefix }: { company?: CompanyInfo; pr
   const slug = getTenantSlugFromPathname(pathname)
   const { categories } = usePublicCategories()
   const { settings } = useWebsiteSettings()
-  const accountHref = loginHrefWithReturn(slug ? prefix + '/cliente/login' : '/login', pathname, slug ? 'next' : 'redirect')
+  const loginHref = loginHrefWithReturn(slug ? prefix + '/cliente/login' : '/login', pathname, slug ? 'next' : 'redirect')
+  const registerHref = slug ? prefix + '/cliente/registro' : '/registro'
+  const ordersHref = prefix + '/perfil?tab=orders'
+  const trackHref = prefix + '/track'
   const currentYear = new Date().getFullYear()
 
   const topCategories = categories.slice(0, 5)
@@ -79,11 +82,23 @@ export function WholesaleFooter({ company, prefix }: { company?: CompanyInfo; pr
 
           {/* Col 4: Atención & Cuenta */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Atención comercial</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clientes & Cuenta</h4>
             <div className="flex flex-col space-y-2 text-xs text-muted-foreground">
-              <Link href={accountHref} className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium">
-                <User className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-                <span>Mi cuenta / Acceso</span>
+              <Link href={loginHref} className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium">
+                <LogIn className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <span>Iniciar sesión</span>
+              </Link>
+              <Link href={registerHref} className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium text-primary">
+                <UserPlus className="h-3.5 w-3.5" aria-hidden />
+                <span>Registrarse como cliente</span>
+              </Link>
+              <Link href={ordersHref} className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium">
+                <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <span>Mis pedidos</span>
+              </Link>
+              <Link href={trackHref} className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium">
+                <Truck className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <span>Rastrear pedido</span>
               </Link>
               {company?.hours && (company.hours.weekdays || company.hours.saturday) && (
                 <div className="flex items-start gap-1.5 pt-1 text-[11px]">

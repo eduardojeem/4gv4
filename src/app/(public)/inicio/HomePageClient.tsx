@@ -1,6 +1,7 @@
 'use client'
 
 import { WholesaleHome } from '@/components/public/wholesale/WholesaleHome'
+import { CatalogBasicHome } from '@/components/public/catalog-basic/CatalogBasicHome'
 import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -224,6 +225,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   }
 
   if (storefrontStyle === 'wholesale-pro') return <WholesaleHome settings={settings} branches={branches} capabilities={capabilities} />
+  if (storefrontStyle === 'catalog-basic') return <CatalogBasicHome settings={settings} branches={branches} capabilities={capabilities} />
 
   return (
     <div className="flex flex-col min-h-screen">

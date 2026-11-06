@@ -1,4 +1,5 @@
 import type { BusinessVertical } from '@/lib/organization/business-profile'
+import type { PublicCommerceMode } from '@/types/website-settings'
 
 /**
  * Aspecto de la tienda online.
@@ -12,6 +13,8 @@ import type { BusinessVertical } from '@/lib/organization/business-profile'
  * - `modern`: Diseño contemporáneo / studio minimalista con bordes suaves redondeados.
  * - `services`: Peluquerías, barberías y estética: servicios con precio y turnos online primero.
  * - `beauty`: Cosmética, maquillaje, skincare y perfumería: compra por necesidad, marcas y rutinas.
+ * - `wholesale-pro`: Catálogo mayorista & retail moderno.
+ * - `catalog-basic`: Vitrina simple para exhibición de productos sin botones de compra ni carrito.
  *
  * `classic` es el aspecto por defecto donde no hay una tienda resuelta (dashboard, marketplace).
  */
@@ -26,6 +29,7 @@ export const STOREFRONT_STYLE_PREFERENCES = [
   'services',
   'beauty',
   'wholesale-pro',
+  'catalog-basic',
 ] as const
 
 export type StorefrontStylePreference = (typeof STOREFRONT_STYLE_PREFERENCES)[number]
@@ -59,6 +63,8 @@ export interface StorefrontStyleContext {
   catalogAvailable?: boolean
   /** El rubro de la cuenta; si no viene, se usa el que recibe resolveStorefrontStyle. */
   businessVertical?: unknown
+  /** Modo de venta resuelto de la tienda (cart | whatsapp | catalog). */
+  commerceMode?: PublicCommerceMode
 }
 
 /** Negocios de turnos: su sitio gira alrededor de la agenda, no de un catálogo. */
@@ -86,11 +92,15 @@ const SERVICES_FALLBACK_STYLE: StorefrontStyle = 'modern'
  * turnos con una tienda:
  * - «Servicios» gira alrededor de la agenda (carta, equipo y reserva): necesita
  *   el módulo Servicios y no se ofrece a rubros de productos.
+ * - «Catálogo básico» solo se ofrece cuando el modo comercial resuelto es 'catalog'.
  * - En rubros de servicios, las plantillas de tienda solo si vende productos, y
  *   solo las que encajan con el rubro.
  */
 export function isStorefrontStyleAvailable(style: StorefrontStylePreference, context: StorefrontStyleContext = {}): boolean {
   if (style === 'auto' || style === 'wholesale-pro') return true
+  if (style === 'catalog-basic') {
+    return context.commerceMode === 'catalog'
+  }
   const vertical = typeof context.businessVertical === 'string' ? context.businessVertical : ''
   if (style === 'services') {
     return context.servicesAvailable !== false && !PRODUCT_VERTICALS.has(vertical)
@@ -117,7 +127,8 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     preference === 'modern' ||
     preference === 'services' ||
     preference === 'beauty' ||
-    preference === 'wholesale-pro'
+    preference === 'wholesale-pro' ||
+    preference === 'catalog-basic'
   )
 
   const chosen: StorefrontStyle = isExplicit
@@ -161,14 +172,19 @@ export function getTemplateCompatibility(input: {
   repairsAvailable?: boolean
   catalogAvailable?: boolean
   categories?: readonly { name: string }[]
+  commerceMode?: PublicCommerceMode
 }): TemplateCompatibilityResult {
-  const { storefrontStyle, currentStyle, businessVertical, modules, servicesAvailable, categories } = input
+  const { storefrontStyle, currentStyle, businessVertical, modules, servicesAvailable, categories, commerceMode } = input
 
   const vertical = typeof businessVertical === 'string' && Object.prototype.hasOwnProperty.call(STYLE_BY_VERTICAL, businessVertical)
     ? (businessVertical as BusinessVertical)
     : undefined
-  const recommendedStyle = vertical ? STYLE_BY_VERTICAL[vertical] : DEFAULT_STOREFRONT_STYLE
-  const isRecommended = storefrontStyle === 'wholesale-pro' ? ['electronics', 'hardware', 'general'].includes(String(vertical)) : storefrontStyle === recommendedStyle
+  const recommendedStyle = commerceMode === 'catalog'
+    ? 'catalog-basic'
+    : (vertical ? STYLE_BY_VERTICAL[vertical] : DEFAULT_STOREFRONT_STYLE)
+  const isRecommended = storefrontStyle === 'wholesale-pro'
+    ? ['electronics', 'hardware', 'general'].includes(String(vertical))
+    : storefrontStyle === recommendedStyle
   const resolvedCurrent = currentStyle === 'auto'
     ? resolveStorefrontStyle('auto', businessVertical, { servicesAvailable })
     : currentStyle
@@ -227,6 +243,7 @@ export function getTemplateCompatibility(input: {
 
 export const STOREFRONT_STYLE_LABELS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'Mayorista & Retail',
+  'catalog-basic': 'Catálogo básico',
   classic: 'Clásico',
   fashion: 'Moda',
   sport: 'Deportivo',
@@ -243,6 +260,7 @@ export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
   description: string
 }> = [
   { value: 'wholesale-pro', label: 'Mayorista & Retail', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.' },
+  { value: 'catalog-basic', label: 'Catálogo básico', description: 'Vitrina simple para exhibir productos con foto, precio y descripción, sin carrito ni botones de compra.' },
   { value: 'auto', label: 'Automático', description: 'Se elige según el rubro de tu negocio.' },
   { value: 'classic', label: 'Clásico', description: 'Foto completa en tarjetas apaisadas. Para tecnología, ferretería o almacén.' },
   { value: 'fashion', label: 'Moda', description: 'Fotos verticales a sangre, títulos elegantes y categorías con foto.' },
@@ -281,6 +299,19 @@ export interface StorefrontTemplateMeta {
 
 export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTemplateMeta> = {
   'wholesale-pro': { id: 'wholesale-pro', name: 'Mayorista & Retail', badge: 'Catálogo profesional', tagline: 'Encontrá lo que necesitás', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.', recommendedVerticals: ['Electrónica', 'Ferretería', 'General'], recommendedColors: ['blue','indigo','teal'], features: ['Buscador protagonista','Categorías accesibles','Precios según tu cuenta'], accentGradient: 'from-slate-700 to-slate-900', badgeColorClass: 'bg-primary/10 text-primary', variants: [] },
+  'catalog-basic': {
+    id: 'catalog-basic',
+    name: 'Catálogo básico',
+    badge: 'Vitrina simple',
+    tagline: 'Vitrina rápida y directa para exhibir tus productos',
+    description: 'Diseño limpio y liviano optimizado para celulares. Muestra fotos, precios y stock sin botones de compra ni carrito.',
+    recommendedVerticals: ['General', 'Ferretería', 'Almacén', 'Mayorista'],
+    recommendedColors: ['blue', 'emerald', 'indigo', 'teal'],
+    features: ['Sin carrito', 'Carga rápida', 'Ideal para mostrador'],
+    accentGradient: 'from-slate-600 to-slate-800',
+    badgeColorClass: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20',
+    variants: [],
+  },
   classic: {
     id: 'classic',
     name: 'Clásico Universal',
@@ -479,6 +510,7 @@ const STYLE_KEYWORDS: ReadonlyArray<{ style: StorefrontStyle; pattern: RegExp }>
 
 const HEADER_BY_STYLE: Record<StorefrontStyle, Exclude<StorefrontHeaderStyle, 'glass'>> = {
   'wholesale-pro': 'solid',
+  'catalog-basic': 'solid',
   classic: 'solid',
   fashion: 'solid',
   sport: 'dark',
@@ -503,6 +535,8 @@ export function suggestStorefrontAppearance(input: {
   servicesAvailable?: boolean
   /** Sin productos no se sugiere una plantilla de tienda a un negocio de servicios. */
   catalogAvailable?: boolean
+  /** Modo de venta de la tienda (cart | whatsapp | catalog). */
+  commerceMode?: PublicCommerceMode
 }): StorefrontAppearanceSuggestion {
   const vertical: BusinessVertical = typeof input.businessVertical === 'string' && input.businessVertical in VERTICAL_NAMES
     ? (input.businessVertical as BusinessVertical)
@@ -514,7 +548,10 @@ export function suggestStorefrontAppearance(input: {
   let style: StorefrontStyle
   let reason: string
   const byVertical = STYLE_BY_VERTICAL_SUGGESTION[vertical]
-  if (byVertical) {
+  if (input.commerceMode === 'catalog') {
+    style = 'catalog-basic'
+    reason = 'Al tener activa la modalidad Solo Catálogo Digital, esta vitrina simple y rápida es la más adecuada.'
+  } else if (byVertical) {
     style = byVertical
     reason = `Tu rubro es ${VERTICAL_NAMES[vertical]}.`
   } else if (keywordHit) {
@@ -525,7 +562,7 @@ export function suggestStorefrontAppearance(input: {
     reason = 'Es la plantilla más versátil para catálogos variados.'
   }
 
-  const context = { servicesAvailable: input.servicesAvailable, catalogAvailable: input.catalogAvailable, businessVertical: vertical }
+  const context = { servicesAvailable: input.servicesAvailable, catalogAvailable: input.catalogAvailable, businessVertical: vertical, commerceMode: input.commerceMode }
   if (!isStorefrontStyleAvailable(style, context)) {
     const wanted = style
     style = resolveStorefrontStyle(style, vertical, context)
@@ -554,6 +591,7 @@ export function usesPortraitMedia(style: StorefrontStyle) {
 /** Titulos de seccion. */
 export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'font-semibold tracking-tight',
+  'catalog-basic': 'font-bold tracking-tight',
   classic: 'font-extrabold tracking-tight',
   fashion: 'font-serif tracking-tight',
   sport: 'font-black uppercase italic tracking-tighter',
@@ -567,6 +605,7 @@ export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
 /** Etiqueta chica sobre los titulos. */
 export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+  'catalog-basic': 'text-xs font-semibold uppercase tracking-wider text-muted-foreground',
   classic: 'text-xs font-bold uppercase tracking-wider text-primary',
   fashion: 'text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground',
   sport: 'inline-block -skew-x-6 bg-primary px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-primary-foreground',
@@ -580,6 +619,7 @@ export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
 /** Esquinas de fotos y botones. */
 export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'rounded-lg',
+  'catalog-basic': 'rounded-lg',
   classic: 'rounded-xl',
   fashion: 'rounded-none',
   sport: 'rounded-md',
