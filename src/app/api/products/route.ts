@@ -1,3 +1,4 @@
+import { fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
 import { randomUUID } from 'node:crypto'
@@ -875,6 +876,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         { status: 404 }
       )
     }
+
+    const fixedPlanIssues = fixedProductPlanErrors({ ...existingProduct, ...validated } as unknown as Parameters<typeof fixedProductPlanErrors>[0])
+    if (fixedPlanIssues.length) return NextResponse.json({ success: false, error: 'Revisá los planes por monto: no son compatibles con el precio del producto.', details: fixedPlanIssues.map(issue => ({ field: 'installments_plans.' + issue.index + '.installmentAmount', message: issue.message })) }, { status: 400 })
 
     // Marca: si se tocó, el texto y el vínculo quedan de acuerdo.
     if (validated.brand !== undefined || validated.brand_id !== undefined) {

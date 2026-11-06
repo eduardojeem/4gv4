@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { AppImage as Image } from '@/components/ui/app-image'
 import { ArrowRight, Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, Minus, Package, Plus, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
@@ -158,19 +158,11 @@ export function ProductCard(props: ProductCardProps) {
       ? [...product.installments_plans]
           .filter((plan) => plan && plan.count >= 1)
           .sort((a, b) => a.count - b.count)
-          .map((plan) => {
-            const built = buildCreditInstallmentPlan({
-              principalAmount: displayPrice,
-              interestRate: plan.rate ?? 0,
-              installmentCount: plan.count,
-              frequency: 'monthly',
-            })
-            return {
-              count: plan.count,
-              perInstallment: built.installments[0]?.amount ?? 0,
-              financedTotal: built.financedTotal,
-              hasInterest: built.interestAmount > 0,
-            }
+          .flatMap(plan => {
+            const result = resolveConfiguredCreditPlan(displayPrice, plan)
+            if (!result.plan) return []
+            const built = result.plan
+            return [{ count: plan.count, perInstallment: built.installments[0]?.amount ?? 0, financedTotal: built.financedTotal, hasInterest: built.interestAmount > 0 }]
           })
       : []
   // Para la tarjeta mostramos la opción con más cuotas (la cuota más baja de mostrar)

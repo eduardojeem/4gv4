@@ -1,3 +1,4 @@
+import { fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
 import { NextRequest, NextResponse } from 'next/server'
@@ -232,7 +233,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
-      .select('id')
+      .select('id, sale_price, offer_price, has_offer, installments_enabled, installments_plans')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -252,6 +253,9 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         { status: 404 }
       )
     }
+
+    const fixedPlanIssues = fixedProductPlanErrors({ ...existingProduct, ...validated } as unknown as Parameters<typeof fixedProductPlanErrors>[0])
+    if (fixedPlanIssues.length) return NextResponse.json({ success: false, error: 'Revisá los planes por monto: no son compatibles con el precio del producto.', details: fixedPlanIssues.map(issue => ({ field: 'installments_plans.' + issue.index + '.installmentAmount', message: issue.message })) }, { status: 400 })
 
     const conflict = await findProductConflict(supabase as never, {
       organizationId: organization.id, sku: validated.sku, barcode: validated.barcode, excludeId: id,

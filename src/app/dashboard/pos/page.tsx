@@ -3128,6 +3128,8 @@ function POSPageContent() {
             count: plan.count,
             interestRate: plan.rate,
             frequency: plan.frequency,
+            mode: plan.mode,
+            installmentAmount: plan.mode === 'amount' ? plan.installmentAmount : undefined,
           })
           toast.success(`Plan de ${plan.count} cuotas preparado`, {
             description: 'Revisá las condiciones sobre el total del ticket antes de confirmar.',

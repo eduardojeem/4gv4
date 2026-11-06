@@ -1,3 +1,4 @@
+import { CreditPlanDefinitionSchema } from '@/lib/credits/plan-definition'
 import { z } from 'zod'
 import { MAX_CREDIT_INSTALLMENTS, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { ServiceBusinessDetailsSchema } from '@/lib/organization/service-specialties'
@@ -283,10 +284,7 @@ export const BrandsSectionSchema = z.object({
   showOnOffers: z.boolean().optional().default(false),
 })
 
-export const CreditPlanDefaultSchema = z.object({
-  count: z.number().int().min(1, 'Minimo 1 cuota').max(60, 'Maximo 60 cuotas'),
-  rate: z.number().min(0, 'El recargo no puede ser negativo').max(MAX_CREDIT_INTEREST_RATE, `El recargo no puede superar ${MAX_CREDIT_INTEREST_RATE}%`),
-})
+export const CreditPlanDefaultSchema = CreditPlanDefinitionSchema
 
 export const CreditPosPolicySchema = z.object({
   allowCustomTerms: z.boolean(),

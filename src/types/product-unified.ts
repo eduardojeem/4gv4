@@ -1,3 +1,4 @@
+import type { CreditPlanDefinition } from '@/lib/credits/plan-definition'
 
 /**
  * Unified Product Types
@@ -15,10 +16,7 @@ export type DbBrand = Database['public']['Tables']['brands']['Row']
 
 // Json type compatibility
 
-export interface InstallmentPlanOption {
-  count: number
-  rate: number
-}
+export type InstallmentPlanOption = CreditPlanDefinition
 
 export type ProductVariantRecord = ProductVariantInput | {
   id: string

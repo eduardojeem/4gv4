@@ -442,6 +442,7 @@ export function POSProductDetailDialog({
   }
 
   const handleUseCreditPlan = (plan: ProductCreditPlan) => {
+    if (plan.error) { toast.error(plan.error); return }
     if (hasVariants && !selectedVariant) {
       toast.info('Selecciona una variante para financiar con este plan')
       const el = document.getElementById('pos-product-variants-section')
@@ -837,7 +838,7 @@ export function POSProductDetailDialog({
                         stock,
                         quantity,
                       })
-                      const ready = requirements.every(requirement => requirement.met)
+                      const ready = !plan.error && requirements.every(requirement => requirement.met)
 
                       return (
                         <article
@@ -855,7 +856,7 @@ export function POSProductDetailDialog({
                               </p>
                             </div>
                             <Badge variant="outline" className="text-[10px]">
-                              {plan.rate === 0 ? 'Sin interés' : `Tasa ${plan.rate}%`}
+                              {plan.mode === 'amount' ? 'Monto fijo' : plan.rate === 0 ? 'Sin interés' : `Tasa ${plan.rate}%`}
                             </Badge>
                           </div>
                           <dl className="mt-1.5 grid grid-cols-2 gap-1 text-xs">
@@ -868,6 +869,7 @@ export function POSProductDetailDialog({
                               <dd className="font-medium">{formatCurrency(plan.financedTotal)}</dd>
                             </div>
                           </dl>
+                          {plan.error && <p className="mt-2 text-xs text-destructive">{plan.error}</p>}
                           <details className="mt-2 text-xs">
                             <summary
                               className={`cursor-pointer rounded py-1 font-medium ${
@@ -903,7 +905,7 @@ export function POSProductDetailDialog({
                             type="button"
                             variant={ready ? 'default' : 'outline'}
                             className="mt-2 h-10 sm:h-8 w-full text-xs"
-                            disabled={isOutOfStock || quantity > stock}
+                            disabled={isOutOfStock || quantity > stock || Boolean(plan.error)}
                             onClick={() => handleUseCreditPlan(plan)}
                             aria-label={`Usar plan de ${plan.count} cuotas`}
                           >

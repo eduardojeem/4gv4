@@ -253,7 +253,7 @@ describe('ProductModal — elección de datos de cuotas', () => {
     expect(screen.getByText(/quedan guardados y vuelven al reactivarla/i)).toBeInTheDocument()
   })
 
-  it('la explicación dice sobre qué precio se calcula', async () => {
+  it('la explicación distingue el simulador de la financiación real', async () => {
     const settings = getWebsiteSettingsDefaults()
     settings.product_credit_defaults!.calculationBase = 'cost'
     websiteSettings = settings
@@ -262,7 +262,8 @@ describe('ProductModal — elección de datos de cuotas', () => {
     await openPricingTab()
     await userEvent.click(await screen.findByText(/¿Cómo funcionan las cuotas\?/i))
 
-    expect(screen.getByText(/La cuota se calcula sobre precio de costo/i)).toBeInTheDocument()
+    expect(screen.getByText(/La referencia del simulador usa precio de costo/i)).toBeInTheDocument()
+    expect(screen.getByText(/El POS financia el saldo de la venta/i)).toBeInTheDocument()
   })
 
   it('ofrece un link a la configuración que no pierde el formulario', async () => {

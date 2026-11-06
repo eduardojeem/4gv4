@@ -17,6 +17,11 @@ import PromotionsPage from '@/app/dashboard/promotions/page'
 
 const permissions = { all: true }
 
+// Esta suite prueba el reparto de la pantalla, no la sesión ni la carga de settings.
+vi.mock('@/hooks/useWebsiteSettings', () => ({
+  useAdminWebsiteSettings: () => ({ settings: null }),
+}))
+
 vi.mock('@/hooks/use-permissions', () => ({
   usePermissions: () => ({ hasPermission: () => permissions.all }),
 }))

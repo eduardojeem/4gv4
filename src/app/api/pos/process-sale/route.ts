@@ -550,6 +550,7 @@ export const POST = withTenantAuth(
           interestRate: credit.interest_rate,
           frequency: credit.frequency,
           mode: credit.schedule_mode,
+          installmentAmounts: credit.installment_amounts ?? undefined,
         },
         paidNow,
         saleTotal: paidNow + creditPrincipal,

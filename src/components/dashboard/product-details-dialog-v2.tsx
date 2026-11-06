@@ -16,6 +16,7 @@ import {
   Printer, TrendingUp, Barcode, MapPin, Star, CheckCircle2, AlertCircle,
   ChevronLeft, ChevronRight, Minus, Plus
 } from 'lucide-react'
+import { resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
 import { Product, ProductMovement } from '@/types/products'
@@ -679,18 +680,20 @@ export function ProductDetailsDialogV2({
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {product.installments_plans.map((plan, index) => {
-                          const total = product.sale_price * (1 + plan.rate / 100)
-                          const cuotaAmount = total / plan.count
+                          const result = resolveConfiguredCreditPlan(product.has_offer && product.offer_price ? product.offer_price : product.sale_price, plan)
+                          const total = result.plan?.financedTotal ?? plan.count * (plan.installmentAmount ?? 0)
+                          const cuotaAmount = result.plan?.installments[0]?.amount ?? plan.installmentAmount ?? 0
 
                           return (
                             <div key={index} className="flex flex-col rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="font-bold text-lg text-indigo-700">{plan.count} cuotas</span>
                                 <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
-                                  {plan.rate > 0 ? `${plan.rate}% recargo` : 'Sin recargo'}
+                                  {plan.mode === 'amount' ? 'Monto fijo' : plan.rate > 0 ? `${plan.rate}% recargo` : 'Sin recargo'}
                                 </Badge>
                               </div>
                               <div className="mt-2 space-y-1 text-sm">
+                                {result.error && <p className="text-destructive">{result.error}</p>}
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Monto de cuota:</span>
                                   <span className="font-bold">{formatCurrency(cuotaAmount)}</span>

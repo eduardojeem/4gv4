@@ -1,3 +1,4 @@
+import type { CreditPlanDefinition } from '@/lib/credits/plan-definition'
 /**
  * Public Portal Types
  * Types for publicly accessible data (products, repairs)
@@ -18,10 +19,7 @@ export interface Category {
 }
 
 /** Una opción de financiación en cuotas: cantidad de cuotas y % de recargo. */
-export interface InstallmentPlanOption {
-  count: number
-  rate: number
-}
+export type InstallmentPlanOption = CreditPlanDefinition
 
 export interface PublicVariantAttributeConfig {
   key: string

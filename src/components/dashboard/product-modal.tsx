@@ -11,6 +11,7 @@ import { Upload, Package, Tag, Warehouse, RefreshCw, Users, Sparkles, Plus, Aler
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
 import { buildCreditInstallmentPlan, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
+import { parseFixedInstallmentInput, resolveConfiguredCreditPlan } from '@/lib/credits/plan-definition'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
@@ -503,6 +504,7 @@ export function ProductModal({
   const applyCreditDefaults = () => {
     form.setValue('installments_plans', toProductInstallmentPlans(creditDefaults), { shouldDirty: true })
     form.setValue('installments_public', creditDefaults.publicByDefault, { shouldDirty: true })
+    void form.trigger('installments_plans')
     setCreditChoice('defaults')
     setPreviousPlansBackup(null)
   }
@@ -1000,7 +1002,7 @@ export function ProductModal({
       installments_plans: Array.isArray(data.installments_plans)
         ? data.installments_plans
             .filter((plan) => Number(plan.count) >= 1)
-            .map((plan) => ({ count: Number(plan.count), rate: Number(plan.rate) || 0 }))
+            .map((plan) => plan.mode === 'amount' ? { count: Number(plan.count), rate: 0, mode: 'amount' as const, installmentAmount: Number(plan.installmentAmount) } : { count: Number(plan.count), rate: Number(plan.rate) || 0 })
             .sort((a, b) => a.count - b.count)
         : [],
     }
@@ -3019,17 +3021,16 @@ export function ProductModal({
                               {installmentFields.map((row, index) => {
                                 const count = Number(installmentsPlans?.[index]?.count) || 0
                                 const rate = Number(installmentsPlans?.[index]?.rate) || 0
-                                const preview =
-                                  installmentBase > 0 && count >= 1
-                                    ? buildCreditInstallmentPlan({
-                                        principalAmount: installmentBase,
-                                        interestRate: rate,
-                                        installmentCount: count,
-                                        frequency: 'monthly',
-                                      })
-                                    : null
+                                const fixed = installmentsPlans?.[index]?.mode === 'amount'
+                                const definition = { count, rate, ...(fixed ? { mode: 'amount' as const, installmentAmount: parseFixedInstallmentInput(String(installmentsPlans?.[index]?.installmentAmount ?? '')) } : {}) }
+                                const resolved = installmentBase > 0 && count >= 1 ? resolveConfiguredCreditPlan(installmentBase, definition) : null
+                                const preview = resolved?.plan
                                 return (
-                                  <div key={row.id} className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-slate-900/40 px-2.5 py-1.5">
+                                  <div key={row.id} className="flex flex-wrap items-start gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-slate-900/40 px-2.5 py-1.5">
+                                    <label className="flex w-28 flex-col gap-1 pt-1"><span className="text-[10px] text-muted-foreground">Tipo de plan</span><select className="h-8 rounded-md border bg-background text-xs" aria-label={'Tipo del plan de ' + count + ' cuotas'} value={fixed ? 'amount' : 'percent'} onChange={event => {
+                                      if (event.target.value === 'amount') form.setValue(`installments_plans.${index}`, { count, rate: 0, mode: 'amount', installmentAmount: Math.max(1, Math.ceil((preview?.financedTotal ?? installmentBase) / Math.max(1, count))) }, { shouldDirty: true, shouldValidate: true })
+                                      else { form.unregister(`installments_plans.${index}.installmentAmount`); form.setValue(`installments_plans.${index}`, { count, rate: Math.max(0, Math.min(MAX_CREDIT_INTEREST_RATE, preview?.interestRate ?? 0)) }, { shouldDirty: true, shouldValidate: true }) }
+                                    }}><option value="percent">Porcentaje</option><option value="amount">Monto fijo</option></select></label>
                                     <FormField
                                       control={form.control}
                                       name={`installments_plans.${index}.count`}
@@ -3055,13 +3056,13 @@ export function ProductModal({
                                     />
                                     <FormField
                                       control={form.control}
-                                      name={`installments_plans.${index}.rate`}
+                                      name={fixed ? `installments_plans.${index}.installmentAmount` : `installments_plans.${index}.rate`}
                                       render={({ field }) => (
                                         <FormItem className="w-[80px] shrink-0">
-                                          <FormLabel className="text-[10px] text-gray-400">Recargo %</FormLabel>
+                                          <FormLabel className="text-[10px] text-gray-400">{fixed ? 'Monto fijo' : 'Recargo %'}</FormLabel>
                                           <FormControl>
                                             <Input
-                                              type="number"
+                                              type="text" inputMode="decimal"
                                               step="0.01"
                                               min={0}
                                               max={MAX_CREDIT_INTEREST_RATE}
@@ -3070,6 +3071,7 @@ export function ProductModal({
                                               data-rate
                                               {...field}
                                               value={field.value ?? ''}
+                                              aria-label={(fixed ? 'Monto fijo' : 'Recargo') + ' del plan de ' + count + ' cuotas'}
                                               onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
                                                   e.preventDefault()
@@ -3098,7 +3100,7 @@ export function ProductModal({
                                             : <span className="text-indigo-600/70"> · sin interés</span>}
                                         </p>
                                       ) : (
-                                        <p className="text-xs text-gray-400 pt-0.5">—</p>
+                                        <p className="text-xs text-destructive pt-0.5">{resolved?.error ?? 'Ingresá un precio para comprobar el plan.'}</p>
                                       )}
                                     </div>
                                     <Button

@@ -270,8 +270,8 @@ export function PaymentMethods({
   const overdueAmount = creditSummary?.overdueAmount ?? 0
   // El adelanto mínimo para que el resto, con su interés, entre en el crédito disponible.
   const minimumDownPayment = React.useMemo(
-    () => minimumCreditDownPayment(cartTotal, creditSummary?.availableCredit ?? 0, creditTerms.interestRate),
-    [cartTotal, creditSummary?.availableCredit, creditTerms.interestRate],
+    () => !creditTerms.scheduleMode || creditTerms.scheduleMode === 'percent' ? minimumCreditDownPayment(cartTotal, creditSummary?.availableCredit ?? 0, creditTerms.interestRate) : null,
+    [cartTotal, creditSummary?.availableCredit, creditTerms.interestRate, creditTerms.scheduleMode],
   )
   const downPaymentTooLow = !canUseCredit && minimumDownPayment !== null && downPaymentAmount > 0 && downPaymentAmount < minimumDownPayment
   const canUseMixedCredit = Boolean(

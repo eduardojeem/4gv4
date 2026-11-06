@@ -21,6 +21,7 @@ export type CreditPolicyCheckInput = {
     interestRate: number
     frequency: CreditFrequency
     mode: CreditScheduleMode
+    installmentAmounts?: number[]
   }
   /** Lo que se cobra en el momento (otros medios + saldo a favor). */
   paidNow: number
@@ -59,7 +60,7 @@ export async function checkCreditPosPolicy(input: CreditPolicyCheckInput): Promi
 
   const defaults = (settingsResult.data?.value ?? null) as {
     posPolicy?: unknown
-    plans?: Array<{ count: number; rate: number }>
+    plans?: import('./plan-definition').CreditPlanDefinition[]
     frequency?: CreditFrequency
   } | null
   const policy = normalizeCreditPosPolicy(defaults?.posPolicy)

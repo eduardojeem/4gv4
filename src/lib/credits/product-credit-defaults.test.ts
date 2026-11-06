@@ -3,6 +3,7 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import type { ProductCreditDefaults } from '@/types/website-settings'
 import {
   buildCreditPlanPreview,
+  creditDefaultsWarnings,
   buildCreditPlanPreviews,
   resolveCreditBase,
   toProductInstallmentPlans,
@@ -161,5 +162,20 @@ describe('toProductInstallmentPlans', () => {
     )
 
     expect(plans).toEqual([{ count: 3, rate: 0 }, { count: 6, rate: 10 }])
+  })
+})
+
+describe('coherencia y redondeo de los predeterminados', () => {
+  it('advierte sobre planes que un cajero no podrá vender con condiciones personalizadas', () => {
+    const result = creditDefaultsWarnings(defaults({ plans: [{ count: 12, rate: 30 }], posPolicy: { allowCustomTerms: true, allowInstallmentAmounts: true, maxInterestRate: 10, maxInstallments: 6, allowedFrequencies: ['weekly'], minDownPaymentPercent: 0 } }))
+    expect(result.some(message => message.includes('más cuotas'))).toBe(true)
+    expect(result.some(message => message.includes('recargo mayor'))).toBe(true)
+    expect(result.some(message => message.includes('frecuencia'))).toBe(true)
+  })
+  it('expone la última cuota para que el redondeo no se presente como cuotas iguales', () => {
+    const result = buildCreditPlanPreviews({ sale_price: 1000000 }, defaults({ plans: [{ count: 3, rate: 0 }], downPaymentPercent: 0 })).previews[0]
+    expect(result.installmentAmount).toBe(333333)
+    expect(result.lastInstallmentAmount).toBe(333334)
+    expect(result.financedTotal).toBe(1000000)
   })
 })

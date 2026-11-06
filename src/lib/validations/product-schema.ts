@@ -1,5 +1,5 @@
+import { CreditPlanFormSchema, fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import * as z from "zod"
-import { MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { validateBarcode } from "./product-validation"
 import {
   ProductAttributeDefinitionSchema,
@@ -74,26 +74,10 @@ export const productSchema = z
     has_offer: z.boolean().default(false),
 
     // Installments / financiación (informativo en la web pública)
-    // Lista de planes: cada opción tiene su cantidad de cuotas y su % de recargo.
+    // Cada plan conserva la cantidad de cuotas y su porcentaje o monto fijo.
     installments_enabled: z.boolean().default(false),
     installments_public: z.boolean().default(true),
-    installments_plans: z
-      .array(
-        z.object({
-          count: z
-            .coerce
-            .number()
-            .int()
-            .min(1, "Mínimo 1 cuota")
-            .max(60, "Máximo 60 cuotas"),
-          rate: z
-            .coerce
-            .number()
-            .min(0, "El recargo no puede ser negativo")
-            .max(MAX_CREDIT_INTEREST_RATE, `El recargo no puede superar ${MAX_CREDIT_INTEREST_RATE}%`),
-        }),
-      )
-      .default([]),
+    installments_plans: z.array(CreditPlanFormSchema).default([]),
 
     // Post-sale fields
     warranty_months: z
@@ -188,6 +172,7 @@ export const productSchema = z
     variants: z.array(ProductVariantInputSchema).default([]),
   })
   .superRefine((data, ctx) => {
+    for (const issue of fixedProductPlanErrors(data)) ctx.addIssue({ code: 'custom', path: ['installments_plans', issue.index, 'installmentAmount'], message: issue.message })
     if (data.has_variants && data.variant_attribute_config.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

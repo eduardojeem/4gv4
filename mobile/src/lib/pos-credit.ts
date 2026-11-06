@@ -130,7 +130,7 @@ export type CreditPolicy = {
   allowedFrequencies: CreditFrequency[];
   minDownPaymentPercent: number;
 };
-export type CreditPolicyState = { policy: CreditPolicy; canOverride: boolean };
+export type CreditPolicyState = { policy: CreditPolicy; canOverride: boolean; defaultPlans: { count: number; rate: number; frequency: CreditFrequency; mode?: 'percent' | 'amount'; installmentAmount?: number }[] };
 
 export const OPEN_POLICY: CreditPolicyState = {
   policy: {
@@ -142,16 +142,17 @@ export const OPEN_POLICY: CreditPolicyState = {
     minDownPaymentPercent: 0,
   },
   canOverride: false,
+  defaultPlans: [],
 };
 
 export async function fetchCreditPolicy(): Promise<CreditPolicyState> {
-  try {
-    const result = await apiFetch<{ data: { policy: CreditPolicy; canOverride: boolean } }>('/api/pos/credit-policy');
-    return { policy: { ...OPEN_POLICY.policy, ...result.data.policy }, canOverride: result.data.canOverride === true };
-  } catch {
-    // Sin la política a la vista se muestra todo: el servidor igual la aplica.
-    return OPEN_POLICY;
-  }
+  const result = await apiFetch<{ data: CreditPolicyState }>('/api/pos/credit-policy');
+  if (!result.data?.policy) throw new Error('No se pudieron leer las reglas de crédito.');
+  return {
+    policy: { ...OPEN_POLICY.policy, ...result.data.policy },
+    canOverride: result.data.canOverride === true,
+    defaultPlans: Array.isArray(result.data.defaultPlans) ? result.data.defaultPlans.filter(plan => Number.isInteger(plan.count) && plan.count >= 1 && plan.count <= 60 && Number.isFinite(plan.rate) && plan.rate >= 0 && plan.rate <= 100 && ['weekly', 'biweekly', 'monthly'].includes(plan.frequency) && (plan.mode === undefined || plan.mode === 'percent' || (plan.mode === 'amount' && Number.isFinite(plan.installmentAmount) && Number(plan.installmentAmount) > 0))) : [],
+  };
 }
 
 /** El calendario que guardó el servidor, si vino en la respuesta de la venta. */

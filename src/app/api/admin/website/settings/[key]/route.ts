@@ -1,3 +1,4 @@
+import { CreditDefaultsConflict, saveCreditDefaults } from '@/lib/credits/save-credit-defaults'
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
@@ -114,6 +115,13 @@ async function handler(
     // (que rompe si la unicidad real es compuesta) y respeta el modelo
     // multi-tenant — una fila de settings por organización.
     const adminSupabase = createAdminSupabase()
+    if (key === 'product_credit_defaults') {
+      const revision = request.headers.get('x-credit-defaults-revision')
+      if (!revision || request.headers.get('x-organization-id') !== orgId) return NextResponse.json({ success: false, error: 'Recargá los predeterminados antes de guardar.', code: 'CREDIT_DEFAULTS_VERSION_REQUIRED' }, { status: 409 })
+      const row = await saveCreditDefaults(adminSupabase, { organizationId: orgId, actorId: context.user.id, revision, value: value as NonNullable<import('@/types/website-settings').WebsiteSettings['product_credit_defaults']> })
+      try { await supabase.from('audit_log').insert({ organization_id: orgId, user_id: context.user.id, action: 'update_website_setting', resource: 'website_settings', resource_id: key }) } catch { console.warn('Credit defaults saved; audit unavailable') }
+      return NextResponse.json({ success: true, data: row.value, creditDefaultsRevision: row.updated_at })
+    }
 
     const existingQuery = adminSupabase
       .from('website_settings')
@@ -202,6 +210,7 @@ async function handler(
       }
     })
   } catch (error) {
+    if (error instanceof CreditDefaultsConflict) return NextResponse.json({ success: false, error: error.message }, { status: error.status })
     console.error('Website settings update API error', { error })
     return NextResponse.json(
       {

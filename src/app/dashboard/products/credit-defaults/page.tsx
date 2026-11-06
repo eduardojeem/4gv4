@@ -1,5 +1,7 @@
 'use client'
 
+import { useAuth } from '@/contexts/auth-context'
+
 import Link from 'next/link'
 import { ArrowLeft, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,6 +9,10 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 import { ProductCreditDefaultsEditor } from '@/components/dashboard/products/ProductCreditDefaultsEditor'
 
 export default function ProductCreditDefaultsPage() {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (user?.role !== 'super_admin' && !['owner', 'admin'].includes(user?.organization?.role ?? '')) return <p role="alert" className="rounded-xl border p-6 text-sm">Solo el dueño o un administrador del comercio puede consultar y editar los predeterminados de crédito.</p>
+
   return (
     <RouteGuard route="/dashboard/products">
       <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
@@ -28,36 +34,11 @@ export default function ProductCreditDefaultsPage() {
           </div>
         </header>
 
-        <div className="bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900/50 rounded-xl p-5 md:p-6 mb-2">
-          <h2 className="text-sm font-bold text-sky-900 dark:text-sky-300 mb-3 flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-200 dark:bg-sky-900 text-sky-700 dark:text-sky-300">
-              <span className="sr-only">Información</span>
-              i
-            </span>
-            ¿Para qué sirve esta sección?
-          </h2>
-          <div className="text-sm text-sky-800 dark:text-sky-200 space-y-3 leading-relaxed">
-            <p>
-              Aquí podés configurar las <strong>condiciones globales por defecto</strong> que tendrán los productos cuando decidas venderlos a crédito o en cuotas.
-            </p>
-            <ul className="list-disc pl-5 space-y-1.5 opacity-90">
-              <li>
-                <strong>Planes de cuotas (Recargos):</strong> Definí el interés o recargo que se aplicará automáticamente a cada cantidad de cuotas (ej. 10% para 3 cuotas, 20% para 6 cuotas).
-              </li>
-              <li>
-                <strong>Base de cálculo:</strong> Establecé qué porcentaje del valor del producto se tomará como base para calcular las cuotas.
-              </li>
-              <li>
-                <strong>Requisitos y Condiciones:</strong> Guardá condiciones estándar (como anticipos mínimos o requisitos del cliente) que se sugerirán automáticamente.
-              </li>
-            </ul>
-            <p className="font-medium bg-sky-100 dark:bg-sky-900/40 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800/50 mt-4">
-              💡 <strong>¿Qué pasa al crear un producto?</strong> Cuando marques un producto como &quot;Habilitar venta a crédito&quot;, el sistema copiará toda esta configuración automáticamente. Podrás dejarla tal cual para ahorrar tiempo, o modificarla individualmente solo para ese producto si necesitás una excepción.
-            </p>
-          </div>
-        </div>
+        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">Configurá los planes de productos y las reglas del POS. Los cambios no actualizan productos existentes.</p>
 
-        <ProductCreditDefaultsEditor />
+        <details className="text-sm text-muted-foreground"><summary className="w-fit cursor-pointer py-2 font-medium text-primary">Qué se copia y qué solo se simula</summary><p className="mt-2 max-w-3xl leading-relaxed">Al elegir predeterminados se copian cantidad de cuotas, recargo o monto fijo y visibilidad. La base de costo y la entrega del ejemplo solo sirven para simular: no cambian lo que se financia en una venta.</p></details>
+
+        <ProductCreditDefaultsEditor key={user?.organization?.id ?? user?.id} />
       </div>
     </RouteGuard>
   )

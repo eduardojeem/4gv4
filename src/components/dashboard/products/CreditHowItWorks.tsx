@@ -57,14 +57,13 @@ export function CreditHowItWorks({ baseLabel, planCount, defaultsEnabled }: Cred
             : 'Vas a armar los planes a mano para este producto.'}
         </p>
         <p>
-          <strong className="text-slate-800 dark:text-slate-200">2. Cada plan es cantidad + recargo.</strong>{' '}
+          <strong className="text-slate-800 dark:text-slate-200">2. Cada plan es cantidad + porcentaje o monto fijo.</strong>{' '}
           El recargo es un porcentaje que se suma antes de dividir en cuotas. Con 0% el cliente paga
           el mismo total, solo que repartido.
         </p>
         <p>
-          <strong className="text-slate-800 dark:text-slate-200">3. La cuota se calcula sobre {baseLabel.toLowerCase()}.</strong>{' '}
-          Es la base definida en la configuración: si la cambiás, cambian todas las cuotas de todos
-          los productos.
+          <strong className="text-slate-800 dark:text-slate-200">3. La referencia del simulador usa {baseLabel.toLowerCase()}.</strong>{' '}
+          Solo se copian la cantidad de cuotas, el porcentaje o monto fijo y la visibilidad. El POS financia el saldo de la venta y la tienda usa su precio efectivo; ambos pueden diferir del simulador.
         </p>
         <p>
           <strong className="text-slate-800 dark:text-slate-200">4. Los planes se guardan igual.</strong>{' '}

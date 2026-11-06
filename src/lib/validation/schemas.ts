@@ -1,5 +1,5 @@
+import { CreditPlanDefinitionSchema, fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { z } from 'zod'
-import { MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
 import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 import {
   ProductAttributeDefinitionSchema,
@@ -114,12 +114,7 @@ const productBaseSchema = z.object({
   installments_public: z.boolean()
     .optional(),
 
-  installments_plans: z.array(
-    z.object({
-      count: z.number().int().min(1).max(60),
-      rate: z.number().min(0).max(MAX_CREDIT_INTEREST_RATE),
-    })
-  ).optional(),
+  installments_plans: z.array(CreditPlanDefinitionSchema).optional(),
 
   is_active: z.boolean()
     .default(true),
@@ -248,7 +243,7 @@ const validateProductVariants = (
   }
 }
 
-export const productSchema = productBaseSchema.superRefine(validateProductVariants)
+export const productSchema = productBaseSchema.superRefine(validateProductVariants).superRefine((data, context) => { for (const issue of fixedProductPlanErrors(data)) context.addIssue({ code: 'custom', path: ['installments_plans', issue.index, 'installmentAmount'], message: issue.message }) })
 
 /**
  * Actualizar un producto: solo lo que viene en el pedido.
