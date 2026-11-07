@@ -85,25 +85,25 @@ export function WholesaleHome({
       ) : (
         hero?.enabled !== false && (
           <section className="relative overflow-hidden border-b bg-gradient-to-r from-muted/50 via-muted/20 to-background">
-            <div className="mx-auto flex max-w-7xl flex-col justify-center px-4 py-8 sm:py-12 md:min-h-[340px]">
+            <div className="mx-auto flex max-w-7xl flex-col justify-center px-4 py-6 sm:py-12 md:min-h-[340px]">
               <div className="max-w-2xl space-y-3">
                 {hero?.badge && (
                   <span className="inline-block rounded-md bg-primary/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-primary">
                     {hero.badge}
                   </span>
                 )}
-                <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
+                <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
                   {hero?.title || settings.company_info?.name || 'Catálogo'}
                 </h1>
                 {hero?.subtitle && (
-                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  <p className="max-w-xl text-xs sm:text-base leading-relaxed text-muted-foreground">
                     {hero.subtitle}
                   </p>
                 )}
-                <div className="flex flex-wrap items-center gap-3 pt-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
                   <Link
                     href={prefix + '/productos'}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring w-full sm:w-auto"
                   >
                     <span>{hero?.ctaPrimaryText || 'Explorar catálogo'}</span>
                     <ArrowRight aria-hidden className="h-4 w-4" />
@@ -111,7 +111,7 @@ export function WholesaleHome({
                   {settings?.offers_section?.enabled && (
                     <Link
                       href={prefix + '/ofertas'}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border/80 bg-background px-4 py-2 text-xs sm:text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                      className="inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-2 rounded-lg border border-border/80 bg-background px-4 py-2 text-xs sm:text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring w-full sm:w-auto"
                     >
                       <Tag className="h-3.5 w-3.5 text-rose-500" aria-hidden />
                       <span>Ver promociones</span>
@@ -179,7 +179,7 @@ export function WholesaleHome({
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 items-start">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 items-start">
               {categories.slice(0, 8).map((category) => {
                 const hasSubs = Boolean(category.subcategories && category.subcategories.length > 0)
 
@@ -188,10 +188,10 @@ export function WholesaleHome({
                     <Link
                       key={category.id}
                       href={prefix + '/productos?category_id=' + encodeURIComponent(category.id)}
-                      className="group flex flex-col justify-between rounded-lg border border-border/70 bg-card p-3 sm:p-3.5 transition-all duration-200 hover:border-primary/50 hover:bg-muted/40 hover:shadow-2xs focus-visible:ring-2 focus-visible:ring-ring"
+                      className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-3 sm:p-3.5 transition-all duration-200 hover:border-primary/50 hover:bg-muted/40 hover:shadow-2xs focus-visible:ring-2 focus-visible:ring-ring min-h-[96px]"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                           <Package className="h-4 w-4" aria-hidden />
                         </div>
                         <ArrowRight
@@ -209,14 +209,14 @@ export function WholesaleHome({
                 return (
                   <div
                     key={category.id}
-                    className="flex flex-col justify-between rounded-lg border border-border/70 bg-card p-3 sm:p-3.5 shadow-2xs transition-all duration-200 hover:border-primary/50"
+                    className="flex flex-col justify-between rounded-xl border border-border/70 bg-card p-3 sm:p-3.5 shadow-2xs transition-all duration-200 hover:border-primary/50 min-h-[96px]"
                   >
                     <div>
                       <Link
                         href={prefix + '/productos?category_id=' + encodeURIComponent(category.id)}
-                        className="group flex items-center justify-between gap-2 focus-visible:ring-2 focus-visible:ring-ring rounded"
+                        className="group flex items-center justify-between gap-2 focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
                       >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors">
                           <Package className="h-4 w-4" aria-hidden />
                         </div>
                         <ArrowRight
@@ -240,7 +240,7 @@ export function WholesaleHome({
                           <Link
                             key={sub.id}
                             href={prefix + '/productos?category_id=' + encodeURIComponent(sub.id)}
-                            className="inline-block rounded bg-muted/60 px-1.5 py-0.5 text-[10px] sm:text-[11px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            className="inline-block rounded-md bg-muted/70 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors active:scale-95"
                           >
                             {sub.name}
                           </Link>
@@ -343,7 +343,7 @@ export function WholesaleHome({
 
             {/* Selector de marcas horizontal tipo pestañas (MobileSentrix) */}
             <div
-              className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar border-b border-border/50"
+              className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar border-b border-border/50 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0"
               role="tablist"
               aria-label="Selector de marcas"
             >
@@ -360,7 +360,7 @@ export function WholesaleHome({
                       setSelectedBrandCategoryId('')
                     }}
                     className={cn(
-                      'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-ring border',
+                      'flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 sm:px-4 sm:py-2 text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-ring border min-h-10',
                       isSelected
                         ? 'border-primary bg-primary/10 text-primary shadow-xs'
                         : 'border-border/60 bg-card text-foreground/75 hover:border-foreground/30 hover:bg-muted/40 hover:text-foreground'
@@ -444,13 +444,13 @@ export function WholesaleHome({
 
                 {/* Split Panel: Columna Izquierda (Series / Departamentos) + Panel Derecho (Multiecolumna) */}
                 <div className="flex flex-col md:flex-row min-h-[300px]">
-                  {/* Sidebar izquierdo de series y departamentos */}
+                  {/* Selector de series y departamentos: barra horizontal deslizable en móvil, sidebar en desktop */}
                   <div
-                    className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-border/70 p-3 bg-muted/10 space-y-1"
+                    className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-border/70 p-2 sm:p-3 bg-muted/10 flex md:flex-col items-center md:items-stretch gap-1.5 md:gap-1 overflow-x-auto md:overflow-x-visible no-scrollbar scroll-smooth"
                     role="tablist"
                     aria-label={`Departamentos de ${selectedBrand.name}`}
                   >
-                    <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <p className="hidden md:block px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Series y Rubros
                     </p>
 
@@ -460,13 +460,14 @@ export function WholesaleHome({
                       aria-selected={selectedBrandCategoryId === ''}
                       onClick={() => setSelectedBrandCategoryId('')}
                       className={cn(
-                        'w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-all font-semibold',
+                        'shrink-0 md:shrink md:w-full flex items-center justify-between rounded-full md:rounded-lg px-3 py-1.5 md:py-2 text-left text-xs transition-all font-semibold whitespace-nowrap md:whitespace-normal border md:border-transparent min-h-8 md:min-h-0',
                         selectedBrandCategoryId === ''
-                          ? 'bg-primary/10 text-primary shadow-2xs font-bold'
-                          : 'text-foreground/80 hover:bg-muted hover:text-foreground'
+                          ? 'bg-primary text-primary-foreground md:bg-primary/10 md:text-primary md:border-transparent shadow-2xs font-bold border-primary'
+                          : 'bg-background md:bg-transparent border-border/70 text-foreground/80 hover:bg-muted hover:text-foreground'
                       )}
                     >
-                      <span>Todos los rubros</span>
+                      <span className="hidden md:inline">Todos los rubros</span>
+                      <span className="md:hidden">Todos</span>
                     </button>
 
                     {filteredBrandCategories.map((cat) => {
@@ -479,15 +480,22 @@ export function WholesaleHome({
                           aria-selected={isCatSelected}
                           onClick={() => setSelectedBrandCategoryId(cat.id)}
                           className={cn(
-                            'w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-all font-semibold',
+                            'shrink-0 md:shrink md:w-full flex items-center justify-between rounded-full md:rounded-lg px-3 py-1.5 md:py-2 text-left text-xs transition-all font-semibold whitespace-nowrap md:whitespace-normal border md:border-transparent min-h-8 md:min-h-0',
                             isCatSelected
-                              ? 'bg-primary/10 text-primary shadow-2xs font-bold'
-                              : 'text-foreground/80 hover:bg-muted hover:text-foreground'
+                              ? 'bg-primary text-primary-foreground md:bg-primary/10 md:text-primary md:border-transparent shadow-2xs font-bold border-primary'
+                              : 'bg-background md:bg-transparent border-border/70 text-foreground/80 hover:bg-muted hover:text-foreground'
                           )}
                         >
                           <span className="truncate">{cat.name}</span>
                           {cat.subcategories && cat.subcategories.length > 0 && (
-                            <span className="ml-1 text-[10px] text-muted-foreground/80 shrink-0">
+                            <span
+                              className={cn(
+                                'ml-1.5 text-[10px] rounded-full px-1.5 py-0.2 shrink-0 font-bold',
+                                isCatSelected
+                                  ? 'bg-primary-foreground/20 text-primary-foreground md:bg-transparent md:text-primary'
+                                  : 'bg-muted text-muted-foreground'
+                              )}
+                            >
                               {cat.subcategories.length}
                             </span>
                           )}
@@ -496,10 +504,10 @@ export function WholesaleHome({
                     })}
                   </div>
 
-                  {/* Panel derecho: Grilla en 3-5 columnas con enlaces directos y modelos */}
-                  <div className="flex-1 p-5 overflow-y-auto bg-background space-y-5">
+                  {/* Panel derecho: Grilla en 2 columnas en móvil y 3-5 columnas en desktop */}
+                  <div className="flex-1 p-3.5 sm:p-5 overflow-y-auto bg-background space-y-4 sm:space-y-5">
                     {/* Barra de cabecera con acciones */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
                       <div>
                         <h4 className="text-sm font-bold text-foreground">
                           {selectedCategoryForBrand
@@ -511,10 +519,10 @@ export function WholesaleHome({
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                         <Link
                           href={prefix + '/productos?marca=' + encodeURIComponent(selectedBrand.name)}
-                          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-2xs hover:bg-primary/90 transition-colors"
+                          className="inline-flex min-h-10 sm:min-h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-2xs hover:bg-primary/90 transition-colors w-full sm:w-auto"
                         >
                           <span>Ver catálogo de {selectedBrand.name}</span>
                           <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -525,7 +533,7 @@ export function WholesaleHome({
                             href={`https://wa.me/${settings.company_info.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, quisiera consultar por productos y lista de precios de la marca ${selectedBrand.name}`)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                            className="inline-flex min-h-10 sm:min-h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors w-full sm:w-auto"
                           >
                             <span>Consultar por WhatsApp</span>
                           </a>
@@ -533,18 +541,18 @@ export function WholesaleHome({
                       </div>
                     </div>
 
-                    {/* Grilla multiecolumna estilo MobileSentrix (3 a 5 columnas) */}
+                    {/* Grilla multiecolumna estilo MobileSentrix (2 cols en móvil, 3 a 5 en desktop) */}
                     {selectedCategoryForBrand?.subcategories && selectedCategoryForBrand.subcategories.length > 0 ? (
                       <div className="space-y-2">
                         <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           Subrubros y modelos ({selectedCategoryForBrand.name})
                         </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-x-4 sm:gap-y-2">
                           {selectedCategoryForBrand.subcategories.map((sub, idx) => (
                             <Link
                               key={sub.id}
                               href={`${prefix}/productos?marca=${encodeURIComponent(selectedBrand.name)}&category_id=${encodeURIComponent(sub.id)}`}
-                              className="group/item flex items-center justify-between gap-1 rounded py-1 px-1.5 text-xs text-foreground/85 transition-colors hover:bg-muted/60 hover:text-primary"
+                              className="group/item flex min-h-9 sm:min-h-7 items-center justify-between gap-1.5 rounded-lg sm:rounded border border-border/40 sm:border-transparent bg-muted/25 sm:bg-transparent py-1.5 px-2.5 sm:py-1 sm:px-1.5 text-xs text-foreground/85 transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-primary active:scale-[0.98]"
                             >
                               <span className="truncate group-hover/item:underline underline-offset-2">
                                 {sub.name}
@@ -563,10 +571,10 @@ export function WholesaleHome({
                         <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           Rubros destacados de {selectedBrand.name}
                         </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-x-4 sm:gap-y-2">
                           <Link
                             href={prefix + '/productos?marca=' + encodeURIComponent(selectedBrand.name)}
-                            className="rounded py-1 px-1.5 text-xs font-semibold text-primary hover:underline"
+                            className="flex min-h-9 sm:min-h-7 items-center rounded-lg sm:rounded border border-primary/30 sm:border-transparent bg-primary/5 sm:bg-transparent py-1.5 px-2.5 sm:py-1 sm:px-1.5 text-xs font-bold text-primary hover:underline truncate"
                           >
                             Todos los productos
                           </Link>
@@ -575,15 +583,15 @@ export function WholesaleHome({
                               key={cat.id}
                               href={`${prefix}/productos?marca=${encodeURIComponent(selectedBrand.name)}&category_id=${encodeURIComponent(cat.id)}`}
                               aria-label={`${cat.name} en ${selectedBrand.name}`}
-                              className="rounded py-1 px-1.5 text-xs text-foreground/80 hover:bg-muted/60 hover:text-primary transition-colors truncate"
+                              className="flex min-h-9 sm:min-h-7 items-center rounded-lg sm:rounded border border-border/40 sm:border-transparent bg-muted/25 sm:bg-transparent py-1.5 px-2.5 sm:py-1 sm:px-1.5 text-xs text-foreground/80 hover:bg-muted/60 hover:text-primary transition-colors truncate"
                             >
-                              {cat.name}
+                              <span className="truncate">{cat.name}</span>
                             </Link>
                           ))}
                           {settings.offers_section?.enabled && (
                             <Link
                               href={prefix + '/productos?marca=' + encodeURIComponent(selectedBrand.name) + '&solo_ofertas=true'}
-                              className="rounded py-1 px-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                              className="flex min-h-9 sm:min-h-7 items-center rounded-lg sm:rounded border border-rose-500/30 sm:border-transparent bg-rose-500/5 sm:bg-transparent py-1.5 px-2.5 sm:py-1 sm:px-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline truncate"
                             >
                               Ofertas de {selectedBrand.name}
                             </Link>
@@ -646,31 +654,31 @@ export function WholesaleHome({
           </section>
         )}
         {/* ── 8. Portal de Clientes Mayoristas & Retail ── */}
-        <section aria-labelledby="wholesale-account-cta" className="rounded-2xl border border-border/80 bg-gradient-to-br from-primary/5 via-card to-background p-6 sm:p-8 shadow-xs">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <section aria-labelledby="wholesale-account-cta" className="rounded-2xl border border-border/80 bg-gradient-to-br from-primary/5 via-card to-background p-5 sm:p-8 shadow-xs">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2 max-w-2xl">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] sm:text-xs font-bold text-primary">
                 <UserCheck className="h-3.5 w-3.5" aria-hidden />
                 Acceso para clientes mayoristas y retail
               </span>
-              <h2 id="wholesale-account-cta" className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              <h2 id="wholesale-account-cta" className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
                 ¿Comprás por mayor o revendés en tu negocio?
               </h2>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                 Creá tu cuenta de cliente para acceder a listas de precios actualizadas, cotizaciones rápidas y seguimiento de tus pedidos.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 shrink-0 w-full md:w-auto">
               <Link
                 href={slug ? prefix + '/cliente/registro' : '/registro'}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring w-full sm:w-auto"
               >
                 <UserPlus className="h-4 w-4" aria-hidden />
                 <span>Crear cuenta de cliente</span>
               </Link>
               <Link
                 href={slug ? prefix + '/cliente/login' : '/login'}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs sm:text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs sm:text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring w-full sm:w-auto"
               >
                 <LogIn className="h-4 w-4 text-muted-foreground" aria-hidden />
                 <span>Ya tengo cuenta</span>
