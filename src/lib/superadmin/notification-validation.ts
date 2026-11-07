@@ -1,6 +1,8 @@
 const NOTIFICATION_TYPES = new Set(['info', 'warning', 'success', 'danger'])
 const NOTIFICATION_TARGETS = new Set(['all', 'specific'])
 const NOTIFICATION_STATUSES = new Set(['draft', 'scheduled', 'sent'])
+/** Margen para no rechazar una hora elegida "para ya" por segundos de diferencia. */
+export const SCHEDULE_PAST_TOLERANCE_MS = 60_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export type GlobalNotificationInput = {
@@ -24,7 +26,8 @@ export type ValidGlobalNotification = {
 }
 
 export function validateGlobalNotification(
-  input: GlobalNotificationInput
+  input: GlobalNotificationInput,
+  now: Date = new Date(),
 ): { data: ValidGlobalNotification; error: null } | { data: null; error: string } {
   const title = typeof input.title === 'string' ? input.title.trim() : ''
   const body = typeof input.body === 'string' ? input.body.trim() : ''
@@ -58,6 +61,9 @@ export function validateGlobalNotification(
     const date = new Date(input.scheduled_at)
     if (Number.isNaN(date.getTime())) {
       return { data: null, error: 'La fecha de programacion es invalida.' }
+    }
+    if (date.getTime() < now.getTime() - SCHEDULE_PAST_TOLERANCE_MS) {
+      return { data: null, error: 'La fecha de programacion ya paso. Elegi una hora futura o publicalo ahora.' }
     }
     scheduledAt = date.toISOString()
   }

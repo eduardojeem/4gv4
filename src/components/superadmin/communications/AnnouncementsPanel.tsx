@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
+import { asuncionInputToIso, isoToAsuncionInput } from '@/lib/superadmin/asuncion-time'
 import type { Announcement, AnnouncementStatus, AnnouncementType } from '@/lib/superadmin/communications'
 
 const TYPE_META: Record<AnnouncementType, { label: string; dot: string; card: string }> = {
@@ -71,12 +72,21 @@ type FormState = {
 
 const EMPTY_FORM: FormState = { id: null, title: '', body: '', type: 'info', target: 'all', targetOrgIds: [], mode: 'now', scheduledAt: '' }
 
-function toLocalInput(iso: string | null): string {
-  if (!iso) return ''
-  const date = new Date(iso)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+const PAGE_SIZE = 20
+
+type AnnouncementPayload = {
+  title: string
+  body: string
+  type: AnnouncementType
+  target: 'all' | 'specific'
+  target_org_ids: string[] | null
+  status: AnnouncementStatus
+  scheduled_at: string | null
 }
+
+type ConfirmState =
+  | { kind: 'publish' | 'delete'; item: Announcement }
+  | { kind: 'edit-published'; item: Announcement; payload: AnnouncementPayload; success: string }
 
 function formatDate(value: string | null) {
   if (!value) return '—'
@@ -124,7 +134,8 @@ export function AnnouncementsPanel({
   const [form, setForm] = useState<FormState | null>(null)
   const [orgQuery, setOrgQuery] = useState('')
   const [preview, setPreview] = useState<Announcement | null>(null)
-  const [confirm, setConfirm] = useState<{ kind: 'publish' | 'delete'; item: Announcement } | null>(null)
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null)
+  const [shown, setShown] = useState(PAGE_SIZE)
   const [pending, startTransition] = useTransition()
 
   const orgNames = useMemo(() => new Map(organizations.map((o) => [o.id, o.name])), [organizations])
@@ -159,7 +170,7 @@ export function AnnouncementsPanel({
       target: a.target,
       targetOrgIds: a.targetOrgIds,
       mode: duplicate ? 'draft' : a.status === 'scheduled' ? 'schedule' : a.status === 'draft' ? 'draft' : 'now',
-      scheduledAt: toLocalInput(a.scheduledAt),
+      scheduledAt: isoToAsuncionInput(a.scheduledAt),
     })
 
   const run = (work: () => Promise<void>, success: string) =>
@@ -177,23 +188,66 @@ export function AnnouncementsPanel({
 
   const save = () => {
     if (!form) return
-    if (form.mode === 'schedule' && !form.scheduledAt) {
-      toast.error('Elegí la fecha y hora de publicación')
-      return
+    let scheduledAt: string | null = null
+    if (form.mode === 'schedule') {
+      scheduledAt = asuncionInputToIso(form.scheduledAt)
+      if (!scheduledAt) {
+        toast.error('Elegí la fecha y hora de publicación')
+        return
+      }
+      if (new Date(scheduledAt).getTime() <= Date.now()) {
+        toast.error('Esa hora ya pasó. Elegí una hora futura o publicalo ahora.')
+        return
+      }
     }
-    const payload = {
+    const payload: AnnouncementPayload = {
       title: form.title,
       body: form.body,
       type: form.type,
       target: form.target,
       target_org_ids: form.target === 'specific' ? form.targetOrgIds : null,
       status: form.mode === 'now' ? 'sent' : form.mode === 'schedule' ? 'scheduled' : 'draft',
-      scheduled_at: form.mode === 'schedule' ? new Date(form.scheduledAt).toISOString() : null,
+      scheduled_at: scheduledAt,
+    }
+    const success = form.mode === 'now' ? 'Aviso publicado' : form.mode === 'schedule' ? 'Aviso programado' : 'Borrador guardado'
+    // Un aviso ya publicado lo están viendo las tiendas: el cambio se confirma antes de guardarlo.
+    const published = form.id ? announcements.find((a) => a.id === form.id && a.status === 'sent') : undefined
+    if (published) {
+      setConfirm({ kind: 'edit-published', item: published, payload, success })
+      return
     }
     run(
       () => form.id ? callApi(`/api/superadmin/notifications/${form.id}`, 'PATCH', payload) : callApi('/api/superadmin/notifications', 'POST', payload),
-      form.mode === 'now' ? 'Aviso publicado' : form.mode === 'schedule' ? 'Aviso programado' : 'Borrador guardado',
+      success,
     )
+  }
+
+  const changeFilter = (update: () => void) => {
+    update()
+    setShown(PAGE_SIZE)
+  }
+
+  const confirmTitle = (c: ConfirmState | null) => {
+    if (c?.kind === 'delete') return '¿Eliminar este aviso?'
+    if (c?.kind === 'edit-published') return c.payload.status === 'sent' ? '¿Guardar cambios en un aviso publicado?' : '¿Despublicar este aviso?'
+    return '¿Publicar ahora?'
+  }
+
+  const confirmDescription = (c: ConfirmState | null) => {
+    if (!c) return ''
+    if (c.kind === 'delete') return `«${c.item.title}» desaparece de las campanas de las tiendas. No se puede deshacer.`
+    if (c.kind === 'edit-published') {
+      return c.payload.status === 'sent'
+        ? `Las tiendas que ya lo recibieron van a ver el texto nuevo de «${c.item.title}». Quienes ya lo leyeron no reciben un aviso nuevo.`
+        : `«${c.item.title}» deja de verse en las campanas de las tiendas hasta que ${c.payload.status === 'scheduled' ? 'llegue la nueva hora programada' : 'lo vuelvas a publicar'}.`
+    }
+    return `«${c.item.title}» se muestra de inmediato a ${audience(c.item).toLowerCase()}.`
+  }
+
+  const confirmAction = (c: ConfirmState) => {
+    if (c.kind === 'delete') run(() => callApi(`/api/superadmin/notifications/${c.item.id}`, 'DELETE'), 'Aviso eliminado')
+    else if (c.kind === 'edit-published') run(() => callApi(`/api/superadmin/notifications/${c.item.id}`, 'PATCH', c.payload), c.success)
+    else run(() => callApi(`/api/superadmin/notifications/${c.item.id}`, 'PATCH', { status: 'sent', scheduled_at: null }), 'Aviso publicado')
   }
 
   const filteredOrgs = organizations.filter((o) => o.name.toLowerCase().includes(orgQuery.trim().toLowerCase()))
@@ -201,14 +255,13 @@ export function AnnouncementsPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrar por estado">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado">
           {([['all', 'Todos'], ['sent', 'Publicados'], ['scheduled', 'Programados'], ['draft', 'Borradores']] as const).map(([value, label]) => (
             <button
               key={value}
               type="button"
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
+              aria-pressed={filter === value}
+              onClick={() => changeFilter(() => setFilter(value))}
               className={cn(
                 'rounded-full border px-3 py-1 text-sm font-medium transition-colors',
                 filter === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
@@ -221,7 +274,7 @@ export function AnnouncementsPanel({
         <div className="flex gap-2">
           <div className="relative flex-1 lg:w-64">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar aviso" className="pl-8" aria-label="Buscar aviso" />
+            <Input value={query} onChange={(e) => changeFilter(() => setQuery(e.target.value))} placeholder="Buscar aviso" className="pl-8" aria-label="Buscar aviso" />
           </div>
           <Button onClick={() => setForm({ ...EMPTY_FORM })}><Plus className="h-4 w-4" /> Nuevo aviso</Button>
         </div>
@@ -233,7 +286,7 @@ export function AnnouncementsPanel({
         </CardContent></Card>
       ) : (
         <ul className="space-y-2">
-          {visible.map((a) => (
+          {visible.slice(0, shown).map((a) => (
             <li key={a.id}>
               <Card className="rounded-xl">
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -271,6 +324,14 @@ export function AnnouncementsPanel({
             </li>
           ))}
         </ul>
+      )}
+      {visible.length > PAGE_SIZE && (
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
+          <p className="text-xs text-slate-500">Mostrando {Math.min(shown, visible.length)} de {visible.length}</p>
+          {shown < visible.length && (
+            <Button variant="outline" size="sm" onClick={() => setShown((value) => value + PAGE_SIZE)}>Mostrar más</Button>
+          )}
+        </div>
       )}
 
       {/* Editor */}
@@ -361,8 +422,8 @@ export function AnnouncementsPanel({
                   </div>
                   {form.mode === 'schedule' && (
                     <div className="space-y-1">
-                      <Input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} aria-label="Fecha y hora de publicación" />
-                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Se publica cuando llega la hora, la primera vez que una tienda abre su panel.</p>
+                      <Input type="datetime-local" value={form.scheduledAt} min={isoToAsuncionInput(new Date().toISOString())} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} aria-label="Fecha y hora de publicación (hora de Paraguay)" />
+                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Hora de Paraguay. Se publica cuando llega la hora, la primera vez que una tienda abre su panel.</p>
                     </div>
                   )}
                 </fieldset>
@@ -418,12 +479,8 @@ export function AnnouncementsPanel({
       <AlertDialog open={confirm !== null} onOpenChange={(open) => { if (!open) setConfirm(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{confirm?.kind === 'delete' ? '¿Eliminar este aviso?' : '¿Publicar ahora?'}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm?.kind === 'delete'
-                ? `«${confirm.item.title}» desaparece de las campanas de las tiendas. No se puede deshacer.`
-                : `«${confirm?.item.title}» se muestra de inmediato a ${confirm ? audience(confirm.item).toLowerCase() : ''}.`}
-            </AlertDialogDescription>
+            <AlertDialogTitle>{confirmTitle(confirm)}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDescription(confirm)}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
@@ -432,14 +489,11 @@ export function AnnouncementsPanel({
               className={confirm?.kind === 'delete' ? 'bg-red-600 hover:bg-red-700' : undefined}
               onClick={(e) => {
                 e.preventDefault()
-                if (!confirm) return
-                const { item, kind } = confirm
-                if (kind === 'delete') run(() => callApi(`/api/superadmin/notifications/${item.id}`, 'DELETE'), 'Aviso eliminado')
-                else run(() => callApi(`/api/superadmin/notifications/${item.id}`, 'PATCH', { status: 'sent', scheduled_at: null }), 'Aviso publicado')
+                if (confirm) confirmAction(confirm)
               }}
             >
               {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-              {confirm?.kind === 'delete' ? 'Eliminar' : 'Publicar'}
+              {confirm?.kind === 'delete' ? 'Eliminar' : confirm?.kind === 'edit-published' ? 'Guardar cambios' : 'Publicar'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

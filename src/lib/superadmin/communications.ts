@@ -25,6 +25,9 @@ export interface Announcement {
   dismissedCount: number
 }
 
+/** Estado mostrado: lo guardado en `status` + la dirección (los entrantes no son envíos). */
+export type MessageDeliveryState = 'sent' | 'failed' | 'pending' | 'received'
+
 export interface MessageLogEntry {
   id: string
   organizationName: string
@@ -33,6 +36,11 @@ export interface MessageLogEntry {
   subject: string | null
   channel: string
   status: string
+  deliveryState: MessageDeliveryState
+  direction: 'outbound' | 'inbound'
+  /** Texto de WhatsApp/SMS y mensajes de reparaciones (el email guarda HTML aparte). */
+  content: string | null
+  isRepairMessage: boolean
   error: string | null
   sentAt: string
 }
@@ -41,6 +49,20 @@ export interface ChannelStats {
   channel: string
   sent: number
   failed: number
+  pending: number
+  received: number
+}
+
+/** Cuántos mensajes se cargan en el listado (los totales se cuentan aparte, sobre todo el historial). */
+export const MESSAGE_LOG_LIMIT = 500
+const MESSAGE_CONTENT_PREVIEW = 2000
+
+export function normalizeMessageState(status: string | null | undefined, direction: string | null | undefined): MessageDeliveryState {
+  if (direction === 'inbound') return 'received'
+  const value = (status ?? '').trim().toLowerCase()
+  if (value === 'failed' || value === 'error' || value === 'bounced' || value === 'rejected') return 'failed'
+  if (value === 'pending' || value === 'queued' || value === 'scheduled' || value === 'sending' || value === '') return 'pending'
+  return 'sent'
 }
 
 export interface EmailConfigCheck {
@@ -67,6 +89,8 @@ export interface CommunicationsData {
   organizations: Array<{ id: string; name: string }>
   messages: MessageLogEntry[]
   channelStats: ChannelStats[]
+  /** Total real de mensajes registrados (no solo los cargados en el listado). */
+  messagesTotal: number
   failedLast7Days: number
   emailChecks: EmailConfigCheck[]
   templates: EmailTemplateInfo[]
@@ -86,7 +110,18 @@ const TEMPLATE_REGISTRY: Array<Omit<EmailTemplateInfo, 'available'>> = [
   { id: 'resend-order', name: 'Confirmación de pedido', description: 'Confirma pedidos de la tienda online.', provider: 'resend', trigger: 'renderOrderConfirmationEmail()', sentFrom: '/api/orders' },
   { id: 'resend-payment-reminder', name: 'Recordatorio de pago', description: 'Avisa a clientes con cuotas de crédito pendientes.', provider: 'resend', trigger: 'renderPaymentReminderEmail()', sentFrom: '/api/credits/send-reminder' },
   { id: 'resend-campaign', name: 'Campañas de las tiendas', description: 'Mensajes que cada tienda envía a sus clientes.', provider: 'resend', trigger: 'communication_campaigns', sentFrom: '/api/communications/campaigns/[id]/send' },
+  { id: 'resend-subscription-notice', name: 'Aviso de suscripción', description: 'Avisos sobre el plan de la empresa: vencimientos, cambios y recordatorios.', provider: 'resend', trigger: 'renderSubscriptionNoticeEmail()', sentFrom: 'src/lib/saas/subscription-notifications.ts' },
+  { id: 'resend-subscription-receipt', name: 'Recibo de suscripción', description: 'Comprobante de cada pago del plan.', provider: 'resend', trigger: 'renderSubscriptionReceiptEmail()', sentFrom: 'src/lib/saas/subscription-notifications.ts' },
+  { id: 'resend-autopay-failed', name: 'Débito automático fallido', description: 'Avisa que no se pudo cobrar el plan con la tarjeta guardada.', provider: 'resend', trigger: 'renderAutopayFailedEmail()', sentFrom: 'src/lib/saas/subscription-autopay.ts' },
+  { id: 'resend-transfer-submitted', name: 'Transferencia recibida', description: 'Confirma que llegó el comprobante de una transferencia del plan.', provider: 'resend', trigger: 'renderTransferReceiptSubmittedEmail()', sentFrom: 'src/lib/saas/bank-transfer-notifications.ts' },
+  { id: 'resend-transfer-reviewed', name: 'Transferencia revisada', description: 'Avisa si la transferencia del plan se aprobó o se rechazó.', provider: 'resend', trigger: 'renderTransferReviewedEmail()', sentFrom: 'src/lib/saas/bank-transfer-notifications.ts' },
+  { id: 'resend-plan-grace', name: 'Plan por vencer (gracia)', description: 'Avisa que el plan venció y corre el período de gracia.', provider: 'resend', trigger: 'renderPlanGraceWarningEmail()', sentFrom: 'src/lib/saas/plan-grace-notifications.ts' },
+  { id: 'resend-plan-deactivated', name: 'Plan desactivado', description: 'Avisa que terminó la gracia y el plan quedó desactivado.', provider: 'resend', trigger: 'renderPlanDeactivatedEmail()', sentFrom: 'src/lib/saas/plan-grace-notifications.ts' },
+  { id: 'resend-account-deletion', name: 'Solicitud de eliminación de cuenta', description: 'Confirma que se recibió el pedido de eliminar la cuenta.', provider: 'resend', trigger: 'renderAccountDeletionRequestedEmail()', sentFrom: 'src/lib/account/account-deletion.ts' },
 ]
+
+/** Para el test que verifica que el catálogo no quede atrás del código. */
+export const EMAIL_TEMPLATE_REGISTRY = TEMPLATE_REGISTRY
 
 const configured = (key: string) => Boolean(process.env[key]?.trim())
 
@@ -100,7 +135,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
   if (dispatch.error) loadErrors.push(`No se pudieron publicar las programadas vencidas: ${dispatch.error.message}`)
 
   const since7d = new Date(Date.now() - 7 * 86_400_000).toISOString()
-  const [announcementsResult, organizationsResult, messagesResult, failedResult, reads] = await Promise.all([
+  const [announcementsResult, organizationsResult, messagesResult, failedResult, totalResult, reads] = await Promise.all([
     admin
       .from('global_notifications')
       .select('id, title, body, type, target, target_org_ids, status, scheduled_at, sent_at, created_at')
@@ -109,14 +144,15 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     admin.from('organizations').select('id, name').order('name'),
     admin
       .from('communication_messages')
-      .select('id, organization_id, customer_name, to_email, subject, channel, status, error, sent_at, created_at')
+      .select('id, organization_id, repair_id, customer_name, to_email, subject, channel, status, direction, content, error, sent_at, created_at')
       .order('created_at', { ascending: false })
-      .limit(500),
+      .limit(MESSAGE_LOG_LIMIT),
     admin
       .from('communication_messages')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'failed')
       .gte('created_at', since7d),
+    admin.from('communication_messages').select('id', { count: 'exact', head: true }),
     fetchAllRows<{ notification_id: string; dismissed: boolean }>((from, to) =>
       admin.from('global_notification_reads').select('notification_id, dismissed').range(from, to) as never,
     ).catch((error: Error) => {
@@ -129,6 +165,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     ['Avisos', announcementsResult],
     ['Organizaciones', organizationsResult],
     ['Mensajes', messagesResult],
+    ['Total de mensajes', totalResult],
   ] as const) {
     if (result.error) loadErrors.push(`${label}: ${result.error.message}`)
   }
@@ -163,26 +200,31 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
   })
 
   const messageRows = (messagesResult.data ?? []) as Array<{
-    id: string; organization_id: string | null; customer_name: string | null; to_email: string | null
-    subject: string | null; channel: string; status: string; error: string | null; sent_at: string | null; created_at: string
+    id: string; organization_id: string | null; repair_id: string | null; customer_name: string | null; to_email: string | null
+    subject: string | null; channel: string; status: string; direction: string | null; content: string | null
+    error: string | null; sent_at: string | null; created_at: string
   }>
   const messages: MessageLogEntry[] = messageRows.map((m) => ({
     id: m.id,
     organizationName: m.organization_id ? orgNames.get(m.organization_id) ?? 'Empresa eliminada' : 'Plataforma',
     recipientName: m.customer_name,
-    recipient: m.to_email ?? '—',
+    // WhatsApp y reparaciones no guardan email: se muestra el cliente o, sin datos, una raya.
+    recipient: m.to_email ?? m.customer_name ?? '—',
     subject: m.subject,
     channel: m.channel,
     status: m.status,
+    deliveryState: normalizeMessageState(m.status, m.direction),
+    direction: m.direction === 'inbound' ? 'inbound' : 'outbound',
+    content: m.content ? m.content.slice(0, MESSAGE_CONTENT_PREVIEW) : null,
+    isRepairMessage: Boolean(m.repair_id),
     error: m.error,
     sentAt: m.sent_at ?? m.created_at,
   }))
 
   const statsMap = new Map<string, ChannelStats>()
   for (const m of messages) {
-    const stat = statsMap.get(m.channel) ?? { channel: m.channel, sent: 0, failed: 0 }
-    if (m.status === 'failed') stat.failed += 1
-    else stat.sent += 1
+    const stat = statsMap.get(m.channel) ?? { channel: m.channel, sent: 0, failed: 0, pending: 0, received: 0 }
+    stat[m.deliveryState] += 1
     statsMap.set(m.channel, stat)
   }
 
@@ -194,7 +236,8 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     announcements,
     organizations,
     messages,
-    channelStats: [...statsMap.values()].sort((a, b) => b.sent + b.failed - (a.sent + a.failed)),
+    channelStats: [...statsMap.values()].sort((a, b) => (b.sent + b.failed + b.pending + b.received) - (a.sent + a.failed + a.pending + a.received)),
+    messagesTotal: totalResult.count ?? messages.length,
     failedLast7Days: failedResult.count ?? 0,
     emailChecks: [
       { key: 'RESEND_API_KEY', label: 'Proveedor de email (Resend)', configured: resendReady, critical: true, description: 'Sin esto no salen los emails propios: bienvenida, pedidos, recordatorios y campañas.' },
