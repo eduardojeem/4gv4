@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: vi.fn() }))
 
-import { EMAIL_TEMPLATE_REGISTRY, normalizeMessageState } from '@/lib/superadmin/communications'
+import { EMAIL_TEMPLATE_REGISTRY, loadReadStats, normalizeMessageState } from '@/lib/superadmin/communications'
 import { asuncionInputToIso, isoToAsuncionInput } from '@/lib/superadmin/asuncion-time'
 import { validateGlobalNotification } from '@/lib/superadmin/notification-validation'
 
@@ -98,5 +98,31 @@ describe('catálogo de plantillas de email', () => {
     const listed = new Set(EMAIL_TEMPLATE_REGISTRY.map((t) => t.trigger.replace(/\(\)$/, '')))
     expect(exported.size).toBeGreaterThan(0)
     expect([...exported].filter((name) => !listed.has(name))).toEqual([])
+  })
+})
+
+describe('loadReadStats', () => {
+  it('usa el conteo de la base', async () => {
+    const admin = { rpc: vi.fn(async () => ({ data: [{ notification_id: 'a', read_count: '3', dismissed_count: 1 }], error: null })), from: vi.fn() }
+    const stats = await loadReadStats(admin as never, [])
+    expect(stats.get('a')).toEqual({ read: 3, dismissed: 1 })
+    expect(admin.from).not.toHaveBeenCalled()
+  })
+
+  it('sin la migración, cuenta las filas como antes', async () => {
+    const rows = [
+      { notification_id: 'a', dismissed: false },
+      { notification_id: 'a', dismissed: true },
+      { notification_id: 'b', dismissed: false },
+    ]
+    const admin = {
+      rpc: vi.fn(async () => ({ data: null, error: { message: 'function not found' } })),
+      from: () => ({ select: () => ({ range: async (from: number) => ({ data: from === 0 ? rows : [], error: null }) }) }),
+    }
+    const errors: string[] = []
+    const stats = await loadReadStats(admin as never, errors)
+    expect(stats.get('a')).toEqual({ read: 2, dismissed: 1 })
+    expect(stats.get('b')).toEqual({ read: 1, dismissed: 0 })
+    expect(errors).toEqual([])
   })
 })

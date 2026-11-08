@@ -41,8 +41,8 @@ export const GET = withTenantAuth({}, async (request: NextRequest, { user, organ
   // Soporte legacy/global para avisos del SuperAdmin
   if (scope === 'global') {
     try {
+      // Los programados los publica pg_cron cada minuto: leer la bandeja no escribe en la base.
       const admin = createAdminSupabase()
-      await admin.rpc('dispatch_due_global_notifications')
 
       const { data: notifications, error } = await admin
         .from('global_notifications')

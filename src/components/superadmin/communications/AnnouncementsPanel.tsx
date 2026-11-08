@@ -423,7 +423,7 @@ export function AnnouncementsPanel({
                   {form.mode === 'schedule' && (
                     <div className="space-y-1">
                       <Input type="datetime-local" value={form.scheduledAt} min={isoToAsuncionInput(new Date().toISOString())} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} aria-label="Fecha y hora de publicación (hora de Paraguay)" />
-                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Hora de Paraguay. Se publica cuando llega la hora, la primera vez que una tienda abre su panel.</p>
+                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Hora de Paraguay. Se publica solo cuando llega la hora (se revisa cada minuto).</p>
                     </div>
                   )}
                 </fieldset>

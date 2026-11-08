@@ -125,17 +125,49 @@ export const EMAIL_TEMPLATE_REGISTRY = TEMPLATE_REGISTRY
 
 const configured = (key: string) => Boolean(process.env[key]?.trim())
 
+type ReadStats = Map<string, { read: number; dismissed: number }>
+type AdminClient = ReturnType<typeof createAdminSupabase>
+
+/**
+ * Lecturas y descartes por aviso, contados en la base (global_notification_read_stats).
+ * Si la migración todavía no está aplicada, cuenta en el servidor como antes.
+ */
+export async function loadReadStats(admin: AdminClient, loadErrors: string[]): Promise<ReadStats> {
+  const stats: ReadStats = new Map()
+  const { data, error } = await admin.rpc('global_notification_read_stats' as never)
+  if (!error) {
+    for (const row of (data ?? []) as Array<{ notification_id: string; read_count: number | string; dismissed_count: number | string }>) {
+      stats.set(row.notification_id, { read: Number(row.read_count) || 0, dismissed: Number(row.dismissed_count) || 0 })
+    }
+    return stats
+  }
+
+  const rows = await fetchAllRows<{ notification_id: string; dismissed: boolean }>((from, to) =>
+    admin.from('global_notification_reads').select('notification_id, dismissed').range(from, to) as never,
+  ).catch((fallbackError: Error) => {
+    loadErrors.push(`Lecturas: ${fallbackError.message}`)
+    return []
+  })
+  for (const r of rows) {
+    const stat = stats.get(r.notification_id) ?? { read: 0, dismissed: 0 }
+    stat.read += 1
+    if (r.dismissed) stat.dismissed += 1
+    stats.set(r.notification_id, stat)
+  }
+  return stats
+}
+
 export async function getCommunicationsData(): Promise<CommunicationsData> {
   const admin = createAdminSupabase()
   const loadErrors: string[] = []
 
-  // Mismo paso que hace la bandeja de las tiendas (/api/notifications): publica
-  // las programadas cuya hora ya llegó, para que acá se vea el estado real.
+  // pg_cron publica las programadas cada minuto; acá se repite por si la hora
+  // acaba de llegar o pg_cron no está disponible, para ver el estado real.
   const dispatch = await admin.rpc('dispatch_due_global_notifications')
   if (dispatch.error) loadErrors.push(`No se pudieron publicar las programadas vencidas: ${dispatch.error.message}`)
 
   const since7d = new Date(Date.now() - 7 * 86_400_000).toISOString()
-  const [announcementsResult, organizationsResult, messagesResult, failedResult, totalResult, reads] = await Promise.all([
+  const [announcementsResult, organizationsResult, messagesResult, failedResult, totalResult, readStats] = await Promise.all([
     admin
       .from('global_notifications')
       .select('id, title, body, type, target, target_org_ids, status, scheduled_at, sent_at, created_at')
@@ -153,12 +185,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
       .eq('status', 'failed')
       .gte('created_at', since7d),
     admin.from('communication_messages').select('id', { count: 'exact', head: true }),
-    fetchAllRows<{ notification_id: string; dismissed: boolean }>((from, to) =>
-      admin.from('global_notification_reads').select('notification_id, dismissed').range(from, to) as never,
-    ).catch((error: Error) => {
-      loadErrors.push(`Lecturas: ${error.message}`)
-      return []
-    }),
+    loadReadStats(admin, loadErrors),
   ])
 
   for (const [label, result] of [
@@ -168,14 +195,6 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     ['Total de mensajes', totalResult],
   ] as const) {
     if (result.error) loadErrors.push(`${label}: ${result.error.message}`)
-  }
-
-  const readStats = new Map<string, { read: number; dismissed: number }>()
-  for (const r of reads) {
-    const stat = readStats.get(r.notification_id) ?? { read: 0, dismissed: 0 }
-    stat.read += 1
-    if (r.dismissed) stat.dismissed += 1
-    readStats.set(r.notification_id, stat)
   }
 
   const organizations = ((organizationsResult.data ?? []) as Array<{ id: string; name: string }>)
