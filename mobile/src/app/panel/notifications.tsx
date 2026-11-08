@@ -14,10 +14,19 @@ import { NOTIFICATION_GROUPS, notificationGroup, notificationDateSection, relati
 
 type Item = { id: string; organizationId: string; branchId: string | null; type: string; title: string; body: string; resourceType: string | null; resourceId: string | null; readAt: string | null; createdAt: string }
 type Feed = { items: Item[]; nextCursor: string | null }
+/** Aviso que la plataforma publica para todas las tiendas o para esta. */
+type Announcement = { id: string; title: string; body: string; type: 'info' | 'warning' | 'success' | 'danger'; read: boolean; timestamp: string }
+const ANNOUNCEMENT_COLORS: Record<Announcement['type'], { light: string; dark: string; label: string }> = {
+  info: { light: '#1D4ED8', dark: '#93C5FD', label: 'Información' },
+  success: { light: '#047857', dark: '#6EE7B7', label: 'Novedad' },
+  warning: { light: '#B45309', dark: '#FCD34D', label: 'Aviso' },
+  danger: { light: '#9F1239', dark: '#FDA4AF', label: 'Urgente' },
+}
 export default function NotificationsScreen() {
   const colors = usePalette()
   const { refreshUnreadCount, feedVersion, promptForPermission, permissionStatus, unreadCount } = useNotifications()
   const [items, setItems] = useState<Item[]>([])
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [busy, setBusy] = useState(true)
   const [more, setMore] = useState(false)
@@ -32,16 +41,21 @@ export default function NotificationsScreen() {
     const scope = getPrivateCacheContext()
     setBusy(true)
     try {
-      const result = await apiFetch<Feed>('/api/notifications?limit=20')
+      const [result, global] = await Promise.all([
+        apiFetch<Feed>('/api/notifications?limit=20'),
+        // Los avisos de la plataforma no son críticos: si fallan, se muestra la bandeja igual.
+        apiFetch<{ data?: Announcement[] }>('/api/notifications?scope=global').catch(() => null),
+      ])
       if (generation !== request.current || scope.epoch !== getPrivateCacheContext().epoch) return
       setItems(result.items); setCursor(result.nextCursor); setError(null)
+      if (global) setAnnouncements(global.data ?? [])
       void refreshUnreadCount()
     } catch { if (generation === request.current) setError('No pudimos cargar tus avisos. Revisá tu conexión y reintentá.') }
     finally { if (generation === request.current) setBusy(false) }
   }, [refreshUnreadCount])
   useFocusEffect(useCallback(() => { void load(); return () => { request.current++ } }, [load]))
   useEffect(() => { if (feedVersion) queueMicrotask(() => void load()) }, [load, feedVersion])
-  useEffect(() => subscribePrivateCacheContext(() => { request.current++; setItems([]); setCursor(null); void load() }), [load])
+  useEffect(() => subscribePrivateCacheContext(() => { request.current++; setItems([]); setAnnouncements([]); setCursor(null); void load() }), [load])
   useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active') void load() }); return () => sub.remove() }, [load])
   const loadMore = async () => {
     if (!cursor || busy || loadingMore.current) return
@@ -60,13 +74,28 @@ export default function NotificationsScreen() {
     const generation = request.current
     try {
       await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify(item ? { notificationId: item.id } : { all: true }) })
+      // «Marcar todas» también alcanza a los avisos de la plataforma.
+      if (!item && announcements.some(row => !row.read)) await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify({ all: true, scope: 'global' }) })
       if (generation !== request.current) return false
       setItems(prev => prev.map(row => !item || row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row))
+      if (!item) setAnnouncements(prev => prev.map(row => ({ ...row, read: true })))
       void refreshUnreadCount(); void Haptics.selectionAsync().catch(() => undefined)
       return true
     } catch { Alert.alert('No se guardó la lectura', 'Revisá tu conexión y volvé a intentar.'); return false }
     finally { readLock.current = false; setReading(false) }
   }
+  const updateAnnouncement = async (announcement: Announcement, dismiss: boolean) => {
+    const previous = announcements
+    setAnnouncements(prev => dismiss ? prev.filter(row => row.id !== announcement.id) : prev.map(row => row.id === announcement.id ? { ...row, read: true } : row))
+    try {
+      await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify({ id: announcement.id, scope: 'global', dismiss }) })
+      void refreshUnreadCount()
+    } catch {
+      setAnnouncements(previous)
+      Alert.alert(dismiss ? 'No se pudo quitar el aviso' : 'No se guardó la lectura', 'Revisá tu conexión y volvé a intentar.')
+    }
+  }
+  const visibleAnnouncements = filter === 'all' ? announcements : filter === 'unread' ? announcements.filter(row => !row.read) : []
   const sections = useMemo(() => {
     const grouped = new Map<string, Item[]>()
     for (const item of items.filter(row => filter === 'all' || (filter === 'unread' ? !row.readAt : notificationGroup(row.type) === filter))) {
@@ -84,8 +113,28 @@ export default function NotificationsScreen() {
     <View style={styles.toolbar}><Text style={{ color: colors.muted }}>Tus avisos del negocio</Text><Pressable accessibilityRole="button" disabled={reading || unreadCount === 0} onPress={() => void markRead()} style={styles.button}><Text style={{ color: linkColor }}>{reading ? 'Guardando…' : 'Marcar todas leídas'}</Text></Pressable></View>
     {error && <View accessibilityRole="alert" style={styles.message}><Text style={{ color: colors.text }}>{error}</Text><NotificationButton color={linkColor} label="Reintentar" action={() => void load()} /></View>}
     {busy && items.length === 0 ? <ActivityIndicator accessibilityLabel="Cargando notificaciones" style={{ margin: 40 }} color={linkColor} /> : <SectionList sections={sections} keyExtractor={item => item.id} stickySectionHeadersEnabled={false} refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={linkColor} />} onEndReached={() => void loadMore()} onEndReachedThreshold={0.3}
+      ListHeaderComponent={visibleAnnouncements.length > 0 ? <View>
+        <Text accessibilityRole="header" style={[styles.section, { color: colors.muted }]}>Avisos de la plataforma</Text>
+        {visibleAnnouncements.map(announcement => {
+          const meta = ANNOUNCEMENT_COLORS[announcement.type] ?? ANNOUNCEMENT_COLORS.info
+          const color = colors.text === '#F1F5F9' ? meta.dark : meta.light
+          return <View key={announcement.id} style={[styles.row, { backgroundColor: announcement.read ? colors.background : colors.card, borderColor: colors.border }]}>
+            <View style={[styles.icon, { backgroundColor: color + '15' }]}><Ionicons name="megaphone-outline" size={22} color={color} /></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${announcement.read ? 'Leído' : 'No leído'}. ${meta.label}. ${announcement.title}. ${announcement.body}. ${relativeNotificationTime(announcement.timestamp)}.${announcement.read ? '' : ' Marcar como leído.'}`} onPress={() => { if (!announcement.read) void updateAnnouncement(announcement, false) }} style={{ flex: 1 }}>
+              <Text style={{ color, fontSize: 12, fontWeight: '700' }}>{meta.label}</Text>
+              <Text style={{ color: colors.text, fontWeight: announcement.read ? '500' : '700', fontSize: 16, marginVertical: 4 }}>{announcement.title}</Text>
+              <Text style={{ color: colors.text, lineHeight: 21 }}>{announcement.body}</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>{relativeNotificationTime(announcement.timestamp)}</Text>
+            </Pressable>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              {!announcement.read && <View style={[styles.dot, { backgroundColor: linkColor }]} />}
+              <Pressable accessibilityRole="button" accessibilityLabel={`Quitar aviso: ${announcement.title}`} onPress={() => void updateAnnouncement(announcement, true)} style={styles.button}><Ionicons name="close" size={20} color={colors.muted} /></Pressable>
+            </View>
+          </View>
+        })}
+      </View> : null}
       renderSectionHeader={({ section }) => <Text accessibilityRole="header" style={[styles.section, { color: colors.muted }]}>{section.title}</Text>}
-      ListEmptyComponent={!error ? <View style={styles.empty}><Ionicons name="notifications-outline" size={42} color={colors.muted} /><Text style={[styles.title, { color: colors.text }]}>{filter === 'unread' ? 'Estás al día' : 'Sin avisos por acá'}</Text><Text style={{ color: colors.muted, textAlign: 'center' }}>Acá vas a encontrar las novedades de tu negocio.</Text><NotificationButton color={linkColor} label="Elegí qué avisos recibir" action={() => router.push('/panel/settings/notifications')} />{permissionStatus !== 'granted' && <NotificationButton color={linkColor} label="Activar notificaciones" action={() => void promptForPermission()} />}</View> : null}
+      ListEmptyComponent={!error && visibleAnnouncements.length === 0 ? <View style={styles.empty}><Ionicons name="notifications-outline" size={42} color={colors.muted} /><Text style={[styles.title, { color: colors.text }]}>{filter === 'unread' ? 'Estás al día' : 'Sin avisos por acá'}</Text><Text style={{ color: colors.muted, textAlign: 'center' }}>Acá vas a encontrar las novedades de tu negocio.</Text><NotificationButton color={linkColor} label="Elegí qué avisos recibir" action={() => router.push('/panel/settings/notifications')} />{permissionStatus !== 'granted' && <NotificationButton color={linkColor} label="Activar notificaciones" action={() => void promptForPermission()} />}</View> : null}
       ListFooterComponent={more ? <ActivityIndicator accessibilityLabel="Cargando más avisos" /> : cursor ? <NotificationButton color={linkColor} label="Cargar más" action={() => void loadMore()} /> : null}
       renderItem={({ item }) => {
         const group = NOTIFICATION_GROUPS[notificationGroup(item.type)]

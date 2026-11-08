@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { loadGlobalAnnouncements } from '@/lib/notifications/global-announcements'
 
 interface NotificationDbRow {
   id: string
@@ -18,17 +19,6 @@ interface NotificationDbRow {
   created_at: string
 }
 
-type GlobalNotificationRow = {
-  id: string
-  title: string
-  body: string
-  type: 'info' | 'warning' | 'success' | 'danger'
-  target: 'all' | 'specific'
-  target_org_ids: string[] | null
-  sent_at: string | null
-  created_at: string
-}
-
 /**
  * GET /api/notifications
  * Bandeja de notificaciones operativas con soporte para paginación por cursor.
@@ -42,51 +32,12 @@ export const GET = withTenantAuth({}, async (request: NextRequest, { user, organ
   if (scope === 'global') {
     try {
       // Los programados los publica pg_cron cada minuto: leer la bandeja no escribe en la base.
-      const admin = createAdminSupabase()
-
-      const { data: notifications, error } = await admin
-        .from('global_notifications')
-        .select('id, title, body, type, target, target_org_ids, sent_at, created_at')
-        .eq('status', 'sent')
-        .or(`target.eq.all,target_org_ids.cs.{${organization.id}}`)
-        .order('sent_at', { ascending: false, nullsFirst: false })
-        .limit(50)
-
+      const { items, error } = await loadGlobalAnnouncements(createAdminSupabase(), organization.id, user.id)
       if (error) {
         logger.error('Failed to load global notifications', { error, orgId: organization.id })
         return NextResponse.json({ error: 'No se pudieron cargar las notificaciones.' }, { status: 500 })
       }
-
-      const rows = (notifications ?? []) as GlobalNotificationRow[]
-      if (rows.length === 0) {
-        return NextResponse.json({ data: [] })
-      }
-
-      const { data: reads } = await admin
-        .from('global_notification_reads')
-        .select('notification_id, dismissed')
-        .eq('user_id', user.id)
-        .in('notification_id', rows.map(r => r.id))
-
-      const readMap = new Map<string, boolean>(
-        (reads ?? []).map(r => [r.notification_id as string, true]),
-      )
-      const dismissedSet = new Set<string>(
-        (reads ?? []).filter(r => r.dismissed).map(r => r.notification_id as string),
-      )
-
-      const data = rows
-        .filter(r => !dismissedSet.has(r.id))
-        .map(r => ({
-          id: r.id,
-          title: r.title,
-          body: r.body,
-          type: r.type,
-          read: readMap.has(r.id),
-          timestamp: r.sent_at ?? r.created_at,
-        }))
-
-      return NextResponse.json({ data })
+      return NextResponse.json({ data: items })
     } catch (error) {
       logger.error('Global notifications GET error', { error })
       return NextResponse.json({ error: 'Error interno.' }, { status: 500 })
