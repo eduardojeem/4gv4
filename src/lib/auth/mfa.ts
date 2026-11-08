@@ -61,6 +61,20 @@ export function isMfaPending(user: UserWithFactors, aal: AssuranceLevel | null):
   return hasVerifiedFactor(user) && aal !== 'aal2'
 }
 
+/**
+ * Superadmin: la verificación en dos pasos es obligatoria (sesión `aal2`).
+ * Sólo se apaga con `SUPERADMIN_MFA_REQUIRED=false`, como salida de emergencia
+ * si el proveedor de 2FA falla; cualquier otro valor (o ninguno) la exige.
+ */
+export function isSuperAdminMfaEnforced(value: string | undefined = process.env.SUPERADMIN_MFA_REQUIRED): boolean {
+  return value?.trim().toLowerCase() !== 'false'
+}
+
+/** El superadmin todavía no pasó el segundo paso en esta sesión. */
+export function needsSuperAdminMfa(aal: AssuranceLevel | null, enforced = isSuperAdminMfaEnforced()): boolean {
+  return enforced && aal !== 'aal2'
+}
+
 export function isAdminMfaRole(organizationRole: string | null | undefined): boolean {
   return Boolean(organizationRole && ADMIN_MFA_ROLES.has(organizationRole))
 }
