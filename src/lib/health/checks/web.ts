@@ -47,7 +47,7 @@ function isHttpFailure(response: ProbeResponse): boolean {
 /** Valores de variables privadas: se usan solo para buscar fugas, nunca salen de esta función. */
 const PRIVATE_KEYS = [
   'SUPABASE_SERVICE_ROLE_KEY',
-  'PAGOPAR_PRIVATE_KEY',
+  'BANCARD_PRIVATE_KEY',
   'TURNSTILE_SECRET_KEY',
   'UPSTASH_REDIS_REST_TOKEN',
   'RESEND_API_KEY',

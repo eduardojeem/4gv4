@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, CalendarOff, CheckCircle2, Globe, Loader2, Trash2 } from 'lucide-react'
 import type { AgendaProfessional } from '@/lib/agenda/agenda-server'
@@ -64,6 +64,8 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
   const [blocks, setBlocks] = useState<Block[]>([])
   const [publicMessageAvailable, setPublicMessageAvailable] = useState(true)
   const [check, setCheck] = useState<Check | null>(null)
+  const [retryCheck, setRetryCheck] = useState(0)
+  const saveLock = useRef(false)
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -107,7 +109,7 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
       }
     }, 400)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [interval, key, storeWide, who])
+  }, [interval, key, storeWide, who, retryCheck])
 
   const pickReason = (value: string) => {
     setReason(value)
@@ -117,7 +119,8 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
   const quick = (from: string, to: string) => { setAllDay(true); setFromDate(from); setToDate(to) }
 
   const save = async () => {
-    if ('error' in interval || currentCheck?.state !== 'ok' || noticeProblem) return
+    if (saveLock.current || 'error' in interval || currentCheck?.state !== 'ok' || noticeProblem) return
+    saveLock.current = true
     setSaving(true)
     try {
       const response = await fetch('/api/agenda/time-off', {
@@ -136,6 +139,7 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
         toast.error(body.error || 'No se pudo guardar la ausencia.')
         // Pudo haber aparecido un turno entre la revisión y el guardado.
         setCheck(null)
+        setRetryCheck(value => value + 1)
         return
       }
       if (body.publicMessageSaved === false) toast.warning('La ausencia se guardó, pero no el aviso en la web.', { description: 'Probá de nuevo desde la lista.' })
@@ -148,6 +152,7 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
     } catch {
       toast.error('No se pudo guardar la ausencia. Revisá tu conexión.')
     } finally {
+      saveLock.current = false
       setSaving(false)
     }
   }
@@ -177,7 +182,7 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
     <section className="space-y-6">
       {!hideHeading && <h2 className="text-base font-semibold">Pausas y ausencias</h2>}
 
-      <div className="space-y-5 rounded-xl border p-4">
+      <fieldset disabled={saving} className="space-y-5 rounded-xl border p-4">
         <div className="space-y-1.5">
           <Label htmlFor="time-off-who">A quién afecta</Label>
           <select id="time-off-who" value={who} onChange={(event) => { setWho(event.target.value); if (event.target.value !== 'all') setAnnounce(false) }} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
@@ -262,7 +267,7 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
         <div role="status" aria-live="polite" className="text-sm">
           {currentCheck?.state === 'checking' && <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Revisando turnos…</p>}
           {currentCheck?.state === 'ok' && <p className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" />No hay turnos en ese período.</p>}
-          {currentCheck?.state === 'error' && <p className="text-destructive">{currentCheck.message}</p>}
+          {currentCheck?.state === 'error' && <div className="space-y-2"><p className="text-destructive">{currentCheck.message}</p><Button type="button" variant="outline" onClick={() => setRetryCheck(value => value + 1)}>Revisar turnos de nuevo</Button></div>}
           {currentCheck?.state === 'conflicts' && (
             <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
               <p className="flex items-center gap-2 font-medium"><AlertTriangle className="h-4 w-4 text-amber-600" />{currentCheck.total} {currentCheck.total === 1 ? 'turno choca' : 'turnos chocan'} con la ausencia. Movelos o cancelalos antes de guardarla.</p>
@@ -280,12 +285,12 @@ export function TimeOffEditor({ professionals, timeZone, hideHeading = false }: 
             Guardar ausencia
           </Button>
         </div>
-      </div>
+      </fieldset>
 
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">Próximas ausencias</h3>
-        {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
-        {blocks.length === 0 ? (
+        {loadError && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{loadError}</p><Button variant="outline" onClick={() => void load()}>Reintentar lista</Button></div>}
+        {!loadError && blocks.length === 0 ? (
           <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">No hay ausencias próximas.</p>
         ) : (
           <ul className="divide-y rounded-xl border">

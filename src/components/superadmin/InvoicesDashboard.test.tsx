@@ -20,7 +20,7 @@ const pago = (extra: Partial<InvoiceRow> = {}): InvoiceRow => ({
   currency: 'PYG',
   status: 'paid',
   paymentMethod: 'card',
-  provider: 'pagopar',
+  provider: 'bancard',
   providerPaymentId: null,
   externalReference: null,
   receiptUrl: null,
@@ -43,7 +43,7 @@ describe('Pagos', () => {
     const { rerender } = render(<InvoicesDashboard rows={[pago()]} referenceTime="2026-09-29T12:00:00Z" />)
     expect(screen.queryByText('Distribución por proveedor')).not.toBeInTheDocument()
 
-    rerender(<InvoicesDashboard rows={[pago(), pago({ id: 'p2', provider: 'bancard' })]} referenceTime="2026-09-29T12:00:00Z" />)
+    rerender(<InvoicesDashboard rows={[pago(), pago({ id: 'p2', provider: 'stripe' })]} referenceTime="2026-09-29T12:00:00Z" />)
     expect(screen.getByText('Distribución por proveedor')).toBeInTheDocument()
   })
 })

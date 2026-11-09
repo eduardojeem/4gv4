@@ -64,7 +64,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
   const displayProducts = (currentOrg.featured_products || []).slice(0, 4)
 
   return (
-    <section className={cn('relative py-12 sm:py-16 border-b border-border/70 overflow-hidden', className)}>
+    <section suppressHydrationWarning className={cn('relative py-12 sm:py-16 border-b border-border/70 overflow-hidden', className)}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* ── Encabezado de Sección ── */}
@@ -121,6 +121,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                 <button
                   key={org.id}
                   type="button"
+                  suppressHydrationWarning
                   onClick={() => setSelectedOrgIndex(index)}
                   className={cn(
                     'group flex items-center gap-2.5 rounded-2xl border px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 active:scale-95 shrink-0',
@@ -344,6 +345,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                       {/* Imagen con zoom sutil */}
                       <div
                         role="button"
+                        suppressHydrationWarning
                         tabIndex={0}
                         onClick={() => setSelectedProduct(asMarketplace)}
                         onKeyDown={(e) => {

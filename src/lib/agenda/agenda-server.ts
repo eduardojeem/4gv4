@@ -42,6 +42,11 @@ export function professionalsForService<T extends Pick<AgendaProfessional, 'serv
 }
 
 export type AgendaService = {
+  /** Portada: la primera foto del producto del catálogo. */
+  image_url?: string | null
+  images?: string[]
+  /** Se muestra en la página web (visibility = public). */
+  catalog_visible?: boolean
   buffer_minutes?: number
   product_id: string
   name: string
@@ -123,7 +128,7 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
     })(),
     client
       .from('products')
-      .select('id, name, sale_price, hide_price, is_active, visibility')
+      .select('id, name, sale_price, hide_price, is_active, visibility, image_url, images')
       .eq('organization_id', organizationId)
       .eq('unit_measure', 'servicio')
       .eq('is_active', true)
@@ -148,11 +153,14 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
   }
 
   const durationById = new Map(((durations.data ?? []) as Array<{ product_id: string; duration_minutes: number; buffer_minutes?: number; online: boolean }>).map((row) => [row.product_id, row]))
-  const services: AgendaService[] = ((products.data ?? []) as Array<{ id: string; name: string; sale_price: number; hide_price?: boolean | null; visibility?: string | null }>)
+  const services: AgendaService[] = ((products.data ?? []) as Array<{ id: string; name: string; sale_price: number; hide_price?: boolean | null; visibility?: string | null; image_url?: string | null; images?: string[] | null }>)
     .map((product) => {
       const row = durationById.get(product.id)
       return {
         product_id: product.id,
+        image_url: product.images?.[0] || product.image_url || null,
+        images: Array.isArray(product.images) ? product.images.filter(Boolean) : product.image_url ? [product.image_url] : [],
+        catalog_visible: (product.visibility ?? 'public') === 'public',
         name: product.name,
         price: Number(product.sale_price) || 0,
         hide_price: product.hide_price === true,

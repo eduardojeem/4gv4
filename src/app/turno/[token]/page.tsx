@@ -11,6 +11,7 @@ import { DEFAULT_TIMEZONE, utcToZoned, WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { whatsappNumber } from '@/lib/quotes/quote-math'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { siteUrl } from '@/lib/site-url'
+import { AppointmentStoreNavigation } from '@/components/public/agenda/AppointmentStoreNavigation'
 import { ManageAppointment } from './ManageAppointment'
 import { publicAppointmentPrice } from '@/lib/agenda/public-appointment-price'
 
@@ -112,6 +113,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
       style={customBrand ? ({ '--brand-primary': customBrand } as CSSProperties) : undefined}
     >
       <div className="mx-auto max-w-md space-y-4">
+        <AppointmentStoreNavigation slug={organization.slug} name={storeName} />
         <header className="flex items-center gap-3">
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -211,7 +213,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
             </a>
           )}
           {!active && storeHref && (
-            <Link href={storeHref} className="flex items-center justify-center gap-2 rounded-xl border bg-background px-4 py-2.5 text-sm font-semibold hover:bg-muted">
+            <Link href={`/${organization.slug}/reservas`} className="flex items-center justify-center gap-2 rounded-xl border bg-background px-4 py-2.5 text-sm font-semibold hover:bg-muted">
               <CalendarCheck2 aria-hidden="true" className="h-4 w-4" />
               Reservar otro turno
             </Link>

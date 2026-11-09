@@ -39,7 +39,8 @@ export function PublicFooter({
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   // En la plantilla «Servicios» el pie lleva a las secciones del negocio, no a la tienda.
   const style = useStorefrontStyle()
-  const isServices = style === 'services'
+  const isBarber = style === 'barber'
+  const isServices = style === 'services' || isBarber
   const isBeauty = style === 'beauty'
   const galleryVisible = Boolean(effectiveSettings?.gallery_section?.enabled && effectiveSettings.gallery_section.images?.length)
 
@@ -103,8 +104,8 @@ export function PublicFooter({
               </li>
               {isServices ? (
                 <>
-                  <li><Link href={`${tenantPrefix}/inicio#servicios`} className="text-muted-foreground hover:text-foreground transition-colors">Servicios y precios</Link></li>
-                  <li><Link href={`${tenantPrefix}/inicio#reservar`} className="text-muted-foreground hover:text-foreground transition-colors">Reservar turno</Link></li>
+                  <li><Link href={`${tenantPrefix}/inicio#${isBarber ? 'rituales' : 'servicios'}`} className="text-muted-foreground hover:text-foreground transition-colors">Servicios y precios</Link></li>
+                  <li><Link href={`${tenantPrefix}/reservas`} className="text-muted-foreground hover:text-foreground transition-colors">Reservar turno</Link></li>
                   {galleryVisible && <li><Link href={`${tenantPrefix}/inicio#galeria`} className="text-muted-foreground hover:text-foreground transition-colors">Galería de trabajos</Link></li>}
                   <li><Link href={`${tenantPrefix}/inicio#resenas`} className="text-muted-foreground hover:text-foreground transition-colors">Opiniones</Link></li>
                 </>
@@ -154,7 +155,7 @@ export function PublicFooter({
 
               <li>
                 <Link
-                  href={`${tenantPrefix}/inicio#contacto`}
+                  href={`${tenantPrefix}/inicio#${isBarber ? 'sedes' : 'contacto'}`}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Contacto y Ubicación

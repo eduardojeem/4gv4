@@ -81,3 +81,14 @@ describe('usePOSSearch: productos y servicios por separado', () => {
     expect(result.current.otherViewMatches).toBe(1)
   })
 })
+
+describe('service-only businesses', () => {
+ it('opens services when the catalog contains no active products, even after async loading', () => {
+  const { result, rerender } = renderHook(({ products }) => usePOSSearch({ products }), { initialProps: { products: [] as Product[] } })
+  rerender({ products: catalog.filter(isPOSService) })
+  expect(result.current.catalogView).toBe('services')
+  expect(result.current.filteredProducts).toHaveLength(2)
+  act(() => result.current.setCatalogView('products'))
+  expect(result.current.catalogView).toBe('products')
+ })
+})

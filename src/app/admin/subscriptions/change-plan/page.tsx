@@ -26,9 +26,9 @@ import {
 } from '@/components/ui/dialog'
 import { formatDate } from '@/lib/saas/subscription-ui'
 import {
-  PagoparPaymentMethodSelector,
+  SubscriptionPaymentMethodSelector,
   type SubscriptionPaymentMethod,
-} from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
+} from '@/components/admin/subscriptions/SubscriptionPaymentMethodSelector'
 import { cn } from '@/lib/utils'
 import type { CommercialPlan, OrganizationUsage } from '@/lib/saas/subscription-service'
 import type { Proration } from '@/lib/saas/subscription-proration'
@@ -37,7 +37,7 @@ type PageData = {
   currentPlan: CommercialPlan
   usage: OrganizationUsage
   plans: CommercialPlan[]
-  paymentAvailability?: { pagopar_card: boolean; pagopar_qr: boolean; stripe: boolean; transfer: boolean }
+  paymentAvailability?: { bancard_card: boolean; stripe: boolean; transfer: boolean }
   stripeEnabled?: boolean
   billingMissingFields?: string[]
   /** Vencimiento del mes ya pagado, si sigue vigente. */
@@ -195,12 +195,11 @@ function PlanCard({
 }
 
 /** Las formas que redirigen a una pasarela piden los datos de facturación. */
-const CHECKOUT_METHODS: SubscriptionPaymentMethod[] = ['card', 'qr', 'stripe']
+const CHECKOUT_METHODS: SubscriptionPaymentMethod[] = ['card', 'stripe']
 
 function confirmLabel(target: CommercialPlan, method: SubscriptionPaymentMethod, scheduled: boolean) {
   if (target.price_monthly <= 0) return scheduled ? 'Programar el cambio' : 'Cambiar a gratuito'
   if (method === 'transfer') return 'Generar solicitud de transferencia'
-  if (method === 'qr') return 'Pagar con QR'
   if (method === 'stripe') return 'Pagar con Stripe'
   return 'Pagar con tarjeta'
 }
@@ -224,12 +223,11 @@ function PlanChangeDialog({
 }) {
   const missing = data.billingMissingFields ?? []
   // La base acepta transferencias para renovar el plan actual o para salir de
-  // Gratuito; entre planes pagos el cambio va por tarjeta o QR.
+  // Gratuito; entre planes pagos el cambio va por tarjeta.
   const transferAllowed = data.currentPlan.price_monthly <= 0 && (data.paymentAvailability?.transfer ?? true)
-  const cardEnabled = data.paymentAvailability?.pagopar_card ?? true
-  const qrEnabled = data.paymentAvailability?.pagopar_qr ?? true
+  const cardEnabled = data.paymentAvailability?.bancard_card ?? true
   const stripeEnabled = data.paymentAvailability?.stripe ?? data.stripeEnabled === true
-  const firstMethod = cardEnabled ? 'card' : qrEnabled ? 'qr' : stripeEnabled ? 'stripe' : transferAllowed ? 'transfer' : null
+  const firstMethod = cardEnabled ? 'card' : stripeEnabled ? 'stripe' : transferAllowed ? 'transfer' : null
   const [method, setMethod] = useState<SubscriptionPaymentMethod | null>(
     missing.length > 0 && transferAllowed ? 'transfer' : firstMethod,
   )
@@ -292,17 +290,16 @@ function PlanChangeDialog({
         {isPaidTarget && (
           <div className="space-y-2">
             <p className="text-sm font-semibold">Forma de pago</p>
-            <PagoparPaymentMethodSelector
+            <SubscriptionPaymentMethodSelector
               value={method}
               onChange={setMethod}
               disabled={busy}
               disabledMethods={missing.length > 0 ? CHECKOUT_METHODS : []}
               includeCard={cardEnabled}
-              includeQr={qrEnabled}
               includeStripe={stripeEnabled}
               includeTransfer={transferAllowed}
             />
-            {missing.length > 0 && (cardEnabled || qrEnabled || stripeEnabled) && (
+            {missing.length > 0 && (cardEnabled || stripeEnabled) && (
               <p className="text-xs text-amber-700 dark:text-amber-300">
                 Para pagar en línea completá tus datos de facturación (falta: {missing.join(', ')}).{' '}
                 <Link href="/admin/subscriptions#billing-form" className="font-semibold underline underline-offset-2">

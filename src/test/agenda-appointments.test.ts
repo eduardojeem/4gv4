@@ -80,7 +80,7 @@ describe('turno → POS', () => {
       clearCart: vi.fn(),
     }))
 
-    await waitFor(() => expect(hook.result.current.activeQuote).toEqual({ kind: 'appointment', id: 'a1', number: 7, code: 'T-00007' }))
+    await waitFor(() => expect(hook.result.current.activeQuote).toEqual({ kind: 'appointment', id: 'a1', number: 7, code: 'T-00007', customer: { id: 'c1', name: 'Cliente de la reserva', phone: null } }))
     expect(fetchMock).toHaveBeenCalledWith('/api/agenda/a1', expect.anything())
     expect(calls.addProduct).toHaveBeenCalledWith(expect.objectContaining({appointmentId:'a1',sale_price:70000,price:70000}), 1)
     expect(calls.setSelectedCustomer).toHaveBeenCalledWith('c1')

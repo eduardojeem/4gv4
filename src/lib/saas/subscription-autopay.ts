@@ -5,35 +5,30 @@ import { PaymentControlError } from '@/lib/payments/control-contract'
 import { sendEmail } from '@/lib/email/resend'
 import { renderAutopayFailedEmail } from '@/lib/email/templates'
 import {
-  createPagoparOrder,
-  getPagoparAmountInPyg,
-  queryPagoparOrder,
-} from '@/lib/payments/pagopar'
-import {
-  addPagoparCustomer,
-  confirmPagoparCards,
-  deletePagoparCard,
-  getUpayCardFormUrl,
-  isPagoparRecurringEnabled,
-  listPagoparCards,
-  payPagoparOrderWithCard,
-  PagoparRecurringError,
-  pickPagoparCard,
-  startPagoparCardForm,
-  type PagoparCardProvider,
-} from '@/lib/payments/pagopar-recurring'
+  BancardError,
+  chargeBancardCard,
+  deleteBancardCard,
+  getBancardAmountInPyg,
+  isBancardConfirmationApproved,
+  isBancardRecurringEnabled,
+  listBancardCards,
+  pickBancardCard,
+  queryBancardPayment,
+  startBancardCardRegistration,
+} from '@/lib/payments/bancard'
 import { getCurrentOrganizationSubscription } from '@/lib/saas/subscription-service'
+import { AUTOPAY_PAYMENT_METHOD, nextBancardShopProcessId } from '@/lib/saas/subscription-checkout'
+import { siteUrl } from '@/lib/site-url'
 
 /**
- * Débito automático de la suscripción con una tarjeta guardada en uPay.
+ * Débito automático de la suscripción con una tarjeta guardada en Bancard.
  *
  * El cobro se intenta el día en que vence el período y, si la tarjeta rechaza,
  * se reintenta a los 2 y a los 5 días. Tras el tercer rechazo el débito queda
  * suspendido: el dueño recibe un aviso en cada rechazo y puede pagar a mano.
  */
 
-export const AUTOPAY_PROVIDER: PagoparCardProvider = 'uPay'
-export const AUTOPAY_PAYMENT_METHOD = 'Pagopar Débito automático'
+export { AUTOPAY_PAYMENT_METHOD }
 export const AUTOPAY_MAX_ATTEMPTS = 3
 /** Días entre el intento n y el n+1. */
 const AUTOPAY_RETRY_OFFSETS_DAYS = [2, 3]
@@ -41,13 +36,13 @@ const AUTOPAY_RETRY_OFFSETS_DAYS = [2, 3]
 const AUTOPAY_DUE_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Evita que dos corridas del cron cobren a la vez la misma organización. */
 const AUTOPAY_CLAIM_MS = 30 * 60 * 1000
-/** Un pago automático todavía pendiente en Pagopar se vuelve a consultar en este plazo. */
+/** Un pago automático todavía sin confirmar en Bancard se vuelve a consultar en este plazo. */
 const AUTOPAY_PENDING_RECHECK_MS = 6 * 60 * 60 * 1000
 
 type AutopayRow = {
   organization_id: string
-  pagopar_customer_id: number
-  provider: PagoparCardProvider
+  bancard_user_id: number
+  provider: string
   enabled: boolean
   card_status: 'none' | 'pending' | 'active'
   card_brand: string | null
@@ -88,7 +83,7 @@ export type AutopayRunResult = {
   skipped: number
 }
 
-const AUTOPAY_COLUMNS = 'organization_id, pagopar_customer_id, provider, enabled, card_status, card_brand, card_masked, card_type, card_issuer, failed_attempts, next_attempt_at, last_attempt_at, last_error, suspended_at'
+const AUTOPAY_COLUMNS = 'organization_id, bancard_user_id, provider, enabled, card_status, card_brand, card_masked, card_type, card_issuer, failed_attempts, next_attempt_at, last_attempt_at, last_error, suspended_at'
 
 /** Próximo reintento tras `failedAttempts` rechazos, o null si ya no hay más. */
 export function getAutopayRetryAt(failedAttempts: number, from: Date) {
@@ -111,7 +106,7 @@ export function isAutopayDue(params: {
 
 function toStatus(row: AutopayRow | null): AutopayStatus {
   return {
-    available: isPagoparRecurringEnabled(),
+    available: isBancardRecurringEnabled(),
     enabled: row?.enabled === true,
     cardStatus: row?.card_status || 'none',
     card: row?.card_status === 'active'
@@ -126,7 +121,7 @@ function toStatus(row: AutopayRow | null): AutopayStatus {
 }
 
 function assertAvailable() {
-  if (!isPagoparRecurringEnabled()) {
+  if (!isBancardRecurringEnabled()) {
     throw new AutopayError('El débito automático todavía no está habilitado.', 501)
   }
 }
@@ -169,7 +164,7 @@ export async function getAutopayStatus(organizationId: string) {
   return toStatus(await getAutopayRow(organizationId))
 }
 
-/** Registra al cliente en Pagopar y devuelve la URL del formulario de uPay. */
+/** Pide a Bancard el formulario para catastrar una tarjeta y devuelve su process_id. */
 export async function startAutopayCardRegistration(params: {
   organizationId: string
   organizationName: string
@@ -186,40 +181,34 @@ export async function startAutopayCardRegistration(params: {
   }
 
   const row = await ensureAutopayRow(params.organizationId)
-  await addPagoparCustomer({
-    customerId: row.pagopar_customer_id,
-    name: state.billingProfile?.business_name?.trim() || params.organizationName,
+  const processId = await startBancardCardRegistration({
+    userId: row.bancard_user_id,
+    // card_id solo tiene que ser único por usuario: se usa la misma secuencia
+    // que los pagos para no repetirlo nunca.
+    cardId: Number(await nextBancardShopProcessId()),
     email,
     phone,
-  })
-  const formId = await startPagoparCardForm({
-    customerId: row.pagopar_customer_id,
     returnUrl: params.returnUrl,
-    provider: AUTOPAY_PROVIDER,
   })
   if (row.card_status === 'none') {
     await updateAutopay(params.organizationId, { card_status: 'pending' })
   }
-  return getUpayCardFormUrl(formId)
+  return processId
 }
 
 /**
- * Al volver del formulario: confirma en Pagopar (obligatorio, haya salido bien
- * o no) y toma la tarjeta guardada de su listado. El parámetro status de la URL
- * no se usa para decidir: solo cuenta lo que Pagopar devuelve.
+ * Al volver del formulario: toma la tarjeta guardada del listado de Bancard.
+ * El parámetro status de la URL no se usa para decidir: solo cuenta lo que
+ * Bancard devuelve.
  */
-export async function completeAutopayCardRegistration(params: {
-  organizationId: string
-  returnUrl: string
-}) {
+export async function completeAutopayCardRegistration(params: { organizationId: string }) {
   assertAvailable()
   const row = await getAutopayRow(params.organizationId)
   if (!row) throw new AutopayError('No hay un registro de tarjeta en curso.', 404)
 
-  await confirmPagoparCards({ customerId: row.pagopar_customer_id, returnUrl: params.returnUrl })
-  const cards = await listPagoparCards(row.pagopar_customer_id)
-  // La más reciente suele ser la última del listado.
-  const card = pickPagoparCard([...cards].reverse(), { provider: AUTOPAY_PROVIDER })
+  const cards = await listBancardCards(row.bancard_user_id)
+  // La más reciente tiene el card_id más alto.
+  const card = pickBancardCard(cards)
 
   if (!card) {
     await updateAutopay(params.organizationId, {
@@ -228,12 +217,17 @@ export async function completeAutopayCardRegistration(params: {
     return { saved: false, status: toStatus(await getAutopayRow(params.organizationId)) }
   }
 
+  // Si cambió de tarjeta, se borran las anteriores para que solo quede una.
+  for (const previous of cards.filter((item) => item.aliasToken !== card.aliasToken)) {
+    await deleteBancardCard({ userId: row.bancard_user_id, aliasToken: previous.aliasToken }).catch(() => undefined)
+  }
+
   await updateAutopay(params.organizationId, {
     card_status: 'active',
     card_brand: card.brand,
     card_masked: card.masked,
     card_type: card.cardType,
-    card_issuer: card.issuer,
+    card_issuer: null,
     enabled: true,
     failed_attempts: 0,
     next_attempt_at: null,
@@ -262,9 +256,9 @@ export async function removeAutopayCard(organizationId: string) {
   const row = await getAutopayRow(organizationId)
   if (!row) return toStatus(null)
 
-  const cards = await listPagoparCards(row.pagopar_customer_id)
-  for (const card of cards.filter((item) => item.provider?.toLowerCase() === AUTOPAY_PROVIDER.toLowerCase())) {
-    await deletePagoparCard({ customerId: row.pagopar_customer_id, aliasToken: card.aliasToken })
+  const cards = await listBancardCards(row.bancard_user_id)
+  for (const card of cards) {
+    await deleteBancardCard({ userId: row.bancard_user_id, aliasToken: card.aliasToken })
   }
   await updateAutopay(organizationId, {
     enabled: false,
@@ -280,19 +274,16 @@ export async function removeAutopayCard(organizationId: string) {
   return toStatus(await getAutopayRow(organizationId))
 }
 
-async function applyPaidAutopayOrder(hash: string) {
-  const order = await queryPagoparOrder(hash)
-  if (order.status === 'approved') {
-    const { error } = await createAdminSupabase().rpc('apply_paid_subscription_payment', {
-      p_external_reference: hash,
-      p_provider_payment_id: order.providerOrderId || '',
-      p_payment_method: AUTOPAY_PAYMENT_METHOD,
-      p_paid_at: order.paidAt ? new Date(order.paidAt).toISOString() : new Date().toISOString(),
-      p_amount: order.amount,
-    })
-    if (error) throw new Error(`No se pudo aplicar el pago: ${error.message}`)
-  }
-  return order.status
+async function applyPaidAutopayCharge(shopProcessId: string, amount: number, providerPaymentId: string) {
+  const { error } = await createAdminSupabase().rpc('apply_paid_provider_subscription_payment', {
+    p_provider: 'bancard',
+    p_external_reference: shopProcessId,
+    p_provider_payment_id: providerPaymentId,
+    p_payment_method: AUTOPAY_PAYMENT_METHOD,
+    p_paid_at: new Date().toISOString(),
+    p_amount: amount,
+  })
+  if (error) throw new Error(`No se pudo aplicar el pago: ${error.message}`)
 }
 
 async function notifyAutopayFailure(params: {
@@ -387,12 +378,13 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
   const subscription = state.subscription
   const plan = state.currentPlan
 
-  // Un pago automático anterior todavía sin resolver: se consulta antes de volver a cobrar.
+  // Un cobro automático anterior todavía sin resolver: se consulta en Bancard
+  // antes de volver a cobrar.
   const { data: pendingPayment } = await admin
     .from('subscription_payments')
-    .select('id, external_reference, amount')
+    .select('id, external_reference, amount, created_at')
     .eq('organization_id', row.organization_id)
-    .eq('provider', 'pagopar')
+    .eq('provider', 'bancard')
     .eq('payment_method', AUTOPAY_PAYMENT_METHOD)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -400,12 +392,17 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
     .maybeSingle()
 
   if (pendingPayment?.external_reference) {
-    const status = await applyPaidAutopayOrder(pendingPayment.external_reference)
-    if (status === 'approved') {
+    const order = await queryBancardPayment(pendingPayment.external_reference, pendingPayment.created_at, now)
+    if (order.status === 'approved') {
+      await applyPaidAutopayCharge(
+        pendingPayment.external_reference,
+        order.amount ?? Number(pendingPayment.amount),
+        order.authorizationNumber || order.ticketNumber || '',
+      )
       await updateAutopay(row.organization_id, { failed_attempts: 0, next_attempt_at: null, last_error: null })
       return 'charged'
     }
-    if (status === 'pending' || status === 'processing') {
+    if (order.status === 'pending' || order.status === 'processing') {
       await updateAutopay(row.organization_id, {
         next_attempt_at: new Date(now.getTime() + AUTOPAY_PENDING_RECHECK_MS).toISOString(),
       })
@@ -413,7 +410,7 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
     }
     await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', pendingPayment.id)
     return registerAutopayFailure({
-      row, now, amountPyg: Number(pendingPayment.amount), planName: plan.name, reason: 'La tarjeta rechazó el cobro.',
+      row, now, amountPyg: Number(pendingPayment.amount), planName: plan.name, reason: order.message || 'La tarjeta rechazó el cobro.',
     })
   }
 
@@ -435,14 +432,24 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
     return 'skipped'
   }
 
-  const amountPyg = getPagoparAmountInPyg(plan.price_monthly, plan.currency)
+  const amountPyg = getBancardAmountInPyg(plan.price_monthly, plan.currency)
   if (amountPyg <= 0) {
     await updateAutopay(row.organization_id, { next_attempt_at: null })
     return 'skipped'
   }
 
-  const billing = state.billingProfile
-  const externalReference = `AUT${Date.now()}${randomUUID().replace(/-/g, '').slice(0, 10)}`
+  // Si Bancard no responde al listar es un error interno: se reintenta
+  // en la próxima corrida sin contar como rechazo.
+  const cards = await listBancardCards(row.bancard_user_id)
+  const card = pickBancardCard(cards, row.card_masked)
+  if (!card) {
+    await updateAutopay(row.organization_id, { card_status: 'none', enabled: false })
+    return registerAutopayFailure({
+      row, now, amountPyg, planName: plan.name, reason: 'La tarjeta guardada ya no está disponible.',
+    })
+  }
+
+  const shopProcessId = await nextBancardShopProcessId()
   const { data: payment, error: paymentError } = await admin
     .from('subscription_payments')
     .insert({
@@ -453,68 +460,29 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
       currency: 'PYG',
       status: 'pending',
       payment_method: AUTOPAY_PAYMENT_METHOD,
-      provider: 'pagopar',
-      external_reference: externalReference,
+      provider: 'bancard',
+      external_reference: shopProcessId,
     })
     .select('id')
     .single()
   if (paymentError || !payment) throw new Error(paymentError?.message || 'No se pudo registrar el pago.')
 
-  let orderHash: string
-  let aliasToken: string
+  let charge: Awaited<ReturnType<typeof chargeBancardCard>>
   try {
-    const order = await createPagoparOrder({
+    charge = await chargeBancardCard({
+      shopProcessId,
       amountPyg,
-      buyer: {
-        businessName: billing?.business_name,
-        document: billing?.ruc,
-        email: billing?.billing_email,
-        name: billing?.business_name,
-        phone: billing?.phone,
-        ruc: billing?.ruc,
-        address: billing?.fiscal_address || '',
-      },
-      description: `Suscripción ${plan.name} - débito automático`,
-      externalReference,
-      itemId: Number.parseInt(payment.id.replace(/[^\d]/g, '').slice(0, 9), 10) || 1,
-      paymentMethod: 'card',
-    })
-    await admin
-      .from('subscription_payments')
-      .update({ provider_payment_id: order.providerOrderId, external_reference: order.hash })
-      .eq('id', payment.id)
-
-    const cards = await listPagoparCards(row.pagopar_customer_id)
-    const card = pickPagoparCard(cards, { masked: row.card_masked, provider: row.provider })
-    if (!card) {
-      await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
-      await updateAutopay(row.organization_id, { card_status: 'none', enabled: false })
-      return registerAutopayFailure({
-        row, now, amountPyg, planName: plan.name, reason: 'La tarjeta guardada ya no está disponible.',
-      })
-    }
-    orderHash = order.hash
-    aliasToken = card.aliasToken
-  } catch (error) {
-    // Pagopar no respondió al preparar el cobro: no se tocó la tarjeta, así
-    // que no cuenta como rechazo. La próxima corrida lo vuelve a intentar.
-    await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
-    throw error
-  }
-
-  try {
-    await payPagoparOrderWithCard({
-      customerId: row.pagopar_customer_id,
-      aliasToken,
-      orderHash,
+      aliasToken: card.aliasToken,
+      description: `Plan ${plan.name}`,
+      returnUrl: siteUrl('/admin/subscriptions/autopay'),
     })
   } catch (error) {
-    if (error instanceof PagoparRecurringError && error.rejected) {
+    if (error instanceof BancardError && error.rejected) {
       await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
       return registerAutopayFailure({ row, now, amountPyg, planName: plan.name, reason: error.message })
     }
     // Sin respuesta clara no se sabe si se debitó: el pago queda pendiente y
-    // la próxima corrida consulta el pedido en Pagopar antes de reintentar.
+    // la próxima corrida lo consulta en Bancard antes de reintentar.
     await updateAutopay(row.organization_id, {
       last_attempt_at: now.toISOString(),
       next_attempt_at: new Date(now.getTime() + AUTOPAY_PENDING_RECHECK_MS).toISOString(),
@@ -523,35 +491,53 @@ async function chargeOrganization(row: AutopayRow, now: Date): Promise<keyof Aut
   }
   await updateAutopay(row.organization_id, { last_attempt_at: now.toISOString() })
 
-  let status: Awaited<ReturnType<typeof applyPaidAutopayOrder>>
+  // 3D Secure: el banco pide que el titular verifique la compra, cosa que un
+  // cobro automático no puede hacer. No se debitó nada: se avisa para pagar a mano.
+  if (charge.kind === 'requires_3ds') {
+    await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
+    return registerAutopayFailure({
+      row,
+      now,
+      amountPyg,
+      planName: plan.name,
+      reason: 'Tu banco pidió verificar el pago (3D Secure). Pagá la suscripción a mano desde Mi suscripción.',
+    })
+  }
+  const confirmation = charge.confirmation
+
+  if (!isBancardConfirmationApproved(confirmation)) {
+    await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
+    return registerAutopayFailure({
+      row,
+      now,
+      amountPyg,
+      planName: plan.name,
+      reason: confirmation.responseDescription || confirmation.responseDetails || 'La tarjeta rechazó el cobro.',
+    })
+  }
+
   try {
-    status = await applyPaidAutopayOrder(orderHash)
+    await applyPaidAutopayCharge(
+      shopProcessId,
+      confirmation.amount ?? amountPyg,
+      confirmation.authorizationNumber || confirmation.ticketNumber || '',
+    )
   } catch {
-    // El débito salió pero no se pudo confirmar todavía: lo resuelve la
-    // consulta de la próxima corrida o el webhook de Pagopar.
+    // El débito salió pero no se pudo aplicar todavía: lo resuelve la
+    // consulta de la próxima corrida.
     await updateAutopay(row.organization_id, {
       next_attempt_at: new Date(now.getTime() + AUTOPAY_PENDING_RECHECK_MS).toISOString(),
     })
     return 'pending'
   }
-  if (status === 'approved') {
-    await updateAutopay(row.organization_id, { failed_attempts: 0, next_attempt_at: null, last_error: null })
-    return 'charged'
-  }
-  if (status === 'pending' || status === 'processing') {
-    await updateAutopay(row.organization_id, {
-      next_attempt_at: new Date(now.getTime() + AUTOPAY_PENDING_RECHECK_MS).toISOString(),
-    })
-    return 'pending'
-  }
-  await admin.from('subscription_payments').update({ status: 'failed' }).eq('id', payment.id)
-  return registerAutopayFailure({ row, now, amountPyg, planName: plan.name, reason: 'La tarjeta rechazó el cobro.' })
+  await updateAutopay(row.organization_id, { failed_attempts: 0, next_attempt_at: null, last_error: null })
+  return 'charged'
 }
 
 /** Barrido del cron: cobra las suscripciones con débito activo que vencen. */
 export async function runSubscriptionAutopay(now = new Date()): Promise<AutopayRunResult> {
   const result: AutopayRunResult = { checked: 0, charged: 0, pending: 0, failed: 0, suspended: 0, skipped: 0 }
-  if (!isPagoparRecurringEnabled()) return result
+  if (!isBancardRecurringEnabled()) return result
 
   const { data, error } = await createAdminSupabase()
     .from('subscription_autopay')

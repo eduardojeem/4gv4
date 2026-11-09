@@ -1,8 +1,9 @@
+import { MarketplaceBusinessPromo } from '@/components/public/MarketplaceBusinessPromo'
 import { getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
 import type { Metadata } from 'next'
 import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import Link from './MarketplaceLink'
-import { ArrowRight, Building2, CheckCircle2, Package, Rocket, Sparkles, Store } from 'lucide-react'
+import { ArrowRight, Building2, Package, Sparkles, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
@@ -16,6 +17,7 @@ import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
+import { MarketplaceCategoriesShowcase } from '@/components/public/MarketplaceCategoriesShowcase'
 import { visibleDirectoryStats } from '@/lib/public/business-directory'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -161,6 +163,9 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
         />
       </section>
 
+      {/* ── Carrusel Showcase de Categorías ── */}
+      <MarketplaceCategoriesShowcase />
+
       {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups.slice(0, 6)} />}
 
       {/* ── Marcas ── */}
@@ -210,72 +215,7 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
         <MarketplaceBusinessPromoShowcase organizations={organizations} />
       )}
 
-      {/* ── Banner Especial: ¿Tenés un negocio? (Ultra-Resaltado) ── */}
-      <section className="relative overflow-hidden border-y border-slate-800/80 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 py-12 sm:py-16 text-white shadow-2xl">
-        {/* Luces ambientales de fondo */}
-        <div className="pointer-events-none absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-600/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-20 -bottom-20 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
-
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center justify-between gap-8 lg:flex-row lg:items-center">
-            
-            {/* Texto y Beneficios */}
-            <div className="text-center lg:text-left space-y-4 max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-bold text-cyan-300 shadow-xs backdrop-blur-md">
-                <Rocket className="h-3.5 w-3.5 text-cyan-400" />
-                <span>Especial para Comercios y Servicios Técnicos</span>
-              </div>
-
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
-                ¿Tenés un negocio o taller?
-              </h2>
-
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-                Publicá tu catálogo en el marketplace, gestioná órdenes de reparación, controlá tu inventario y multiplicá tus ventas con nuestra plataforma.
-              </p>
-
-              {/* Beneficios rápidos */}
-              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 pt-1">
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 backdrop-blur-xs">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
-                  Tienda online sincronizada
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 backdrop-blur-xs">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
-                  Control de Reparaciones & Taller
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 backdrop-blur-xs">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
-                  Inventario & POS
-                </span>
-              </div>
-            </div>
-
-            {/* Botones de Acción */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto shrink-0">
-              <Button
-                asChild
-                className="w-full sm:w-auto h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-sm px-6 shadow-xl shadow-cyan-500/25 transition-all active:scale-[0.98] border border-white/20"
-              >
-                <Link href="/register" className="flex items-center justify-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  <span>Crear mi tienda</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-
-              <Button
-                asChild
-                variant="outline"
-                className="w-full sm:w-auto h-12 rounded-xl border-white/30 bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-5 backdrop-blur-md transition-all"
-              >
-                <Link href="/saas">Conocer funciones SaaS</Link>
-              </Button>
-            </div>
-
-          </div>
-        </div>
-      </section>
+      <MarketplaceBusinessPromo />
 
       {/* ── Empresas asociadas ── */}
       {organizations.length > 0 && (

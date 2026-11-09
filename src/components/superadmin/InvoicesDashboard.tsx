@@ -121,7 +121,6 @@ const PLAN_COLORS: Record<string, string> = {
 }
 
 const PROVIDER_META: Record<string, { label: string; color: string }> = {
-  pagopar: { label: 'Pagopar', color: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-300' },
   mercado_pago: { label: 'Mercado Pago', color: 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/20 dark:text-cyan-300' },
   stripe: { label: 'Stripe', color: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-300' },
   bancard: { label: 'Bancard', color: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300' },
@@ -368,7 +367,7 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
       <PageHeader
         icon={Wallet}
         title="Pagos"
-        description="Cada cobro de suscripción recibido por Pagopar, Mercado Pago, Bancard u otros proveedores, con su estado."
+        description="Cada cobro de suscripción recibido por Bancard, Stripe, transferencia u otros medios, con su estado."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => router.refresh()}>

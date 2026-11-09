@@ -6,7 +6,7 @@ export type PublicBookingQuote = { quoteId:string; expiresAt:string; startsAt:st
 
 export function useBookingQuote(slug:string,serviceId:string|null,professionalId:string|null,startsAt:string|null,enabled:boolean,refresh:number) {
   const key=enabled && serviceId && startsAt ? `${slug}|${serviceId}|${professionalId}|${startsAt}|${refresh}`:null
-  const [result,setResult]=useState<{key:string;quote:PublicBookingQuote|null;error:string|null;attemptId:string}|null>(null)
+  const [result,setResult]=useState<{key:string;quote:PublicBookingQuote|null;error:string|null;attemptId:string;unavailable:boolean}|null>(null)
   const [acceptedId,setAcceptedId]=useState<string|null>(null)
   const [clock,setClock]=useState(()=>Date.now())
   useEffect(()=>{
@@ -16,8 +16,8 @@ export function useBookingQuote(slug:string,serviceId:string|null,professionalId
       body:JSON.stringify({service_id:serviceId,professional_id:professionalId,starts_at:startsAt}),signal:controller.signal})
       .then(async response=>{
         const body=await response.json().catch(()=>({}))
-        if(!controller.signal.aborted) setResult({key,quote:response.ok?body:null,error:response.ok?null:body.error||'No se pudo confirmar el horario.',attemptId:crypto.randomUUID()})
-      }).catch(()=>{if(!controller.signal.aborted)setResult({key,quote:null,error:'No se pudo confirmar el horario. Revisá tu conexión.',attemptId:crypto.randomUUID()})})
+        if(!controller.signal.aborted) setResult({key,quote:response.ok?body:null,error:response.ok?null:body.error||'No se pudo confirmar el horario.',unavailable:!response.ok && ['APPOINTMENT_OVERLAP','SLOT_UNAVAILABLE','NO_ELIGIBLE_PROFESSIONAL','TIME_OFF_CONFLICT'].includes(body.code),attemptId:crypto.randomUUID()})
+      }).catch(()=>{if(!controller.signal.aborted)setResult({key,quote:null,error:'No se pudo confirmar el horario. Revisá tu conexión.',unavailable:false,attemptId:crypto.randomUUID()})})
     return()=>controller.abort()
   },[key,slug,serviceId,professionalId,startsAt])
   const current=result?.key===key?result:null
@@ -28,7 +28,7 @@ export function useBookingQuote(slug:string,serviceId:string|null,professionalId
     return()=>clearTimeout(timer)
   },[expiry,clock])
   const expired=Boolean(expiry && Date.parse(expiry)<=clock)
-  return {quote:current?.quote??null,error:current?.error??null,loading:Boolean(key && !current),expired,
+  return {unavailable:current?.unavailable??false,quote:current?.quote??null,error:current?.error??null,loading:Boolean(key && !current),expired,
     accepted:Boolean(current?.quote && acceptedId===current.quote.quoteId && !expired),
     accept:(checked:boolean)=>setAcceptedId(checked?current?.quote?.quoteId??null:null),attemptId:current?.attemptId}
 }

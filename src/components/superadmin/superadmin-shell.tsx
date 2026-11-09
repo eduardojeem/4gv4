@@ -161,6 +161,7 @@ const navItems: NavItem[] = [
       { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard },
       { title: 'Pagos', href: '/superadmin/invoices', icon: FileText },
       { title: 'Planes', href: '/superadmin/plans', icon: Sparkles },
+      { title: 'Plantillas por plan', href: '/superadmin/plans/plantillas', icon: LayoutTemplate },
       { title: 'Promociones', href: '/superadmin/promo-codes', icon: TicketPercent },
       { title: 'Gastos', href: '/superadmin/finanzas', icon: Wallet },
     ],

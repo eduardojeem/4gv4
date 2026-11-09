@@ -34,8 +34,8 @@ describe('el registro no pide tarjeta', () => {
   })
 
   it('la API de registro no llama a ningún cobro', () => {
-    expect(RUTA.toLowerCase()).not.toContain('pagopar')
-    expect(RUTA).not.toContain('createSubscriptionPagoparCheckout')
+    expect(RUTA.toLowerCase()).not.toContain('bancard')
+    expect(RUTA).not.toContain('createSubscriptionBancardCheckout')
     expect(RUTA.toLowerCase()).not.toContain('checkouturl')
   })
 

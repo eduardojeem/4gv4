@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -12,10 +12,10 @@ import {
   Copy,
   CreditCard,
   Download,
-  ExternalLink,
   Globe, LayoutGrid,
   List,
   Minus,
+  MoreHorizontal,
   Package,
   Receipt,
   RefreshCw,
@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { useUrlListState } from '@/hooks/useUrlListState'
@@ -39,6 +40,8 @@ import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
 import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
 import { describeLastAccess } from '@/lib/superadmin/last-access'
+import { OrganizationPageHeader } from './organization-page-header'
+import { normalizeOrganizationSearch } from '@/lib/superadmin/organization-edit'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
 // ---------------------------------------------------------------------------
@@ -94,6 +97,7 @@ export const VERTICAL_META: Record<string, { label: string; icon: string; badge:
   food: { label: 'Alimentos & Gastronomía', icon: '🍔', badge: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
   cosmetics: { label: 'Cosmética & Belleza', icon: '💄', badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
   hardware: { label: 'Ferretería & Construcción', icon: '🔨', badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800' },
+  barbershop: { label: 'Barbería y peluquería', icon: '💈', badge: 'bg-muted text-foreground border-border' },
   other: { label: 'Otros Rubros', icon: '🏷️', badge: 'bg-muted text-foreground/80 border-border' },
 }
 
@@ -117,13 +121,13 @@ function RubroBadge({ vertical, model }: { vertical?: string | null; model?: str
   const meta = VERTICAL_META[vertical || 'general'] || VERTICAL_META.general
   return (
     <div className="space-y-0.5 min-w-0">
-      <Badge variant="outline" className={cn('rounded-lg px-2 py-0.5 text-[10px] font-extrabold shadow-2xs gap-1 max-w-full truncate', meta.badge)}>
+      <Badge variant="outline" className={cn('rounded-lg px-2 py-0.5 text-xs font-semibold shadow-2xs gap-1 max-w-full truncate', meta.badge)}>
         <span>{meta.icon}</span>
         <span className="truncate">{meta.label}</span>
       </Badge>
       {model && model !== 'retail' && (
-        <p className="text-[9px] text-muted-foreground font-medium capitalize truncate pl-1">
-          {model === 'wholesale' ? 'Mayorista' : model === 'repair' ? 'Taller' : model === 'service' ? 'Servicios' : model}
+        <p className="text-[11px] text-muted-foreground font-medium capitalize truncate pl-1">
+          {model === 'wholesale' ? 'Mayorista' : model === 'repair' ? 'Taller' : model === 'service' ? 'Servicios' : model === 'mixed' ? 'Mixto' : model}
         </p>
       )}
     </div>
@@ -131,7 +135,9 @@ function RubroBadge({ vertical, model }: { vertical?: string | null; model?: str
 }
 
 function ModulesPreview({ modules }: { modules?: string[] | null }) {
-  const list = modules && modules.length > 0 ? modules : ['pos', 'inventory', 'crm', 'ecommerce']
+  if (modules == null) return <span className="text-xs text-muted-foreground">Según el plan</span>
+  if (modules.length === 0) return <span className="text-xs text-muted-foreground">Sin funciones habilitadas</span>
+  const list = modules
   const visible = list.slice(0, 3)
   const remaining = list.length - visible.length
 
@@ -142,7 +148,7 @@ function ModulesPreview({ modules }: { modules?: string[] | null }) {
         return (
           <span
             key={m}
-            className={cn('inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold border shadow-2xs', meta.color)}
+            className={cn('inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-semibold border shadow-2xs', meta.color)}
             title={meta.label || m}
           >
             {meta.short}
@@ -150,7 +156,7 @@ function ModulesPreview({ modules }: { modules?: string[] | null }) {
         )
       })}
       {remaining > 0 && (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-muted text-muted-foreground border border-border">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-muted text-muted-foreground border border-border">
           +{remaining}
         </span>
       )}
@@ -214,7 +220,7 @@ function SubscriptionBadge({ org }: { org: SuperAdminOrganization }) {
         {label}
       </Badge>
       {timing && (timing.urgent || status === 'trialing') && (
-        <div className={cn('flex items-center gap-1 text-[10px] font-semibold', timing.urgent ? 'text-red-500' : 'text-cyan-600 dark:text-cyan-400')}>
+        <div className={cn('flex items-center gap-1 text-xs font-semibold', timing.urgent ? 'text-red-500' : 'text-cyan-600 dark:text-cyan-400')}>
           <Clock className="h-3 w-3" />
           {timing.label}
         </div>
@@ -225,17 +231,17 @@ function SubscriptionBadge({ org }: { org: SuperAdminOrganization }) {
 
 function MemberBar({ org }: { org: SuperAdminOrganization }) {
   const { staff_total, staff_active, staff_invited, customers_total } = org
-  if (staff_total === 0 && customers_total === 0) return <span className="text-xs text-muted-foreground font-medium">Sin miembros</span>
+  if (staff_total === 0 && customers_total === 0) return <span className="text-xs text-muted-foreground font-medium">Sin equipo ni clientes</span>
   const activePercent = staff_total > 0 ? Math.round((staff_active / staff_total) * 100) : 0
 
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted-foreground/15">
+        <div className="h-1.5 w-10 overflow-hidden rounded-full bg-muted-foreground/15">
           <div className="h-full rounded-full bg-emerald-500 transition-all duration-300" style={{ width: `${activePercent}%` }} />
         </div>
         <span className="text-xs font-bold tabular-nums text-foreground/80">
-          {staff_active}<span className="text-muted-foreground font-normal">/{staff_total} personal</span>
+          {staff_active}<span className="text-muted-foreground font-normal">/{staff_total} activos</span>
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground font-medium">
@@ -257,13 +263,15 @@ function PaymentBadge({ status }: { status: string | null }) {
   const normalized = status?.toLowerCase() ?? ''
   const healthy = normalized === 'paid'
   const warning = normalized === 'pending'
+  const failed = normalized === 'failed' || normalized === 'unpaid'
 
   return (
     <Badge variant="outline" className={cn(
-      'rounded-full text-[10px] font-bold shadow-2xs',
+      'rounded-full text-xs font-bold shadow-2xs',
       healthy && 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300',
       warning && 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
-      !healthy && !warning && 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
+      failed && 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300',
+      !healthy && !warning && !failed && 'border-border bg-muted/40 text-muted-foreground'
     )}>
       {PAYMENT_LABELS[normalized] ?? status ?? 'Sin registro'}
     </Badge>
@@ -288,6 +296,13 @@ function describeSince(value: string | null | undefined, now: number) {
  * el dueño, si la empresa todavía entra al sistema o si vende, y para ver la
  * ficha había que adivinar que el nombre era un enlace.
  */
+function OrganizationActions({ org, onEdit, showDetail = false }: { org: SuperAdminOrganization; onEdit(): void; showDetail?: boolean }) {
+  return <div className="flex items-center justify-end gap-1">{showDetail && <Button asChild variant="outline" className="min-h-11 rounded-xl text-sm"><Link href={'/superadmin/organizations/' + encodeURIComponent(org.slug)}>Ver ficha<ArrowRight className="size-4"/></Link></Button>}
+    <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name}/>
+    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-11 rounded-xl" aria-label={'Más acciones de ' + org.name}><MoreHorizontal className="size-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-60 rounded-xl p-1"><DropdownMenuItem onSelect={onEdit} className="min-h-11 gap-2"><Wrench className="size-4"/>Editar organización</DropdownMenuItem><DropdownMenuSeparator/><DropdownMenuItem asChild className="min-h-11 gap-2"><a href={'/' + org.slug + '/inicio'} target="_blank" rel="noreferrer"><Globe className="size-4"/>Abrir tienda pública</a></DropdownMenuItem><DropdownMenuItem asChild className="min-h-11 gap-2"><Link href={'/superadmin/users?organization=' + org.id}><Users className="size-4"/>Gestionar equipo</Link></DropdownMenuItem><DropdownMenuItem asChild className="min-h-11 gap-2"><Link href={'/superadmin/subscriptions?q=' + encodeURIComponent(org.slug)}><CreditCard className="size-4"/>Suscripción y pagos</Link></DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+  </div>
+}
+
 function OrganizationGridCard({
   org,
   referenceTime,
@@ -343,14 +358,14 @@ function OrganizationGridCard({
           <button
             type="button"
             onClick={() => onCopyUrl(org.slug)}
-            className="flex max-w-full items-center gap-1 truncate text-xs text-muted-foreground hover:text-foreground"
+            className="flex max-w-full items-center gap-1 text-xs leading-5 text-muted-foreground hover:text-foreground"
             title="Copiar dirección de la tienda"
           >
             /{org.slug}
             <Copy className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
         </div>
-        <Badge variant="outline" className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
+        <Badge variant="outline" className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
           {planLabel(org.plan, planNames)}
         </Badge>
       </div>
@@ -360,7 +375,7 @@ function OrganizationGridCard({
         <SubscriptionBadge org={org} />
         {org.subscription_status && <PaymentBadge status={org.payment_status} />}
         {org.cancel_at_period_end && (
-          <Badge variant="outline" className="rounded-full border-amber-200 text-[10px] font-bold text-amber-700 dark:border-amber-900 dark:text-amber-300">
+          <Badge variant="outline" className="rounded-full border-amber-200 text-xs font-bold text-amber-700 dark:border-amber-900 dark:text-amber-300">
             Cancela al vencer
           </Badge>
         )}
@@ -387,7 +402,7 @@ function OrganizationGridCard({
       {/* Detalle */}
       <dl className="mt-3 grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-border px-4 py-3 text-xs">
         <div className="col-span-2 min-w-0">
-          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <User className="h-3 w-3" /> Dueño
           </dt>
           <dd className="mt-0.5 truncate font-medium text-foreground">
@@ -397,7 +412,7 @@ function OrganizationGridCard({
         </div>
 
         <div className="min-w-0">
-          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Clock className="h-3 w-3" /> Último acceso
           </dt>
           <dd className={cn('mt-0.5 font-medium', access?.stale ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
@@ -406,7 +421,7 @@ function OrganizationGridCard({
         </div>
 
         <div className="min-w-0">
-          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Receipt className="h-3 w-3" /> Última venta
           </dt>
           <dd className="mt-0.5 font-medium text-foreground">
@@ -415,7 +430,7 @@ function OrganizationGridCard({
         </div>
 
         <div className="min-w-0">
-          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Users className="h-3 w-3" /> Equipo
           </dt>
           <dd className="mt-0.5 font-medium tabular-nums text-foreground">
@@ -427,7 +442,7 @@ function OrganizationGridCard({
         </div>
 
         <div className="min-w-0">
-          <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Package className="h-3 w-3" /> Productos
           </dt>
           <dd className="mt-0.5 font-medium tabular-nums text-foreground">
@@ -447,40 +462,13 @@ function OrganizationGridCard({
 
       {/* Acciones */}
       <div className="flex items-center gap-1 border-t border-border bg-muted/40 p-2.5">
-        <Button asChild size="sm" className="h-8 gap-1.5 rounded-lg text-xs font-bold">
+        <Button asChild size="sm" className="min-h-11 gap-2 rounded-xl text-sm font-semibold">
           <Link href={detailHref}>
             Ver detalle
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </Button>
-        <div className="ml-auto flex items-center gap-0.5">
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Abrir tienda">
-            <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-            </a>
-          </Button>
-          <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
-            title="Editar organización"
-            aria-label={`Editar ${org.name}`}
-            onClick={onEdit}
-          >
-            <Wrench className="h-4 w-4" />
-          </Button>
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Gestionar usuarios">
-            <Link href={`/superadmin/users?organization=${org.id}`} aria-label={`Usuarios de ${org.name}`}>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Suscripción y pagos">
-            <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`} aria-label={`Suscripción de ${org.name}`}>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </Link>
-          </Button>
-        </div>
+        <div className="ml-auto"><OrganizationActions org={org} onEdit={onEdit}/></div>
       </div>
     </Card>
   )
@@ -505,15 +493,15 @@ function StatCard({
   }
 
   return (
-    <div className="flex flex-1 items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:shadow-md">
-      <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl [&>div:first-child]:hidden sm:[&>div:first-child]:flex border border-border bg-card p-4 shadow-sm">
+      <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="flex flex-col min-w-0">
-        <p className="truncate text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-        <div className="flex items-baseline gap-2">
-          <span className="text-xl font-black text-foreground">{value}</span>
-          <span className="truncate text-xs text-muted-foreground">{sub}</span>
+        <p className="text-xs font-medium leading-5 text-muted-foreground">{label}</p>
+        <div className="flex flex-col gap-1">
+          <span className="text-xl font-bold text-foreground">{value}</span>
+          <span className="text-xs leading-5 text-muted-foreground">{sub}</span>
         </div>
       </div>
     </div>
@@ -539,7 +527,7 @@ export function OrganizationsDashboard({
   planNames?: PlanNames
 }) {
   const router = useRouter()
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [refreshing, startRefresh] = useTransition()
   const [editingOrg, setEditingOrg] = useState<EditableOrganization | null>(null)
   const { state, setValue } = useUrlListState({
     q: '',
@@ -549,7 +537,10 @@ export function OrganizationsDashboard({
     dir: 'desc',
     page: '1',
     size: '25',
+    view: 'table',
   })
+  const viewMode: ViewMode = state.view === 'grid' ? 'grid' : 'table'
+  const setViewMode = (value: ViewMode) => setValue('view', value)
   const query = state.q
   const planFilter = state.plan
   const statusFilter = state.status as FilterStatus
@@ -596,9 +587,9 @@ export function OrganizationsDashboard({
   }
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeOrganizationSearch(query)
     let rows = organizations.filter((o) => {
-      const matchQuery = !q || [o.name, o.slug, o.owner_email, o.owner_name, o.id].some((v) => v?.toLowerCase().includes(q))
+      const matchQuery = !q || [o.name, o.slug, o.owner_email, o.owner_name, o.id].some((v) => v && normalizeOrganizationSearch(v).includes(q))
       const matchPlan = planFilter === 'ALL' || o.plan === planFilter
       const normalizedStatus = o.subscription_status === 'cancelled' ? 'canceled' : o.subscription_status
       const matchStatus = statusFilter === 'all'
@@ -664,375 +655,7 @@ export function OrganizationsDashboard({
     { key: 'no_sub', label: 'Sin suscripción' },
   ]
 
-  const thClass = 'px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground'
-  const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-foreground transition-colors'
-
-  return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
-
-      {/* Header */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-            <Building2 className="h-3.5 w-3.5 text-cyan-500" />
-            Superadmin · Gestión Multiempresa SaaS
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-            Directorio de Organizaciones
-          </h1>
-          <p className="max-w-2xl text-xs sm:text-sm text-muted-foreground">
-            Control operativo de empresas, planes, owners y suscripciones del ecosistema multiempresa.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer" onClick={() => router.refresh()}>
-            <RefreshCw className="h-3.5 w-3.5" />
-            Actualizar
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="h-3.5 w-3.5" />
-            Exportar CSV
-          </Button>
-          <Button asChild size="sm" className="gap-2 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 dark:bg-cyan-700 dark:hover:bg-cyan-600 shadow-md cursor-pointer">
-            <Link href="/superadmin/organizations/create">
-              <Sparkles className="h-3.5 w-3.5" />
-              Nueva Organización
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      
-      <div className="flex flex-wrap gap-4">
-          <StatCard label="Total Empresas" value={organizations.length} sub={`${filtered.length} coincidentes`} icon={Building2} />
-          <StatCard label="Planes pagos" value={stats.paid} sub={['BASIC', 'PRO', 'ENTERPRISE'].map((code) => planLabel(code, planNames)).join(', ')} icon={Sparkles} tone="info" />
-          <StatCard label="Suscripciones Activas" value={stats.activeSubscriptions} sub="al día con cobros" icon={CheckCircle2} tone="success" />
-          <StatCard label="En Período de Prueba" value={stats.trialing} sub="trials activos" icon={Clock} tone={stats.trialing > 0 ? 'warning' : 'default'} />
-          <StatCard label="Nuevas (30 días)" value={stats.newThisMonth} sub="recientemente creadas" icon={CalendarDays} tone={stats.newThisMonth > 0 ? 'info' : 'default'} />
-        </div>
-
-      {/* Main Table / Grid Card */}
-      <Card className="rounded-3xl border border-border bg-card/95 shadow-sm overflow-hidden">
-        <CardHeader className="border-b border-border bg-muted/40 px-6 py-4 space-y-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base font-bold text-foreground">
-                  Directorio de Empresas
-                </CardTitle>
-                <Badge variant="outline" className="text-xs font-bold px-2 py-0.5 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800">
-                  {filtered.length} de {organizations.length}
-                </Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Listado central con acceso a soporte y métricas por tenant.
-              </CardDescription>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* View Switcher */}
-              <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  className={cn(
-                    'p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
-                    viewMode === 'table' ? 'bg-card shadow-2xs text-foreground' : ''
-                  )}
-                  title="Vista de Tabla"
-                  aria-label="Vista de Tabla"
-                  aria-pressed={viewMode === 'table'}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={cn(
-                    'p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
-                    viewMode === 'grid' ? 'bg-card shadow-2xs text-foreground' : ''
-                  )}
-                  title="Vista de Cuadrícula"
-                  aria-label="Vista de Cuadrícula"
-                  aria-pressed={viewMode === 'grid'}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Search */}
-              <div className="relative w-full sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="h-8 pl-8 text-xs rounded-xl"
-                  placeholder="Buscar empresa, slug, owner..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
-
-              {/* Plan filter */}
-              <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
-                <button
-                  type="button"
-                  onClick={() => setPlanFilter('ALL')}
-                  className={cn(
-                    'h-6 rounded-lg px-2.5 text-xs font-bold transition-all cursor-pointer',
-                    planFilter === 'ALL' ? 'bg-foreground text-background shadow-2xs' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  Todos
-                </button>
-                {planOptions.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPlanFilter(p)}
-                    className={cn(
-                      'h-6 rounded-lg px-2.5 text-xs font-bold transition-all cursor-pointer',
-                      planFilter === p ? 'bg-foreground text-background shadow-2xs' : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {planLabel(p, planNames)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Status filter pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border">
-            {filterPills.map((f) => {
-              const count = f.key === 'all'
-                ? organizations.length
-                : f.key === 'no_sub'
-                ? countOrganizationsWithoutSubscription(organizations)
-                : statusCounts[f.key] ?? 0
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setStatusFilter(f.key)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer',
-                    statusFilter === f.key
-                      ? 'bg-card text-foreground shadow-2xs border border-border'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <span>{f.label}</span>
-                  <span className={cn(
-                    'flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-extrabold',
-                    statusFilter === f.key ? 'bg-foreground text-background' : 'bg-muted-foreground/15 text-foreground/80'
-                  )}>
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-            {(query || planFilter !== 'ALL' || statusFilter !== 'all') && (
-              <button
-                type="button"
-                onClick={() => { setQuery(''); setPlanFilter('ALL'); setStatusFilter('all') }}
-                className="text-xs font-bold text-cyan-600 hover:underline cursor-pointer pl-2"
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          {/* Table View */}
-          {viewMode === 'table' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px]">
-                <thead className="sticky top-0 z-10 border-b border-border bg-muted/40 backdrop-blur">
-                  <tr>
-                    <th className={cn(thClass, 'pl-4')}>
-                      <button className={thBtn} onClick={() => toggleSort('name')}>
-                        Empresa <SortIndicator active={sortKey === 'name'} direction={sortDir} />
-                      </button>
-                    </th>
-                    <th className={thClass}>Rubro Comercial</th>
-                    <th className={thClass}>Módulos</th>
-                    <th className={thClass}>
-                      <button className={thBtn} onClick={() => toggleSort('plan')}>
-                        Plan <SortIndicator active={sortKey === 'plan'} direction={sortDir} />
-                      </button>
-                    </th>
-                    <th className={thClass}>
-                      <button className={thBtn} onClick={() => toggleSort('status')}>
-                        Suscripción <SortIndicator active={sortKey === 'status'} direction={sortDir} />
-                      </button>
-                    </th>
-                    <th className={thClass}>Owner Principal</th>
-                    <th className={thClass}>
-                      <button className={thBtn} onClick={() => toggleSort('members')}>
-                        Personal & Clientes <SortIndicator active={sortKey === 'members'} direction={sortDir} />
-                      </button>
-                    </th>
-                    <th className={thClass}>
-                      <button className={thBtn} onClick={() => toggleSort('created')}>
-                        Creada <SortIndicator active={sortKey === 'created'} direction={sortDir} />
-                      </button>
-                    </th>
-                    <th className={cn(thClass, 'pr-4 text-right')}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-20 text-center">
-                        <Minus className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                        <p className="mt-3 text-xs font-bold text-muted-foreground">No se encontraron organizaciones con estos filtros</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    pagination.items.map((org) => (
-                      <tr
-                        key={org.id}
-                        className="transition-colors hover:bg-muted/50"
-                      >
-                        {/* Empresa */}
-                        <td className="py-2 pl-4 pr-3">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black shadow-2xs',
-                              PLAN_AVATAR_BG[org.plan] ?? PLAN_AVATAR_BG.FREE
-                            )}>
-                              {getInitials(org.name)}
-                            </div>
-                            <div className="min-w-0">
-                              <Link
-                                href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
-                                className="truncate text-xs font-extrabold text-foreground hover:text-cyan-600 transition-colors block"
-                              >
-                                {org.name}
-                              </Link>
-                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                <span>/{org.slug}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => void copyUrl(org.slug)}
-                                  className="hover:text-foreground cursor-pointer"
-                                  title="Copiar URL"
-                                  aria-label={`Copiar URL de ${org.name}`}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Rubro Comercial */}
-                        <td className="px-3 py-2">
-                          <RubroBadge vertical={org.business_vertical} model={org.operating_model} />
-                        </td>
-
-                        {/* Módulos Habilitados */}
-                        <td className="px-3 py-2">
-                          <ModulesPreview modules={org.enabled_modules} />
-                        </td>
-
-                        {/* Plan */}
-                        <td className="px-3 py-2">
-                          <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-                            {planLabel(org.plan, planNames)}
-                          </Badge>
-                        </td>
-
-                        {/* Suscripción */}
-                        <td className="px-3 py-2">
-                          <SubscriptionBadge org={org} />
-                        </td>
-
-                        {/* Owner */}
-                        <td className="px-3 py-2">
-                          <div className="max-w-[180px]">
-                            <p className="truncate text-[11px] sm:text-xs font-semibold text-foreground/80">
-                              {org.owner_name || (org.owner_email?.split('@')[0]) || '—'}
-                            </p>
-                            {org.owner_email && (
-                              <p className="truncate text-[10px] text-muted-foreground">{org.owner_email}</p>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Miembros */}
-                        <td className="px-3 py-2">
-                          <MemberBar org={org} />
-                        </td>
-
-                        {/* Creada */}
-                        <td className="px-3 py-2 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                          {formatDate(org.created_at)}
-                        </td>
-
-                        {/* Acciones */}
-                        <td className="py-2 pl-3 pr-4">
-                          <div className="flex items-center justify-end gap-1">
-                            <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400"
-                              title="Editar organización"
-                              aria-label={`Editar ${org.name}`}
-                              onClick={() => setEditingOrg({
-                                id: org.id,
-                                name: org.name,
-                                slug: org.slug,
-                                plan: org.plan,
-                                subscription_status: org.subscription_status,
-                                business_vertical: org.business_vertical,
-                                operating_model: org.operating_model,
-                                enabled_modules: org.enabled_modules,
-                                cancel_at_period_end: org.cancel_at_period_end,
-                              })}
-                            >
-                              <Wrench className="h-3 w-3" />
-                            </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400" title="Ver detalle completo">
-                              <Link href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`} aria-label={`Ver detalle de ${org.name}`}>
-                                <Building2 className="h-3 w-3" />
-                              </Link>
-                            </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Abrir tienda pública">
-                              <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer" aria-label={`Abrir tienda de ${org.name}`}>
-                                <Globe className="h-3 w-3 text-muted-foreground" />
-                              </a>
-                            </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Gestionar usuarios">
-                              <Link href={`/superadmin/users?organization=${org.id}`} aria-label={`Ver usuarios de ${org.name}`}>
-                                <Users className="h-3 w-3 text-muted-foreground" />
-                              </Link>
-                            </Button>
-                            <Button asChild variant="ghost" size="icon" className="h-7 w-7 rounded-lg cursor-pointer" title="Suscripción y pagos">
-                              <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`} aria-label={`Ver suscripción de ${org.name}`}>
-                                <CreditCard className="h-3 w-3 text-muted-foreground" />
-                              </Link>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            /* Grid Cards View */
-            <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.length === 0 ? (
-                <div className="col-span-full py-16 text-center">
-                  <Minus className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                  <p className="mt-3 text-xs font-bold text-muted-foreground">No se encontraron organizaciones con estos filtros</p>
-                </div>
-              ) : (
-                pagination.items.map((org) => (
-                  <OrganizationGridCard
+  const renderCard = (org: SuperAdminOrganization) => (<OrganizationGridCard
                     key={org.id}
                     org={org}
                     referenceTime={referenceTime}
@@ -1049,8 +672,91 @@ export function OrganizationsDashboard({
                       enabled_modules: org.enabled_modules,
                       cancel_at_period_end: org.cancel_at_period_end,
                     })}
-                  />
-                ))
+                  />)
+
+  const thClass = 'px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground'
+  const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-foreground transition-colors'
+
+  return (
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+
+      {/* Header */}
+      <OrganizationPageHeader title="Organizaciones" description="Encontrá cada empresa, revisá su estado y accedé a su configuración desde un solo lugar." actions={<>
+        <Button variant="outline" disabled={refreshing} onClick={() => startRefresh(() => router.refresh())} className="gap-2 rounded-xl"><RefreshCw className={cn('size-4', refreshing && 'animate-spin')}/>{refreshing ? 'Actualizando…' : 'Actualizar'}</Button>
+        <Button variant="outline" onClick={exportCsv} disabled={!filtered.length} className="gap-2 rounded-xl"><Download className="size-4"/>Exportar resultados</Button>
+        <Button asChild className="gap-2 rounded-xl"><Link href="/superadmin/organizations/create"><Building2 className="size-4"/>Nueva organización</Link></Button>
+      </>}/>
+
+      
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
+          <StatCard label="Total Empresas" value={organizations.length} sub={`${filtered.length} coincidentes`} icon={Building2} />
+          <StatCard label="Planes comerciales" value={stats.paid} sub="El pago se consulta por separado" icon={Sparkles} tone="info" />
+          <StatCard label="Suscripciones activas" value={stats.activeSubscriptions} sub="Estado de suscripción" icon={CheckCircle2} tone="success" />
+          <StatCard label="En Período de Prueba" value={stats.trialing} sub="Con suscripción de prueba" icon={Clock} tone={stats.trialing > 0 ? 'warning' : 'default'} />
+          <StatCard label="Nuevas (30 días)" value={stats.newThisMonth} sub="recientemente creadas" icon={CalendarDays} tone={stats.newThisMonth > 0 ? 'info' : 'default'} />
+        </div>
+
+      {/* Main Table / Grid Card */}
+      <Card className="rounded-3xl border border-border bg-card/95 shadow-sm overflow-hidden">
+        <CardHeader className="space-y-5 border-b border-border bg-card px-4 py-5 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-lg font-semibold">Directorio de empresas</CardTitle><CardDescription className="mt-1 text-sm">{filtered.length} de {organizations.length} organizaciones · Pago y suscripción son estados distintos.</CardDescription></div><div className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1" role="group" aria-label="Vista del directorio"><button type="button" onClick={() => setViewMode('table')} aria-label="Vista de Tabla" aria-pressed={viewMode === 'table'} className={cn('flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm', viewMode === 'table' && 'bg-card shadow-sm')}><List className="size-4"/>Tabla</button><button type="button" onClick={() => setViewMode('grid')} aria-label="Vista de Cuadrícula" aria-pressed={viewMode === 'grid'} className={cn('flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm', viewMode === 'grid' && 'bg-card shadow-sm')}><LayoutGrid className="size-4"/>Tarjetas</button></div></div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_1fr_1fr_1fr]">
+            <label className="space-y-2 text-sm font-medium">Buscar empresa<div className="relative"><Search aria-hidden className="absolute left-3 top-3.5 size-4 text-muted-foreground"/><Input className="h-11 rounded-xl pl-10 text-sm" placeholder="Buscar empresa, slug, owner..." value={query} onChange={event => setQuery(event.target.value)}/></div></label>
+            <label className="space-y-2 text-sm font-medium">Plan<select className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm" value={planFilter} onChange={event => setPlanFilter(event.target.value)}><option value="ALL">Todos los planes</option>{planOptions.map(plan => <option key={plan} value={plan}>{planLabel(plan, planNames)}</option>)}</select></label>
+            <label className="space-y-2 text-sm font-medium">Suscripción<select className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm" value={statusFilter} onChange={event => setStatusFilter(event.target.value as FilterStatus)}>{filterPills.map(filter => <option key={filter.key} value={filter.key}>{filter.label} ({filter.key === 'all' ? organizations.length : filter.key === 'no_sub' ? countOrganizationsWithoutSubscription(organizations) : statusCounts[filter.key] ?? 0})</option>)}</select></label>
+            <label className="space-y-2 text-sm font-medium">Ordenar<select className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm" value={sortKey + ':' + sortDir} onChange={event => { const [key, dir] = event.target.value.split(':'); setValue('sort', key); setValue('dir', dir); setValue('page', '1') }}><option value="created:desc">Más recientes</option><option value="created:asc">Más antiguas</option><option value="name:asc">Nombre: A a Z</option><option value="name:desc">Nombre: Z a A</option><option value="members:desc">Mayor equipo</option><option value="plan:asc">Plan: A a Z</option><option value="plan:desc">Plan: Z a A</option><option value="status:asc">Estado: A a Z</option><option value="status:desc">Estado: Z a A</option><option value="members:asc">Menor equipo</option></select></label>
+          </div>
+          {(query || planFilter !== 'ALL' || statusFilter !== 'all') && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3"><p role="status" className="text-sm text-muted-foreground">{filtered.length} resultados con los filtros actuales</p><Button variant="ghost" className="min-h-11 text-primary" onClick={() => { setQuery(''); setPlanFilter('ALL'); setStatusFilter('all') }}>Limpiar filtros</Button></div>}
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {/* Table View */}
+          {viewMode === 'table' ? (
+            <div className="min-w-0">
+              <div className="hidden xl:block">
+                <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/15 px-6 py-3 text-xs text-muted-foreground"><span>Mostrando {pagination.items.length} empresas en esta página</span><span className="flex items-center gap-2"><ArrowRight aria-hidden className="size-3.5"/>Deslizá para ver todas las columnas</span></div>
+                <div tabIndex={0} role="region" aria-label="Tabla de organizaciones, desplazamiento horizontal y vertical" className="max-h-[min(72vh,800px)] overflow-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-primary">
+                  <table className="w-full min-w-[1320px] table-fixed border-separate border-spacing-0 text-sm">
+                    <caption className="sr-only">Directorio de organizaciones</caption>
+                    <colgroup><col className="w-[270px]"/><col className="w-[190px]"/><col className="w-[190px]"/><col className="w-[200px]"/><col className="w-[160px]"/><col className="w-[130px]"/><col className="w-[180px]"/></colgroup>
+                    <thead className="sticky top-0 z-20 bg-muted text-muted-foreground">
+                      <tr>
+                        {([{key:'name',label:'Empresa'},{key:'plan',label:'Plan y funciones'},{key:'status',label:'Suscripción y pago'}] as const).map((column,index) => <th key={column.key} scope="col" aria-sort={sortKey === column.key ? sortDir === 'asc' ? 'ascending' : 'descending' : 'none'} className={cn(thClass,'border-b border-border bg-muted',index === 0 && 'sticky left-0 z-30 border-r border-border/70')}><button type="button" className={thBtn + ' min-h-11 text-xs font-semibold normal-case tracking-normal'} onClick={() => toggleSort(column.key)}>{column.label}<SortIndicator active={sortKey===column.key} direction={sortDir}/></button></th>)}
+                        <th scope="col" className={cn(thClass,'border-b border-border text-xs font-semibold normal-case tracking-normal')}>Propietario</th>
+                        <th scope="col" aria-sort={sortKey==='members' ? sortDir==='asc'?'ascending':'descending':'none'} className={cn(thClass,'border-b border-border')}><button type="button" className={thBtn + ' min-h-11 text-xs font-semibold normal-case tracking-normal'} onClick={() => toggleSort('members')}>Equipo<SortIndicator active={sortKey==='members'} direction={sortDir}/></button></th>
+                        <th scope="col" aria-sort={sortKey==='created' ? sortDir==='asc'?'ascending':'descending':'none'} className={cn(thClass,'border-b border-border')}><button type="button" className={thBtn + ' min-h-11 text-xs font-semibold normal-case tracking-normal'} onClick={() => toggleSort('created')}>Fecha de alta<SortIndicator active={sortKey==='created'} direction={sortDir}/></button></th>
+                        <th scope="col" className={cn(thClass,'sticky right-0 z-30 border-b border-l border-border bg-muted pr-5 text-right text-xs font-semibold normal-case tracking-normal')}>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!pagination.items.length ? <tr><td colSpan={7} className="py-20 text-center"><Minus aria-hidden className="mx-auto size-8 text-muted-foreground/60"/><p className="mt-3 text-sm text-muted-foreground">No se encontraron organizaciones con estos filtros</p></td></tr> : pagination.items.map(org => <tr key={org.id} className="group bg-card transition-colors even:bg-muted/10 hover:bg-primary/[.035]">
+                        <td className="sticky left-0 z-10 border-b border-r border-border/60 bg-card px-5 py-5 align-top group-hover:bg-muted/80">
+                          <div className="flex items-start gap-3"><span aria-hidden className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold',PLAN_AVATAR_BG[org.plan]??PLAN_AVATAR_BG.FREE)}>{getInitials(org.name)}</span><div className="min-w-0 flex-1"><Link href={'/superadmin/organizations/'+encodeURIComponent(org.slug)} title={org.name} className="block break-words text-sm font-semibold leading-5 text-foreground hover:text-primary">{org.name}</Link><div className="mt-1 flex min-w-0 items-center gap-1"><span title={'/'+org.slug} className="truncate text-xs text-muted-foreground">/{org.slug}</span><button type="button" aria-label={'Copiar URL de '+org.name} onClick={() => void copyUrl(org.slug)} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"><Copy aria-hidden className="size-3.5"/></button></div></div></div>
+                          <div className="mt-3"><RubroBadge vertical={org.business_vertical} model={org.operating_model}/></div>
+                        </td>
+                        <td className="border-b border-border/60 px-4 py-5 align-top"><Badge variant="outline" className={cn('rounded-lg px-2.5 py-1 text-xs font-semibold',PLAN_COLORS[org.plan]??PLAN_COLORS.FREE)}>{planLabel(org.plan,planNames)}</Badge><div className="mt-3"><ModulesPreview modules={org.enabled_modules}/></div></td>
+                        <td className="space-y-3 border-b border-border/60 px-4 py-5 align-top"><SubscriptionBadge org={org}/><div><span className="mb-1 block text-[11px] text-muted-foreground">Pago</span><PaymentBadge status={org.payment_status}/></div></td>
+                        <td className="border-b border-border/60 px-4 py-5 align-top"><p className="break-words font-medium leading-5 text-foreground">{org.owner_name || 'Sin nombre registrado'}</p>{org.owner_email ? <a title={org.owner_email} href={'mailto:'+org.owner_email} className="mt-2 block break-all text-xs leading-5 text-muted-foreground hover:text-primary">{org.owner_email}</a> : <p className="mt-2 text-xs text-muted-foreground">Sin correo registrado</p>}</td>
+                        <td className="border-b border-border/60 px-4 py-5 align-top"><MemberBar org={org}/></td>
+                        <td className="border-b border-border/60 px-4 py-5 align-top"><time dateTime={org.created_at??undefined} className="whitespace-nowrap text-xs font-medium text-muted-foreground">{formatDate(org.created_at)}</time></td>
+                        <td className="sticky right-0 z-10 border-b border-l border-border/60 bg-card px-3 py-5 align-top group-hover:bg-muted/80"><OrganizationActions showDetail org={org} onEdit={() => setEditingOrg({id:org.id,name:org.name,slug:org.slug,plan:org.plan,subscription_status:org.subscription_status,business_vertical:org.business_vertical,operating_model:org.operating_model,enabled_modules:org.enabled_modules,cancel_at_period_end:org.cancel_at_period_end})}/></td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="grid gap-4 p-4 sm:grid-cols-2 xl:hidden">{pagination.items.length ? pagination.items.map(renderCard) : <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No se encontraron organizaciones con estos filtros</p>}</div>
+            </div>
+          ) : (
+            /* Grid Cards View */
+            <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.length === 0 ? (
+                <div className="col-span-full py-16 text-center">
+                  <Minus className="mx-auto h-8 w-8 text-muted-foreground/60" />
+                  <p className="mt-3 text-xs font-bold text-muted-foreground">No se encontraron organizaciones con estos filtros</p>
+                </div>
+              ) : (
+                pagination.items.map(renderCard)
               )}
             </div>
           )}

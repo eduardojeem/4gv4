@@ -54,6 +54,7 @@ export type OnboardingChecklistInput = {
 export const ONBOARDING_MODULE_PREFERENCES = [
   { key: 'pos', label: 'Ventas / POS', entitlement: 'pos', module: 'pos' },
   { key: 'inventory', label: 'Inventario', entitlement: 'inventory', module: 'inventory' },
+  { key: 'services', label: 'Agenda y servicios', entitlement: 'services', module: 'services' },
   { key: 'repairs', label: 'Reparaciones', entitlement: 'repairs', module: 'repairs' },
   { key: 'suppliers', label: 'Proveedores', entitlement: 'inventory_admin', module: 'inventory_admin' },
   { key: 'credits', label: 'Créditos', entitlement: 'credits', module: 'credits' },

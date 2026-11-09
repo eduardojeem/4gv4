@@ -195,6 +195,28 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
       )}
 
       {style === 'wholesale-pro' && (<><NavRow /><div className="rounded border bg-background p-1"><Bar className="w-3/4" /></div><div className="rounded bg-primary/10 p-2"><Bar className="w-1/2" /></div><ProductRow style={style} count={4} /></>)}
+      {style === 'informatica-electronica' && (
+        <>
+          <div className="bg-slate-900 px-1.5 py-1 text-white">
+            <div className="flex items-center justify-between">
+              <span className="h-2 w-2 rounded-xs bg-primary" />
+              <div className="flex gap-1">
+                <span className="h-1 w-3 rounded-full bg-white/60" />
+                <span className="h-1 w-3 rounded-full bg-emerald-400" />
+              </div>
+            </div>
+            <div className="mt-1 flex items-center justify-between rounded bg-slate-800 px-1 py-0.5">
+              <span className="h-1 w-8 rounded-full bg-white/90" />
+              <span className="h-1.5 w-3 rounded-xs bg-primary" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded bg-muted/40 px-1.5 py-1 border border-border">
+            <span className="text-[6px] font-black text-rose-500">OFERTAS</span>
+            <span className="h-1 w-4 rounded-full bg-primary" />
+          </div>
+          <ProductRow style={style} count={3} />
+        </>
+      )}
       {style === 'catalog-basic' && (
         <>
           <NavRow />
@@ -232,6 +254,32 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
           <div className="flex gap-1">
             {[0, 1, 2].map((index) => (
               <span key={index} className="h-3.5 w-3.5 rounded-full bg-muted-foreground/20 ring-1 ring-background" />
+            ))}
+          </div>
+        </>
+      )}
+      {style === 'barber' && (
+        <>
+          <NavRow dark square />
+          <div className="flex items-center justify-between rounded-lg bg-zinc-950 px-2 py-2 border border-amber-500/30">
+            <div className="space-y-1">
+              <span className="block font-serif text-[8px] tracking-wider text-amber-400">CLUB DE CABALLEROS</span>
+              <span className="block h-1 w-10 rounded-full bg-amber-400/50" />
+            </div>
+            <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[6px] font-black text-zinc-950">Turnos</span>
+          </div>
+          <div className="space-y-1 rounded-lg border border-amber-500/20 bg-zinc-900/90 p-1.5">
+            {['Ritual Barba', 'Corte de Autor', 'Toallas Calientes'].map((label) => (
+              <div key={label} className="flex items-center justify-between gap-1">
+                <span className="text-[6px] text-zinc-300">{label}</span>
+                <span className="h-px flex-1 border-b border-dotted border-amber-500/30" />
+                <span className="h-1 w-4 rounded-full bg-amber-500" />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            {[0, 1, 2].map((index) => (
+              <span key={index} className="h-3.5 w-3.5 rounded-full bg-amber-500/30 ring-1 ring-amber-500/50" />
             ))}
           </div>
         </>

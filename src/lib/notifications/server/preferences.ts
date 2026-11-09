@@ -191,7 +191,9 @@ export async function upsertNotificationPreference(params: {
   pushEnabled: boolean
   inAppEnabled: boolean
 }): Promise<EffectivePreference> {
-  const { organizationId, userId, notificationType, pushEnabled, inAppEnabled } = params
+  const { organizationId, userId, notificationType, pushEnabled } = params
+  // El historial de novedades permanece disponible; el push es la preferencia opcional.
+  const inAppEnabled = notificationType === 'SYSTEM_NEWS' ? true : params.inAppEnabled
   const supabase = createAdminSupabase()
 
   const { error } = await supabase.from('notification_preferences').upsert(

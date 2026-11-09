@@ -25,7 +25,7 @@ export type BillingProfile = {
   phone: string | null;
 };
 
-export type SubscriptionPaymentAvailability = { pagopar_card: boolean; pagopar_qr: boolean; stripe: boolean; autopay: boolean; promo: boolean; transfer: boolean };
+export type SubscriptionPaymentAvailability = { bancard_card: boolean; stripe: boolean; autopay: boolean; promo: boolean; transfer: boolean };
 
 export type SubscriptionDetails = {
   paymentAvailability: SubscriptionPaymentAvailability;
@@ -81,7 +81,7 @@ export function normalizeSubscription(raw: RawResponse): SubscriptionDetails {
   const validMonthly = monthly && Number.isFinite(monthly.current) && monthly.current >= 0 && Number.isFinite(Date.parse(monthly.startsAt)) && Number.isFinite(Date.parse(monthly.endsAt));
   const known = (value: unknown) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value));
   return {
-    paymentAvailability: Object.fromEntries(['pagopar_card', 'pagopar_qr', 'stripe', 'autopay', 'promo', 'transfer'].map(key => [key, (raw.paymentAvailability as Record<string, unknown> | undefined)?.[key] === true])) as SubscriptionPaymentAvailability,
+    paymentAvailability: Object.fromEntries(['bancard_card', 'stripe', 'autopay', 'promo', 'transfer'].map(key => [key, (raw.paymentAvailability as Record<string, unknown> | undefined)?.[key] === true])) as SubscriptionPaymentAvailability,
     repairUsage: validMonthly ? monthly : null,
     usageKnown: Object.fromEntries(['branches','users','cashRegisters','products','services'].map(key => [key,known(key === 'cashRegisters' ? usage.cashRegisters ?? usage.registers : usage[key])])),
     subscription: (raw.subscription as SubscriptionDetails['subscription']) ?? null,

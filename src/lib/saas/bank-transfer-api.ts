@@ -40,7 +40,7 @@ export async function requireTransferTenant() {
   const auth = await resolveRequestAuthUser()
   if (auth.authenticated === false) throw new TransferApiError('No autorizado.', auth.reason === 'inactive' ? 403 : 401)
   const organization = await getCurrentOrganizationContext(auth.user.id)
-  // Same organization-facing billing boundary as Pagopar and billing profile.
+  // Same organization-facing billing boundary as Bancard and billing profile.
   if (!organization || !['owner', 'admin'].includes(organization.role)) throw new TransferApiError('No tenés permiso para gestionar pagos de planes.', 403)
   return { organization, user: auth.user }
 }

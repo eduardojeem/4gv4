@@ -65,7 +65,7 @@ export default async function DashboardOnboardingPage() {
       .maybeSingle(),
     admin
       .from('organizations')
-      .select('business_vertical, operating_model, storefront_public')
+      .select('business_vertical, operating_model, storefront_public, enabled_modules')
       .eq('id', organization.id)
       .maybeSingle(),
   ])
@@ -139,7 +139,7 @@ export default async function DashboardOnboardingPage() {
       businessCategory: businessProfile?.business_vertical ?? null,
       branch: branch ?? null,
     })
-    return <SharedOnboardingWizard initialState={state} initialRevision={settings?.onboarding_revision ?? 0} planName={planInfo?.name ?? organization.plan ?? 'Free'} entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : []} />
+    return <SharedOnboardingWizard key={organization.id} organizationId={organization.id} initialState={state} initialRevision={settings?.onboarding_revision ?? 0} planName={planInfo?.name ?? organization.plan ?? 'Free'} entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : []} />
   }
   const adminSettings = getTenantAdminSettings(settings?.modules)
   const companyInfo = (companyInfoSetting?.value ?? {}) as {
@@ -183,6 +183,7 @@ export default async function DashboardOnboardingPage() {
 
   return (
     <OnboardingClient
+      key={organization.id}
       organization={organization}
       subscription={
         subscription
@@ -222,6 +223,7 @@ export default async function DashboardOnboardingPage() {
           ? companyInfo.brandColor
           : 'blue',
         storefrontPublic,
+        enabledModules: businessProfile?.enabled_modules ?? undefined,
         businessVertical: businessProfile?.business_vertical || 'general',
         serviceSpecialties: planInfo?.serviceSpecialties ?? [],
         attentionMode: planInfo?.attentionMode ?? 'local',

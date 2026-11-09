@@ -80,6 +80,8 @@ export type ProductFilters = {
   perPage?: number
   /** Pass the already-resolved wholesale status to skip a redundant DB round-trip. */
   isWholesale?: boolean
+  /** Filtrar exclusivamente productos que tienen precio mayorista definido */
+  wholesaleOnly?: boolean
 }
 
 export type ProductsResponse = {
@@ -494,6 +496,10 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
     if (filters.offers) {
       q = q.eq('has_offer', true)
+    }
+
+    if (isWholesale && filters.wholesaleOnly) {
+      q = q.gt('wholesale_price', 0)
     }
 
     switch (sort) {

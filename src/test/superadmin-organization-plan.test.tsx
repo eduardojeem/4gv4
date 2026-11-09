@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -162,13 +162,13 @@ const abrir = async (nombre: RegExp) => {
 describe('la pestaña de módulos', () => {
   it('mide el uso contra lo que incluye el plan', async () => {
     render(<OrganizationDetailView data={base()} />)
-    await abrir(/Módulos|Rubro/)
+    await abrir(/Funciones/)
     expect(screen.getByText('6 de 6 módulos que incluye (100%)')).toBeInTheDocument()
   })
 
   it('explica que sin elección propia están todos los del plan', async () => {
     render(<OrganizationDetailView data={base()} />)
-    await abrir(/Módulos|Rubro/)
+    await abrir(/Funciones/)
     expect(screen.getByText(/no eligió módulos: tiene activos todos los que su plan incluye/)).toBeInTheDocument()
   })
 
@@ -176,7 +176,7 @@ describe('la pestaña de módulos', () => {
     // `ecommerce` esta prendido y la organizacion no recibio un solo pedido:
     // es plata que paga por algo que no toca.
     render(<OrganizationDetailView data={base()} />)
-    await abrir(/Módulos|Rubro/)
+    await abrir(/Funciones/)
     expect(screen.getByText(/módulos? activos? que nunca se us(aron|ó)/)).toBeInTheDocument()
   })
 
@@ -184,14 +184,14 @@ describe('la pestaña de módulos', () => {
     render(<OrganizationDetailView data={base({
       organization: { ...base().organization, enabled_modules: ['pos', 'inventory'] } as never,
     })} />)
-    await abrir(/Módulos|Rubro/)
+    await abrir(/Funciones/)
     expect(screen.getAllByText('Disponible, apagado').length).toBeGreaterThan(0)
     expect(screen.queryByText('No contratado')).not.toBeInTheDocument()
   })
 
   it('muestra el uso de cada módulo activo', async () => {
     render(<OrganizationDetailView data={base()} />)
-    await abrir(/Módulos|Rubro/)
+    await abrir(/Funciones/)
     expect(screen.getAllByText('47 productos').length).toBeGreaterThan(0)
     expect(screen.getAllByText('3 reparaciones').length).toBeGreaterThan(0)
     expect(screen.getByText('Sin pedidos web — activo pero sin usar')).toBeInTheDocument()
@@ -218,7 +218,7 @@ describe('la pestaña de suscripción', () => {
       } as never,
     })} />)
     await abrir(/Suscripción|Plan/)
-    expect(screen.getByText('Pago vencido')).toBeInTheDocument()
+    expect(within(screen.getByRole('tabpanel')).getByText('Pago vencido')).toBeInTheDocument()
     expect(screen.queryByText('No hay una suscripción registrada')).not.toBeInTheDocument()
   })
 

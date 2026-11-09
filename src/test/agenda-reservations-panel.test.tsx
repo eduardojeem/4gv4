@@ -42,3 +42,20 @@ describe('reservas: borrador y guardado seguro', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('settings save interaction', () => {
+ it('freezes fields during save and preserves edits on a network failure', async () => {
+  let fail: (error: Error) => void = () => {}
+  vi.stubGlobal('fetch', vi.fn((_input, init) => init?.method === 'PUT' ? new Promise((_resolve, reject) => { fail = reject }) : Promise.resolve({ ok:true, json:async()=>config })))
+  window.location.hash = '#reservas'
+  render(<AgendaSettingsPanel />)
+  const message = await screen.findByLabelText(/Mensaje para el cliente/)
+  fireEvent.change(message, { target: { value:'Llegá 5 minutos antes' } })
+  fireEvent.click(screen.getByRole('button', { name:'Guardar cambios' }))
+  await waitFor(() => expect(message).toBeDisabled())
+  fail(new Error('offline'))
+  await waitFor(() => expect(message).toBeEnabled())
+  expect(message).toHaveValue('Llegá 5 minutos antes')
+  expect(screen.getByRole('alert')).toHaveTextContent('tus cambios siguen aquí')
+ })
+})

@@ -19,7 +19,9 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { SuggestedServicesCard } from '@/components/dashboard/agenda/SuggestedServicesCard'
 import { ProfessionalsManager } from '@/components/dashboard/agenda/ProfessionalsManager'
 import { TimeOffEditor } from '@/components/dashboard/agenda/TimeOffEditor'
+import { ServiceWebsiteEditor } from './ServiceWebsiteEditor'
 import { NewServiceDialog } from '@/components/dashboard/agenda/NewServiceDialog'
+import { agendaSettingsProblem } from '@/lib/agenda/settings-validation'
 import { reservationReadiness } from '@/lib/agenda/reservation-readiness'
 
 const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería', beauty_services: 'belleza y cuidado personal' }
@@ -71,6 +73,9 @@ export function AgendaSettingsPanel() {
   const [savedSnapshot, setSavedSnapshot] = useState('')
   const [newServiceOpen, setNewServiceOpen] = useState(false)
   const [daysText, setDaysText] = useState('30')
+  const saveLock = useRef(false)
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const { businessVertical, serviceSpecialties } = useSubscriptionStatus()
   // Snapshot del servidor; las altas no reenvían configuración global.
@@ -120,7 +125,8 @@ export function AgendaSettingsPanel() {
       settings: draft.settings,
       services: (body.services as AgendaService[]).map((service) => {
         const edited = draft.services.find((item) => item.product_id === service.product_id)
-        return edited ? { ...service, duration_minutes: edited.duration_minutes, online: edited.online, buffer_minutes: edited.buffer_minutes } : service
+        // Si se acaba de ocultar de la web, tampoco queda reservable online.
+        return edited ? { ...service, duration_minutes: edited.duration_minutes, online: service.catalog_visible === false ? false : edited.online, buffer_minutes: edited.buffer_minutes } : service
       }),
     } : body)
   }, [savedSnapshot])
@@ -191,10 +197,15 @@ export function AgendaSettingsPanel() {
     if (!saved) return
     // El equipo no se descarta: ya está guardado.
     setConfig((current) => (current ? { ...current, settings: saved.settings, services: saved.services, settingsRevision: saved.settingsRevision } : current))
+    setSaveError(null)
     setDaysText(String(saved.settings.max_days_ahead))
   }
 
   const save = async () => {
+    if (saveLock.current) return
+    setSaveError(null)
+    const problem = agendaSettingsProblem(settings, config.services)
+    if (problem) { setSaveError(problem); toast.error(problem); return }
     if (!daysValid || (settings.booking_message?.length ?? 0) > 500) {
       toast.error('Revisá los días de anticipación y el mensaje (máximo 500 caracteres).')
       goTo('reservas')
@@ -206,6 +217,7 @@ export function AgendaSettingsPanel() {
       goTo('horario')
       return
     }
+    saveLock.current = true
     setSaving(true)
     try {
       const response = await fetch('/api/agenda/settings', {
@@ -226,14 +238,17 @@ export function AgendaSettingsPanel() {
       const body = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (body.code === 'AGENDA_SETTINGS_CHANGED') setConflict(true)
+        setSaveError(body.error || 'No se pudo guardar. Tu borrador se conserva.')
         toast.error(body.error || 'No se pudo guardar')
         return
       }
       toast.success('Cambios guardados')
       await load()
     } catch {
+      setSaveError('No se pudo guardar. Revisá tu conexión; tus cambios siguen aquí.')
       toast.error('No se pudo guardar. Revisá tu conexión.')
     } finally {
+      saveLock.current = false
       setSaving(false)
     }
   }
@@ -252,14 +267,20 @@ export function AgendaSettingsPanel() {
       {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
       {conflict && <div role="alert" className="rounded-xl border border-amber-300 p-4 text-sm"><p>Otra persona modificó la agenda. Tu borrador sigue aquí; no se sobrescribió la configuración guardada.</p><Button variant="outline" className="mt-2" disabled={saving} onClick={() => { if (window.confirm('Recargar descarta tu borrador y trae la configuración actual. ¿Continuar?')) void load() }}>Recargar y descartar borrador</Button></div>}
 
-      <div className="space-y-1">
+      <div className="rounded-2xl border border-primary/15 bg-primary/5 p-5 sm:p-6 space-y-2">
         <Link href="/dashboard/agenda" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Agenda</Link>
         <h1 className="text-2xl font-bold tracking-tight">Configurar la agenda</h1>
-        <p className="text-sm text-muted-foreground">Elegí una sección. Lo del equipo se guarda al editar a cada profesional; lo demás, con «Guardar cambios».</p>
+        <p className="text-sm text-muted-foreground">Configurá cuándo atendés, quién atiende y qué servicios ofrecés. Guardá los ajustes antes de probar las reservas de tu tienda.</p>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-3" aria-label="Resumen de la agenda">
+        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Zona horaria</p><p className="mt-1 text-sm font-semibold">{config.timeZone}</p><p className="mt-1 text-xs text-muted-foreground">Se usa para turnos y ausencias.</p></div>
+        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Servicios para reservar</p><p className="mt-1 text-lg font-semibold">{config.services.filter(service => service.online).length} de {config.services.length}</p><button className="mt-1 text-xs font-medium text-primary underline" onClick={() => goTo('servicios')}>Revisar servicios</button></div>
+        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Reservas online</p><p className="mt-1 text-sm font-semibold">{!settings.online_booking ? 'Desactivadas' : readiness.ready ? 'Requisitos completos' : 'Falta configurar'}</p><button className="mt-1 text-xs font-medium text-primary underline" onClick={() => goTo('reservas')}>Ver requisitos{dirty ? ' · borrador sin guardar' : ''}</button></div>
+      </div>
+      {saveError && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{saveError}</p>}
       {!advanced && (
-        <p className="rounded-lg border p-3 text-sm text-muted-foreground">La agenda básica sigue disponible. Para activar tarifas, horarios individuales y ausencias, falta aplicar la migración transaccional de reservas.</p>
+        <p className="rounded-lg border p-3 text-sm text-muted-foreground">La agenda básica está disponible. Las tarifas individuales, horarios por profesional y ausencias todavía no están habilitados. Consultá con soporte para activarlos.</p>
       )}
 
       <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -284,9 +305,11 @@ export function AgendaSettingsPanel() {
           ))}
         </nav>
 
-        <div className="min-w-0">
+        <fieldset disabled={saving} aria-busy={saving} className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/40 px-4 py-3 text-xs text-muted-foreground"><span>{section === 'equipo' || section === 'ausencias' ? 'Cada profesional o ausencia se guarda con su propio botón; no necesita Guardar cambios.' : 'Los ajustes de esta sección se aplican con Guardar cambios.'}</span><span className="font-medium">{sections.find(item => item.id === section)?.label}</span></div>
           {section === 'horario' && (
             <SectionCard title="Horario de atención" description="Fuera de este horario no se ofrecen turnos online. Un administrador puede agendar fuera de horario con una advertencia; nunca sobre otro turno o ausencia.">
+              <p className="mb-4 rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">Ejemplo: 09:00–12:00 y 14:00–18:00 deja el almuerzo sin turnos. Los tramos no deben superponerse.</p>
               <div className="divide-y">
                 {DAY_ORDER.map((day) => {
                   const ranges = settings.opening_hours[day] ?? []
@@ -315,7 +338,7 @@ export function AgendaSettingsPanel() {
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                 <div className="flex items-center gap-2 text-sm">
-                  <Label>Turnos cada</Label>
+                  <Label>Ofrecer horarios cada</Label>
                   <Select value={String(settings.slot_minutes)} onValueChange={(value) => setSettings({ slot_minutes: Number(value) })}>
                     <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
                     <SelectContent>{[10, 15, 20, 30, 45, 60].map((minutes) => <SelectItem key={minutes} value={String(minutes)}>{minutes} min</SelectItem>)}</SelectContent>
@@ -325,6 +348,7 @@ export function AgendaSettingsPanel() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left"
                     onClick={() => {
                       const opening = { ...settings.opening_hours }
                       DAY_ORDER.forEach((day) => { if (day !== 1 && (opening[day] ?? []).length > 0) opening[day] = mondayRanges.map(([from, to]) => [from, to] as [string, string]) })
@@ -346,7 +370,10 @@ export function AgendaSettingsPanel() {
                 rates={config.professionalRates ?? []}
                 currency={config.currency}
                 advanced={advanced}
-                onProfessionalsChange={(update) => setConfig((current) => (current ? { ...current, professionals: update(current.professionals) } : current))}
+                onProfessionalsChange={(update) => {
+                  if (savedConfigRef.current) savedConfigRef.current = { ...savedConfigRef.current, professionals: update(savedConfigRef.current.professionals) }
+                  setConfig(current => current ? { ...current, professionals: update(current.professionals) } : current)
+                }}
                 onRatesChange={(professionalId, rates) => setConfig((current) => (current ? { ...current, professionalRates: [...(current.professionalRates ?? []).filter((row) => row.professional_id !== professionalId), ...rates] } : current))}
               />
             </SectionCard>
@@ -355,7 +382,7 @@ export function AgendaSettingsPanel() {
           <div hidden={section !== 'servicios'}>
             <SectionCard
               title="Servicios"
-              description="Lo que se reserva y se cobra. Decí cuánto dura cada uno y si se puede reservar online."
+              description="Definí la duración de cada servicio y si el cliente puede reservarlo desde tu tienda. Crear un servicio lo guarda al momento; los ajustes de esta lista requieren Guardar cambios."
               action={<Button onClick={() => setNewServiceOpen(true)} className="min-h-10"><Plus className="h-4 w-4" /> Nuevo servicio</Button>}
             >
               <div className="space-y-4">
@@ -377,34 +404,37 @@ export function AgendaSettingsPanel() {
                     <Button variant="outline" className="mt-4 min-h-10" onClick={() => setNewServiceOpen(true)}><Plus className="h-4 w-4" /> Nuevo servicio</Button>
                   </div>
                 ) : (
-                  <ul className="divide-y">
-                    {config.services.map((service) => (
-                      <li key={service.product_id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 text-sm">
+                  <div className="space-y-3"><Label htmlFor="service-search">Buscar servicio</Label><Input id="service-search" type="search" placeholder="Nombre del servicio…" value={serviceSearch} onChange={event => setServiceSearch(event.target.value)} /><p className="text-xs text-muted-foreground">Preparación es el tiempo libre después del servicio. Ejemplo: corte de 30 min + 10 min para limpiar ocupa 40 min.</p>
+                  {!config.services.some(service => service.name.toLocaleLowerCase().includes(serviceSearch.trim().toLocaleLowerCase())) && <p role="status" className="py-4 text-sm text-muted-foreground">No hay servicios que coincidan con la búsqueda.</p>}
+                  <ul className="space-y-3">
+                    {config.services.filter(service => service.name.toLocaleLowerCase().includes(serviceSearch.trim().toLocaleLowerCase())).map((service) => (
+                      <li key={service.product_id} className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-muted/10 p-4 text-sm">
                         <span className="min-w-0 flex-1 basis-40">
                           <span className="block font-medium">{service.name}</span>
                           <span className="text-xs text-muted-foreground">{service.hide_price ? 'Precio a consultar' : formatCurrency(service.price, { currency: config.currency })}</span>
                         </span>
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           Dura
-                          <Input type="number" min={5} step={5} className="h-9 w-20 text-sm" value={service.duration_minutes} aria-label={`Duración de ${service.name}`} onChange={(event) => setService(service.product_id, { duration_minutes: Math.max(5, Number(event.target.value) || 5) })} />
+                          <Input type="number" min={5} max={600} step={1} className="h-9 w-20 text-sm" value={service.duration_minutes} aria-label={`Duración de ${service.name}`} onChange={(event) => setService(service.product_id, { duration_minutes: Math.max(5, Number(event.target.value) || 5) })} />
                           min
                         </label>
                         {advanced && (
                           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            Margen
+                            Preparación
                             <Input type="number" min={0} max={120} step={1} className="h-9 w-20 text-sm" value={service.buffer_minutes ?? 0} aria-label={`Margen de ${service.name}`} onChange={(event) => setService(service.product_id, { buffer_minutes: Number(event.target.value) })} />
                             min
                           </label>
                         )}
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Switch checked={service.online} onCheckedChange={(on) => setService(service.product_id, { online: on })} aria-label={`Reservable online: ${service.name}`} /> Online
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={service.catalog_visible === false ? 'Primero mostralo en la página web para poder reservarlo online.' : undefined}>
+                          <Switch disabled={service.catalog_visible === false} checked={service.online} onCheckedChange={(on) => setService(service.product_id, { online: on })} aria-label={`Permitir reservar online: ${service.name}`} /> Reservar online
                         </label>
+                        <ServiceWebsiteEditor service={service} onSaved={refreshKeepingDrafts} />
                       </li>
                     ))}
-                  </ul>
+                  </ul></div>
                 )}
                 {config.services.length > 0 && (
-                  <p className="text-xs text-muted-foreground">Para cambiar el nombre, el precio o la foto de un servicio, editalo en <Link href="/dashboard/products" className="underline">Productos</Link>.</p>
+                  <p className="text-xs text-muted-foreground">La portada y si aparece en la web se cambian en «Foto y página web» de cada servicio. Para el nombre o el precio, editalo en <Link href="/dashboard/products" className="underline">Productos</Link>.</p>
                 )}
                 {savedSettingsRef.current && (
                   <NewServiceDialog
@@ -424,7 +454,7 @@ export function AgendaSettingsPanel() {
               <div className="space-y-5 text-sm">
                 <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
                   <h3 className="font-semibold">Estado de las reservas</h3>
-                  <p>{!settings.online_booking ? 'Reservas online apagadas' : readiness.ready ? 'Configuración básica lista' : 'Faltan requisitos para ofrecer reservas'}</p>
+                  <p>{!settings.online_booking ? 'Reservas online apagadas' : readiness.ready ? 'Requisitos de configuración completos' : 'Faltan requisitos para ofrecer reservas'}</p>
                   <ul className="space-y-1">{readiness.checks.map(check => <li key={check.label}>{check.ok ? '✓' : 'Pendiente:'} {check.label}</li>)}</ul>
                   {readiness.uncovered.length > 0 && <p>Sin personal online habilitado: {readiness.uncovered.join(', ')}.</p>}
                   <p className="text-xs text-muted-foreground">Revisa requisitos básicos, no garantiza horarios libres: al reservar también se consideran turnos y ausencias.</p>
@@ -432,7 +462,7 @@ export function AgendaSettingsPanel() {
                 <h3 className="font-semibold">Cómo reserva el cliente</h3>
                 <div className="divide-y rounded-xl border">
                   <ToggleRow title="Aceptar reservas desde la tienda" checked={settings.online_booking} onChange={(on) => setSettings({ online_booking: on })} />
-                  <ToggleRow title="Confirmarlas yo antes" detail="Si está apagado, quedan confirmadas solas." checked={settings.require_confirmation} onChange={(on) => setSettings({ require_confirmation: on })} />
+                  <ToggleRow title="Revisar cada solicitud antes de confirmarla" detail="Activado: el cliente solicita el turno y vos lo confirmás desde Agenda. Desactivado: la reserva se confirma automáticamente si el horario está libre." checked={settings.require_confirmation} onChange={(on) => setSettings({ require_confirmation: on })} />
                   <ToggleRow title="Avisarme por email" detail="Cuando un cliente reserva, cambia o cancela. Llega al email de contacto de la tienda; igual lo ves en la campanita de la Agenda." checked={settings.notify_email !== false} onChange={(on) => setSettings({ notify_email: on })} />
                 </div>
 
@@ -455,7 +485,7 @@ export function AgendaSettingsPanel() {
                       <option value="optional">El cliente puede elegir o pedir cualquiera</option>
                       <option value="required">El cliente debe elegir con quién atenderse</option>
                     </select>
-                    <span className="block text-xs text-muted-foreground">La asignación automática confirma un profesional concreto y su tarifa antes de reservar. Si exigís elegir, necesitás al menos uno activo y que se pueda reservar online.</span>
+                    <span className="block text-xs text-muted-foreground">En asignación automática, el sistema elige una persona disponible y muestra su nombre y precio antes de que el cliente confirme. Si exigís elegir, necesitás al menos uno activo y que se pueda reservar online.</span>
                   </label>
                 )}
 
@@ -466,7 +496,7 @@ export function AgendaSettingsPanel() {
                       <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                       <SelectContent>{[[0, 'Sin mínimo'], [30, '30 minutos'], [60, '1 hora'], [120, '2 horas'], [240, '4 horas'], [1440, '1 día']].map(([value, label]) => <SelectItem key={value} value={String(value)}>{label}</SelectItem>)}</SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Cuánto antes del turno se puede reservar.</p>
+                    <p className="text-xs text-muted-foreground">Tiempo mínimo entre la reserva y el inicio. Con 1 hora, a las 14:00 se puede reservar desde las 15:00.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="max-days-ahead">Hasta cuántos días adelante</Label>
@@ -485,11 +515,11 @@ export function AgendaSettingsPanel() {
           )}
 
           {section === 'ausencias' && advanced && (
-            <SectionCard title="Pausas y ausencias" description="Vacaciones, almuerzo o un cierre excepcional, de toda la tienda o de un profesional.">
+            <SectionCard title="Pausas y ausencias" description="Bloqueá vacaciones, almuerzos o cierres excepcionales. Se revisan los turnos existentes; no se cancelan reservas automáticamente.">
               <TimeOffEditor professionals={config.professionals} timeZone={config.timeZone} hideHeading />
             </SectionCard>
           )}
-        </div>
+        </fieldset>
       </div>
 
       {dirty && (

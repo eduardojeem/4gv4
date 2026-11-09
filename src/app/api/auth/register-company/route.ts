@@ -2,6 +2,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { registerCompanySchema } from '@/lib/validation/saas'
+import { describeAuthError } from '@/lib/auth/auth-error-messages'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { normalizeTenantSlug, validateTenantSlug } from '@/lib/saas/reserved-slugs'
@@ -220,8 +221,10 @@ export async function POST(request: Request) {
         email: input.email,
       })
 
+      const message = describeAuthError(authError?.message, 'company-register')
+      const passwordRejected = authError?.code === 'weak_password' || /password.*(weak|short)|password should be|easy to guess/i.test(authError?.message ?? '')
       return NextResponse.json(
-        { success: false, error: authError?.message || 'No se pudo crear el usuario.' },
+        { success: false, error: message, ...(passwordRejected ? { fieldErrors: [{ field: 'password', message }] } : {}) },
         { status: 400 }
       )
     }

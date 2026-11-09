@@ -11,6 +11,7 @@ import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 import { rateLimiter } from '@/lib/rate-limiter'
 import { samePublicValue } from '@/lib/public/cache-invalidation'
+import { checkStorefrontTemplateChange } from '@/lib/website/template-plan-access.server'
 import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
 
 /**
@@ -171,6 +172,21 @@ async function updateHandler(
       const auditClient = await createClient()
       try { await auditClient.from('audit_log').insert({ organization_id: orgId, user_id: context.user.id, action: 'update_website_settings_batch', resource: 'website_settings', new_values: { keys: ['product_credit_defaults'] } }) } catch { console.warn('Credit defaults saved; audit unavailable') }
       return NextResponse.json({ success: true, data: { product_credit_defaults: persisted.value }, organizationId: orgId, creditDefaultsRevision: persisted.updated_at })
+    }
+    // Cambiar de plantilla solo a una que traiga el plan (la actual se conserva siempre).
+    const companyInfoEntry = validatedEntries.find(({ key }) => key === 'company_info')
+    if (companyInfoEntry) {
+      const { data: previousCompanyInfo, error: previousCompanyInfoError } = await adminSupabase
+        .from('website_settings')
+        .select('value')
+        .eq('organization_id', orgId)
+        .eq('key', 'company_info')
+        .maybeSingle()
+      if (previousCompanyInfoError) throw previousCompanyInfoError
+      const templateError = await checkStorefrontTemplateChange(orgId, companyInfoEntry.value, previousCompanyInfo?.value)
+      if (templateError) {
+        return NextResponse.json({ success: false, error: templateError, code: 'TEMPLATE_NOT_IN_PLAN', key: 'company_info' }, { status: 403 })
+      }
     }
     const marketplaceEntries = validatedEntries.filter(({ key }) => key === 'company_info' || key === 'hero_content')
     let hasMarketplaceChanges = false

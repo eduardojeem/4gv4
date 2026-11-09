@@ -200,3 +200,6 @@ public/worker-*.js
 # Auditorías de seguridad con riesgos pendientes: el repo es público, quedan solo en local
 /docs/security/s1-*
 /docs/audits/mobile-p1-security-integrity-*.md
+
+# Documentación confidencial de Bancard (manuales, propuesta, formularios): nunca al repositorio
+docs/bancard/

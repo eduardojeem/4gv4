@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { CalendarCheck2, Home, MapPin, Scissors } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -21,6 +22,7 @@ const TAB = 'group flex flex-1 flex-col items-center justify-center gap-1 py-1 t
  */
 export function ServicesMobileNav({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
   const pathname = usePathname()
+  const barber = useStorefrontStyle() === 'barber'
   const { settings } = useWebsiteSettings()
   const effectiveSettings = settings ?? initialSettings
   const companyInfo = useStorefrontCompanyInfo(effectiveSettings?.company_info)
@@ -37,7 +39,7 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
   const mapsHref = companyInfo?.mapsUrl?.trim()
     || (companyInfo?.address?.trim() ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(companyInfo.address.trim())}` : null)
   const bookingHref = agenda
-    ? effectiveSettings?.booking_section?.enabled ? `${prefix}/inicio#reservar` : `${prefix}/turnos`
+    ? `${prefix}/reservas`
     : whatsappHref
   const homeActive = pathname === `${prefix}/inicio` || pathname === prefix || pathname === '/'
 
@@ -50,7 +52,7 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
         <Home aria-hidden="true" className="h-5 w-5" />
         Inicio
       </Link>
-      <Link href={`${prefix}/inicio#servicios`} className={TAB}>
+      <Link href={`${prefix}/inicio#${barber ? 'rituales' : 'servicios'}`} className={TAB}>
         <Scissors aria-hidden="true" className="h-5 w-5" />
         Servicios
       </Link>
@@ -65,7 +67,7 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
             <CalendarCheck2 aria-hidden="true" className="h-6 w-6" />
           </span>
           {/* Sin reservas online el turno se pide por WhatsApp. */}
-          {agenda ? 'Reservar' : 'Pedir turno'}
+          {agenda ? 'Reservas' : 'Pedir turno'}
         </Link>
       ) : (
         <span className="flex-1" />
@@ -77,7 +79,7 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
           Cómo llegar
         </a>
       ) : (
-        <Link href={`${prefix}/inicio#contacto`} className={TAB}>
+        <Link href={`${prefix}/inicio#${barber ? 'sedes' : 'contacto'}`} className={TAB}>
           <MapPin aria-hidden="true" className="h-5 w-5" />
           Contacto
         </Link>

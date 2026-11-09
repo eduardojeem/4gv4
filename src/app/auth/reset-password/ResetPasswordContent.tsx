@@ -3,7 +3,7 @@
 import { AppImage } from '@/components/ui/app-image'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,8 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
-import { validatePassword } from '@/lib/auth/password-validation'
+import { describeAuthError } from '@/lib/auth/auth-error-messages'
+import { sanitizeRedirectPath, validatePassword } from '@/lib/auth/password-validation'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
@@ -29,6 +30,9 @@ export default function ResetPasswordContent() {
   const [validatingToken, setValidatingToken] = useState(true)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = sanitizeRedirectPath(searchParams.get('next'))
+  const loginHref = `/login?redirect=${encodeURIComponent(next)}`
   const supabase = createClient()
   const { branding } = usePlatformBranding()
 
@@ -68,13 +72,13 @@ export default function ResetPasswordContent() {
 
         if (!session) {
           toast.error('El enlace de recuperación es inválido o ha expirado')
-          setTimeout(() => router.push('/login'), 2000)
+          setTimeout(() => router.push(loginHref), 2000)
           return
         }
 
         // Con 2FA activa, Supabase sólo deja cambiar la contraseña después del código.
         if ((await loadMfaState(supabase).catch(() => null))?.pending) {
-          router.replace(buildMfaPath('/auth/reset-password'))
+          router.replace(buildMfaPath(`/auth/reset-password?next=${encodeURIComponent(next)}`))
           return
         }
 
@@ -87,7 +91,7 @@ export default function ResetPasswordContent() {
     }
 
     validateSession()
-  }, [router, supabase])
+  }, [router, supabase, next, loginHref])
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -110,11 +114,11 @@ export default function ResetPasswordContent() {
     try {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) {
-        setError(error.message || 'Error al actualizar la contraseña')
+        setError(describeAuthError(error.message, 'password'))
       } else {
         setSuccess(true)
         toast.success('Contraseña actualizada exitosamente')
-        setTimeout(() => router.push('/dashboard'), 2000)
+        setTimeout(() => router.push(next), 2000)
       }
     } catch (_err) {
       setError('Ocurrió un error inesperado. Intenta de nuevo.')
@@ -358,7 +362,7 @@ export default function ResetPasswordContent() {
               {/* Card Footer */}
               <div className="px-8 py-5 border-t border-white/[0.05] bg-black/20 text-center backdrop-blur-md">
                 <Link
-                  href="/login"
+                  href={loginHref}
                   className="text-xs font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1.5 group"
                 >
                   <ArrowRight className="h-3 w-3 rotate-180 group-hover:-translate-x-1 transition-transform opacity-70" />

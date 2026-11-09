@@ -303,6 +303,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     // Los avisos de cobro mandan el texto concreto (fecha, plan, monto).
     formatBody: (data) => (typeof data?.message === 'string' && data.message.trim() ? data.message : 'Se actualizó el plan de suscripción de tu negocio.'),
   },
+  SYSTEM_NEWS: {title:'Novedades en MiTiendaPy',defaultBody:'Hay una nueva función o un aviso de la plataforma. Abrí la app para conocer los detalles.',defaultResourceType:'global_announcement'},
   IMPORTANT_SYSTEM_MESSAGE: {
     title: 'Comunicado del sistema',
     defaultBody: 'Hay un comunicado importante sobre el funcionamiento de la plataforma.',

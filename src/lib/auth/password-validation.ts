@@ -32,6 +32,7 @@ export function getPasswordChecks(pwd: string): PasswordCheck[] {
  */
 export function sanitizeRedirectPath(path: string | null | undefined, fallback = '/dashboard'): string {
   if (!path) return fallback
+  if (/[\\\x00-\x20\x7f]/.test(path)) return fallback
   // Must start with exactly one slash and not be a protocol-relative URL
   if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) return fallback
   // Block any path that contains a colon before the first slash (protocol injection)

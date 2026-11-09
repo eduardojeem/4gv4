@@ -209,7 +209,14 @@ export default function MobileUserProfileScreen() {
         return;
       }
       const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      if (error) {
+        const message = /weak|easy to guess|compromised|breached/i.test(error.message)
+          ? 'Elegí una contraseña más larga y única, que no uses en otras cuentas.'
+          : /same.*password/i.test(error.message)
+            ? 'La contraseña nueva debe ser diferente de la actual.'
+            : 'No pudimos cambiar tu contraseña. Intentá de nuevo.';
+        throw new Error(message);
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       setCurrentPassword('');
       setNewPassword('');

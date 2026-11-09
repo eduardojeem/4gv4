@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { OrganizationsDashboard, type SuperAdminOrganization } from '@/components/superadmin/organizations/organizations-dashboard'
 import { planLabel } from '@/lib/superadmin/plan-names'
@@ -55,3 +55,40 @@ describe('directorio de organizaciones', () => {
     expect(planLabel('BASIC', planNames)).toBe('Pro')
   })
 })
+
+describe('filtros claros del directorio', () => {
+ it('encuentra empresas aunque la búsqueda omita acentos', () => {
+  render(<OrganizationsDashboard organizations={[org({name:'Tecnología Sur'}),org({id:'otra',name:'Moda Norte',slug:'moda-norte'})]} referenceTime={AHORA}/>);
+  fireEvent.change(screen.getByPlaceholderText('Buscar empresa, slug, owner...'), {target:{value:'tecnologia'}});
+  expect(screen.getAllByRole('link',{name:'Tecnología Sur'}).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('link',{name:'Moda Norte'})).not.toBeInTheDocument();
+ });
+ it('combina estado y búsqueda y permite recuperar resultados al limpiar', () => {
+  render(<OrganizationsDashboard organizations={[org({}),org({id:'otra',name:'Moda Norte',slug:'moda-norte',subscription_status:'past_due'})]} referenceTime={AHORA}/>);
+  fireEvent.change(screen.getByRole('combobox',{name:'Suscripción',exact:true}),{target:{value:'past_due'}});
+  expect(screen.queryByRole('link',{name:'HCA Celular'})).not.toBeInTheDocument();
+  fireEvent.change(screen.getByPlaceholderText('Buscar empresa, slug, owner...'),{target:{value:'no existe'}});
+  expect(screen.getAllByText('No se encontraron organizaciones con estos filtros').length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole('button',{name:'Limpiar filtros'}));
+  expect(screen.getAllByRole('link',{name:'HCA Celular'}).length).toBeGreaterThan(0);
+ });
+});
+
+describe('tabla de organizaciones', () => {
+ it('distingue la suscripción activa del pago pendiente en cada fila', () => {
+  render(<OrganizationsDashboard organizations={[org({payment_status:'pending'})]} referenceTime={AHORA}/>);
+  const table=screen.getByRole('table',{name:'Directorio de organizaciones'});
+  const row=within(table).getAllByRole('row')[1];
+  expect(within(row).getByText('Activo')).toBeInTheDocument();
+  expect(within(row).getByText('Pendiente')).toBeInTheDocument();
+ });
+ it('expone el orden seleccionado para lectores de pantalla', () => {
+  render(<OrganizationsDashboard organizations={[org({})]} referenceTime={AHORA}/>);
+  const table=screen.getByRole('table',{name:'Directorio de organizaciones'});
+  const header=within(table).getByRole('columnheader',{name:/Empresa/});
+  fireEvent.click(within(header).getByRole('button'));
+  expect(header).toHaveAttribute('aria-sort','ascending');
+  fireEvent.click(within(header).getByRole('button'));
+  expect(header).toHaveAttribute('aria-sort','descending');
+ });
+});

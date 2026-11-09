@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import type { AutopayStatus } from '@/lib/saas/subscription-autopay'
+import { BancardIframe } from '@/components/admin/subscriptions/BancardIframe'
 
 type Notice = { tone: 'success' | 'error'; text: string } | null
 
@@ -28,7 +29,7 @@ async function request(method: 'GET' | 'POST' | 'DELETE', body?: Record<string, 
 
 export default function SubscriptionAutopayPage() {
   const [status, setStatus] = useState<(AutopayStatus & { paymentAvailability?: { autopay: boolean } }) | null>(null)
-  const [formUrl, setFormUrl] = useState<string | null>(null)
+  const [cardForm, setCardForm] = useState<{ processId: string; scriptUrl: string } | null>(null)
   const [busy, setBusy] = useState<string | null>('load')
   const [notice, setNotice] = useState<Notice>(null)
 
@@ -48,7 +49,7 @@ export default function SubscriptionAutopayPage() {
     const returned = new URLSearchParams(window.location.search).get('card')
     void run('load', async () => {
       if (returned) {
-        // Vuelta del formulario de uPay: confirmar es obligatorio en Pagopar, haya salido bien o no.
+        // Vuelta del formulario de Bancard: se confirma consultando las tarjetas guardadas.
         window.history.replaceState(null, '', window.location.pathname)
         const result = await request('POST', { action: 'confirm' }) as { saved: boolean; status: AutopayStatus }
         setStatus(result.status)
@@ -62,8 +63,8 @@ export default function SubscriptionAutopayPage() {
   }, [run])
 
   const startCardForm = () => run('start', async () => {
-    const result = await request('POST', { action: 'start' }) as { formUrl: string }
-    setFormUrl(result.formUrl)
+    const result = await request('POST', { action: 'start' }) as { processId: string; scriptUrl: string }
+    setCardForm(result)
   })
 
   const toggleEnabled = (enabled: boolean) => run('toggle', async () => {
@@ -85,7 +86,7 @@ export default function SubscriptionAutopayPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Débito automático</h1>
-          <p className="text-sm text-muted-foreground">Cobramos tu plan cada mes con la tarjeta que guardes en uPay.</p>
+          <p className="text-sm text-muted-foreground">Cobramos tu plan cada mes con la tarjeta que guardes en Bancard.</p>
         </div>
       </div>
 
@@ -145,7 +146,7 @@ export default function SubscriptionAutopayPage() {
                     {status.card ? `${status.card.brand || 'Tarjeta'} ${status.card.masked || ''}` : 'Sin tarjeta guardada'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {status.card ? `${status.card.type || 'Tarjeta'} · uPay` : 'Visa o Mastercard, crédito o débito.'}
+                    {status.card ? `${status.card.type || 'Tarjeta'} · Bancard` : 'Visa o Mastercard, crédito o débito.'}
                   </p>
                 </div>
               </div>
@@ -183,16 +184,12 @@ export default function SubscriptionAutopayPage() {
             </div>
           </section>
 
-          {formUrl && (
+          {cardForm && (
             <section className="space-y-2 rounded-2xl border bg-card p-3">
               <p className="px-2 text-sm text-muted-foreground">
-                Completá los datos en el formulario seguro de uPay. Tu tarjeta no pasa por nuestros servidores.
+                Completá los datos en el formulario seguro de Bancard. Tu tarjeta no pasa por nuestros servidores.
               </p>
-              <iframe
-                src={formUrl}
-                title="Formulario de tarjeta de uPay"
-                className="h-[340px] w-full rounded-xl border-0"
-              />
+              <BancardIframe kind="cards" processId={cardForm.processId} scriptUrl={cardForm.scriptUrl} />
             </section>
           )}
         </>

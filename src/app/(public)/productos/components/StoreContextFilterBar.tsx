@@ -2,18 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Flame, FolderTree, Package } from 'lucide-react'
+import { Briefcase, ChevronLeft, ChevronRight, Flame, FolderTree, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Category } from '@/types/public'
 
 interface StoreContextFilterBarProps {
   categories: Category[]
   brands: string[]
+  isWholesale?: boolean
 }
 
 export function StoreContextFilterBar({
   categories,
   brands,
+  isWholesale = false,
 }: StoreContextFilterBarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -26,6 +28,7 @@ export function StoreContextFilterBar({
   const currentCategoryId = searchParams.get('category_id') || ''
   const currentBrand = searchParams.get('brand') || ''
   const isOnlyOffers = searchParams.get('offers') === 'true'
+  const isOnlyWholesale = searchParams.get('wholesale') === 'true' || searchParams.get('mayorista') === 'true'
   const isOnlyInStock = searchParams.get('in_stock') === 'true'
 
   const activeCategory = categories.find((c) => c.id === currentCategoryId)
@@ -76,7 +79,7 @@ export function StoreContextFilterBar({
 
   const hasBrandsOrSubs = brands.length > 0 || subcategories.length > 0
 
-  if (!hasBrandsOrSubs && !isOnlyOffers && !isOnlyInStock) return null
+  if (!hasBrandsOrSubs && !isOnlyOffers && !isOnlyWholesale && !isOnlyInStock) return null
 
   return (
     <div className="w-full max-w-full space-y-1.5">
@@ -157,6 +160,23 @@ export function StoreContextFilterBar({
             <Flame className="h-3 w-3" />
             <span>Ofertas</span>
           </button>
+
+          {/* Toggle Mayorista (solo visible si el usuario tiene habilitado acceso mayorista) */}
+          {isWholesale && (
+            <button
+              type="button"
+              onClick={() => updateParam('wholesale', !isOnlyWholesale)}
+              className={cn(
+                'shrink-0 flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all shadow-2xs',
+                isOnlyWholesale
+                  ? 'border-sky-400 bg-sky-600 text-white'
+                  : 'border-sky-200 bg-sky-50/60 text-sky-700 hover:bg-sky-100 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300'
+              )}
+            >
+              <Briefcase className="h-3 w-3" />
+              <span>Mayoristas</span>
+            </button>
+          )}
 
           {/* Toggle Stock */}
           <button

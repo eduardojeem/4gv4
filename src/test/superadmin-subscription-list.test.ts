@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { createElement } from 'react'
+import { render, screen } from '@testing-library/react'
+import { SubscriptionCard } from '@/components/superadmin/subscriptions/subscription-card'
 import { describe, expect, it } from 'vitest'
 
 import { isRunningTrial } from '@/components/superadmin/subscriptions/utils'
@@ -8,7 +11,6 @@ import type { SuperAdminSubscription } from '@/components/superadmin/subscriptio
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const TABLERO = leer('src/components/superadmin/subscriptions/subscriptions-dashboard.tsx')
 const PAGINA = leer('src/app/superadmin/subscriptions/page.tsx')
-const TARJETA = leer('src/components/superadmin/subscriptions/subscription-card.tsx')
 
 const dias = (n: number) => new Date(Date.now() + n * 86400000).toISOString()
 const sub = (over: Partial<SuperAdminSubscription>) =>
@@ -74,8 +76,12 @@ describe('el precio ausente no se convierte en gratis', () => {
   })
 
   it('la tarjeta usa el mismo criterio que la tabla', () => {
-    expect(TARJETA).toContain("{ text: 'Precio sin definir', warn: true }")
-    expect(TARJETA).toContain("{ text: 'Gratuito', warn: false }")
+    const card = { organization_name:'Ejemplo',organization_id:'org1',plan:'PRO',status:'active',provider:'manual',plan_details:null } as SuperAdminSubscription
+    const { rerender } = render(createElement(SubscriptionCard, { subscription: card, onOpenDetail: () => {} }))
+    expect(screen.getByText('Precio sin definir')).toBeInTheDocument()
+    expect(screen.queryByText('Gratuito')).not.toBeInTheDocument()
+    rerender(createElement(SubscriptionCard, { subscription:{...card,plan_details:{price_monthly:0} as SuperAdminSubscription['plan_details']},onOpenDetail:() => {} }))
+    expect(screen.getByText('Gratuito')).toBeInTheDocument()
   })
 })
 

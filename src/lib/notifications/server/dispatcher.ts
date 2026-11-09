@@ -231,6 +231,8 @@ export async function dispatchNotificationEvent(
   let pushFailed = 0
 
   const pushEligibleUserIds = eligible
+    // Las novedades masivas solo salen después de persistir su marca de idempotencia.
+    .filter((m) => type !== 'SYSTEM_NEWS' || notificationByUser.has(m.userId))
     .filter((m) => !duplicateUserIds.has(m.userId))
     .filter((m) => {
       const pref = preferencesMap.get(m.userId)

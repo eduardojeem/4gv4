@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowRight,
-  Boxes, Check,
+  Boxes,
   CheckCircle2,
-  Clock, Loader2, Save, ShieldAlert
+  Loader2, Save, ShieldAlert
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -25,6 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
+import { buildOrganizationPatch, organizationEditDefaults, ORGANIZATION_FIELD_LABELS, type OrganizationEditValues } from '@/lib/superadmin/organization-edit'
+import { ORGANIZATION_CURRENCIES, ORGANIZATION_TIMEZONES, timezoneOffsetLabel } from '@/lib/superadmin/create-organization'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 
 export type EditableOrganization = {
@@ -38,6 +40,7 @@ export type EditableOrganization = {
   business_vertical?: string | null
   operating_model?: string | null
   enabled_modules?: string[] | null
+  effective_modules?: string[]
   trial_ends_at?: string | null
   current_period_ends_at?: string | null
   cancel_at_period_end?: boolean
@@ -59,25 +62,6 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelada' },
   { value: 'expired', label: 'Expirada' },
   { value: 'unpaid', label: 'Impaga' },
-]
-
-const CURRENCIES = [
-  { value: 'PYG', label: 'Guaraní Paraguayo (PYG)' },
-  { value: 'USD', label: 'Dólar Estadounidense (USD)' },
-  { value: 'ARS', label: 'Peso Argentino (ARS)' },
-  { value: 'BRL', label: 'Real Brasileño (BRL)' },
-]
-
-const TIMEZONES = [
-  { value: 'America/Asuncion', label: '🇵🇾 Paraguay (UTC-4)' },
-  { value: 'America/Buenos_Aires', label: '🇦🇷 Argentina (UTC-3)' },
-  { value: 'America/Sao_Paulo', label: '🇧🇷 Brasil (UTC-3)' },
-  { value: 'America/Montevideo', label: '🇺🇾 Uruguay (UTC-3)' },
-  { value: 'America/Santiago', label: '🇨🇱 Chile (UTC-4/3)' },
-  { value: 'America/Bogota', label: '🇨🇴 Colombia (UTC-5)' },
-  { value: 'America/Lima', label: '🇵🇪 Perú (UTC-5)' },
-  { value: 'America/Mexico_City', label: '🇲🇽 México (UTC-6)' },
-  { value: 'America/New_York', label: '🇺🇸 New York (UTC-5/4)' },
 ]
 
 export const VERTICAL_OPTIONS = [
@@ -129,6 +113,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   const [timezone, setTimezone] = useState('America/Asuncion')
   const [businessVertical, setBusinessVertical] = useState('general')
   const [operatingModel, setOperatingModel] = useState('retail')
+  const [inheritModules, setInheritModules] = useState(true)
   const [enabledModules, setEnabledModules] = useState<string[]>([])
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -142,12 +127,13 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       setName(organization.name || '')
       setSlug(organization.slug || '')
       setPlan((organization.plan || 'FREE').toUpperCase())
-      setStatus(organization.subscription_status || 'active')
+      setStatus(organization.subscription_status === 'canceled' ? 'cancelled' : organization.subscription_status || 'sin_registro')
       setCurrency(organization.currency || 'PYG')
       setTimezone(organization.timezone || 'America/Asuncion')
       setBusinessVertical(organization.business_vertical || 'general')
       setOperatingModel(organization.operating_model || 'retail')
-      setEnabledModules(organization.enabled_modules || ['pos', 'inventory', 'crm', 'ecommerce'])
+      setInheritModules(organization.enabled_modules == null)
+      setEnabledModules(organization.enabled_modules ?? organization.effective_modules ?? [])
       setCancelAtPeriodEnd(Boolean(organization.cancel_at_period_end))
       setError(null)
       setShowConfirmation(false)
@@ -158,21 +144,24 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
 
   // Change detection for danger/confirmation prompts
   const isSlugChanged = slug.trim() !== organization.slug
-  const isPlanChanged = plan !== (organization.plan || 'FREE').toUpperCase()
-  const isStatusChanged = status !== (organization.subscription_status || 'active')
   const isDangerousStatus = status === 'suspended' || status === 'cancelled' || status === 'past_due'
   
-  const hasChanges =
-    name.trim() !== organization.name ||
-    isSlugChanged ||
-    isPlanChanged ||
-    isStatusChanged ||
-    currency !== (organization.currency || 'PYG') ||
-    timezone !== (organization.timezone || 'America/Asuncion') ||
-    businessVertical !== (organization.business_vertical || 'general') ||
-    operatingModel !== (organization.operating_model || 'retail') ||
-    JSON.stringify([...enabledModules].sort()) !== JSON.stringify([...(organization.enabled_modules || [])].sort()) ||
-    cancelAtPeriodEnd !== Boolean(organization.cancel_at_period_end)
+  const draft: OrganizationEditValues = { name, slug, plan, status, currency, timezone, business_vertical: businessVertical, operating_model: operatingModel, enabled_modules: inheritModules ? null : enabledModules, cancel_at_period_end: cancelAtPeriodEnd }
+  const changes = buildOrganizationPatch(organization, draft)
+  const originalValues = organizationEditDefaults(organization)
+  const hasChanges = Object.keys(changes).length > 0
+  const restrictiveChange = isDangerousStatus && changes.status !== undefined
+  function describeValue(key: keyof OrganizationEditValues, value: unknown) {
+    if (value == null) return 'Según el plan'
+    if (value === 'sin_registro') return 'Sin suscripción'
+    if (key === 'plan') return planLabel(String(value), planNames)
+    if (key === 'enabled_modules') return (value as string[]).map(moduleDisplayName).join(', ') || 'Ninguna'
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No'
+    if (key === 'status') return STATUS_OPTIONS.find(item => item.value === value)?.label || String(value)
+    if (key === 'business_vertical') return VERTICAL_OPTIONS.find(item => item.value === value)?.label || String(value)
+    if (key === 'operating_model') return OPERATING_MODELS.find(item => item.value === value)?.label || String(value)
+    return String(value)
+  }
 
   function toggleModule(modKey: string) {
     setEnabledModules((prev) =>
@@ -182,12 +171,13 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
 
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setError(null)
     if (!name.trim()) {
       setError('El nombre de la organización es obligatorio.')
       return
     }
     if (!slug.trim()) {
-      setError('El slug de subdominio es obligatorio.')
+      setError('La dirección pública es obligatoria.')
       return
     }
     if (!/^[a-z0-9-]+$/.test(slug.trim())) {
@@ -195,11 +185,16 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       return
     }
 
+    if (status === 'sin_registro' && (changes.plan !== undefined || changes.cancel_at_period_end !== undefined)) {
+      setError('Elegí el estado de la nueva suscripción antes de continuar.')
+      return
+    }
     // Trigger safety confirmation step
     setShowConfirmation(true)
   }
 
   async function executeSave() {
+    if (isSubmitting || !hasChanges) return
     setIsSubmitting(true)
     setError(null)
 
@@ -207,18 +202,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       const res = await fetch(`/api/superadmin/organizations/${organization?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          slug: slug.trim(),
-          plan,
-          status,
-          currency,
-          timezone,
-          business_vertical: businessVertical,
-          operating_model: operatingModel,
-          enabled_modules: enabledModules,
-          cancel_at_period_end: cancelAtPeriodEnd,
-        }),
+        body: JSON.stringify(changes),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -239,29 +223,29 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   }
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="flex max-h-[94vh] flex-col overflow-hidden p-0 sm:max-w-2xl rounded-3xl border border-border shadow-2xl">
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !isSubmitting) onClose() }}>
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden p-0 sm:max-w-3xl rounded-3xl border border-border shadow-2xl">
         
         {/* Header */}
-        <div className="border-b border-border bg-gradient-to-r from-muted/40 via-card to-violet-50/50 p-5 dark:to-violet-950/30">
+        <div className="border-b border-border bg-muted/30 p-5 pr-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white font-black text-sm shadow-md">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md">
                 {organization.name.slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <DialogTitle className="text-lg font-black text-foreground tracking-tight">
-                    {showConfirmation ? 'Confirmar Modificación Crítica' : 'Editar Organización, Rubro & Módulos'}
+                  <DialogTitle className="text-lg font-bold text-foreground tracking-tight">
+                    {showConfirmation ? 'Revisar cambios' : 'Editar organización'}
                   </DialogTitle>
-                  <Badge variant="outline" className="text-[10px] font-mono font-bold">
+                  <Badge variant="outline" className="text-xs font-mono font-bold">
                     /{organization.slug}
                   </Badge>
                 </div>
                 <DialogDescription className="text-xs text-muted-foreground font-medium">
                   {showConfirmation
-                    ? 'Revisa el impacto antes de aplicar los cambios en producción.'
-                    : 'Actualiza identidad comercial, rubro, plan SaaS, módulos y estado operativo.'}
+                    ? 'Comprobá los campos que van a cambiar antes de guardar.'
+                    : 'Datos de empresa, suscripción y funciones, en secciones separadas.'}
                 </DialogDescription>
               </div>
             </div>
@@ -269,115 +253,41 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
             <Badge
               variant="outline"
               className={cn(
-                'text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full hidden sm:inline-flex',
+                'text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full hidden sm:inline-flex',
                 status === 'active'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                   : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
               )}
             >
-              {status}
+              {status === 'sin_registro' ? 'Sin suscripción' : STATUS_OPTIONS.find(option => option.value === status)?.label || status}
             </Badge>
           </div>
         </div>
 
+        {error && <div role="alert" className="mx-5 mt-3 shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
         {/* ⚠️ STEP 2: CONFIRMATION & IMPACT VIEW */}
         {showConfirmation ? (
           <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-muted/40">
             
             {/* Danger Hero Warning */}
-            <div className="rounded-3xl border border-red-300 bg-gradient-to-br from-red-50 via-card to-rose-50 p-5 dark:border-red-900/70 dark:from-red-950/40 dark:to-rose-950/30 shadow-xs space-y-3">
-              <div className="flex items-center gap-2.5 text-red-700 dark:text-red-400 font-extrabold text-sm">
-                <ShieldAlert className="h-5 w-5 shrink-0 text-red-600" />
-                <span>¿Confirmas la aplicación de estos cambios?</span>
+            <div className={cn("space-y-3 rounded-2xl border p-5", restrictiveChange ? "border-red-300 bg-red-50 dark:border-red-900/70 dark:bg-red-950/30" : "border-border bg-muted/30")}>
+              <div className={cn("flex items-center gap-2.5 text-sm font-semibold", restrictiveChange ? "text-red-700 dark:text-red-400" : "text-foreground")}>
+                {restrictiveChange ? <ShieldAlert className="size-5 shrink-0 text-red-600"/> : <CheckCircle2 className="size-5 shrink-0 text-primary"/>}
+                <span>¿Querés guardar estos cambios?</span>
               </div>
-              <p className="text-xs text-red-800 dark:text-red-300 leading-relaxed font-medium">
-                Estás a punto de modificar la configuración operativa de <strong className="font-black text-foreground">{organization.name}</strong>. Esta acción afectará el acceso de sus usuarios, el catálogo y las URLs públicas.
+              <p className="text-sm leading-6 text-muted-foreground">
+                Estás a punto de modificar la configuración operativa de <strong className="font-bold text-foreground">{organization.name}</strong>. Solo se guardarán los campos que modificaste. Revisá especialmente los cambios de plan, acceso y dirección pública.
               </p>
             </div>
 
             {/* Change Diff Summary */}
             <div className="rounded-2xl border border-border bg-card p-4 space-y-3 text-xs shadow-2xs">
-              <p className="font-extrabold uppercase tracking-wider text-[10px] text-muted-foreground">
+              <p className="font-semibold uppercase tracking-wider text-xs text-muted-foreground">
                 Resumen de Cambios a Aplicar
               </p>
               
-              <ul className="space-y-2.5">
-                {name.trim() !== organization.name && (
-                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
-                    <span className="text-muted-foreground font-medium">Nombre de la Empresa:</span>
-                    <span className="font-bold text-foreground">
-                      {organization.name} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{name}</strong>
-                    </span>
-                  </li>
-                )}
-
-                {isSlugChanged && (
-                  <li className="flex flex-col gap-1 border-b border-border pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground font-medium">Subdominio Público:</span>
-                      <span className="font-mono font-bold">
-                        /{organization.slug} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-red-600 dark:text-red-400">/{slug}</strong>
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium bg-amber-50 dark:bg-amber-950/40 p-2 rounded-xl">
-                      ⚠️ <strong>Aviso Crítico:</strong> Los enlaces anteriores compartidos por la empresa (redes sociales, WhatsApp, QR) dejarán de responder y deberán reemplazarse por la nueva URL.
-                    </p>
-                  </li>
-                )}
-
-                {businessVertical !== (organization.business_vertical || 'general') && (
-                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
-                    <span className="text-muted-foreground font-medium">Rubro Comercial:</span>
-                    <span className="font-bold">
-                      {organization.business_vertical || 'general'} → <strong className="text-cyan-600">{businessVertical}</strong>
-                    </span>
-                  </li>
-                )}
-
-                {isPlanChanged && (
-                  <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
-                    <span className="text-muted-foreground font-medium">Plan SaaS:</span>
-                    <span className="font-bold">
-                      {planLabel(organization.plan, planNames)} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{planLabel(plan, planNames)}</strong>
-                    </span>
-                  </li>
-                )}
-
-                {isStatusChanged && (
-                  <li className="flex flex-col gap-1 border-b border-border pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground font-medium">Estado de Suscripción:</span>
-                      <span className="font-bold">
-                        {organization.subscription_status || 'active'} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className={cn(isDangerousStatus ? 'text-red-600 dark:text-red-400' : 'text-emerald-600')}>{status}</strong>
-                      </span>
-                    </div>
-                    {isDangerousStatus && (
-                      <p className="text-[11px] text-red-700 dark:text-red-300 font-medium bg-red-50 dark:bg-red-950/40 p-2 rounded-xl">
-                        🚨 <strong>Bloqueo Operativo:</strong> Si el estado es {status}, los usuarios del tenant no podrán procesar ventas en el POS ni gestionar catálogo.
-                      </p>
-                    )}
-                  </li>
-                )}
-
-                <li className="flex flex-col gap-1 border-b border-border pb-2">
-                  <span className="text-muted-foreground font-medium">Módulos Habilitados ({enabledModules.length}):</span>
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {enabledModules.map((mod) => (
-                      <Badge key={mod} variant="secondary" className="text-[10px] font-bold">
-                        {AVAILABLE_MODULES.find((m) => m.key === mod)?.label || mod}
-                      </Badge>
-                    ))}
-                  </div>
-                </li>
-              </ul>
+              <ul className="divide-y divide-border">{(Object.keys(changes) as (keyof OrganizationEditValues)[]).map(key => <li key={key} className="space-y-2 py-3"><p className="text-sm font-semibold">{ORGANIZATION_FIELD_LABELS[key]}</p><div className="grid gap-2 text-sm sm:grid-cols-[1fr_auto_1fr]"><span className="break-words text-muted-foreground">{describeValue(key, originalValues[key])}</span><ArrowRight aria-hidden className="size-4 self-center text-muted-foreground"/><span className="break-words font-medium text-foreground">{describeValue(key, changes[key])}</span></div></li>)}</ul>
             </div>
-
-            {error && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-                <span>{error}</span>
-              </div>
-            )}
 
             {/* Confirmation Footer */}
             <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-border">
@@ -385,16 +295,17 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={isSubmitting}
                 onClick={() => setShowConfirmation(false)}
                 className="rounded-xl text-xs font-bold cursor-pointer w-full sm:w-auto"
               >
-                Volver a Revisar
+                Volver a editar
               </Button>
               <Button
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => void executeSave()}
-                className="gap-2 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 shadow-md cursor-pointer h-10 px-5 w-full sm:w-auto"
+                className={cn("min-h-11 w-full gap-2 rounded-xl px-5 text-sm font-semibold sm:w-auto", restrictiveChange ? "bg-red-600 text-white hover:bg-red-700" : "bg-primary text-primary-foreground hover:bg-primary/90")}
               >
                 {isSubmitting ? (
                   <>
@@ -404,7 +315,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-                    Confirmar y Guardar en Producción
+                    Confirmar y guardar
                   </>
                 )}
               </Button>
@@ -413,14 +324,14 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
           </div>
         ) : (
           /* 🛠️ STEP 1: MAIN EDIT FORM */
-          <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 bg-muted/40">
+          <form onSubmit={handleFormSubmit} className="flex min-h-0 flex-1 flex-col"><div className="flex-1 space-y-6 overflow-y-auto bg-background p-5">
             
             {/* Real-time Critical Impact Alert Banners */}
             {isSlugChanged && (
               <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-xs font-medium text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 shadow-2xs">
                 <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <strong className="font-extrabold block">Atención: Modificación de Subdominio</strong>
+                  <strong className="font-semibold block">La dirección pública va a cambiar</strong>
                   <p>
                     Cambiar el slug de <code>/{organization.slug}</code> a <code>/{slug}</code> cambiará la URL pública de la tienda para los clientes.
                   </p>
@@ -432,7 +343,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               <div className="flex items-start gap-3 rounded-2xl border border-red-300 bg-red-50/90 p-4 text-xs font-medium text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200 shadow-2xs">
                 <ShieldAlert className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <strong className="font-extrabold block">Alerta de Suspensión / Estado Restrictivo</strong>
+                  <strong className="font-semibold block">Alerta de Suspensión / Estado Restrictivo</strong>
                   <p>
                     Marcar la organización como <strong>{status}</strong> restringirá las ventas y el acceso operativo para todos los miembros.
                   </p>
@@ -440,6 +351,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               </div>
             )}
 
+            <div><h3 className="text-base font-semibold">1. Datos de la empresa</h3><p className="mt-1 text-sm text-muted-foreground">Identidad, dirección pública y actividad.</p></div>
             {/* Form Fields Grid */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
@@ -450,7 +362,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   id="edit-org-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="rounded-xl h-10 text-xs font-bold"
+                  className="h-11 w-full rounded-xl text-sm font-medium"
                   placeholder="Nombre comercial"
                   required
                 />
@@ -459,9 +371,9 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               <div className="space-y-1.5 sm:col-span-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="edit-org-slug" className="text-xs font-bold text-foreground/80">
-                    Subdominio / Slug de Tienda <span className="text-red-500">*</span>
+                    Dirección de la tienda <span className="text-red-500">*</span>
                   </Label>
-                  <span className="text-[10px] text-muted-foreground">URL pública: /{slug}/inicio</span>
+                  <span className="text-xs text-muted-foreground">URL pública: /{slug}/inicio</span>
                 </div>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground">
@@ -472,7 +384,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                     value={slug}
                     onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                     className={cn(
-                      'pl-7 rounded-xl h-10 text-xs font-mono font-bold',
+                      'pl-7 rounded-xl h-11 text-sm font-mono font-bold',
                       isSlugChanged ? 'text-amber-600 border-amber-400 ring-1 ring-amber-400/30' : 'text-violet-600 dark:text-violet-400'
                     )}
                     placeholder="slug-de-empresa"
@@ -487,7 +399,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   Rubro Comercial
                 </Label>
                 <Select value={businessVertical} onValueChange={setBusinessVertical}>
-                  <SelectTrigger id="edit-org-vertical" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-vertical" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -505,7 +417,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   Modelo Operativo
                 </Label>
                 <Select value={operatingModel} onValueChange={setOperatingModel}>
-                  <SelectTrigger id="edit-org-model" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-model" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -518,16 +430,17 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 </Select>
               </div>
 
+              <div className="sm:col-span-2 border-t border-border pt-5"><h3 className="text-base font-semibold">2. Plan y acceso</h3><p className="mt-1 text-sm text-muted-foreground">Cambiar estos valores puede modificar las funciones disponibles.</p></div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-plan" className="text-xs font-bold text-foreground/80">
                   Plan Asignado
                 </Label>
                 <Select value={plan} onValueChange={setPlan}>
-                  <SelectTrigger id="edit-org-plan" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-plan" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {PLAN_OPTIONS.map((p) => (
+                    {Array.from(new Set([...PLAN_OPTIONS, plan])).map((p) => (
                       <SelectItem key={p} value={p} className="text-xs font-bold">
                         {planLabel(p, planNames)}
                       </SelectItem>
@@ -541,10 +454,11 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   Estado de la Suscripción
                 </Label>
                 <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger id="edit-org-status" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-status" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
+                    {status === 'sin_registro' && <SelectItem value="sin_registro" disabled>Sin suscripción</SelectItem>}
                     {STATUS_OPTIONS.map((st) => (
                       <SelectItem key={st.value} value={st.value} className="text-xs font-bold">
                         {st.label}
@@ -554,16 +468,18 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 </Select>
               </div>
 
+              <div className="sm:col-span-2 border-t border-border pt-5"><h3 className="text-base font-semibold">3. Moneda y horarios</h3><p className="mt-1 text-sm text-muted-foreground">Solo se actualizan si los cambiás.</p></div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-currency" className="text-xs font-bold text-foreground/80">
                   Moneda Principal
                 </Label>
                 <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger id="edit-org-currency" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-currency" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {CURRENCIES.map((c) => (
+                    {!ORGANIZATION_CURRENCIES.some(item => item.value === currency) && <SelectItem value={currency}>{currency}</SelectItem>}
+                    {ORGANIZATION_CURRENCIES.map((c) => (
                       <SelectItem key={c.value} value={c.value} className="text-xs font-bold">
                         {c.label}
                       </SelectItem>
@@ -577,13 +493,14 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   Zona Horaria
                 </Label>
                 <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger id="edit-org-timezone" className="rounded-xl h-10 text-xs font-bold">
+                  <SelectTrigger id="edit-org-timezone" className="h-11 w-full rounded-xl text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {TIMEZONES.map((tz) => (
+                    {!ORGANIZATION_TIMEZONES.some(item => item.value === timezone) && <SelectItem value={timezone}>{timezone}</SelectItem>}
+                    {ORGANIZATION_TIMEZONES.map((tz) => (
                       <SelectItem key={tz.value} value={tz.value} className="text-xs font-bold">
-                        {tz.label}
+                        {tz.country} · {timezoneOffsetLabel(tz.value) ?? tz.value}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -596,19 +513,20 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Boxes className="h-4 w-4 text-violet-600" />
-                  <span className="text-xs font-extrabold text-foreground">
-                    Módulos Funcionales Habilitados
+                  <span className="text-xs font-semibold text-foreground">
+                    4. Funciones de la empresa
                   </span>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-bold">
-                  {enabledModules.length} activos
+                <Badge variant="outline" className="text-xs font-bold">
+                  {inheritModules ? 'Según el plan' : enabledModules.length + ' seleccionadas'}
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground font-medium">
-                Selecciona las funcionalidades disponibles en el menú y operaciones de este tenant:
+              <p className="text-xs text-muted-foreground font-medium">
+                Estas opciones no agregan funciones que el plan no incluya.
               </p>
 
-              <div className="grid gap-2 sm:grid-cols-2">
+              {organization.enabled_modules == null && <label className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3"><span className="text-sm font-medium">Conservar las funciones del plan<span className="mt-1 block text-xs font-normal text-muted-foreground">Desactivá esta opción solo si querés personalizarlas.</span></span><Switch checked={inheritModules} onCheckedChange={setInheritModules}/></label>}
+              {(!inheritModules || Boolean(organization.effective_modules?.length)) && <div className={cn('grid gap-2 sm:grid-cols-2', inheritModules && 'opacity-60')}>
                 {AVAILABLE_MODULES.map((mod) => {
                   const isChecked = enabledModules.includes(mod.key)
                   return (
@@ -622,67 +540,29 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                       )}
                     >
                       <Checkbox
+                        disabled={inheritModules}
                         checked={isChecked}
                         onCheckedChange={() => toggleModule(mod.key)}
                         className="mt-0.5"
                       />
                       <div className="min-w-0">
                         <p className="font-bold">{mod.label}</p>
-                        <p className="text-[10px] text-muted-foreground">{mod.desc}</p>
+                        <p className="text-xs text-muted-foreground">{mod.desc}</p>
                       </div>
                     </label>
                   )
                 })}
-              </div>
-            </div>
-
-            {/* Quick 1-Click Status Presets (Unified with Subscriptions) */}
-            <div className="rounded-2xl border border-border bg-card p-3.5 shadow-2xs space-y-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-                Atajos Rápidos de Estado
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setStatus('active'); toast.info('Estado marcado como Activa') }}
-                  className="h-7 text-[11px] font-bold rounded-lg border-emerald-200 text-emerald-700 dark:border-emerald-900/60 dark:text-emerald-300 hover:bg-emerald-50 cursor-pointer"
-                >
-                  <Check className="h-3 w-3 mr-1" />
-                  Activar & Normalizar
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setStatus('trialing'); toast.info('Estado marcado como Trialing') }}
-                  className="h-7 text-[11px] font-bold rounded-lg border-cyan-200 text-cyan-700 dark:border-cyan-900/60 dark:text-cyan-300 hover:bg-cyan-50 cursor-pointer"
-                >
-                  <Clock className="h-3 w-3 mr-1" />
-                  Modo Trial (Prueba)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setStatus('suspended'); toast.warning('Estado marcado como Suspendida') }}
-                  className="h-7 text-[11px] font-bold rounded-lg border-red-200 text-red-700 dark:border-red-900/60 dark:text-red-300 hover:bg-red-50 cursor-pointer"
-                >
-                  <ShieldAlert className="h-3 w-3 mr-1" />
-                  Suspender Acceso
-                </Button>
-              </div>
+              </div>}
             </div>
 
             {/* Cancel at period end switch */}
             <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 shadow-2xs">
               <div>
-                <Label htmlFor="edit-org-cancel" className="text-xs font-extrabold cursor-pointer text-foreground">
-                  Cancelar Suscripción al Cierre
+                <Label htmlFor="edit-org-cancel" className="text-xs font-semibold cursor-pointer text-foreground">
+                  Cancelar al terminar el período
                 </Label>
-                <p className="text-[11px] text-muted-foreground font-medium">
-                  Mantiene el acceso operativo hasta la fecha de expiración del período.
+                <p className="text-xs text-muted-foreground font-medium">
+                  La cancelación queda programada para la fecha de finalización.
                 </p>
               </div>
               <Switch
@@ -693,15 +573,10 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
             </div>
 
             {/* Error banner */}
-            {error && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-                <span>{error}</span>
-              </div>
-            )}
 
+            </div>
             {/* Form Action Buttons */}
-            <DialogFooter className="pt-2 border-t border-border flex items-center justify-between gap-2">
+            <DialogFooter className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card p-4 [&_button]:min-h-11">
               <Button
                 type="button"
                 variant="ghost"
@@ -713,7 +588,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               </Button>
               <Button
                 type="submit"
-                disabled={!hasChanges}
+                disabled={!hasChanges || isSubmitting}
                 size="sm"
                 className={cn(
                   'gap-1.5 rounded-xl text-xs font-bold shadow-md cursor-pointer h-9 px-4',
@@ -723,7 +598,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 )}
               >
                 <Save className="h-3.5 w-3.5" />
-                Revisar & Guardar Cambios
+                Revisar cambios
               </Button>
             </DialogFooter>
 

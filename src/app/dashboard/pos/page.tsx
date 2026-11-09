@@ -1,4 +1,6 @@
 'use client'
+import { AppointmentCustomerCard } from './components/AppointmentCustomerCard'
+import { AppointmentCheckoutNotice } from './components/AppointmentCheckoutNotice'
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -181,6 +183,7 @@ function POSPageContent() {
     setSelectedCustomer, 
     activeCustomer,
     customers, 
+    refreshCustomers,
     setNewCustomerOpen: _setNewCustomerOpen
   } = usePOSCustomer()
 
@@ -272,6 +275,7 @@ function POSPageContent() {
   const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales(posStorageScope)
   const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false)
   const [isRepairModalOpen, setIsRepairModalOpen] = useState(false)
+  const [reservationContactForCreate, setReservationContactForCreate] = useState<{ name: string; phone: string | null } | null>(null)
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false)
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
@@ -677,6 +681,10 @@ function POSPageContent() {
     clearCart,
     onLoaded: clearQuoteParam,
   })
+
+  useEffect(() => {
+    if (activeQuote?.kind === 'appointment') setCatalogView('services')
+  }, [activeQuote?.id, activeQuote?.kind, setCatalogView])
 
   // updateQuantity is now provided by useOptimizedCart
 
@@ -1378,10 +1386,12 @@ function POSPageContent() {
             onRetry={(id) => void offlineSales.retry(id)}
             onDiscard={(id) => void offlineSales.discard(id)}
           />
-          {activeQuote && (
+          {activeQuote?.kind === 'appointment' && <AppointmentCheckoutNotice code={activeQuote.code} cashOpen={getCurrentRegister.isOpen} onOpenCash={() => setIsOpenRegisterDialogOpen(true)} onRemove={() => { if (window.confirm('Se vaciará el carrito de este turno. No se cancela la reserva ni se registra ningún cobro. ¿Continuar?')) { clearCart(true); clearActiveQuote() } }} />}
+          {activeQuote?.kind === 'appointment' && activeQuote.customer && <AppointmentCustomerCard key={activeQuote.id} contact={activeQuote.customer} customers={customers} selectedId={selectedCustomer} onSelect={setSelectedCustomer} onCreate={() => { setReservationContactForCreate(activeQuote.customer!); setIsQuickCustomerOpen(true) }} />}
+          {activeQuote && activeQuote.kind !== 'appointment' && (
             <div role="status" className="flex items-center justify-between gap-3 border-b border-violet-200 bg-violet-50 px-4 py-1.5 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
-              <span>Cobrando {activeQuote.kind === 'quote' ? 'el presupuesto' : 'el turno'} <b>{activeQuote.code}</b>: al completar la venta queda {activeQuote.kind === 'quote' ? 'marcado como vendido' : 'como atendido y cobrado'}.</span>
-              <button type="button" className="min-h-11 text-xs underline" onClick={() => { if (activeQuote.kind === 'appointment') clearCart(true); clearActiveQuote() }}>{activeQuote.kind === 'appointment' ? 'Quitar turno y vaciar carrito' : 'No vincular'}</button>
+              <span>Cobrando el presupuesto <b>{activeQuote.code}</b>: al completar la venta queda marcado como vendido.</span>
+              <button type="button" className="min-h-11 text-xs underline" onClick={() => clearActiveQuote()}>No vincular</button>
             </div>
           )}
           {/* Header desktop optimizado */}
@@ -1477,7 +1487,7 @@ function POSPageContent() {
                   <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-primary/70 h-3.5 w-3.5 pointer-events-none" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar nombre, código, SKU o marca"
+                    placeholder={catalogView === 'services' ? 'Buscar un servicio por nombre o código' : 'Buscar nombre, código, SKU o marca'}
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -2026,7 +2036,7 @@ function POSPageContent() {
             statusMessage={checkoutEligibility.reason}
             catalog={<>
             {/* Lista de productos */}
-            <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
+            <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label={catalogView === 'services' ? 'Servicios para cobrar' : 'Productos para vender'}>
               <div className="mb-2.5 space-y-2.5">
                 <div className="pos-panel flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2063,7 +2073,7 @@ function POSPageContent() {
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50">
+                    <div className={cn(catalogView === 'services' ? 'hidden' : 'flex', 'items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50')}>
                       <Tag className="h-3 w-3 text-muted-foreground" />
                       <span className="text-xs font-medium text-muted-foreground">Mayorista<span className="hidden lg:inline"> (F9)</span></span>
                       <Switch
@@ -2077,7 +2087,7 @@ function POSPageContent() {
                 </div>
 
                 {/* Escáner de códigos de barras */}
-                {getFeatureFlag('enableBarcodeScanner') && (
+                {catalogView === 'products' && getFeatureFlag('enableBarcodeScanner') && (
                   <POSBarcodeScanner
                     onProductFound={async (barcode) => {
                       const result = await addScannedBarcode(barcode)
@@ -2089,13 +2099,13 @@ function POSPageContent() {
                 )}
 
                 {/* Desde el celular o la tablet: la cámara lee un producto tras otro. */}
-                <BarcodeScanner
+                {catalogView === 'products' && <BarcodeScanner
                   continuous
                   label="Escanear con la cámara"
                   className="w-full"
                   hint="Pasá los productos de a uno: cada lectura suma 1 al carrito"
                   onScan={addScannedBarcode}
-                />
+                />}
               </div>
 
               {/* Estados de carga y error */}
@@ -2281,6 +2291,8 @@ function POSPageContent() {
             {/* Carrito lateral mejorado - responsive */}
             <div id="pos-cart-panel" tabIndex={-1} className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40">
               <POSCart
+                cashRegisterClosed={!getCurrentRegister.isOpen}
+                onOpenCash={() => { setIsMobileCartOpen(false); setIsOpenRegisterDialogOpen(true) }}
                 items={combinedCartItems}
                 onUpdateQuantity={updateQuantity}
                 onRemoveItem={handleRemoveItem}
@@ -2357,8 +2369,10 @@ function POSPageContent() {
               <SheetHeader className="p-4 border-b">
                 <SheetTitle>Carrito de Compras</SheetTitle>
               </SheetHeader>
-              <div className="flex-1 overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 <POSCart
+                cashRegisterClosed={!getCurrentRegister.isOpen}
+                onOpenCash={() => { setIsMobileCartOpen(false); setIsOpenRegisterDialogOpen(true) }}
                   items={combinedCartItems}
                   onUpdateQuantity={updateQuantity}
                   onRemoveItem={handleRemoveItem}
@@ -2400,12 +2414,12 @@ function POSPageContent() {
 
           <Button
             className="h-full min-h-[52px] px-5 text-sm font-bold rounded-xl shadow-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all active:scale-[0.97]"
-            onClick={handleOpenCheckout}
-            disabled={!canCheckout}
+            onClick={() => { if (!getCurrentRegister.isOpen) setIsOpenRegisterDialogOpen(true); else handleOpenCheckout() }}
+            disabled={paymentStatus === 'processing' || combinedCartItems.length === 0 || (getCurrentRegister.isOpen && !canCheckout)}
             title={checkoutEligibility.reason}
           >
             <CreditCard className="mr-2 h-5 w-5" />
-            Cobrar
+            {getCurrentRegister.isOpen ? 'Cobrar' : 'Abrir caja'}
           </Button>
         </div>
       </div>
@@ -3089,9 +3103,13 @@ function POSPageContent() {
           existe y con el email en null sobre una columna NOT NULL. */}
       <CustomerQuickCreateDialog
         open={isQuickCustomerOpen}
-        onClose={() => setIsQuickCustomerOpen(false)}
+        initialContact={reservationContactForCreate}
+        onClose={() => { setIsQuickCustomerOpen(false); setReservationContactForCreate(null) }}
+        onSelectExisting={(customer) => { setSelectedCustomer(customer.id); void refreshCustomers(); setIsQuickCustomerOpen(false); setReservationContactForCreate(null) }}
         onCreated={(customerId) => {
           setSelectedCustomer(customerId)
+          void refreshCustomers()
+          setReservationContactForCreate(null)
           setIsQuickCustomerOpen(false)
         }}
       />

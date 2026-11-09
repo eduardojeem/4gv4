@@ -12,11 +12,10 @@ import {
   planRequiresPayment,
 } from '@/lib/saas/subscription-service'
 import {
-  createSubscriptionPagoparCheckout,
+  createSubscriptionBancardCheckout,
   getMissingBillingFields,
   SubscriptionCheckoutError,
-} from '@/lib/saas/pagopar-subscription-checkout'
-import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
+} from '@/lib/saas/subscription-checkout'
 import { getBrowserRequestOrigin } from '@/lib/payments/stripe'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 import { BankTransferError, createBankTransferRequest } from '@/lib/saas/bank-transfers'
@@ -96,7 +95,7 @@ export async function POST(request: NextRequest) {
   const newPlan = typeof body.plan === 'string' ? body.plan.trim() : ''
   const useStripe = body.paymentMethod === 'stripe'
   const useTransfer = body.paymentMethod === 'transfer'
-  const paymentMethod = useStripe || useTransfer ? null : parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
+  const useCard = (body.paymentMethod ?? 'card') === 'card'
 
   if (!newPlan) {
     return NextResponse.json({ error: 'Falta el campo plan.' }, { status: 400 })
@@ -134,16 +133,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, pendingPayment: true, ...checkout })
       }
 
-      if (!paymentMethod) {
+      if (!useCard) {
         return NextResponse.json({ error: 'Forma de pago no válida.' }, { status: 400 })
       }
 
-      const checkout = await createSubscriptionPagoparCheckout({
+      const checkout = await createSubscriptionBancardCheckout({
         organization,
-        userEmail: auth.user.email,
         targetPlanCode: assessment.targetPlan.code,
         canChangePlan: true,
-        paymentMethod,
+        requestOrigin: getBrowserRequestOrigin(request),
         correlationId,
       })
       return NextResponse.json({ success: true, pendingPayment: true, ...checkout })

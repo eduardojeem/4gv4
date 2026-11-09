@@ -14,8 +14,8 @@ export function paymentEvidence(results: Evidence[], detail: string): PaymentCon
 export async function subscriptionControlHistory(methods: PaymentControl[]): Promise<PaymentControl[]> {
   const admin = createAdminSupabase()
   const selectors: Record<string, [string, string]> = {
-    pagopar_card: ['pagopar', 'Pagopar Tarjeta'], pagopar_qr: ['pagopar', 'Pagopar QR'],
-    stripe: ['stripe', 'Stripe Tarjeta'], autopay: ['pagopar', 'Pagopar Débito automático'],
+    bancard_card: ['bancard', 'Bancard Tarjeta'],
+    stripe: ['stripe', 'Stripe Tarjeta'], autopay: ['bancard', 'Bancard Débito automático'],
     transfer: ['bank_transfer', 'bank_transfer'], manual_cash: ['manual', 'Efectivo'],
   }
   return Promise.all(methods.map(async method => {

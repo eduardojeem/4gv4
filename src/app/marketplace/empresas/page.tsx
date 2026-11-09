@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { getAllMarketplaceOrganizations } from '@/lib/public/marketplace'
 import { EmpresasClient } from '@/components/public/EmpresasClient'
 import { TopRatedCarousel } from '@/components/public/TopRatedCarousel'
+import { MarketplaceStoresProductsCarousel } from '@/components/public/MarketplaceStoresProductsCarousel'
 
 export const metadata: Metadata = {
   title: 'Tiendas y Empresas | Marketplace MiPOS',
@@ -67,6 +68,15 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
           </div>
         </div>
       </section>
+
+      {/* ── Carrusel Superior de Tiendas y Productos ── */}
+      {organizations.length > 0 && (
+        <MarketplaceStoresProductsCarousel
+          organizations={organizations}
+          exploreAllHref="#directorio"
+          exploreAllLabel="Ver directorio completo"
+        />
+      )}
 
       {/* ── Directorio con Filtro por Rubros y Ciudades ── */}
       {/* Las mejor calificadas van después de la grilla: arriba empujaban los

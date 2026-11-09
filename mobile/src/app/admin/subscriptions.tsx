@@ -173,12 +173,12 @@ export default function SubscriptionsAdminScreen() {
                     <Ionicons name="wallet-outline" size={18} color={palette.success} />
                     <Text style={[styles.cardTitle, { color: colors.text }]}>Pagar la suscripción</Text>
                   </View>
-                  {missingBilling.length > 0 && (data.paymentAvailability.pagopar_card || data.paymentAvailability.pagopar_qr || data.paymentAvailability.stripe) && (
+                  {missingBilling.length > 0 && (data.paymentAvailability.bancard_card || data.paymentAvailability.stripe) && (
                     <Text style={[styles.small, { color: '#B45309' }]}>
                       Para pagar en línea completá tus datos de facturación (falta: {missingBilling.join(', ')}).
                     </Text>
                   )}
-                  {(data.paymentAvailability.pagopar_card || data.paymentAvailability.pagopar_qr || data.paymentAvailability.stripe || data.paymentAvailability.transfer) ? <Pressable onPress={() => void openWeb('/admin/subscriptions#pay')} style={[styles.primaryBtn, { backgroundColor: palette.success }]}>
+                  {(data.paymentAvailability.bancard_card || data.paymentAvailability.stripe || data.paymentAvailability.transfer) ? <Pressable onPress={() => void openWeb('/admin/subscriptions#pay')} style={[styles.primaryBtn, { backgroundColor: palette.success }]}>
                     <Ionicons name="card-outline" size={16} color="#fff" />
                     <Text style={styles.primaryText}>Ver medios de pago disponibles</Text>
                   </Pressable> : <Text style={[styles.small, { color: colors.muted }]}>No hay medios de pago disponibles. Contactá con soporte para renovar tu plan.</Text>}

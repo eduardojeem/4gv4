@@ -76,14 +76,11 @@ describe('onboarding and admin settings synchronization', () => {
   it('presents onboarding as a focused configuration workspace', () => {
     const client = read('src/components/dashboard/onboarding/OnboardingClient.tsx')
 
-    // Un asistente paso a paso la primera vez; después, las mismas secciones como pestañas.
-    for (const step of ['business', 'contact', 'payments', 'public', 'social']) {
+    // Un asistente paso a paso, también al volver a configurar. La interacción se prueba en onboarding-wizard.test.tsx.
+    for (const step of ['business', 'contact', 'payments', 'public', 'social', 'review']) {
       expect(client).toContain(`{ id: '${step}'`)
-      expect(client).toContain(`<TabsContent value="${step}"`)
     }
-    expect(client).toContain('<TabsTrigger key={step.id} value={step.id}')
     expect(client).toContain('clearOnboardingStatusCache()')
-    expect(client).toContain("if (isRevisit) router.refresh()")
     expect(client).toContain("window.addEventListener('beforeunload'")
     expect(client).not.toContain('Siguiente paso recomendado')
   })

@@ -8,6 +8,7 @@ export const TENANT_PUBLIC_SECTION_NAMES = [
   'ofertas',
   'servicios',
   'turnos',
+  'reservas',
   'mis-reparaciones',
   'track',
   'carrito',

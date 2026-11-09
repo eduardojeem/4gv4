@@ -34,7 +34,12 @@ export async function verifyCurrentPassword(email: string, password: string): Pr
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data, error } = await probe.auth.signInWithPassword({ email, password });
-  if (error || !data.session) return false;
+  if (error) {
+    if (error.code === 'invalid_credentials') return false;
+    if (/captcha/i.test(error.message)) throw new Error('Para verificar tu contraseña, abrí tu perfil en la web y cambiala desde allí.');
+    throw new Error('No pudimos verificar tu contraseña. Revisá tu conexión e intentá de nuevo.');
+  }
+  if (!data.session) throw new Error('No pudimos verificar tu contraseña. Intentá de nuevo.');
   await probe.auth.signOut({ scope: 'local' }).catch(() => undefined);
   return true;
 }

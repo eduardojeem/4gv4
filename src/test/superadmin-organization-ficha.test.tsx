@@ -345,3 +345,13 @@ describe('la actividad no depende solo del mostrador', () => {
     expect(screen.getByText('Nunca vendió')).toBeInTheDocument()
   })
 })
+
+describe('vigencia de la prueba en el resumen',()=>{
+ it('usa el final de la prueba cuando todavía no hay período de pago',()=>{
+  const clock=vi.spyOn(Date,'now').mockReturnValue(new Date('2026-11-07T12:00:00Z').getTime());
+  try {
+   render(<OrganizationDetailView data={base({subscription:{id:'trial',plan:'PRO',status:'trialing',payment_status:null,provider:'manual',provider_customer_id:null,provider_subscription_id:null,current_period_starts_at:null,current_period_ends_at:null,trial_ends_at:'2026-11-12T12:00:00Z',cancel_at_period_end:false}})}/>);
+   expect(screen.getByText('5d restantes')).toBeInTheDocument();
+  } finally {clock.mockRestore();}
+ });
+});

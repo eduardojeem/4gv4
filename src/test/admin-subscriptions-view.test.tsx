@@ -50,7 +50,7 @@ describe('SubscriptionsClientView component', () => {
       currency: 'PYG',
       status: 'paid',
       payment_method: 'credit_card',
-      provider: 'pagopar',
+      provider: 'bancard',
       created_at: '2026-08-01T12:00:00.000Z',
       paid_at: '2026-08-01T12:05:00.000Z',
     },
@@ -189,7 +189,7 @@ describe('SubscriptionsClientView component', () => {
     render(<SubscriptionsClientView {...defaultProps} />)
 
     expect(screen.getByText('Historial de pagos')).toBeInTheDocument()
-    expect(screen.getByText('Pagopar')).toBeInTheDocument()
+    expect(screen.getByText('Bancard')).toBeInTheDocument()
     expect(screen.getByText('VOUCHER-TEST-100')).toBeInTheDocument()
 
     // Click Activaciones filter
@@ -197,7 +197,7 @@ describe('SubscriptionsClientView component', () => {
     fireEvent.click(activacionesBtn)
 
     expect(screen.getByText('VOUCHER-TEST-100')).toBeInTheDocument()
-    expect(screen.queryByText('Pagopar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bancard')).not.toBeInTheDocument()
     window.location.hash = ''
   })
 
@@ -329,7 +329,7 @@ describe('las otras tres pestañas', () => {
       currency: 'PYG',
       status: 'paid',
       payment_method: 'credit_card',
-      provider: 'pagopar',
+      provider: 'bancard',
       created_at: '2026-08-01T12:00:00.000Z',
       paid_at: '2026-08-01T12:00:00.000Z',
     }))

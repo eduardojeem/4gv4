@@ -67,8 +67,8 @@ describe('checkout website setting validation', () => {
             },
             {
               id: 'bank-2',
-              bankName: 'Ueno Bank',
-              alias: 'tienda.ueno',
+              bankName: 'Banco Itaú',
+              alias: 'tienda.itau',
               accountHolder: '4G Celulares',
             },
           ],

@@ -5,7 +5,7 @@ import { runDailyBillingTasks } from '@/lib/saas/daily-billing-tasks'
 export const maxDuration = 300
 
 /**
- * Tareas diarias de cobro: conciliación de Pagopar, débito automático y avisos
+ * Tareas diarias de cobro: conciliación de Bancard, débito automático y avisos
  * del plazo de productos. La llama el cron de Vercel (vercel.json) con
  * `Authorization: Bearer $CRON_SECRET`; también acepta POST para un scheduler
  * externo o para correrla a mano.

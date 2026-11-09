@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   cancelSubscriptionAtPeriodEnd: vi.fn(),
   changePlan: vi.fn(),
   getCurrentOrganizationSubscription: vi.fn(),
-  createSubscriptionPagoparCheckout: vi.fn(),
+  createSubscriptionBancardCheckout: vi.fn(),
   createBankTransferRequest: vi.fn(),
 }))
 
@@ -21,9 +21,9 @@ vi.mock('@/lib/saas/subscription-service', () => ({
   getCurrentOrganizationSubscription: mocks.getCurrentOrganizationSubscription,
   planRequiresPayment: (plan: { price_monthly: number }) => plan.price_monthly > 0,
 }))
-vi.mock('@/lib/saas/pagopar-subscription-checkout', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/lib/saas/pagopar-subscription-checkout')>(),
-  createSubscriptionPagoparCheckout: mocks.createSubscriptionPagoparCheckout,
+vi.mock('@/lib/saas/subscription-checkout', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/saas/subscription-checkout')>(),
+  createSubscriptionBancardCheckout: mocks.createSubscriptionBancardCheckout,
 }))
 vi.mock('@/lib/saas/stripe-subscription-checkout', () => ({ createSubscriptionStripeCheckout: vi.fn() }))
 vi.mock('@/lib/saas/bank-transfers', async (importOriginal) => ({
@@ -99,19 +99,30 @@ describe('POST /api/admin/subscriptions/change-plan', () => {
       redirectTo: '/admin/subscriptions#pay-transfer',
     })
     expect(mocks.createBankTransferRequest).toHaveBeenCalledWith('org-1', 'user-1', 'PRO')
-    expect(mocks.createSubscriptionPagoparCheckout).not.toHaveBeenCalled()
+    expect(mocks.createSubscriptionBancardCheckout).not.toHaveBeenCalled()
   })
 
-  it('pasa el código de correlación a Pagopar', async () => {
+  it('pasa el código de correlación y el origen a Bancard', async () => {
     mocks.assessPlanChange.mockResolvedValue({ success: true, targetPlan: { code: 'PRO', price_monthly: 100000 } })
-    mocks.createSubscriptionPagoparCheckout.mockResolvedValue({ checkoutUrl: 'https://www.pagopar.com/pagos/x' })
+    mocks.createSubscriptionBancardCheckout.mockResolvedValue({ checkoutUrl: '/admin/subscriptions/pagar?process_id=abcdefgh12&ref=100001' })
 
-    await post({ plan: 'PRO', paymentMethod: 'qr' })
+    const response = await post({ plan: 'PRO', paymentMethod: 'card' })
 
-    expect(mocks.createSubscriptionPagoparCheckout).toHaveBeenCalledWith(expect.objectContaining({
-      paymentMethod: 'qr',
+    expect(await response.json()).toMatchObject({ pendingPayment: true, checkoutUrl: '/admin/subscriptions/pagar?process_id=abcdefgh12&ref=100001' })
+    expect(mocks.createSubscriptionBancardCheckout).toHaveBeenCalledWith(expect.objectContaining({
+      targetPlanCode: 'PRO',
+      requestOrigin: 'http://localhost',
       correlationId: CORRELATION_ID,
     }))
+  })
+
+  it('rechaza una forma de pago que ya no existe (QR)', async () => {
+    mocks.assessPlanChange.mockResolvedValue({ success: true, targetPlan: { code: 'PRO', price_monthly: 100000 } })
+
+    const response = await post({ plan: 'PRO', paymentMethod: 'qr' })
+
+    expect(response.status).toBe(400)
+    expect(mocks.createSubscriptionBancardCheckout).not.toHaveBeenCalled()
   })
 
   it('solo el propietario puede cambiar el plan', async () => {

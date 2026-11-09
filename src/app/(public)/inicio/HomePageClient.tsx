@@ -2,6 +2,8 @@
 
 import { WholesaleHome } from '@/components/public/wholesale/WholesaleHome'
 import { CatalogBasicHome } from '@/components/public/catalog-basic/CatalogBasicHome'
+import { InformaticaElectronicaHome } from '@/components/public/informatica-electronica/InformaticaElectronicaHome'
+import { BarberHome } from '@/components/public/barber/BarberHome'
 import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -226,6 +228,8 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
 
   if (storefrontStyle === 'wholesale-pro') return <WholesaleHome settings={settings} branches={branches} capabilities={capabilities} />
   if (storefrontStyle === 'catalog-basic') return <CatalogBasicHome settings={settings} branches={branches} capabilities={capabilities} />
+  if (storefrontStyle === 'informatica-electronica') return <InformaticaElectronicaHome settings={settings} branches={branches} capabilities={capabilities} />
+  if (storefrontStyle === 'barber') return <BarberHome settings={settings} branches={branches} capabilities={capabilities} />
 
   return (
     <div className="flex flex-col min-h-screen">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react'
@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
+import { persistSharedDraft, SharedDraftSaveError } from '@/lib/onboarding/submit-shared-draft'
+import { normalizeOnboardingState, filterOnboardingPreferences, visibleEntitledModules } from '@/lib/onboarding/shared-setup'
+import { BUSINESS_VERTICALS, moduleDependencyProblems } from '@/lib/organization/business-profile'
 import { getSupportedRegionalCountries, REGIONAL_CURRENCIES } from '@/lib/regional/contract'
 import { BUSINESS_VERTICAL_LABELS } from '@/lib/organization/business-labels'
 import {
@@ -22,14 +24,16 @@ import {
 
 const CATEGORY_LABELS: Record<string, string> = BUSINESS_VERTICAL_LABELS
 const TIMEZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu']
-const STEP_NAMES = ['Plan', 'Negocio', 'Sucursal', 'Módulos', 'Listo']
+const STEP_NAMES = ['Plan', 'Negocio', 'Sucursal', 'Herramientas', 'Revisar']
 
 export function SharedOnboardingWizard({
+  organizationId,
   initialState,
   initialRevision,
   planName,
   entitledModules,
 }: {
+  organizationId?: string
   initialState: SharedOnboardingState
   initialRevision: number
   planName: string
@@ -41,6 +45,10 @@ export function SharedOnboardingWizard({
   const [selectedModules, setSelectedModules] = useState<string[]>(() => initialState.data.selectedModules ?? suggestOnboardingPreferences(initialState.data.businessCategory, entitledModules))
   const [errors, setErrors] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const saveLock = useRef(false)
+  const draftLoaded = useRef(false)
+  const [draftReady,setDraftReady] = useState(false)
+  const [saveError,setSaveError] = useState<string | null>(null)
   const step = state.completed ? 5 : Math.max(2, state.currentStep)
   const defaults = useMemo(() => state.data.countryCode ? getRegionalSelection(state.data.countryCode) : null, [state.data.countryCode])
   const recommendedPreferences = useMemo(
@@ -61,76 +69,42 @@ export function SharedOnboardingWizard({
     setErrors([])
   }
 
-  const saveStep = async () => {
-    let data: Record<string, unknown>
-    if (step === 2) {
-      const result = validateBusinessStep(state.data)
-      if (!result.valid) { setErrors(result.fields); return }
-      data = state.data as unknown as Record<string, unknown>
-    } else if (step === 3) {
-      const result = validateBranchStep(state.data.primaryBranch)
-      if (!result.valid) { setErrors(result.fields); return }
-      data = state.data.primaryBranch
-    } else {
-      data = { selectedModules }
-    }
-
-    setSaving(true)
-    try {
-      const response = await fetch('/api/onboarding/status', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step, data, expectedRevision: revision }),
-      })
-      const result = await response.json().catch(() => null)
-      if (!response.ok) {
-        if (response.status === 409 && result?.code === 'ONBOARDING_REVISION_CONFLICT') {
-          const latestResponse = await fetch('/api/onboarding/status', { cache: 'no-store' })
-          const latest = await latestResponse.json().catch(() => null)
-          if (latestResponse.ok && latest?.setupState) {
-            const remote = latest.setupState as SharedOnboardingState
-            const localDraft = step === 2
-              ? {
-                  businessName: state.data.businessName,
-                  countryCode: state.data.countryCode,
-                  businessCategory: state.data.businessCategory,
-                  currency: state.data.currency,
-                  timezone: state.data.timezone,
-                  locale: state.data.locale,
-                  regionalConfirmed: state.data.regionalConfirmed,
-                }
-              : step === 3 ? { primaryBranch: state.data.primaryBranch } : { selectedModules }
-            setState({ ...remote, data: { ...remote.data, ...localDraft } })
-            if (step !== 4) setSelectedModules(remote.data.selectedModules ?? [])
-            setRevision(Number(latest.onboardingRevision ?? result.revision ?? revision))
-            toast.info('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisá tu paso y volvé a guardar.')
-            return
-          }
-        }
-        setErrors(Array.isArray(result?.fields) ? result.fields : [])
-        throw new Error(result?.error || 'No se pudo guardar el paso.')
-      }
-      if (Number.isSafeInteger(result?.revision)) setRevision(result.revision)
-      if (result?.setupState) setState(result.setupState)
-      else setState((current) => ({ ...current, currentStep: step === 2 ? 3 : step === 3 ? 4 : 5 }))
-      if (step === 4) setState((current) => ({ ...current, data: { ...current.data, selectedModules } }))
-      setErrors([])
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el paso.')
-    } finally {
-      setSaving(false)
-    }
+  useEffect(()=>{
+    if(!organizationId||draftLoaded.current)return
+    draftLoaded.current=true
+    try{const raw=localStorage.getItem('onboarding:shared-draft:'+organizationId);if(raw){const draft=JSON.parse(raw);if(Date.now()-Number(draft.savedAt)<7*86400000){setState(normalizeOnboardingState(draft.state));setSelectedModules(Array.isArray(draft.selectedModules)?draft.selectedModules:[]);if(Number.isSafeInteger(draft.revision)&&draft.revision>=0)setRevision(draft.revision)}}}catch{}
+    setDraftReady(true)
+  },[organizationId])
+  useEffect(()=>{
+    if(!organizationId||!draftReady)return
+    try{const key='onboarding:shared-draft:'+organizationId;if(state.completed)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify({state,selectedModules,revision,savedAt:Date.now()}))}catch{}
+  },[organizationId,state,selectedModules,revision,draftReady])
+  const moduleProblem = filterOnboardingPreferences(selectedModules,entitledModules).length !== selectedModules.length ? 'Revisá las herramientas incluidas en tu plan.' : moduleDependencyProblems(visibleEntitledModules(selectedModules,entitledModules))[0] ?? null
+  const saveStep = () => {
+    if(saveLock.current)return
+    if(step===4&&moduleProblem){setSaveError(moduleProblem);return}
+    const validation=step===2?validateBusinessStep(state.data):step===3?validateBranchStep(state.data.primaryBranch):{valid:true,fields:[]}
+    if(!validation.valid){setErrors(validation.fields);setSaveError('Completá los datos marcados antes de seguir.');return}
+    setErrors([]);setSaveError(null)
+    const key=step===2?'business':step===3?'branch':'modules'
+    setState(current=>({...current,currentStep:Math.min(5,step+1) as SharedOnboardingState['currentStep'],completedSteps:[...new Set([...current.completedSteps,key])] as SharedOnboardingState['completedSteps'],data:{...current.data,selectedModules}}))
   }
 
   const finish = async (destination: '/dashboard' | '/dashboard/products/new' | '/dashboard/pos' = '/dashboard') => {
-    setSaving(true)
+    if(saveLock.current)return
+    if(moduleProblem){setSaveError(moduleProblem);setState(current=>({...current,currentStep:4}));return}
+    const business=validateBusinessStep(state.data), branch=validateBranchStep(state.data.primaryBranch)
+    if(!business.valid||!branch.valid){setErrors([...business.fields,...branch.fields]);setSaveError('Revisá los datos obligatorios antes de finalizar.');setState(current=>({...current,currentStep:!business.valid?2:3}));return}
+    saveLock.current=true
+    setSaving(true);setSaveError(null)
     try {
+      const savedRevision=await persistSharedDraft(state,selectedModules,revision,setRevision)
       const response = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sharedSetup: true,
-          expectedRevision: revision,
+          expectedRevision: savedRevision,
           displayName: state.data.businessName,
           currency: state.data.currency,
           timezone: state.data.timezone,
@@ -153,8 +127,7 @@ export function SharedOnboardingWizard({
           const latestResponse = await fetch('/api/onboarding/status', { cache: 'no-store' })
           const latest = await latestResponse.json().catch(() => null)
           if (latestResponse.ok && latest?.setupState) {
-            setState(latest.setupState)
-            setSelectedModules(latest.setupState.data.selectedModules ?? [])
+            setSaveError('La configuración cambió en otro dispositivo. Conservamos tu borrador; revisá el resumen y volvé a confirmar.')
             setRevision(Number(latest.onboardingRevision ?? result.revision ?? revision))
             toast.info('Tu configuración fue actualizada desde otro dispositivo. Recargamos los datos más recientes; revisalos antes de finalizar.')
             return
@@ -165,11 +138,17 @@ export function SharedOnboardingWizard({
       if (Number.isSafeInteger(result?.revision)) setRevision(result.revision)
       setState((current) => ({ ...current, completed: true, currentStep: 5, completedAt: result.completedAt ?? new Date().toISOString() }))
       if (destination !== '/dashboard') router.push(destination)
-      else toast.success('Tu negocio está listo.');
-      router.refresh()
+      else toast.success('Configuración guardada.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo finalizar la configuración.')
+      if(error instanceof SharedDraftSaveError && error.status===409){
+        const latestResponse=await fetch('/api/onboarding/status',{cache:'no-store'}).catch(()=>null)
+        const latest=await latestResponse?.json().catch(()=>null)
+        if(latestResponse?.ok&&Number.isSafeInteger(latest?.onboardingRevision))setRevision(latest.onboardingRevision)
+      }
+      const message=error instanceof Error ? error.message : 'No se pudo finalizar la configuración.'
+      setSaveError(message);toast.error(message)
     } finally {
+      saveLock.current=false
       setSaving(false)
     }
   }
@@ -181,7 +160,7 @@ export function SharedOnboardingWizard({
       <header className="mb-8 text-center">
         <p className="text-sm font-semibold text-primary">Configuración inicial · Plan {planName}</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Dejá tu negocio listo para trabajar</h1>
-        <p className="mt-2 text-muted-foreground">Guardamos cada paso para que puedas continuar desde la web o desde la app.</p>
+        <p className="mt-2 text-muted-foreground">Avanzá con Siguiente y revisá el resumen. La configuración se aplica cuando confirmás el último paso.</p>
       </header>
 
       <ol aria-label="Pasos de configuración" className="mb-8 grid grid-cols-5 gap-2">
@@ -194,9 +173,11 @@ export function SharedOnboardingWizard({
         })}
       </ol>
 
+      {saveError&&<p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{saveError}</p>}
+      <p className="text-sm text-muted-foreground">El avance se conserva como borrador en este dispositivo. Guardá al finalizar todos los pasos.</p>
       <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-8">
         {state.completed ? <div className="space-y-6">
-          <div className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" /><h2 className="mt-3 text-2xl font-bold">Tu negocio está listo</h2><p className="mt-1 text-muted-foreground">La configuración se guardó y ya podés continuar desde cualquier dispositivo.</p></div>
+          <div className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" /><h2 className="mt-3 text-2xl font-bold">Configuración guardada</h2><p className="mt-1 text-muted-foreground">La configuración se guardó y ya podés continuar desde cualquier dispositivo.</p></div>
           <Summary state={state} planName={planName} />
           <div className="grid gap-3 sm:grid-cols-3"><Button onClick={() => router.push('/dashboard/products/new')}>Agregar primer producto</Button><Button variant="outline" onClick={() => router.push('/dashboard/pos')}>Hacer primera venta</Button><Button variant="outline" onClick={() => router.push('/dashboard')}>Ir al panel</Button></div>
         </div> : <>
@@ -218,11 +199,11 @@ export function SharedOnboardingWizard({
             <div className="space-y-2"><Label htmlFor="setup-hours">Horario de atención (opcional)</Label><Textarea id="setup-hours" value={state.data.primaryBranch.hours} onChange={(event) => setBranch({ hours: event.target.value })} placeholder="Lun a sáb, de 8:00 a 18:00" /></div>
           </div> : null}
           {step === 4 ? <div className="space-y-5"><div><h2 className="text-xl font-bold">¿Qué querés usar?</h2><p className="mt-1 text-sm text-muted-foreground">Marcamos lo más útil para tu rubro según las funciones incluidas en el plan {planName}. Podés cambiar la selección; lo que el plan no incluye seguirá deshabilitado.</p></div>
-            <div className="grid gap-3 sm:grid-cols-2">{ONBOARDING_MODULE_PREFERENCES.map((preference) => { const entitled = !preference.entitlement || entitledModules.includes(preference.entitlement); const checked = selectedModules.includes(preference.key); const recommended = recommendedPreferences.has(preference.key); return <label key={preference.key} className={`flex items-center gap-3 rounded-xl border p-4 ${entitled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}><input type="checkbox" checked={checked} disabled={!entitled} onChange={() => setSelectedModules((current) => checked ? current.filter((item) => item !== preference.key) : [...current, preference.key])} /><span className="font-medium">{preference.label}</span>{recommended ? <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Recomendado</span> : !preference.entitlement ? <span className="ml-auto text-xs text-muted-foreground">Preferencia</span> : !entitled ? <span className="ml-auto text-xs text-muted-foreground">No incluido</span> : null}</label> })}</div>
+            <Button type="button" variant="outline" disabled={saving} onClick={()=>setSelectedModules(suggestOnboardingPreferences(state.data.businessCategory,entitledModules))}>Usar recomendaciones del rubro</Button><div className="grid gap-3 sm:grid-cols-2">{ONBOARDING_MODULE_PREFERENCES.map((preference) => { const entitled = !preference.entitlement || entitledModules.includes(preference.entitlement); const checked = selectedModules.includes(preference.key); const recommended = recommendedPreferences.has(preference.key); return <label key={preference.key} className={`flex items-center gap-3 rounded-xl border p-4 ${entitled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}><input type="checkbox" checked={checked} disabled={!entitled && !checked} onChange={() => setSelectedModules((current) => checked ? current.filter((item) => item !== preference.key) : [...current, preference.key])} /><span className="font-medium">{preference.label}</span>{recommended ? <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Recomendado</span> : !preference.entitlement ? <span className="ml-auto text-xs text-muted-foreground">Preferencia</span> : !entitled ? <span className="ml-auto text-xs text-muted-foreground">No incluido</span> : null}</label> })}</div>
           </div> : null}
-          {step === 5 ? <div className="space-y-5"><div className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" /><h2 className="mt-3 text-2xl font-bold">Tu negocio está listo</h2><p className="mt-1 text-muted-foreground">Revisá el resumen; al continuar se guarda la configuración y se habilita el panel.</p></div><Summary state={{ ...state, data: { ...state.data, selectedModules } }} planName={planName} /></div> : null}
+          {step === 5 ? <div className="space-y-5"><div className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" /><h2 className="mt-3 text-2xl font-bold">Revisá antes de guardar</h2><p className="mt-1 text-muted-foreground">Estos cambios todavía son un borrador. Al finalizar se aplica la configuración y se habilita el panel.</p></div><Summary state={{ ...state, data: { ...state.data, selectedModules } }} planName={planName} /></div> : null}
 
-          <div className="mt-8 flex justify-between gap-3 border-t pt-5">{step > 2 ? <Button type="button" variant="outline" disabled={saving} onClick={() => setState((current) => ({ ...current, currentStep: (step - 1) as SharedOnboardingState['currentStep'] }))}><ArrowLeft className="mr-2 h-4 w-4" />Atrás</Button> : <span />}{step < 5 ? <Button type="button" disabled={saving} onClick={() => void saveStep()}> {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Guardar y continuar<ArrowRight className="ml-2 h-4 w-4" /></Button> : <Button type="button" disabled={saving} onClick={() => void finish()}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Finalizar configuración</Button>}</div>
+          <div className="mt-8 flex justify-between gap-3 border-t pt-5">{step > 2 ? <Button type="button" variant="outline" disabled={saving} onClick={() => setState((current) => ({ ...current, currentStep: (step - 1) as SharedOnboardingState['currentStep'] }))}><ArrowLeft className="mr-2 h-4 w-4" />Atrás</Button> : <span />}{step < 5 ? <Button type="button" disabled={saving} onClick={() => void saveStep()}> {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Siguiente<ArrowRight className="ml-2 h-4 w-4" /></Button> : <Button type="button" disabled={saving} onClick={() => void finish()}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Finalizar y guardar</Button>}</div>
         </>}
       </section>
     </main>

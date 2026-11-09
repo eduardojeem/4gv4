@@ -149,6 +149,8 @@ export function ProductCard(props: ProductCardProps) {
   // placeholder se sigue mostrando entero para no recortarlo.
   const portraitMedia = usesPortraitMedia(storefrontStyle)
   const coverImage = shouldUsePortraitProductCover(imageSrc, portraitMedia)
+  // Tecnología e Informática: el equipo entero, sin recortes, en cuadrado.
+  const deviceMedia = storefrontStyle === 'tech' || storefrontStyle === 'informatica-electronica'
 
   // ── Cuotas / financiación (informativo) ───────────────────────────────────
   const installmentsVisible =
@@ -276,7 +278,7 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
-          storefrontStyle === 'tech' && 'rounded-2xl border border-border/70 bg-card shadow-xs hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
+          deviceMedia && 'rounded-2xl border border-border/70 bg-card shadow-xs hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
           storefrontStyle === 'market' && 'rounded-2xl border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-md',
           storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
           storefrontStyle === 'beauty' && 'rounded-2xl border border-stone-200/80 shadow-xs hover:border-stone-400 hover:shadow-md dark:border-stone-800 dark:hover:border-stone-600',
@@ -294,10 +296,12 @@ export function ProductCard(props: ProductCardProps) {
             // Cosmética y súper: el envase sobre blanco, en cuadrado. En tecnología, dispositivo entero sobre superficie neutra.
             storefrontStyle === 'beauty' || isMarket || storefrontStyle === 'wholesale-pro'
               ? 'aspect-square bg-white dark:bg-muted/10'
+              : storefrontStyle === 'informatica-electronica'
+              ? 'aspect-square bg-white dark:bg-muted/10'
               : storefrontStyle === 'tech'
               ? 'aspect-square bg-muted/15 dark:bg-muted/10'
               : 'bg-muted/30',
-            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && storefrontStyle !== 'tech' && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
+            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && !deviceMedia && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
           aria-label={`Vista rápida de ${product.name}`}
         >
@@ -308,7 +312,7 @@ export function ProductCard(props: ProductCardProps) {
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
-                storefrontStyle === 'tech'
+                deviceMedia
                   ? 'object-contain p-3.5 sm:p-4 transition-transform duration-500 group-hover:scale-[1.05]'
                   : coverImage && storefrontStyle !== 'wholesale-pro'
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
@@ -425,7 +429,7 @@ export function ProductCard(props: ProductCardProps) {
             storefrontStyle === 'classic' && 'font-semibold',
             storefrontStyle === 'fashion' && 'font-bold group-hover:text-primary transition-colors',
             storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight',
-            storefrontStyle === 'tech' && 'font-semibold tracking-tight group-hover:text-primary transition-colors',
+            deviceMedia && 'font-semibold tracking-tight group-hover:text-primary transition-colors',
             storefrontStyle === 'market' && 'font-bold text-xs sm:text-sm',
             storefrontStyle === 'modern' && 'font-bold tracking-tight text-foreground/90',
             storefrontStyle === 'services' && 'font-semibold',

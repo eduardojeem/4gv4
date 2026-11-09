@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Loader2, Mail, MessageCircle, Search, Smartphone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { useUrlListState } from '@/hooks/useUrlListState'
 import { getMessageContentAction } from '@/app/superadmin/communications/actions'
 import type { ChannelStats, MessageLogEntry } from '@/lib/superadmin/communications'
 
@@ -25,13 +26,18 @@ function formatDate(value: string) {
 }
 
 export function MessagesPanel({ messages, channelStats }: { messages: MessageLogEntry[]; channelStats: ChannelStats[] }) {
-  const [channel, setChannel] = useState('all')
-  const [onlyFailed, setOnlyFailed] = useState(false)
-  const [query, setQuery] = useState('')
+  const {state,setValue} = useUrlListState({msgChannel:'all',msgFailed:'',msgQuery:''})
+  const channel=state.msgChannel
+  const onlyFailed=state.msgFailed==='1'
+  const query=state.msgQuery
+  const setChannel=(value:string)=>setValue('msgChannel',value)
+  const setOnlyFailed=(value:boolean)=>setValue('msgFailed',value?'1':'')
+  const setQuery=(value:string)=>setValue('msgQuery',value)
   const [open, setOpen] = useState<MessageLogEntry | null>(null)
   const [html, setHtml] = useState<string | null>(null)
   const [contentError, setContentError] = useState<string | null>(null)
-  const [loading, startLoading] = useTransition()
+  const [loading,setLoading] = useState(false)
+  const requestId = useRef(0)
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -42,16 +48,20 @@ export function MessagesPanel({ messages, channelStats }: { messages: MessageLog
     )
   }, [messages, channel, onlyFailed, query])
 
-  const openMessage = (m: MessageLogEntry) => {
-    setOpen(m)
-    setHtml(null)
-    setContentError(null)
+  const openMessage = async (m: MessageLogEntry) => {
+    const request = ++requestId.current
+    setOpen(m); setHtml(null); setContentError(null); setLoading(m.channel === 'email')
     if (m.channel !== 'email') return
-    startLoading(async () => {
+    try {
       const result = await getMessageContentAction(m.id)
+      if (request !== requestId.current) return
       if ('error' in result) setContentError(result.error)
       else setHtml(result.data.html)
-    })
+    } catch {
+      if (request === requestId.current) setContentError('No se pudo cargar el contenido. Volvé a abrir el mensaje.')
+    } finally {
+      if (request === requestId.current) setLoading(false)
+    }
   }
 
   return (
@@ -61,14 +71,14 @@ export function MessagesPanel({ messages, channelStats }: { messages: MessageLog
           <Card className="rounded-xl sm:col-span-3"><CardContent className="p-4 text-sm text-slate-500">Todavía no hay mensajes registrados.</CardContent></Card>
         ) : channelStats.map((s) => {
           const meta = channelMeta(s.channel)
-          const total = s.sent + s.failed
+          const total = s.sent + s.failed + (s.pending ?? 0) + (s.other ?? 0)
           return (
             <Card key={s.channel} className="rounded-xl">
               <CardContent className="p-4">
                 <p className="flex items-center gap-2 text-sm font-semibold"><meta.icon className="h-4 w-4" /> {meta.label}</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums">{total}</p>
                 <p className="text-xs text-slate-500">
-                  {s.sent} enviados · <span className={s.failed ? 'font-semibold text-red-600 dark:text-red-400' : ''}>{s.failed} fallidos</span>
+                  {s.sent} enviados · <span className={s.failed ? 'font-semibold text-red-600 dark:text-red-400' : ''}>{s.failed} fallidos</span> · {s.pending ?? 0} pendientes · {s.other ?? 0} otros
                 </p>
               </CardContent>
             </Card>
@@ -80,18 +90,18 @@ export function MessagesPanel({ messages, channelStats }: { messages: MessageLog
         <div className="flex flex-wrap gap-1.5">
           {['all', ...channelStats.map((s) => s.channel)].map((value) => (
             <button key={value} type="button" aria-pressed={channel === value} onClick={() => setChannel(value)}
-              className={cn('rounded-full border px-3 py-1 text-sm', channel === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40')}>
+              className={cn('min-h-11 rounded-full border px-3 py-2 text-sm', channel === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40')}>
               {value === 'all' ? 'Todos los canales' : channelMeta(value).label}
             </button>
           ))}
-          <button type="button" aria-pressed={onlyFailed} onClick={() => setOnlyFailed((v) => !v)}
+          <button type="button" aria-pressed={onlyFailed} onClick={() => setOnlyFailed(!onlyFailed)}
             className={cn('rounded-full border px-3 py-1 text-sm', onlyFailed ? 'border-red-500 bg-red-600 text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40')}>
             Solo fallidos
           </button>
         </div>
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Destinatario, asunto o tienda" className="pl-8" aria-label="Buscar mensaje" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Destinatario, asunto o tienda" className="h-11 pl-8" aria-label="Buscar mensaje" />
         </div>
       </div>
 
@@ -113,8 +123,8 @@ export function MessagesPanel({ messages, channelStats }: { messages: MessageLog
                         {m.error && <span className="block truncate text-xs text-red-600 dark:text-red-400">{m.error}</span>}
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
-                        <Badge variant="outline" className={cn('rounded-full', m.status === 'failed' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300')}>
-                          {m.status === 'failed' ? 'Falló' : 'Enviado'}
+                        <Badge variant="outline" className={cn('rounded-full', m.status === 'failed' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300' : ['sent','delivered','read'].includes(m.status) ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300')}>
+                          {({failed:'Falló',sent:'Enviado',delivered:'Entregado',read:'Leído',pending:'Pendiente',queued:'En cola',sending:'En proceso',scheduled:'Programado',draft:'Borrador'} as Record<string,string>)[m.status] || 'Estado desconocido'}
                         </Badge>
                         <span className="font-mono text-[11px] text-slate-500">{formatDate(m.sentAt)}</span>
                       </span>
@@ -128,7 +138,7 @@ export function MessagesPanel({ messages, channelStats }: { messages: MessageLog
       </Card>
       <p className="text-xs text-slate-500">Muestra los últimos 500 mensajes registrados en communication_messages.</p>
 
-      <Sheet open={open !== null} onOpenChange={(value) => { if (!value) setOpen(null) }}>
+      <Sheet open={open !== null} onOpenChange={(value) => { if (!value) { requestId.current++; setOpen(null); setLoading(false) } }}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
           {open && (
             <>

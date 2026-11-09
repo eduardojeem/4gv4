@@ -1,3 +1,4 @@
+import { AppVersionBanner } from '@/components/app-version-banner';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, View } from 'react-native';
@@ -23,6 +24,7 @@ export default function PanelLayout() {
           <StatusBar style={dark ? 'light' : 'dark'} />
           <View style={{ flex: 1, backgroundColor: colors.background }}>
             <PanelHeader />
+            <AppVersionBanner />
             <View style={{ flex: 1 }}>
               <Slot />
             </View>

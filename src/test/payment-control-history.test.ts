@@ -20,11 +20,11 @@ describe('payment history evidence', () => {
     expect(paymentEvidence([{ data: [{ id: 'x' }], error: null }, { data: null, error: true }], '')?.confirmed).toBe(true)
   })
   it('counts only paid positive subscription payments with exact provider and method, not activations', async () => {
-    await subscriptionControlHistory([method('pagopar_qr'), method('promo')])
+    await subscriptionControlHistory([method('bancard_card'), method('promo')])
     expect(state.calls).toContainEqual(['eq', 'status', 'paid'])
     expect(state.calls).toContainEqual(['gt', 'amount', 0])
-    expect(state.calls).toContainEqual(['eq', 'provider', 'pagopar'])
-    expect(state.calls).toContainEqual(['eq', 'payment_method', 'Pagopar QR'])
+    expect(state.calls).toContainEqual(['eq', 'provider', 'bancard'])
+    expect(state.calls).toContainEqual(['eq', 'payment_method', 'Bancard Tarjeta'])
     expect(state.calls.filter(call => call[0] === 'from')).toHaveLength(1)
   })
   it('scopes every commerce source to the server organization and excludes financing from money collection', async () => {

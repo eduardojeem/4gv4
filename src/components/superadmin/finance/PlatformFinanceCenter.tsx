@@ -397,7 +397,7 @@ export function PlatformFinanceCenter({
         (tool.id === 'gemini' && (ep.includes('gemini') || ep.includes('google ai') || ep.includes('vertex'))) ||
         (tool.id === 'claude' && (ep.includes('anthropic') || ep.includes('claude'))) ||
         (tool.id === 'app-stores' && (ep.includes('apple') || ep.includes('google play'))) ||
-        (tool.id === 'pagopar' && (ep.includes('pagopar') || ep.includes('bancard')))
+        (tool.id === 'bancard' && ep.includes('bancard'))
       )
     })
   }, [expenses])

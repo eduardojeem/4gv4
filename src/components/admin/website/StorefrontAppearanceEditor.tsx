@@ -11,7 +11,8 @@ import { StorefrontTemplateSelector } from '@/components/admin/website/Storefron
 import { StorefrontTemplatePreviewDialog, type StorefrontLook } from '@/components/admin/website/StorefrontTemplatePreviewDialog'
 import { StorefrontAppearancePreview } from '@/components/admin/website/StorefrontAppearancePreview'
 import { BrandColorScope } from '@/components/admin/website/StorefrontTemplateThumbnail'
-import { BRAND_COLORS } from '@/lib/website/brand-colors'
+import { ExtraBrandColorSwatches } from '@/components/admin/website/ExtraBrandColorSwatches'
+import { BRAND_COLORS, findExtraBrandColor } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import {
   STOREFRONT_HEADER_OPTIONS,
@@ -69,6 +70,7 @@ export function StorefrontAppearanceEditor({
   // La plantilla guardada ya no corresponde (sin agenda, sin productos o de otro rubro): la tienda usa otra.
   const styleFallback = !isStorefrontStyleAvailable(stylePreference, { servicesAvailable, catalogAvailable, businessVertical, commerceMode })
   const brandColor = value.brandColor || 'blue'
+  const extraColor = brandColor === 'custom' ? findExtraBrandColor(value.customBrandColor) : null
   const headerOption = headerOptionFor(value.headerStyle)
   const templateMeta = STOREFRONT_TEMPLATES_METADATA[activeStyle]
 
@@ -218,12 +220,12 @@ export function StorefrontAppearanceEditor({
               type="button"
               onClick={() => onChange({ brandColor: 'custom', customBrandColor: value.customBrandColor || '#2563EB' })}
               aria-label="Usar un color personalizado"
-              aria-pressed={brandColor === 'custom'}
+              aria-pressed={brandColor === 'custom' && !extraColor}
               title="Personalizado"
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-full bg-[conic-gradient(at_center,#ef4444,#f59e0b,#22c55e,#06b6d4,#6366f1,#ec4899,#ef4444)] transition-transform',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                brandColor === 'custom' ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : 'hover:scale-110'
+                brandColor === 'custom' && !extraColor ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : 'hover:scale-110'
               )}
             >
               <span
@@ -233,9 +235,15 @@ export function StorefrontAppearanceEditor({
               />
             </button>
           </div>
+          <ExtraBrandColorSwatches
+            className="mt-4"
+            brandColor={brandColor}
+            customBrandColor={value.customBrandColor}
+            onSelect={(hex) => onChange({ brandColor: 'custom', customBrandColor: hex })}
+          />
           <p className="mt-3 text-xs text-muted-foreground">
             {brandColor === 'custom'
-              ? 'Color personalizado'
+              ? extraColor?.name ?? 'Color personalizado'
               : BRAND_COLORS.find((color) => color.key === brandColor)?.name ?? 'Azul'}
             <span className="mx-1.5">·</span>
             Los marcados con un punto combinan con {STOREFRONT_STYLE_LABELS[activeStyle]}.

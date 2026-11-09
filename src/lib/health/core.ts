@@ -179,7 +179,7 @@ export function sanitizeGuidedActions(actions: HealthGuidedAction[]): HealthGuid
 
 const PRIVATE_ENV_KEYS = [
   'SUPABASE_SERVICE_ROLE_KEY',
-  'PAGOPAR_PRIVATE_KEY',
+  'BANCARD_PRIVATE_KEY',
   'TURNSTILE_SECRET_KEY',
   'UPSTASH_REDIS_REST_TOKEN',
   'RESEND_API_KEY',

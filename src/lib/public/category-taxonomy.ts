@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  AirVent, Apple, Baby, Backpack, BookOpen, Briefcase, Cable, Camera, Car, Cctv, Coffee, CookingPot,
+  AirVent, Apple, Baby, Backpack, BookOpen, Briefcase, Building2, Cable, Camera, Car, Cctv, Coffee, CookingPot,
   Cpu, Dumbbell, Footprints, Gamepad2, Gem, Glasses, Hammer, HardDrive, Headphones, House, Keyboard,
   Lamp, Laptop, Monitor, Mouse, Music, Package, Palette, PawPrint, PenTool, Pill, Plug, PlugZap,
   Printer, Refrigerator, Router, Scissors, Shirt, ShoppingBag, ShoppingBasket, Smartphone, Sofa,
@@ -107,7 +107,8 @@ const RULES: Rule[] = [
   { terms: ['fotografia', 'camara'], icon: Camera, branch: 'deportes' },
   { terms: ['libro'], icon: BookOpen, branch: 'deportes' },
 
-  // Servicios y librería
+  // Servicios, inmobiliaria y librería
+  { terms: ['inmobiliari', 'inmueble', 'bienes raices', 'propiedad', 'terreno', 'alquiler'], icon: Building2, branch: 'servicios' },
   { terms: ['libreria', 'papeleria', 'oficina', 'utiles'], icon: PenTool, branch: 'servicios' },
   { terms: ['servicio'], icon: Briefcase, branch: 'servicios' },
 ]

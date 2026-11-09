@@ -49,7 +49,7 @@ export interface UsePOSSearchReturn {
   selectSuggestion: (s: string) => void
   recentSearches: string[]
 
-  // Productos o servicios. Arranca siempre en productos.
+  // Productos o servicios. Se adapta al catálogo antes de la primera elección.
   catalogView: POSCatalogView
   setCatalogView: (v: POSCatalogView) => void
   catalogCounts: { products: number; services: number }
@@ -131,8 +131,10 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   )
 
   // --- Vista del catálogo ---
-  // No se persiste: la caja abre en productos, que es lo que se vende a diario.
-  const [catalogView, setCatalogViewState] = useState<POSCatalogView>(DEFAULT_POS_CATALOG_VIEW)
+  // Un negocio solo de servicios abre en Servicios; se respeta la elección manual.
+  const [chosenCatalogView, setCatalogViewState] = useState<POSCatalogView | null>(null)
+  const availableCounts = countByCatalogView(products.filter(product => product.is_active !== false))
+  const catalogView = chosenCatalogView ?? (availableCounts.products === 0 && availableCounts.services > 0 ? 'services' : DEFAULT_POS_CATALOG_VIEW)
 
   // --- Filtros ---
   const [selectedCategory, setSelectedCategory] = useState<string>('all')

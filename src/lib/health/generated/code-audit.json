@@ -881,7 +881,7 @@
       "serviceRole": false
     },
     {
-      "route": "/api/admin/subscriptions/payments/pagopar",
+      "route": "/api/admin/subscriptions/payments/bancard",
       "methods": [
         "POST"
       ],
@@ -3926,7 +3926,7 @@
       "serviceRole": true
     },
     {
-      "route": "/api/payments/pagopar/webhook",
+      "route": "/api/payments/bancard/webhook",
       "methods": [
         "POST"
       ],
@@ -7151,9 +7151,9 @@
   ],
   "paymentProviders": [
     {
-      "provider": "pagopar",
+      "provider": "bancard",
       "webhookRoutes": [
-        "/api/payments/pagopar/webhook"
+        "/api/payments/bancard/webhook"
       ]
     }
   ],

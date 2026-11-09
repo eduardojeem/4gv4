@@ -324,3 +324,12 @@ describe('CustomerQuickCreateDialog', () => {
     expect(onClose).toHaveBeenCalled()
   })
 })
+
+describe('reservation prefill',()=>{
+ it('prefills contact without switching into edit mode',()=>{
+  render(<CustomerQuickCreateDialog open onClose={vi.fn()} initialContact={{name:'Ana Pérez',phone:'0981123456'}}/>)
+  expect(screen.getByLabelText(/^Nombre/i)).toHaveValue('Ana')
+  expect(screen.getByLabelText(/^Apellido/i)).toHaveValue('Pérez')
+  expect(screen.getByLabelText(/^Teléfono/i)).toHaveValue('0981123456')
+ })
+})

@@ -8,15 +8,7 @@ import { ServicesPageClient } from './ServicesPageClient'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import type { Service } from '@/types/website-settings'
-
-// La relación categories(name) de Supabase puede venir como objeto o como
-// array de un elemento según cómo infiera la cardinalidad sin codegen de
-// tipos; esto cubre ambos casos sin recurrir a `any`.
-function extractCategoryName(raw: unknown): string | undefined {
-  if (!raw) return undefined
-  if (Array.isArray(raw)) return (raw[0] as { name?: string } | undefined)?.name
-  return (raw as { name?: string }).name
-}
+import { inventoryServicesForWebsite, mergeInventoryServices, type InventoryServiceRow } from '@/lib/website/inventory-services'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
@@ -37,42 +29,26 @@ interface ServicesPageProps {
 export default async function ServicesPage({ organizationId, organizationName }: ServicesPageProps = {}) {
   const settings = await fetchWebsiteSettings()
 
-  const services: Service[] = getActivePublicServices(settings?.services).map(s => ({
+  let services: Service[] = getActivePublicServices(settings?.services).map(s => ({
     ...s,
     source: s.source || 'catalog',
   }))
 
-  // Cargar servicios dinámicos de la organización desde la tabla products.
+  // Servicios de la organización desde la tabla products: solo los activos y
+  // marcados para la página web, con su portada.
   if (organizationId) {
     try {
       const supabase = createAdminSupabase()
       const { data: dbServices } = await supabase
         .from('products')
-        .select('id, name, description, sale_price, visibility, category:categories(name)')
+        .select('id, name, description, sale_price, hide_price, visibility, is_active, image_url, images, category:categories(name)')
         .eq('organization_id', organizationId)
         .eq('visibility', 'public')
+        .eq('is_active', true)
         .or('unit_measure.eq.servicio,name.ilike.%servicio%')
 
       if (dbServices && dbServices.length > 0) {
-        const converted: Service[] = dbServices.map(s => ({
-          id: s.id,
-          title: s.name,
-          description: s.description || '',
-          price: s.sale_price || 0,
-          icon: 'wrench',
-          color: 'blue',
-          benefits: ['Garantía escrita', 'Atención profesional'],
-          category: extractCategoryName(s.category) || 'Servicios Técnicos',
-          active: true,
-          source: 'inventory',
-        }))
-
-        const existingTitles = new Set(services.map(s => (s.title || '').toLowerCase()))
-        for (const conv of converted) {
-          if (!existingTitles.has(conv.title.toLowerCase())) {
-            services.push(conv)
-          }
-        }
+        services = mergeInventoryServices(services, inventoryServicesForWebsite(dbServices as InventoryServiceRow[]))
       }
     } catch (e) {
       console.error('Error fetching org DB services:', e)

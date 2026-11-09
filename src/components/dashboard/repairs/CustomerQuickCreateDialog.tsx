@@ -131,6 +131,7 @@ interface CustomerQuickCreateDialogProps {
     /** Se llama cuando se detecta un cliente existente y el usuario decide usarlo directamente. */
     onSelectExisting?: (customerData: Customer & { is_wholesale?: boolean }) => void
     /** Con un cliente acá el dialogo pasa a modo edicion. */
+    initialContact?: { name: string; phone: string | null } | null
     customerToEdit?: QuickCustomerData | null
 }
 
@@ -176,6 +177,7 @@ export function CustomerQuickCreateDialog({
     onUpdated,
     onSelectExisting,
     customerToEdit = null,
+    initialContact = null,
 }: CustomerQuickCreateDialogProps) {
     const isEditing = Boolean(customerToEdit)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -253,13 +255,14 @@ export function CustomerQuickCreateDialog({
                 customerToEdit.customer_type === 'mayorista'
             ))
         } else {
-            reset(EMPTY_FORM)
+            const personName = initialContact ? splitLegacyCustomerName({ id: '', name: initialContact.name }) : null
+            reset(initialContact ? { ...EMPTY_FORM, first_name: personName!.firstName, last_name: personName!.lastName, phone: initialContact.phone || '' } : EMPTY_FORM)
             setIsWholesale(false)
         }
         // La invitacion al portal nunca se arrastra: es una accion, no un dato
         // del cliente, y reenviarla sin querer manda un correo de verdad.
         setSendWebInvite(false)
-    }, [open, customerToEdit, reset])
+    }, [open, customerToEdit, initialContact, reset])
 
     /**
      * Arma el cliente que se devuelve a la pantalla. Estaba escrito cuatro veces

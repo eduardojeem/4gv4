@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getAppReturnOrigin, getBrowserRequestOrigin } from '@/lib/http/app-origin'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { PagoparRecurringError } from '@/lib/payments/pagopar-recurring'
+import { BancardError, getBancardCheckoutScriptUrl } from '@/lib/payments/bancard'
 import {
   AutopayError,
   completeAutopayCardRegistration,
@@ -13,9 +13,9 @@ import {
   startAutopayCardRegistration,
 } from '@/lib/saas/subscription-autopay'
 
-/** Pagopar redirige acá al terminar el formulario; tiene que ser idéntica en agregar y confirmar. */
+/** Bancard redirige acá al terminar el formulario para guardar la tarjeta. */
 function getCardReturnUrl(request: Request) {
-  return `${getAppReturnOrigin(getBrowserRequestOrigin(request))}/auth/pagopar-tarjeta`
+  return `${getAppReturnOrigin(getBrowserRequestOrigin(request))}/auth/bancard-tarjeta`
 }
 
 async function resolveContext(requireOwner: boolean) {
@@ -40,7 +40,7 @@ function errorResponse(error: unknown) {
   if (error instanceof AutopayError) {
     return NextResponse.json({ error: error.message }, { status: error.status })
   }
-  if (error instanceof PagoparRecurringError) {
+  if (error instanceof BancardError) {
     // 424 y no 502: Cloudflare reemplaza las respuestas 502 por su propia página.
     return NextResponse.json({ error: error.message }, { status: 424 })
   }
@@ -66,18 +66,17 @@ export async function POST(request: Request) {
   try {
     switch (body.action) {
       case 'start': {
-        const formUrl = await startAutopayCardRegistration({
+        const processId = await startAutopayCardRegistration({
           organizationId: context.organization.id,
           organizationName: context.organization.name,
           userEmail: context.auth.user.email,
           returnUrl: getCardReturnUrl(request),
         })
-        return NextResponse.json({ formUrl })
+        return NextResponse.json({ processId, scriptUrl: getBancardCheckoutScriptUrl() })
       }
       case 'confirm':
         return NextResponse.json(await completeAutopayCardRegistration({
           organizationId: context.organization.id,
-          returnUrl: getCardReturnUrl(request),
         }))
       case 'enable':
         return NextResponse.json(await setAutopayEnabled(context.organization.id, true))

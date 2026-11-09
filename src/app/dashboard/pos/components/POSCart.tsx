@@ -67,6 +67,8 @@ interface POSCartProps {
   onRemoveItem: (id: string) => void;
   onApplyDiscount?: (id: string, discount: number) => void;
   onCheckout: () => void;
+  cashRegisterClosed?: boolean;
+  onOpenCash?: () => void;
   onClearCart: () => void;
   onApplyPromoCode?: (code: string) => void;
   // Wholesale & Discount State
@@ -310,6 +312,8 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onRemoveItem,
   onApplyDiscount,
   onCheckout,
+  cashRegisterClosed = false,
+  onOpenCash,
   onClearCart,
   onApplyPromoCode,
   isWholesale,
@@ -334,6 +338,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   documentKind = 'internal'
 }) => {
   const canCheckout = checkoutEligibility.canConfirm;
+  const offerOpenCash = cashRegisterClosed && Boolean(onOpenCash) && !isProcessing && items.length > 0;
   const checkoutDisabledReason = checkoutEligibility.reason;
 
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
@@ -399,9 +404,9 @@ export const POSCart: React.FC<POSCartProps> = memo(({
 
   // ─── Cart with items ─────────────────────────────────────
   return (
-    <Card className="h-full flex flex-col shadow-sm border-border/50 overflow-hidden rounded-xl bg-background/80 backdrop-blur-sm">
+    <Card className="h-full min-h-0 flex flex-col gap-0 py-0 shadow-sm border-border/50 overflow-hidden rounded-xl bg-background/80 backdrop-blur-sm">
       {/* Header */}
-      <CardHeader className="py-2 px-3 border-b bg-muted/10">
+      <CardHeader className="shrink-0 py-2 px-3 border-b bg-muted/10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <div className="flex items-center justify-center h-5 w-5 rounded-md bg-primary/10">
@@ -473,9 +478,9 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         </div>
       </CardHeader>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div role="region" aria-label="Detalle del carrito y ajustes" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {/* Scrollable Items List */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 scroll-smooth">
+        <div className="px-3 py-2">
           <AnimatePresence mode="popLayout">
             {items.map((item) => (
               <CartItemRow
@@ -491,8 +496,8 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         </div>
 
         {/* Bottom section: Controls + Totals + CTA */}
-        <div className="bg-card border-t shadow-[0_-2px_8px_-3px_rgba(0,0,0,0.08)] z-10">
-          <div className="max-h-[34vh] overflow-y-auto">
+        <div className="shrink-0 bg-card border-t shadow-[0_-2px_8px_-3px_rgba(0,0,0,0.08)] z-10">
+          <div>
 
             {/* Collapsible Controls: Wholesale, Discount, Promo */}
             <div className="px-4 pt-2">
@@ -606,17 +611,20 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             </div>
           </div>
 
-          {/* Sticky CTA — Single total + prominent button */}
-          <div className="p-3 border-t border-primary/20 bg-gradient-to-t from-primary/5 to-background">
+        </div>
+      </div>
+
+          {/* Primary action stays outside the scrolling details. */}
+          <div className="shrink-0 p-3 border-t border-primary/20 bg-gradient-to-t from-primary/5 to-background">
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total a cobrar</p>
                 <p className="text-xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
               </div>
               <Button
-                onClick={onCheckout}
-                disabled={isProcessing || !canCheckout}
-                title={checkoutDisabledReason}
+                onClick={offerOpenCash ? onOpenCash : onCheckout}
+                disabled={isProcessing || (!offerOpenCash && !canCheckout)}
+                title={offerOpenCash ? 'Abrí la caja; luego podrás confirmar el cobro' : checkoutDisabledReason}
                 size="default"
                 className={cn(
                   "w-full h-10 text-sm font-bold rounded-lg shadow-md transition-all",
@@ -634,14 +642,12 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-1.5" />
-                    Cobrar ahora
+                    {offerOpenCash ? 'Abrir caja para cobrar' : 'Cobrar ahora'}
                   </>
                 )}
               </Button>
             </div>
           </div>
-        </div>
-      </div>
     </Card>
   );
 });

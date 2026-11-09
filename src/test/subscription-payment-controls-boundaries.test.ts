@@ -3,17 +3,15 @@ import { PaymentControlError } from '@/lib/payments/control-contract'
 const denied = vi.hoisted(() => ({ call: vi.fn() }))
 vi.mock('@/lib/payments/subscription-controls', () => ({ assertSubscriptionPaymentEnabled: denied.call }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => { throw new Error('Unexpected financial DB access') } }))
-import { createSubscriptionPagoparCheckout } from '@/lib/saas/pagopar-subscription-checkout'
+import { createSubscriptionBancardCheckout } from '@/lib/saas/subscription-checkout'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 import { redeemSubscriptionPromo } from '@/lib/saas/redeem-subscription-promo'
 beforeEach(() => { denied.call.mockReset().mockRejectedValue(new PaymentControlError('Medio deshabilitado', 409)) })
 describe('subscription creation policy boundaries', () => {
-  it('blocks card and QR independently before creating or reusing a provider order', async () => {
+  it('blocks Bancard card payments before creating or reusing a provider order', async () => {
     const organization = { id: 'org', name: 'Test' }
-    await expect(createSubscriptionPagoparCheckout({ organization, canChangePlan: false, paymentMethod: 'card' })).rejects.toMatchObject({ status: 409 })
-    expect(denied.call).toHaveBeenLastCalledWith('pagopar_card')
-    await expect(createSubscriptionPagoparCheckout({ organization, canChangePlan: false, paymentMethod: 'qr' })).rejects.toMatchObject({ status: 409 })
-    expect(denied.call).toHaveBeenLastCalledWith('pagopar_qr')
+    await expect(createSubscriptionBancardCheckout({ organization, canChangePlan: false })).rejects.toMatchObject({ status: 409 })
+    expect(denied.call).toHaveBeenLastCalledWith('bancard_card')
   })
   it('blocks Stripe before touching provider or billing records', async () => {
     await expect(createSubscriptionStripeCheckout({ organization: { id: 'org', name: 'Test' }, canChangePlan: false })).rejects.toMatchObject({ status: 409 })

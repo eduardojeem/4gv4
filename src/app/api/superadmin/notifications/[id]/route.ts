@@ -28,7 +28,7 @@ export async function PATCH(
   if (previousError) return NextResponse.json({ error: previousError.message }, { status: 500 })
   if (!previous) return NextResponse.json({ error: 'Notificacion no encontrada.' }, { status: 404 })
 
-  const validation = validateGlobalNotification({ ...previous, ...body })
+  const validation = validateGlobalNotification({ ...previous, ...body }, previous.status === 'scheduled' ? previous.scheduled_at : null)
   if (validation.error) return NextResponse.json({ error: validation.error }, { status: 400 })
   const notification = validation.data
 

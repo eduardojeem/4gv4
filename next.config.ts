@@ -196,9 +196,12 @@ const nextConfig: NextConfig = {
     // Cloudflare Web Analytics inyecta su beacon desde static.cloudflareinsights.com
     // y envía las mediciones a cloudflareinsights.com. Sin estos dos dominios la
     // CSP lo bloqueaba y Cloudflare no registraba ninguna visita.
+    // Bancard vPOS: el script del iframe (bancard-checkout.js) y el propio
+    // iframe salen del ambiente de producción o del de pruebas (puerto 8888).
+    const BANCARD_ORIGINS = 'https://vpos.infonet.com.py https://vpos.infonet.com.py:8888'
     const scriptSrc = isProd
-      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
-      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
+      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://vpos.infonet.com.py https://vpos.infonet.com.py:8888"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://vpos.infonet.com.py https://vpos.infonet.com.py:8888"
 
     return [
       ...(!isProd
@@ -208,8 +211,8 @@ const nextConfig: NextConfig = {
         // Security headers para todas las rutas.
         // CSP efectiva: las fuentes requeridas por Supabase y Turnstile están
         // declaradas explícitamente; cualquier otra carga queda bloqueada.
-        // /auth/pagopar-tarjeta queda afuera: ver la regla siguiente.
-        source: '/((?!auth/pagopar-tarjeta).*)',
+        // /auth/bancard-tarjeta queda afuera: ver la regla siguiente.
+        source: '/((?!auth/bancard-tarjeta).*)',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -226,8 +229,8 @@ const nextConfig: NextConfig = {
               "font-src 'self' data:",
               ["connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org", ...devSupabaseOrigins].join(' '),
               // Google Maps: el mapa de la ubicación en la sección de contacto de cada tienda.
-              // Pagopar: formulario de uPay para guardar la tarjeta del débito automático.
-              `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com https://www.pagopar.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
+              // Bancard: iframe de vPOS para pagar con tarjeta y para guardar la tarjeta del débito automático.
+              `frame-src 'self' blob: https://challenges.cloudflare.com https://maps.google.com https://www.google.com ${BANCARD_ORIGINS}${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
               "worker-src 'self' blob:",
               "manifest-src 'self'",
               ...(isProd ? ['upgrade-insecure-requests'] : []),
@@ -248,10 +251,10 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Retorno del formulario de tarjeta de uPay: Pagopar puede cargarlo dentro
-        // de su iframe, así que además del propio sitio se permite www.pagopar.com
-        // como ancestro. La página no lee datos; solo sale del iframe hacia el panel.
-        source: '/auth/pagopar-tarjeta',
+        // Retorno del formulario de tarjeta de Bancard: puede cargarse dentro de
+        // su iframe, así que además del propio sitio se permite vPOS como
+        // ancestro. La página no lee datos; solo sale del iframe hacia el panel.
+        source: '/auth/bancard-tarjeta',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -259,7 +262,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "base-uri 'self'",
               "object-src 'none'",
-              "frame-ancestors 'self' https://www.pagopar.com",
+              `frame-ancestors 'self' ${BANCARD_ORIGINS}`,
               "form-action 'self'",
               scriptSrc,
               "style-src 'self' 'unsafe-inline'",

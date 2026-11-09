@@ -297,6 +297,7 @@ export function MarketplaceBrandsSection({
             {/* Pill indicador de movimiento continuo */}
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => setIsPaused((p) => !p)}
               className={cn(
                 'hidden sm:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all border shadow-2xs',
@@ -324,6 +325,7 @@ export function MarketplaceBrandsSection({
             {/* Botón de Play/Pausa de movimiento */}
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => setIsPaused((p) => !p)}
               aria-label={!isPaused ? 'Pausar movimiento automático' : 'Reanudar movimiento automático'}
               title={!isPaused ? 'Pausar movimiento' : 'Reanudar movimiento'}

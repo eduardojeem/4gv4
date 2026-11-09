@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LifeBuoy } from 'lucide-react'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SUPPORT_REASON_MIN_LENGTH, SUPPORT_REASON_MAX_LENGTH, SUPPORT_SESSION_TTL_MINUTES } from '@/lib/superadmin/support-session-policy'
 import { cn } from '@/lib/utils'
 
 interface EnterSupportButtonProps {
@@ -29,12 +30,16 @@ export function EnterSupportButton({ organizationId, organizationName, className
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const inFlight = useRef(false)
+
   async function start() {
-    if (reason.trim().length < 5) {
-      setError('Indicá un motivo de al menos 5 caracteres.')
+    if (inFlight.current) return
+    if (reason.trim().length < SUPPORT_REASON_MIN_LENGTH || reason.trim().length > SUPPORT_REASON_MAX_LENGTH) {
+      setError(`Indicá un motivo de entre ${SUPPORT_REASON_MIN_LENGTH} y ${SUPPORT_REASON_MAX_LENGTH} caracteres.`)
       return
     }
 
+    inFlight.current = true
     setLoading(true)
     setError(null)
     try {
@@ -44,8 +49,8 @@ export function EnterSupportButton({ organizationId, organizationName, className
         body: JSON.stringify({ organizationId, reason: reason.trim() }),
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(body.error || 'No se pudo iniciar el modo soporte.')
+      if (!res.ok || typeof body.session?.id !== 'string') {
+        setError(typeof body.error === 'string' ? body.error : 'No se pudo confirmar la sesión de soporte.')
         return
       }
       setOpen(false)
@@ -55,6 +60,7 @@ export function EnterSupportButton({ organizationId, organizationName, className
     } catch {
       setError('No se pudo conectar con el servicio de soporte.')
     } finally {
+      inFlight.current = false
       setLoading(false)
     }
   }
@@ -89,7 +95,7 @@ export function EnterSupportButton({ organizationId, organizationName, className
         <DialogHeader>
           <DialogTitle>Entrar en modo soporte</DialogTitle>
           <DialogDescription>
-            Accederás temporalmente a {organizationName}. El motivo y la sesión quedarán registrados en auditoría.
+            Registrás la asistencia a {organizationName} durante {SUPPORT_SESSION_TTL_MINUTES} minutos. Seguís usando tu cuenta y tus permisos de superadministrador.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-2">
@@ -101,22 +107,24 @@ export function EnterSupportButton({ organizationId, organizationName, className
               setReason(event.target.value)
               if (error) setError(null)
             }}
-            placeholder="Ej.: revisar configuración de pagos solicitada por el owner"
+            placeholder="Ej.: revisar la configuración solicitada por el propietario"
             rows={4}
-            maxLength={300}
+            maxLength={SUPPORT_REASON_MAX_LENGTH}
             disabled={loading}
+            aria-invalid={Boolean(error)}
+            aria-describedby={`support-message-${organizationId}`}
           />
           <div className="flex items-center justify-between text-xs">
-            <span className={error ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}>
-              {error ?? 'Mínimo 5 caracteres.'}
+            <span id={`support-message-${organizationId}`} role={error ? 'alert' : undefined} className={error ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
+              {error ?? `Entre ${SUPPORT_REASON_MIN_LENGTH} y ${SUPPORT_REASON_MAX_LENGTH} caracteres.`}
             </span>
-            <span className="text-slate-400">{reason.length}/300</span>
+            <span className="text-slate-400">{reason.length}/{SUPPORT_REASON_MAX_LENGTH}</span>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>Cancelar</Button>
-          <Button onClick={() => void start()} disabled={loading || reason.trim().length < 5}>
-            {loading ? 'Iniciando…' : 'Iniciar acceso temporal'}
+          <Button onClick={() => void start()} disabled={loading || reason.trim().length < SUPPORT_REASON_MIN_LENGTH || reason.trim().length > SUPPORT_REASON_MAX_LENGTH}>
+            {loading ? 'Iniciando…' : 'Iniciar sesión de soporte'}
           </Button>
         </DialogFooter>
       </DialogContent>

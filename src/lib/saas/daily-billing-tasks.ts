@@ -1,6 +1,6 @@
 import 'server-only'
 import { completeDueAccountDeletions } from '@/lib/account/account-deletion'
-import { reconcilePendingPagoparPayments } from '@/lib/saas/pagopar-reconciliation'
+import { reconcilePendingBancardPayments } from '@/lib/saas/bancard-subscription-status'
 import { sendPlanGraceNotifications } from '@/lib/saas/plan-grace-notifications'
 import { runSubscriptionAutopay } from '@/lib/saas/subscription-autopay'
 import { sendSubscriptionReminders } from '@/lib/saas/subscription-notifications'
@@ -14,7 +14,7 @@ import { sendSubscriptionReminders } from '@/lib/saas/subscription-notifications
 export type DailyTaskResult = { ok: true; data: unknown } | { ok: false; error: string }
 
 export const DAILY_BILLING_TASKS: Record<string, () => Promise<unknown>> = {
-  pagoparReconcile: () => reconcilePendingPagoparPayments(),
+  bancardReconcile: () => reconcilePendingBancardPayments(),
   subscriptionAutopay: () => runSubscriptionAutopay(),
   planGraceNotifications: () => sendPlanGraceNotifications(),
   subscriptionReminders: () => sendSubscriptionReminders(),

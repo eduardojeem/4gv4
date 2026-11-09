@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const tasks = vi.hoisted(() => ({ reconcile: vi.fn(), autopay: vi.fn(), grace: vi.fn(), reminders: vi.fn(), deletions: vi.fn() }))
-vi.mock('@/lib/saas/pagopar-reconciliation', () => ({ reconcilePendingPagoparPayments: tasks.reconcile }))
+vi.mock('@/lib/saas/bancard-subscription-status', () => ({ reconcilePendingBancardPayments: tasks.reconcile }))
 vi.mock('@/lib/saas/subscription-autopay', () => ({ runSubscriptionAutopay: tasks.autopay }))
 vi.mock('@/lib/saas/plan-grace-notifications', () => ({ sendPlanGraceNotifications: tasks.grace }))
 vi.mock('@/lib/saas/subscription-notifications', () => ({ sendSubscriptionReminders: tasks.reminders }))
@@ -38,7 +38,7 @@ describe('/api/cron/daily', () => {
 
   it('corre las cinco tareas y una que falla no frena a las demás', async () => {
     vi.stubEnv('CRON_SECRET', 'secreto')
-    tasks.reconcile.mockRejectedValue(new Error('Pagopar caído'))
+    tasks.reconcile.mockRejectedValue(new Error('Bancard caído'))
     tasks.autopay.mockResolvedValue({ charged: 1 })
     tasks.grace.mockResolvedValue({ sent: 2 })
     tasks.reminders.mockResolvedValue({ sent: 0 })
@@ -48,7 +48,7 @@ describe('/api/cron/daily', () => {
     const body = await response.json()
 
     expect(response.status).toBe(500)
-    expect(body.results.pagoparReconcile).toEqual({ ok: false, error: 'Pagopar caído' })
+    expect(body.results.bancardReconcile).toEqual({ ok: false, error: 'Bancard caído' })
     expect(body.results.subscriptionAutopay).toEqual({ ok: true, data: { charged: 1 } })
     expect(body.results.planGraceNotifications).toEqual({ ok: true, data: { sent: 2 } })
     expect(body.results.subscriptionReminders).toEqual({ ok: true, data: { sent: 0 } })

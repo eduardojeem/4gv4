@@ -26,7 +26,7 @@ describe('buildServiceHealthEntries', () => {
         check('supabase.database', 'healthy', 'Base accesible'),
         check('security.turnstile', 'error', 'Configuración incompleta'),
         check('cloudflare.edge', 'healthy', 'Proxy verificado'),
-        check('payments.pagopar', 'not_configured', 'No implementado'),
+        check('payments.bancard', 'not_configured', 'No implementado'),
       ],
       {
         supabase: 'configured',
@@ -34,7 +34,7 @@ describe('buildServiceHealthEntries', () => {
         telegram: 'configured',
         turnstile: 'partial',
         cloudflare: 'configured',
-        pagopar: 'missing',
+        bancard: 'missing',
       },
     )
 
@@ -43,7 +43,7 @@ describe('buildServiceHealthEntries', () => {
     expect(services.find((service) => service.id === 'telegram')).toMatchObject({ status: 'unknown' })
     expect(services.find((service) => service.id === 'turnstile')).toMatchObject({ status: 'error', configured: 'partial' })
     expect(services.find((service) => service.id === 'cloudflare')).toMatchObject({ status: 'healthy' })
-    expect(services.find((service) => service.id === 'pagopar')).toMatchObject({ status: 'not_configured' })
+    expect(services.find((service) => service.id === 'bancard')).toMatchObject({ status: 'not_configured' })
   })
 
   it('never includes environment values in its serialized output', () => {
@@ -75,12 +75,12 @@ describe('buildServiceHealthEntries', () => {
       [
         { ...check('security.rate_limiting', 'healthy'), metadata: { latencyMs: 7 } },
         check('security.turnstile', 'healthy'),
-        check('payments.pagopar', 'healthy'),
+        check('payments.bancard', 'healthy'),
       ],
-      { upstash: 'configured', turnstile: 'configured', pagopar: 'configured' },
+      { upstash: 'configured', turnstile: 'configured', bancard: 'configured' },
     )
 
-    for (const id of ['upstash', 'turnstile', 'pagopar']) {
+    for (const id of ['upstash', 'turnstile', 'bancard']) {
       expect(configuredOnly.find((service) => service.id === id)).toMatchObject({
         status: 'unknown',
         unavailableReason: expect.stringContaining('no verificado'),

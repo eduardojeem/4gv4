@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { OnboardingClient } from '@/components/dashboard/onboarding/OnboardingClient'
 import { STARTER_CHECKOUT_CHOICES } from '@/lib/onboarding/checkout-choices'
@@ -58,9 +58,22 @@ describe('configuración inicial paso a paso', () => {
     expect(screen.getByText('Agenda y reservas')).toBeInTheDocument()
   })
 
-  it('al volver a entrar, las secciones son pestañas', () => {
+  it('al volver a entrar también exige recorrer los pasos', () => {
     render(<OnboardingClient {...props({ completedAt: '2026-10-01T00:00:00Z' })} />)
-    expect(screen.getByRole('tab', { name: /Cobro y entrega/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Siguiente:/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Siguiente: Datos y contacto/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Finalizar y guardar' })).not.toBeInTheDocument()
   })
+})
+
+it('no guarda hasta revisar el último paso y conserva borrador si falla',async()=>{
+ const request=vi.fn().mockResolvedValue({ok:false,json:async()=>({error:'Fallo de prueba'})});vi.stubGlobal('fetch',request)
+ const input=props();input.initialCompanyInfo.phone='+595 981123456';input.initialCompanyInfo.address='Calle 123';input.initialCompanyInfo.city='Luque'
+ render(<OnboardingClient {...input}/>)
+ for(const label of ['Datos y contacto','Cobro y entrega','Tu tienda','Redes','Revisar y finalizar']) fireEvent.click(screen.getByRole('button',{name:'Siguiente: '+label}))
+ expect(request).not.toHaveBeenCalled()
+ expect(screen.getByRole('heading',{name:'Revisá tu configuración'})).toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button',{name:'Finalizar y guardar'}))
+ await waitFor(()=>expect(screen.getByText('Fallo de prueba')).toBeInTheDocument())
+ expect(screen.queryByRole('heading',{name:'Configuración guardada'})).not.toBeInTheDocument()
+ vi.unstubAllGlobals()
 })

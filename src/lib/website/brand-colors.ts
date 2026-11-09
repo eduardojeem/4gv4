@@ -30,6 +30,47 @@ export const BRAND_COLORS: BrandColorOption[] = [
 
 export const DEFAULT_BRAND_COLOR = 'blue'
 
+export interface ExtraBrandColor {
+  hex: string
+  name: string
+}
+
+/**
+ * Más tonos para la marca. No son claves nuevas: se guardan como color
+ * personalizado (`brandColor: 'custom'` + `customBrandColor`), que ya funciona
+ * en toda la tienda, el panel, los correos y la app. Todos tienen contraste de
+ * al menos 4.5:1 con el texto blanco de los botones.
+ */
+export const EXTRA_BRAND_COLORS: ExtraBrandColor[] = [
+  { hex: '#8B1E3F', name: 'Bordó' },
+  { hex: '#6B1D2F', name: 'Vino' },
+  { hex: '#C8473D', name: 'Coral' },
+  { hex: '#B4532A', name: 'Terracota' },
+  { hex: '#9A6A0B', name: 'Mostaza' },
+  { hex: '#8A6D1E', name: 'Dorado' },
+  { hex: '#556B2F', name: 'Oliva' },
+  { hex: '#166534', name: 'Verde bosque' },
+  { hex: '#047857', name: 'Jade' },
+  { hex: '#0F5E6E', name: 'Petróleo' },
+  { hex: '#3B5B85', name: 'Azul acero' },
+  { hex: '#1E3A8A', name: 'Azul marino' },
+  { hex: '#7457B8', name: 'Lavanda' },
+  { hex: '#6D28D9', name: 'Violeta' },
+  { hex: '#7E2A6E', name: 'Ciruela' },
+  { hex: '#B21FB8', name: 'Fucsia' },
+  { hex: '#6B3E26', name: 'Chocolate' },
+  { hex: '#475569', name: 'Pizarra' },
+  { hex: '#374151', name: 'Grafito' },
+  { hex: '#111827', name: 'Negro' },
+]
+
+/** El tono extra que corresponde a un color personalizado, si es uno de la paleta. */
+export function findExtraBrandColor(hex?: string | null): ExtraBrandColor | null {
+  if (!hex) return null
+  const normalized = hex.trim().toUpperCase()
+  return EXTRA_BRAND_COLORS.find((color) => color.hex === normalized) ?? null
+}
+
 /** `custom` es valido: significa que el color real esta en `customBrandColor`. */
 export function isKnownBrandColor(value: unknown): boolean {
   if (typeof value !== 'string') return false

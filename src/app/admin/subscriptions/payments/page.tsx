@@ -5,10 +5,9 @@ import { redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
-import { isValidPagoparOrderHash, type PagoparOrderDisplayStatus } from '@/lib/payments/pagopar'
+import { isValidBancardShopProcessId, type BancardOrderDisplayStatus } from '@/lib/payments/bancard'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { verifySubscriptionPagoparPayment } from '@/lib/saas/pagopar-subscription-status'
-import { syncPagoparPaymentStatus } from '@/lib/saas/pagopar-reconciliation'
+import { syncBancardPaymentStatus, verifySubscriptionBancardPayment } from '@/lib/saas/bancard-subscription-status'
 import { isValidStripeCheckoutSessionId } from '@/lib/payments/stripe'
 import {
   verifySubscriptionStripePayment,
@@ -18,15 +17,15 @@ import {
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-type PageProps = { searchParams: Promise<{ hash?: string | string[]; stripe_session?: string | string[] }> }
+type PageProps = { searchParams: Promise<{ ref?: string | string[]; stripe_session?: string | string[] }> }
 
-const STRIPE_STATUS: Record<StripeSessionDisplayStatus, PagoparOrderDisplayStatus> = {
+const STRIPE_STATUS: Record<StripeSessionDisplayStatus, BancardOrderDisplayStatus> = {
   approved: 'approved',
   pending: 'pending',
   expired: 'cancelled',
 }
 
-const STATUS_CONTENT: Record<PagoparOrderDisplayStatus, {
+const STATUS_CONTENT: Record<BancardOrderDisplayStatus, {
   title: string
   description: string
   badge: string
@@ -35,21 +34,21 @@ const STATUS_CONTENT: Record<PagoparOrderDisplayStatus, {
 }> = {
   approved: {
     title: 'Pago aprobado',
-    description: 'Pagopar confirmó el cobro. La suscripción se activa únicamente cuando el webhook seguro procesa la notificación.',
+    description: 'El proveedor confirmó el cobro. La suscripción se activa únicamente con la confirmación verificada del servidor.',
     badge: 'Aprobado',
     icon: CheckCircle2,
     tone: 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100',
   },
   pending: {
     title: 'Pago pendiente',
-    description: 'El pedido existe, pero Pagopar todavía espera que se complete el pago.',
+    description: 'El pago existe, pero todavía no se completó. Si cerraste el formulario, podés volver a pagar desde suscripciones.',
     badge: 'Pendiente',
     icon: Clock3,
     tone: 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100',
   },
   rejected: {
     title: 'Pago rechazado',
-    description: 'Pagopar informó que el pago no pudo completarse. Podés volver y generar un nuevo intento.',
+    description: 'El pago no pudo completarse. Podés volver y generar un nuevo intento.',
     badge: 'Rechazado',
     icon: XCircle,
     tone: 'border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100',
@@ -63,7 +62,7 @@ const STATUS_CONTENT: Record<PagoparOrderDisplayStatus, {
   },
   processing: {
     title: 'Pago en proceso',
-    description: 'Pagopar reconoce el pedido y continúa procesándolo. Revisá nuevamente en unos instantes.',
+    description: 'El pago se está procesando. Revisá nuevamente en unos instantes.',
     badge: 'Procesando',
     icon: LoaderCircle,
     tone: 'border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100',
@@ -72,6 +71,11 @@ const STATUS_CONTENT: Record<PagoparOrderDisplayStatus, {
 
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat('es-PY', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount)
+}
+
+function dateTime(value: string | null) {
+  const date = value ? new Date(value) : new Date()
+  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Asuncion' }).format(Number.isNaN(date.getTime()) ? new Date() : date)
 }
 
 function VerificationError({ title, description }: { title: string; description: string }) {
@@ -90,10 +94,12 @@ function VerificationError({ title, description }: { title: string; description:
 
 export default async function SubscriptionPaymentsPage({ searchParams }: PageProps) {
   const params = await searchParams
-  const hash = Array.isArray(params.hash) ? params.hash[0] : params.hash
+  // Bancard puede agregar su propio ?status= a la URL de retorno: solo cuenta el número inicial.
+  const rawReference = Array.isArray(params.ref) ? params.ref[0] : params.ref
+  const reference = rawReference?.match(/^\d{1,15}/)?.[0] ?? rawReference
   const stripeSession = Array.isArray(params.stripe_session) ? params.stripe_session[0] : params.stripe_session
 
-  if (!hash && !stripeSession) redirect('/admin/subscriptions#payment-history')
+  if (!reference && !stripeSession) redirect('/admin/subscriptions#payment-history')
 
   const auth = await resolveRequestAuthUser()
   if (!auth.authenticated) return redirect('/login')
@@ -104,16 +110,16 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
   if (stripeSession) {
     return <StripePaymentStatus organizationId={organization.id} sessionId={stripeSession} />
   }
-  if (!hash) redirect('/admin/subscriptions#payment-history')
+  if (!reference) redirect('/admin/subscriptions#payment-history')
 
-  const verification = isValidPagoparOrderHash(hash)
-    ? await verifySubscriptionPagoparPayment(organization.id, hash)
+  const verification = isValidBancardShopProcessId(reference)
+    ? await verifySubscriptionBancardPayment(organization.id, reference)
     : null
-  // Si la notificación de Pagopar no llegó, la confirmación del servidor
-  // (nunca un dato del navegador) aplica el pago acá mismo.
+  // Si la confirmación de Bancard no llegó, la consulta del servidor (nunca un
+  // dato del navegador) aplica el pago acá mismo.
   const syncOutcome = verification?.kind === 'verified'
-    ? await syncPagoparPaymentStatus(verification.localPayment, verification.providerOrder).catch((error: unknown) => {
-      console.error('[pagopar-return] No se pudo aplicar el pago verificado.', {
+    ? await syncBancardPaymentStatus(verification.localPayment, verification.providerOrder).catch((error: unknown) => {
+      console.error('[bancard-return] No se pudo aplicar el pago verificado.', {
         organizationId: organization.id,
         paymentId: verification.localPayment.id,
         reason: error instanceof Error ? error.message : 'unknown_error',
@@ -132,9 +138,9 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
       </div>
 
       {!verification && <VerificationError title="Enlace de pago inválido" description="El identificador recibido no tiene el formato esperado. Volvé al historial y verificá el estado desde allí." />}
-      {verification?.kind === 'not_found' && <VerificationError title="Pago no encontrado" description="No encontramos un pago Pagopar de esta organización asociado con el identificador recibido." />}
-      {verification?.kind === 'mismatch' && <VerificationError title="No se pudo validar el pago" description="La información devuelta por Pagopar no coincide con el pago registrado. No se realizó ningún cambio en la suscripción." />}
-      {verification?.kind === 'unavailable' && <VerificationError title="No se pudo verificar el pago" description="Pagopar no respondió correctamente o la consulta tardó demasiado. Tu pago no fue modificado; intentá nuevamente en unos instantes." />}
+      {verification?.kind === 'not_found' && <VerificationError title="Pago no encontrado" description="No encontramos un pago con Bancard de esta organización asociado con el identificador recibido." />}
+      {verification?.kind === 'mismatch' && <VerificationError title="No se pudo validar el pago" description="La información devuelta por Bancard no coincide con el pago registrado. No se realizó ningún cambio en la suscripción." />}
+      {verification?.kind === 'unavailable' && <VerificationError title="No se pudo verificar el pago" description="Bancard no respondió correctamente o la consulta tardó demasiado. Tu pago no fue modificado; intentá nuevamente en unos instantes." />}
 
       {verification?.kind === 'verified' && (() => {
         const { localPayment, providerOrder } = verification
@@ -154,19 +160,26 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
                   <Badge variant="secondary">{content.badge}</Badge>
                 </div>
                 <p className="mt-2 text-sm leading-6 opacity-80">
-                  {providerOrder.status === 'approved' ? 'Pagopar confirmó el cobro.' : content.description}
+                  {providerOrder.status === 'approved' ? 'Bancard confirmó el cobro.' : content.description}
                 </p>
 
                 <dl className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2">
-                  <div><dt className="text-xs opacity-65">Monto verificado</dt><dd className="mt-0.5 font-semibold">{money(providerOrder.amount, localPayment.currency)}</dd></div>
+                  <div><dt className="text-xs opacity-65">Monto verificado</dt><dd className="mt-0.5 font-semibold">{money(providerOrder.amount ?? localPayment.amount, localPayment.currency)}</dd></div>
                   <div><dt className="text-xs opacity-65">Plan solicitado</dt><dd className="mt-0.5 font-semibold">{localPayment.plan_id || 'Suscripción'}</dd></div>
-                  <div><dt className="text-xs opacity-65">Método</dt><dd className="mt-0.5 font-semibold">{providerOrder.paymentMethod || 'Pagopar'}</dd></div>
-                  <div><dt className="text-xs opacity-65">Referencia</dt><dd className="mt-0.5 font-mono font-semibold">…{hash.slice(-10)}</dd></div>
+                  <div><dt className="text-xs opacity-65">Método</dt><dd className="mt-0.5 font-semibold">{localPayment.payment_method || 'Bancard'}</dd></div>
+                  {/* Bancard exige mostrar fecha y hora, número de pedido, importe y la
+                      descripción de la respuesta, y prohíbe mostrar el código de
+                      autorización, el código de respuesta y la información de seguridad. */}
+                  <div><dt className="text-xs opacity-65">Número de pedido</dt><dd className="mt-0.5 font-mono font-semibold">#{reference}</dd></div>
+                  <div><dt className="text-xs opacity-65">Fecha y hora</dt><dd className="mt-0.5 font-semibold">{dateTime(localPayment.created_at)}</dd></div>
+                  {providerOrder.message && (
+                    <div><dt className="text-xs opacity-65">Respuesta de Bancard</dt><dd className="mt-0.5 font-semibold">{providerOrder.message}</dd></div>
+                  )}
                 </dl>
 
                 {providerOrder.status === 'approved' && (
                   <p className="mt-4 rounded-lg border border-current/15 bg-background/55 px-3 py-2 text-xs font-medium">
-                    {subscriptionApplied ? 'El pago ya está aplicado a tu suscripción.' : 'Pagopar aprobó el pago, pero todavía no pudimos aplicarlo. Verificá nuevamente en unos instantes.'}
+                    {subscriptionApplied ? 'El pago ya está aplicado a tu suscripción.' : 'Bancard aprobó el pago, pero todavía no pudimos aplicarlo. Verificá nuevamente en unos instantes.'}
                   </p>
                 )}
               </div>
@@ -177,9 +190,9 @@ export default async function SubscriptionPaymentsPage({ searchParams }: PagePro
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button asChild variant="outline"><Link href="/admin/subscriptions#payment-history">Ver historial de pagos</Link></Button>
-        <Button asChild><Link href={`/admin/subscriptions/payments?hash=${encodeURIComponent(hash)}`}>Verificar nuevamente</Link></Button>
+        <Button asChild><Link href={`/admin/subscriptions/payments?ref=${encodeURIComponent(reference)}`}>Verificar nuevamente</Link></Button>
       </div>
-      <p className="text-center text-xs text-muted-foreground">El estado se consulta directamente a Pagopar desde el servidor; los datos del enlace no activan planes.</p>
+      <p className="text-center text-xs text-muted-foreground">El estado se consulta directamente a Bancard desde el servidor; los datos del enlace no activan planes.</p>
     </main>
   )
 }
@@ -221,7 +234,7 @@ async function StripePaymentStatus({ organizationId, sessionId }: { organization
                   <h1 className="text-xl font-bold">{content.title}</h1>
                   <Badge variant="secondary">{content.badge}</Badge>
                 </div>
-                <p className="mt-2 text-sm leading-6 opacity-80">{content.description.replace('Pagopar', 'Stripe')}</p>
+                <p className="mt-2 text-sm leading-6 opacity-80">{content.description}</p>
 
                 <dl className="mt-5 grid gap-3 border-t border-current/15 pt-4 text-sm sm:grid-cols-2">
                   <div><dt className="text-xs opacity-65">Monto verificado</dt><dd className="mt-0.5 font-semibold">{money(amount, localPayment.currency)}</dd></div>
