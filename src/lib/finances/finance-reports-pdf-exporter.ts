@@ -403,7 +403,7 @@ export async function exportFinanceSummaryPdf({
   doc.setFontSize(8.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(203, 213, 225)
-  doc.text('BALANCE FINANCIERO EJECUTIVO • ESTADO DE RESULTADOS Y CAJA', margin + 14, y + 38)
+  doc.text('RESUMEN DEL PERÍODO • CUÁNTO GANASTE Y CÓMO SE MOVIÓ LA PLATA', margin + 14, y + 38)
 
   doc.setFontSize(8)
   doc.setTextColor(148, 163, 184)
@@ -431,7 +431,7 @@ export async function exportFinanceSummaryPdf({
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(100, 116, 139)
-  doc.text('1. RESULTADO ECONÓMICO (DEVENGADO)', margin + 12, y + 16)
+  doc.text('1. LO QUE GANASTE', margin + 12, y + 16)
 
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
@@ -462,7 +462,7 @@ export async function exportFinanceSummaryPdf({
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(100, 116, 139)
-  doc.text('2. FLUJO FINANCIERO (CAJA / BANCO)', box2X + 12, y + 16)
+  doc.text('2. ENTRÓ MENOS SALIÓ (NO ES EL SALDO DE CAJA)', box2X + 12, y + 16)
 
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
@@ -473,7 +473,7 @@ export async function exportFinanceSummaryPdf({
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(100, 116, 139)
   doc.text(
-    `Cobrado: ${formatCurrency(summary.cash.collected)} − Pagado: ${formatCurrency(summary.cash.paid)}`,
+    `Entró: ${formatCurrency(summary.cash.collected)} − Salió: ${formatCurrency(summary.cash.paid)}`,
     box2X + 12,
     y + 48
   )
@@ -491,26 +491,35 @@ export async function exportFinanceSummaryPdf({
       ? `${Math.round((summary.accrued.netProfit / summary.accrued.revenue) * 100)}%`
       : '-'
 
+  // Textos neutros: antes decía «pantallas y repuestos» y «órdenes de taller»
+  // también para una barbería o una tienda de ropa, y prometía «ganancia
+  // líquida para retiro», cuando el resultado no es la plata que hay en caja.
+  const share = (value: number | null) =>
+    value !== null && summary.accrued.revenue > 0 ? `${Math.round((value / summary.accrued.revenue) * 100)}%` : '-'
+  const money = (value: number | null) => (value === null ? 'Faltan costos' : formatCurrency(value))
+  const sources = summary.accrued.revenueBreakdown
+  const sourceParts = sources
+    ? [
+        sources.merchandise > 0 ? 'mercadería' : null,
+        sources.services > 0 ? 'servicios' : null,
+        sources.repairs.total > 0 ? 'reparaciones entregadas' : null,
+        sources.orders > 0 ? 'pedidos web' : null,
+      ].filter(Boolean)
+    : []
+  const revenueDetail = sourceParts.length > 0 ? `Ventas de ${sourceParts.join(', ')}` : 'Ventas del período'
   const accruedTableRows = [
-    ['(+) Ingresos Operativos', 'Ventas de mostrador y órdenes de taller', formatCurrency(summary.accrued.revenue), '100.0%'],
-    [
-      '(−) Costos Directos',
-      'Pantallas, componentes y repuestos consumidos',
-      summary.accrued.directCosts === null ? 'Pendiente' : formatCurrency(summary.accrued.directCosts),
-      summary.accrued.directCosts !== null && summary.accrued.revenue > 0
-        ? `${Math.round((summary.accrued.directCosts / summary.accrued.revenue) * 100)}%`
-        : '-',
-    ],
-    ['(=) Utilidad Bruta Operativa', 'Margen directo de taller y comercio', formatCurrency(summary.accrued.grossProfit), grossMarginPercent],
-    ['(−) Gastos Operativos (OPEX)', 'Alquiler, servicios, insumos y delivery', formatCurrency(summary.accrued.operatingExpenses), summary.accrued.revenue > 0 ? `${Math.round((summary.accrued.operatingExpenses / summary.accrued.revenue) * 100)}%` : '-'],
-    ['(−) Nómina y Salarios', 'Sueldos fijos y comisiones a colaboradores', formatCurrency(summary.accrued.payrollCost), summary.accrued.revenue > 0 ? `${Math.round((summary.accrued.payrollCost / summary.accrued.revenue) * 100)}%` : '-'],
-    ['(=) RESULTADO NETO FINAL', 'Ganancia líquida para retiro o reinversión', formatCurrency(summary.accrued.netProfit), netMarginPercent],
+    ['(+) Vendiste', revenueDetail, formatCurrency(summary.accrued.revenue), '100%'],
+    ['(−) Lo que te costó lo vendido', 'Mercadería, insumos y repuestos con costo cargado', money(summary.accrued.directCosts), share(summary.accrued.directCosts)],
+    ['(=) Ganancia por venta', 'Antes de gastos y sueldos', money(summary.accrued.grossProfit), grossMarginPercent],
+    ['(−) Gastos del negocio', 'Alquiler, servicios y otros gastos anotados', formatCurrency(summary.accrued.operatingExpenses), share(summary.accrued.operatingExpenses)],
+    ['(−) Sueldos y comisiones', 'Liquidaciones aprobadas y pagos a técnicos', formatCurrency(summary.accrued.payrollCost), share(summary.accrued.payrollCost)],
+    ['(=) Lo que ganaste', 'No es lo que hay en caja: eso está en «Entró menos salió»', money(summary.accrued.netProfit), netMarginPercent],
   ]
 
   autoTable(doc, {
     startY: y,
     margin: { left: margin, right: margin },
-    head: [['Concepto Contable', 'Descripción', 'Monto en Guaraníes (Gs.)', '% Facturación']],
+    head: [['Concepto', 'Qué incluye', 'Monto (Gs.)', '% de lo vendido']],
     body: accruedTableRows,
     theme: 'grid',
     headStyles: {
