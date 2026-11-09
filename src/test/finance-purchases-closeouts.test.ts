@@ -105,3 +105,15 @@ describe('cuotas de cuentas corrientes', () => {
     expect(result.cash.collected).toBe(400_000)
   })
 })
+
+describe('intereses de créditos', () => {
+  it('el interés cobrado en las cuotas es ingreso, sin costo', () => {
+    const result = summary({
+      creditPayments: [{ saleId: 's1', branchId: null, paymentDate: '2026-10-20T12:00:00Z', paymentMethod: 'cash', status: 'completed', amount: 120_000, interestAmount: 20_000 }],
+    })
+    expect(result.accrued.revenue).toBe(20_000)
+    expect(result.accrued.revenueBreakdown?.interest).toBe(20_000)
+    expect(result.accrued.grossProfit).toBe(20_000)
+    expect(result.cash.collected).toBe(120_000)
+  })
+})

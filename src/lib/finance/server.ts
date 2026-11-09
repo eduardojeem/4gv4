@@ -762,6 +762,44 @@ export async function generateDueRecurringObligations(organizationId: string): P
   }
 }
 
+/**
+ * Genera los gastos recurrentes del período de hoy en todos los negocios con
+ * plantillas activas. Antes solo se generaban cuando alguien abría Finanzas:
+ * si nadie entraba en febrero, el alquiler de febrero nunca aparecía. La llama
+ * el cron diario con el rol de servicio (la función acepta llamadas sin
+ * usuario; con usuario exige permiso de finanzas). Es idempotente: no duplica
+ * un período ya generado.
+ */
+export async function generateRecurringObligationsForAllOrganizations(): Promise<{ organizations: number; created: number; failed: number }> {
+  const admin = createAdminSupabase()
+  const templates = await allFinanceRows(admin
+    .from('finance_expense_templates')
+    .select('id, organization_id', { count: 'exact' })
+    .eq('status', 'active')
+    .order('id'))
+  if (templates.error) {
+    if (isMissingTableError(templates.error, 'finance_expense_templates')) return { organizations: 0, created: 0, failed: 0 }
+    throw toFinanceApiError(templates.error)
+  }
+  const organizationIds = Array.from(new Set(
+    ((templates.data ?? []) as Array<{ organization_id: string | null }>)
+      .map((row) => row.organization_id)
+      .filter((id): id is string => Boolean(id)),
+  ))
+  let created = 0
+  let failed = 0
+  for (const organizationId of organizationIds) {
+    const today = toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
+    const { data, error } = await admin.rpc('generate_recurring_finance_obligations', {
+      p_generation_date: today,
+      p_organization_id: organizationId,
+    })
+    if (error) failed += 1
+    else created += Number(data ?? 0)
+  }
+  return { organizations: organizationIds.length, created, failed }
+}
+
 export type ExpenseUpdateInput = Partial<
   Omit<ExpenseInput, 'branchId' | 'recurrence' | 'dueDate' | 'vendor' | 'notes'>
 > & {
@@ -1955,6 +1993,11 @@ type FinanceSalePaymentRecord = {
   paymentMethod: string
   status: string
   amount: number
+  /**
+   * Parte del cobro de una cuota que es interés. La venta a crédito cuenta solo
+   * el capital (`sales.total_amount`): el interés es ingreso cuando se cobra.
+   */
+  interestAmount?: number
 }
 
 /**
@@ -2465,6 +2508,9 @@ function buildFinancialSummary(
       parts.filter((part) => isCostedRepairPart(part, restocked)),
     )
   }
+  const interestCollected = roundMoneyValue((records.creditPayments ?? [])
+    .filter((payment) => isInBranch(payment.branchId, filters) && isInPeriod(payment.paymentDate, filters))
+    .reduce((total, payment) => total + money(payment.interestAmount), 0))
   const revenue = [
     ...selectedSales.map((sale) => {
       const items = saleItemsBySaleId.get(sale.id) ?? []
@@ -2489,6 +2535,10 @@ function buildFinancialSummary(
         sourceType: 'repair' as const,
       }
     }),
+    // Intereses cobrados en cuotas: ingreso sin costo, el día que se cobran.
+    ...(interestCollected > 0
+      ? [{ id: 'credit-interest', amount: interestCollected, cashAmount: 0, hasCost: true, label: 'Intereses de créditos' }]
+      : []),
     // El costo se captura al crear el pedido (trigger sobre customer_order_items).
     // Un pedido sin snapshot —anterior a esa migracion— queda declarado sin
     // cobertura en vez de estimarle un costo con la lista de precios de hoy.
@@ -2725,6 +2775,7 @@ function buildFinancialSummary(
     repairs: selectedRepairs,
     orders: selectedOrders,
     refunds: refunds.reduce((total, refund) => total + refund.amount, 0),
+    interest: interestCollected,
   })
   const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings]
 
@@ -2762,6 +2813,7 @@ function buildRevenueBreakdown(input: {
   repairs: FinanceRepairRecord[]
   orders: FinanceOrderRecord[]
   refunds: number
+  interest?: number
 }): FinanceRevenueBreakdown {
   let merchandise = 0
   let services = 0
@@ -2794,8 +2846,9 @@ function buildRevenueBreakdown(input: {
       count: input.repairs.length,
     },
     orders: roundMoneyValue(orders),
+    interest: roundMoneyValue(input.interest ?? 0),
     refunds: roundMoneyValue(input.refunds),
-    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders),
+    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders + (input.interest ?? 0)),
   }
 }
 
@@ -3394,7 +3447,7 @@ async function loadCreditInstallmentPayments(
   let query = admin
     .from('credit_payments')
     .select(
-      'amount, payment_method, created_at, customer_credits!inner(id, sale_id, origin_type, branch_id, organization_id)',
+      'amount, payment_method, created_at, credit_installments(amount, interest_component), customer_credits!inner(id, sale_id, origin_type, branch_id, organization_id)',
       { count: 'exact' },
     )
     .eq('customer_credits.organization_id', organizationId)
@@ -3437,6 +3490,13 @@ async function loadCreditInstallmentPayments(
         // admitted only when it is a positive settlement in a schema-valid method.
         status: 'completed',
         amount: money(payment.amount),
+        interestAmount: (() => {
+          const installment = Array.isArray(payment.credit_installments) ? payment.credit_installments[0] : payment.credit_installments
+          const installmentAmount = money((installment as { amount?: number | string | null } | null)?.amount)
+          const interest = money((installment as { interest_component?: number | string | null } | null)?.interest_component)
+          if (installmentAmount <= 0 || interest <= 0) return 0
+          return roundMoneyValue(money(payment.amount) * Math.min(1, interest / installmentAmount))
+        })(),
       }]
     }),
     available: true,

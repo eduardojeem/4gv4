@@ -115,6 +115,7 @@ describe('canonical finance summary aggregation', () => {
         services: 0,
         repairs: { total: 300, labor: 0, parts: 300, count: 1 },
         orders: 0,
+        interest: 0,
         refunds: 0,
         grossRevenue: 1_300,
       },

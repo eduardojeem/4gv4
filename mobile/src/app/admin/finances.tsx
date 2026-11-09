@@ -444,6 +444,9 @@ export default function FinancesAdminScreen() {
                     {sources.orders > 0 && (
                       <Line icon="globe-outline" label="Pedidos web" value={amount(sources.orders)} colors={colors} />
                     )}
+                    {(sources.interest ?? 0) > 0 && (
+                      <Line icon="trending-up-outline" label="Intereses" hint="Cobrados en cuotas de créditos" value={amount(sources.interest ?? 0)} colors={colors} />
+                    )}
                     {sources.refunds > 0 && (
                       <Line icon="return-down-back-outline" label="Devoluciones" value={`− ${amount(sources.refunds)}`} colors={colors} />
                     )}

@@ -289,6 +289,7 @@ export type FinanceSummaryData = {
       services: number;
       repairs: { total: number; labor: number; parts: number; count: number };
       orders: number;
+      interest?: number;
       refunds: number;
       grossRevenue: number;
     };

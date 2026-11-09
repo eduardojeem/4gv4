@@ -124,6 +124,8 @@ export interface FinanceRevenueBreakdown {
   }
   /** Pedidos de la tienda web. */
   orders: number
+  /** Intereses cobrados en cuotas de créditos (la venta cuenta solo el capital). */
+  interest?: number
   /** Devoluciones cerradas en el período (se restan). */
   refunds: number
   grossRevenue: number
