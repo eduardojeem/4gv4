@@ -7,6 +7,7 @@ import { BookOpenCheck, Coins, Hash, Loader2, ReceiptText, RefreshCw, Search, Wa
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import { BranchSelector } from '@/components/branches/branch-selector'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -273,7 +274,22 @@ export function ExpensesPanel({
         <span>{dueView === 'overdue' ? 'Vencidos' : 'Próximos vencimientos'}: saldos actuales de todos los períodos.</span>
         <Button variant="outline" size="sm" onClick={() => setDueView(undefined)}>Volver al período seleccionado</Button>
       </div> : null}
-      {!branchId ? <p className="rounded-lg border bg-muted/30 p-3 text-sm">Vista consolidada. Seleccioná una sucursal en el filtro superior para registrar o pagar gastos.</p> : null}
+      {!branchId ? (
+        <div
+          role={action?.mode === 'new' ? 'alert' : undefined}
+          className={cn(
+            'flex flex-col gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between',
+            action?.mode === 'new' ? 'border-primary/40 bg-primary/5' : 'bg-muted/30',
+          )}
+        >
+          <p>
+            {action?.mode === 'new'
+              ? 'Elegí de qué sucursal es el gasto y se abre el formulario.'
+              : 'Estás viendo todas las sucursales. Para anotar o pagar un gasto, elegí una.'}
+          </p>
+          <BranchSelector compact className="w-full sm:w-auto" />
+        </div>
+      ) : null}
       <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

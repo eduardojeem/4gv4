@@ -33,6 +33,13 @@ import { exportFinanceSummaryPdf } from '@/lib/finances/finance-reports-pdf-expo
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { cn } from '@/lib/utils'
 import { reconciliationGuidance } from '@/lib/finance/reconciliation-guidance'
+import { comparisonText, financeHeadline } from '@/lib/finance/headline'
+import {
+  financeWarningAction,
+  financeWarningImpact,
+  financeWarningSourceHref,
+  financeWarningTitle,
+} from '@/lib/finance/warning-actions'
 import { FinanceMetricExplanation } from './FinanceMetricExplanation'
 
 /** Cuantos registros se nombran antes de resumir el resto en "y N mas". */
@@ -86,7 +93,8 @@ export function RevenueSourcesBreakdown({ breakdown }: { breakdown: RevenueBreak
       icon: Wrench,
     },
     { key: 'orders', label: 'Pedidos web', hint: 'Tienda online', value: breakdown.orders, icon: Globe },
-  ]
+    // Solo lo que tuvo movimiento: una barbería no ve «Reparaciones» en cero.
+  ].filter((source) => source.value > 0)
   const total = breakdown.grossRevenue
   return (
     <section aria-labelledby="finance-revenue-sources-heading" className="rounded-xl border bg-card p-4 shadow-sm">
@@ -690,23 +698,42 @@ export function FinanceSummary({
   const coverageWarnings = useMemo(() => {
     const groups = new Map<
       string,
-      { code: string; message: string; count: number; labels: string[] }
+      { code: string; message: string; count: number; labels: string[]; sources: Array<{ label: string; href: string }> }
     >()
     for (const warning of summary.coverageWarnings) {
-      const key = `${warning.code}:${warning.message}`
+      const key = warning.code
       const group = groups.get(key) ?? {
         code: warning.code,
         message: warning.message,
         count: 0,
         labels: [],
+        sources: [],
       }
       group.count += 1
       const label = warning.sourceLabel?.trim()
-      if (label && !group.labels.includes(label)) group.labels.push(label)
+      if (label && !group.labels.includes(label)) {
+        group.labels.push(label)
+        const href = financeWarningSourceHref(warning.sourceType, warning.sourceId)
+        if (href) group.sources.push({ label, href })
+      }
       groups.set(key, group)
     }
     return Array.from(groups.values())
   }, [summary.coverageWarnings])
+  // «Esta semana»: 7 días desde hoy, en la zona del negocio (el servidor ya
+  // calculó «hoy» así; acá se compara solo la fecha, sin hora del dispositivo).
+  const weekLimit = useMemo(() => {
+    const today = summary.generatedAt ? summary.generatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10)
+    const limit = new Date(`${today}T00:00:00Z`)
+    limit.setUTCDate(limit.getUTCDate() + 7)
+    return limit.toISOString().slice(0, 10)
+  }, [summary.generatedAt])
+  const dueThisWeek = summary.upcomingDue.filter((row) => row.dueDate <= weekLimit)
+  const dueLater = summary.upcomingDue.filter((row) => row.dueDate > weekLimit)
+  const headline = financeHeadline(summary.accrued)
+  const previousHeadline = summary.comparison ? financeHeadline(summary.comparison.accrued) : null
+  const profitComparison = comparisonText(headline.profit, previousHeadline?.profit)
+  const revenueComparison = comparisonText(summary.accrued.revenue, summary.comparison?.accrued?.revenue)
 
   // Margen bruto y margen neto calculados
   const grossMarginPercent =
@@ -719,7 +746,7 @@ export function FinanceSummary({
       ? `${Math.round((summary.accrued.netProfit / summary.accrued.revenue) * 100)}% margen neto`
       : undefined
 
-  const isNetPositive = summary.accrued.netProfit !== null && summary.accrued.netProfit >= 0
+  const isNetPositive = headline.profit >= 0
   const isCashPositive = summary.cash.netCashFlow >= 0
 
   return (
@@ -732,9 +759,14 @@ export function FinanceSummary({
           <div className="space-y-1.5 min-w-[220px]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Resultado Económico
+                {isNetPositive ? 'Ganaste' : 'Perdiste'}
               </span>
-              {netMarginPercent && (
+              {headline.estimated && (
+                <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                  Aproximado · faltan datos
+                </Badge>
+              )}
+              {!headline.estimated && netMarginPercent && (
                 <Badge
                   variant="outline"
                   className={cn(
@@ -748,14 +780,35 @@ export function FinanceSummary({
                 </Badge>
               )}
             </div>
-            <p className={cn('text-2xl sm:text-3xl font-bold tracking-tight', isNetPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
-              {summary.accrued.netProfit === null ? 'Pendiente' : formatCurrency(summary.accrued.netProfit)}
+            <p
+              data-testid="finance-headline-profit"
+              className={cn(
+                'text-2xl sm:text-3xl font-bold tracking-tight',
+                headline.estimated
+                  ? 'text-foreground'
+                  : isNetPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
+              )}
+            >
+              {formatCurrency(Math.abs(headline.profit))}
             </p>
             <p className="text-xs text-muted-foreground">
               {summary.accrued.revenue > 0
-                ? `De ${formatCurrency(summary.accrued.revenue)} en ingresos registrados tras los costos`
-                : 'Sin ingresos registrados en el período'}
+                ? headline.marginPct !== null && headline.marginPct >= 0
+                  ? `Vendiste ${formatCurrency(summary.accrued.revenue)}: de cada Gs. 100 te quedaron Gs. ${headline.marginPct}`
+                  : `Vendiste ${formatCurrency(summary.accrued.revenue)}, pero los costos y gastos fueron más`
+                : 'Todavía no hay ventas en el período'}
             </p>
+            {profitComparison && (
+              <p className="text-xs font-medium text-foreground" data-testid="finance-headline-comparison">
+                {isNetPositive ? 'Ganancia' : 'Resultado'}: {profitComparison}
+                {revenueComparison && <span className="font-normal text-muted-foreground"> · Ventas: {revenueComparison}</span>}
+              </p>
+            )}
+            {headline.estimated && (
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Sale más alto de lo real: hay ventas sin costo o reparaciones sin precio. Completalos abajo, en «Para que los números sean exactos».
+              </p>
+            )}
             <FinanceMetricExplanation kind="economic" />
           </div>
 
@@ -765,7 +818,7 @@ export function FinanceSummary({
           <div className="space-y-1.5 min-w-[220px]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Cobrado menos pagado
+                Entró menos salió
               </span>
               <Badge
                 variant="outline"
@@ -776,16 +829,16 @@ export function FinanceSummary({
                     : 'bg-destructive/10 text-destructive border-destructive/30'
                 )}
               >
-                {isCashPositive ? '✓ Superávit' : '✕ Déficit'}
+                {isCashPositive ? 'Entró más de lo que salió' : 'Salió más de lo que entró'}
               </Badge>
             </div>
             <p className={cn('text-2xl sm:text-3xl font-bold tracking-tight', isCashPositive ? 'text-foreground' : 'text-destructive')}>
               {formatCurrency(summary.cash.netCashFlow)}
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(summary.cash.collected)} cobrados vs {formatCurrency(summary.cash.paid)} en pagos netos
+              Entró {formatCurrency(summary.cash.collected)} · salió {formatCurrency(summary.cash.paid)}
             </p>
-            <p className="text-xs text-muted-foreground">Flujo del período; no es el saldo disponible de caja o banco.</p>
+            <p className="text-xs text-muted-foreground">Es lo que se movió en el período, no lo que hay hoy en caja o en el banco.</p>
             <FinanceMetricExplanation kind="cash" />
           </div>
 
@@ -798,14 +851,14 @@ export function FinanceSummary({
               onClick={() => onViewExpenses?.('new')}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all active:scale-95 select-none"
             >
-              <span>+ Registrar Gasto</span>
+              <span>+ Anotar gasto</span>
             </button>
             <button
               type="button"
               onClick={onViewPayroll}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all active:scale-95 select-none"
             >
-              <span>Ver nómina</span>
+              <span>Sueldos y comisiones</span>
             </button>
             <button
               type="button"
@@ -816,7 +869,7 @@ export function FinanceSummary({
               title="Descargar balance y resumen financiero en PDF"
             >
               <FileDown className="h-3.5 w-3.5 text-primary" />
-              <span>{isExportingPdf ? 'Generando…' : 'Exportar Resumen (PDF)'}</span>
+              <span>{isExportingPdf ? 'Generando…' : 'Descargar PDF'}</span>
             </button>
             {onOpenBusinessGuide && (
               <button
@@ -844,9 +897,9 @@ export function FinanceSummary({
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Siguiente acción</p>
             <h2 id="finance-priorities-heading" className="text-sm sm:text-base font-bold text-foreground">
-              Qué requiere atención hoy
+              Qué necesita tu atención
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">Los vencimientos muestran saldos actuales, incluidos los de períodos anteriores.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Las cuentas a pagar incluyen las de meses anteriores que siguen sin pagar.</p>
           </div>
           {summary.complete ? (
             <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs gap-1 hidden sm:flex font-semibold">
@@ -857,35 +910,35 @@ export function FinanceSummary({
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <PriorityAction
-            title="Pagos vencidos"
-            description="Regularizá obligaciones atrasadas para evitar recargos o cortes."
+            title="Ya vencieron"
+            description="Cuentas atrasadas: pagalas para evitar recargos o cortes."
             count={summary.overdue.length}
             tone={summary.overdue.length > 0 ? 'urgent' : 'default'}
-            action="Ver gastos vencidos"
+            action="Ver y pagar"
             onClick={() => onViewExpenses?.('overdue')}
             icon={CircleAlert}
           />
           <PriorityAction
-            title="Próximos vencimientos"
-            description="Planificá los pagos y compromisos de los próximos días."
-            count={summary.upcomingDue.length}
-            action="Ver calendario de gastos"
+            title="Para pagar esta semana"
+            description="Cuentas que vencen en los próximos 7 días."
+            count={dueThisWeek.length}
+            action="Ver cuentas a pagar"
             onClick={() => onViewExpenses?.('upcoming')}
             icon={CalendarClock}
           />
           <PriorityAction
-            title="Datos pendientes"
-            description="Completá costos unitarios para medir la ganancia real sin desvíos."
-            count={coverageWarnings.length}
+            title="Faltan datos"
+            description="Costos o precios sin cargar: sin ellos la ganancia sale aproximada."
+            count={coverageWarnings.reduce((total, warning) => total + warning.count, 0)}
             tone={coverageWarnings.length > 0 ? 'urgent' : 'default'}
-            action="Auditar rentabilidad"
-            onClick={onViewProfitability}
+            action="Completar ahora"
+            onClick={() => document.getElementById('finance-data-warnings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             icon={AlertTriangle}
           />
           <PriorityAction
-            title="Nómina del equipo"
-            description="Revisá salarios y comisiones integradas, prepará la liquidación y luego registrá el pago."
-            action="Administrar nómina"
+            title="Sueldos y comisiones"
+            description="Prepará la liquidación del equipo y registrá el pago."
+            action="Ir a sueldos"
             onClick={onViewPayroll}
             icon={Users}
           />
@@ -1063,45 +1116,58 @@ export function FinanceSummary({
 
       {/* Alerta de Cobertura */}
       {coverageWarnings.length > 0 && (
-        <Alert variant="destructive" className="border-destructive/50 bg-destructive/5">
-          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle className="font-semibold">Faltan costos o datos para completar el resultado</AlertTitle>
+        <Alert id="finance-data-warnings" className="scroll-mt-24 border-amber-500/50 bg-amber-500/5">
+          <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+          <AlertTitle className="font-semibold">Para que los números sean exactos</AlertTitle>
           <AlertDescription className="mt-2 text-xs">
             <p className="mb-2">
-              Revisá los avisos por tipo: los costos faltantes afectan la ganancia; los cobros sin fecha afectan la precisión del flujo. No se corrigen registrando nuevamente dinero ya cobrado o pagado.
+              No hace falta registrar de nuevo plata ya cobrada o pagada: alcanza con completar el dato que falta.
             </p>
-            <ul role="list" aria-label="Datos pendientes de conciliación" className="max-h-80 overflow-y-auto list-disc pl-4 pr-2 space-y-3">
-              {coverageWarnings.map((warning) => (
-                <li key={`${warning.code}-${warning.message}`}>
-                  <span>{warning.message}</span>{' '}
-                  <span className="font-semibold whitespace-nowrap">
-                    ({warning.count}{' '}
-                    {warning.count === 1 ? 'registro' : 'registros'})
-                  </span>
-                  {warning.labels.length > 0 && (
+            <ul role="list" aria-label="Datos que faltan" className="max-h-96 overflow-y-auto pr-2 space-y-4">
+              {coverageWarnings.map((warning) => {
+                const action = financeWarningAction(warning.code)
+                return (
+                <li key={warning.code} data-testid={`finance-warning-${warning.code}`}>
+                  <p className="text-sm font-semibold text-foreground">{financeWarningTitle(warning.code, warning.count)}</p>
+                  <p className="text-muted-foreground">{financeWarningImpact(warning.code)}</p>
+                  {warning.sources.length > 0 ? (
+                    <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                      {warning.sources.slice(0, MAX_LISTED_SOURCES).map((source) => (
+                        <a key={source.href} href={source.href} className="font-medium text-primary underline underline-offset-4">
+                          {source.label}
+                        </a>
+                      ))}
+                      {warning.labels.length > MAX_LISTED_SOURCES && (
+                        <span className="text-muted-foreground">y {warning.labels.length - MAX_LISTED_SOURCES} más</span>
+                      )}
+                    </span>
+                  ) : warning.labels.length > 0 ? (
                     <span className="mt-0.5 block text-muted-foreground">
                       {warning.labels.slice(0, MAX_LISTED_SOURCES).join(' · ')}
                       {warning.labels.length > MAX_LISTED_SOURCES &&
                         ` y ${warning.labels.length - MAX_LISTED_SOURCES} más`}
                     </span>
+                  ) : null}
+                  {action && (
+                    action.kind === 'link' ? (
+                      <a href={action.href} className="mt-2 inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+                        {action.label} →
+                      </a>
+                    ) : (
+                      <button type="button" onClick={onViewPayroll} className="mt-2 inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+                        {action.label} →
+                      </button>
+                    )
                   )}
                   <details className="mt-1 rounded-md border border-border/60 bg-background/50 p-2 text-foreground">
-                    <summary className="min-h-11 cursor-pointer font-medium focus-visible:ring-2 focus-visible:ring-ring">Cómo revisar estos registros</summary>
+                    <summary className="min-h-11 cursor-pointer font-medium focus-visible:ring-2 focus-visible:ring-ring">Más detalle</summary>
                     <p className="mt-2 leading-relaxed">{reconciliationGuidance(warning.code)}</p>
-                    <p className="mt-2 text-muted-foreground">Después de revisar los datos de origen, actualizá el resumen con el mismo período y sucursal. Esta guía no modifica movimientos ni certifica una conciliación.</p>
+                    <p className="mt-2 text-muted-foreground">Cuando lo completes, actualizá el resumen con el mismo período y sucursal.</p>
                   </details>
                 </li>
-              ))}
+                )
+              })}
             </ul>
-            {onViewProfitability && (
-              <button
-                type="button"
-                onClick={onViewProfitability}
-                className="mt-3 font-semibold underline underline-offset-4 hover:opacity-80 block"
-              >
-                Ir a Rentabilidad para auditar costos →
-              </button>
-            )}
           </AlertDescription>
         </Alert>
       )}
@@ -1109,16 +1175,18 @@ export function FinanceSummary({
       {/* Sección 3: Vencimientos y Obligaciones */}
       <div className="grid gap-4 lg:grid-cols-2">
         <DueList
-          title="Vencidos"
+          title="Ya vencieron"
           rows={summary.overdue}
-          description="Obligaciones atrasadas que requieren regularización inmediata."
+          description="Cuentas atrasadas: pagalas primero."
           onViewAll={() => onViewExpenses?.('overdue')}
           urgent
         />
         <DueList
-          title="Próximos vencimientos"
-          rows={summary.upcomingDue}
-          description="Obligaciones planificadas para los próximos días."
+          title="Para pagar esta semana"
+          rows={dueThisWeek}
+          description={dueLater.length > 0
+            ? `Vencen en los próximos 7 días. Más adelante: ${dueLater.length} ${dueLater.length === 1 ? 'cuenta' : 'cuentas'} por ${formatCurrency(dueLater.reduce((total, row) => total + row.amount, 0))}.`
+            : 'Vencen en los próximos 7 días.'}
           onViewAll={() => onViewExpenses?.('upcoming')}
         />
       </div>

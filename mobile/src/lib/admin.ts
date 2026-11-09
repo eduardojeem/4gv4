@@ -300,6 +300,10 @@ export type FinanceSummaryData = {
   };
   upcomingDue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
   overdue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
+  /** El mismo resumen del período anterior, para comparar. */
+  comparison?: {
+    accrued: Pick<FinanceSummaryData['accrued'], 'revenue' | 'directCosts' | 'grossProfit' | 'operatingExpenses' | 'payrollCost' | 'netProfit'>;
+  };
 };
 
 export async function fetchFinanceSummary(params?: { startDate?: string; endDate?: string; branchId?: string }) {

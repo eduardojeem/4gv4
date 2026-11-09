@@ -30,7 +30,10 @@ type FinanceSection = (typeof sections)[number]['value']
 export type ExpenseAction = 'new' | 'overdue' | 'upcoming' | 'all'
 
 function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>['summary']>) {
-  return Object.values(summary.accrued).every((value) => value === null || value === 0)
+  // Solo los importes: `revenueBreakdown` es un objeto (la apertura de ingresos)
+  // y con él adentro un negocio nuevo nunca veía la pantalla de bienvenida.
+  const { revenueBreakdown: _breakdown, ...amounts } = summary.accrued
+  return Object.values(amounts).every((value) => value === null || value === 0)
     && Object.values(summary.cash).every((value) => value === 0)
     && !summary.upcomingDue.length && !summary.overdue.length && !summary.coverageWarnings.length && summary.complete
 }

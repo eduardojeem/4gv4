@@ -4,8 +4,9 @@ import { resolveBranchScopeForUser } from '@/lib/branches/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import { zonedToUtc } from '@/lib/agenda/time'
 import { calculateFinancialSummary } from '@/lib/finance/calculations'
-import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { SALE_STATUS, isCompletedSaleStatus, normalizeSaleStatus } from '@/lib/sales-status'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
 import { z } from 'zod'
@@ -506,6 +507,24 @@ export function toOrganizationDay(date: Date, timezone: string): string {
   }).formatToParts(date)
   const value = (type: string) => parts.find((part) => part.type === type)?.value
   return `${value('year')}-${value('month')}-${value('day')}`
+}
+
+/**
+ * Instante UTC en que empieza `day` en la zona del negocio. En Paraguay el
+ * 1/11 empieza a las 03:00Z (o 04:00Z): cortar a medianoche UTC mandaba lo
+ * vendido después de las 21:00 al día siguiente, y lo del último día del mes
+ * al mes siguiente.
+ */
+export function dayStartUtc(day: string, timeZone: string): string {
+  return new Date(zonedToUtc(day, '00:00', timeZone)).toISOString()
+}
+
+/** Día del negocio de una fecha: una fecha sola se toma tal cual; un instante, en la zona del negocio. */
+function businessDay(value: string | null | undefined, timeZone: string | undefined): string | null {
+  if (!value) return null
+  if (value.length <= 10 || !timeZone) return day(value)
+  const instant = new Date(value)
+  return Number.isNaN(instant.getTime()) ? null : toOrganizationDay(instant, timeZone)
 }
 
 async function loadOrganizationTimezone(organizationId: string): Promise<string> {
@@ -2135,6 +2154,44 @@ export interface FinanceProfitabilityRow {
 }
 
 const FINANCE_REPORT_QUERY_LIMIT = 10_000
+/** Supabase devuelve como mucho 1000 filas por pedido (max_rows). */
+const FINANCE_PAGE_SIZE = 1000
+
+type FinancePageResult = { data: unknown[] | null; error: unknown; count?: number | null }
+type FinancePageableQuery<R extends FinancePageResult> = PromiseLike<R> & {
+  range: (from: number, to: number) => FinancePageableQuery<R>
+}
+
+/**
+ * Trae todas las filas de una consulta del informe, de a 1000.
+ *
+ * Antes se pedía `.limit(10_000)` en un solo pedido, pero Supabase corta en
+ * 1000: entre 1001 y 10.000 filas el informe quedaba recortado sin avisar
+ * (una tienda con 25 ventas por día perdía ~500 ventas al mirar octubre).
+ * La consulta tiene que venir ordenada por una columna única para que las
+ * páginas no repitan ni salteen filas. Si el total supera el tope del informe
+ * no se descarga: `assertBoundedFinanceRows` lo rechaza con un mensaje claro.
+ */
+export async function allFinanceRows<R extends FinancePageResult>(query: FinancePageableQuery<R>): Promise<R> {
+  const first = await query.range(0, FINANCE_PAGE_SIZE - 1)
+  if (first.error || !first.data) return first
+  const total = typeof first.count === 'number' ? first.count : null
+  if (total !== null && total > FINANCE_REPORT_QUERY_LIMIT) return first
+  const rows = [...first.data]
+  let lastPage = first.data.length
+  for (
+    let from = FINANCE_PAGE_SIZE;
+    lastPage === FINANCE_PAGE_SIZE && (total === null || rows.length < total) && rows.length <= FINANCE_REPORT_QUERY_LIMIT;
+    from += FINANCE_PAGE_SIZE
+  ) {
+    const page = await query.range(from, from + FINANCE_PAGE_SIZE - 1)
+    if (page.error) return page
+    const data = page.data ?? []
+    rows.push(...data)
+    lastPage = data.length
+  }
+  return { ...first, data: rows, count: total ?? rows.length }
+}
 
 function money(value: number | string | null | undefined): number {
   const parsed = Number(value)
@@ -2145,6 +2202,15 @@ function roundMoneyValue(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+function roundLines<T extends { amount: number; paidAmount?: number; cashAmount?: number }>(lines: T[]): T[] {
+  return lines.map((line) => ({
+    ...line,
+    amount: roundMoneyValue(line.amount),
+    ...(line.paidAmount === undefined ? {} : { paidAmount: roundMoneyValue(line.paidAmount) }),
+    ...(line.cashAmount === undefined ? {} : { cashAmount: roundMoneyValue(line.cashAmount) }),
+  }))
+}
+
 function day(value: string | null | undefined): string | null {
   if (!value) return null
   const result = value.slice(0, 10)
@@ -2152,7 +2218,7 @@ function day(value: string | null | undefined): string | null {
 }
 
 function isInPeriod(value: string | null | undefined, filters: FinanceFilters): boolean {
-  const valueDay = day(value)
+  const valueDay = businessDay(value, filters.timeZone)
   return Boolean(valueDay && valueDay >= filters.startDate && valueDay <= filters.endDate)
 }
 
@@ -2163,6 +2229,20 @@ function isInBranch(branchId: string | null, filters: FinanceFilters): boolean {
 function previousPeriod(filters: FinanceFilters): FinanceFilters {
   const start = new Date(`${filters.startDate}T00:00:00Z`)
   const end = new Date(`${filters.endDate}T00:00:00Z`)
+  // Meses completos (1/10 al 31/10) se comparan con los meses completos
+  // anteriores (1/9 al 30/9), no con «los mismos 31 días hacia atrás».
+  const lastOfEndMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0))
+  if (start.getUTCDate() === 1 && end.getUTCDate() === lastOfEndMonth.getUTCDate()) {
+    const months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() + 1
+    const previousStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - months, 1))
+    const previousEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 0))
+    return {
+      startDate: previousStart.toISOString().slice(0, 10),
+      endDate: previousEnd.toISOString().slice(0, 10),
+      branchId: filters.branchId,
+      timeZone: filters.timeZone,
+    }
+  }
   const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
   const previousEnd = new Date(start)
   previousEnd.setUTCDate(previousEnd.getUTCDate() - 1)
@@ -2173,6 +2253,7 @@ function previousPeriod(filters: FinanceFilters): FinanceFilters {
     startDate: previousStart.toISOString().slice(0, 10),
     endDate: previousEnd.toISOString().slice(0, 10),
     branchId: filters.branchId,
+    timeZone: filters.timeZone,
   }
 }
 
@@ -2415,7 +2496,21 @@ function buildFinancialSummary(
     recoveredCost: Math.min(money(refund.recoveredCost), money(refund.amount)),
     cashAmount: Math.min(money(refund.cashAmount), money(refund.amount)),
   }))
-  const summary = calculateFinancialSummary({ revenue, directCosts, expenses, payroll: payrollWithTechnicians, refunds })
+  // Un costo en moneda extranjera puede tener centavos (7000,08 × 3 da
+  // 21000,239999… en JS) y el cálculo rechaza más de 2 decimales: todo el
+  // resumen respondía error. Cada línea se redondea a centavos antes.
+  const summary = calculateFinancialSummary({
+    revenue: roundLines(revenue),
+    directCosts: roundLines(directCosts),
+    expenses: roundLines(expenses),
+    payroll: roundLines(payrollWithTechnicians),
+    refunds: refunds.map((refund) => ({
+      ...refund,
+      amount: roundMoneyValue(refund.amount),
+      recoveredCost: roundMoneyValue(refund.recoveredCost),
+      cashAmount: roundMoneyValue(refund.cashAmount),
+    })),
+  })
   const refundedCash = refunds.reduce((total, refund) => total + refund.cashAmount, 0)
   const saleCollected = [...(records.salePayments ?? []), ...(records.creditPayments ?? [])]
     .filter(
@@ -2697,12 +2792,12 @@ async function loadOrderItemCosts(
 
   const results = await Promise.all(
     chunkQueryValues(orderIds).map((ids) =>
-      admin
+      allFinanceRows(admin
         .from('customer_order_item_cost_snapshots')
         .select('order_id, product_id, quantity, unit_cost', { count: 'exact' })
         .eq('organization_id', organizationId)
         .in('order_id', ids)
-        .limit(FINANCE_REPORT_QUERY_LIMIT),
+        .order('id')),
     ),
   )
 
@@ -2730,16 +2825,16 @@ async function loadOrderItemCosts(
 async function loadTechnicianPayments(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
-  startDate: string,
-  queryEndDate: string,
+  startAt: string,
+  endBefore: string,
 ): Promise<FinanceTechnicianPaymentRecord[]> {
-  const result = await admin
+  const result = await allFinanceRows(admin
     .from('technician_payments')
     .select('id, amount, method, status, paid_at, branch_id', { count: 'exact' })
     .eq('organization_id', organizationId)
-    .gte('paid_at', startDate)
-    .lt('paid_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('paid_at', startAt)
+    .lt('paid_at', endBefore)
+    .order('id'))
 
   if (result.error) {
     // Un despliegue sin el modulo de tecnicos no tiene la tabla.
@@ -2751,11 +2846,11 @@ async function loadTechnicianPayments(
   const ids = (result.data ?? []).map(row => String(row.id))
   const mapped = new Set<string>()
   for (let offset = 0; offset < ids.length; offset += 200) {
-    const mapping = await admin.from('payroll_entries')
+    const mapping = await allFinanceRows(admin.from('payroll_entries')
       .select('legacy_source_id', { count: 'exact' })
       .eq('organization_id', organizationId)
       .in('legacy_source_id', ids.slice(offset, offset + 200))
-      .limit(FINANCE_REPORT_QUERY_LIMIT)
+      .order('id'))
     if (mapping.error) throw toFinanceApiError(mapping.error)
     assertBoundedFinanceRows(mapping.data as unknown[] | null, 'vínculos de pagos históricos', mapping.count)
     for (const row of mapping.data ?? []) mapped.add(String(row.legacy_source_id))
@@ -2775,21 +2870,21 @@ async function loadTechnicianPayments(
 async function loadCustomerOrders(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
-  startDate: string,
-  queryEndDate: string,
+  startAt: string,
+  endBefore: string,
   filters: FinanceFilters,
 ): Promise<FinanceOrderRecord[]> {
   let query = admin
     .from('customer_orders')
     .select('id, order_number, branch_id, created_at, status, payment_status, total', { count: 'exact' })
     .eq('organization_id', organizationId)
-    .gte('created_at', startDate)
-    .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('created_at', startAt)
+    .lt('created_at', endBefore)
+    .order('id')
 
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
 
-  const result = await query
+  const result = await allFinanceRows(query)
 
   if (result.error) {
     // Un despliegue sin el modulo de tienda no tiene la tabla: no es motivo
@@ -2816,19 +2911,19 @@ async function loadCustomerOrders(
 async function loadAfterSalesRefunds(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
-  startDate: string,
-  queryEndDate: string,
+  startAt: string,
+  endBefore: string,
 ): Promise<FinanceRefundRecord[]> {
-  const result = await admin
+  const result = await allFinanceRows(admin
     .from('after_sales_cases')
-    .select('id, status, resolved_at, refund_amount, refund_method, restock_action, sale_id, sale_item_id, repair_id', { count: 'exact' })
+    .select('id, status, resolved_at, refund_amount, refund_method, restock_action, sale_id, sale_item_id, repair_id, quantity', { count: 'exact' })
     .eq('organization_id', organizationId)
     // El estado se guarda en ingles o en espanol segun la antiguedad del caso.
     .in('status', ['completed', 'completado'])
     .gt('refund_amount', 0)
-    .gte('resolved_at', startDate)
-    .lt('resolved_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('resolved_at', startAt)
+    .lt('resolved_at', endBefore)
+    .order('id'))
 
   if (result.error) {
     // Un despliegue sin la migracion de posventa simplemente no tiene
@@ -2922,6 +3017,10 @@ async function loadFinanceSummaryRecords(
   const comparison = previousPeriod(filters)
   const startDate = comparison.startDate
   const queryEndDate = filters.endDate
+  const timeZone = filters.timeZone ?? DEFAULT_FINANCE_TIMEZONE
+  // Límites como instantes en la zona del negocio (columnas con hora).
+  const startAt = dayStartUtc(startDate, timeZone)
+  const endBefore = dayStartUtc(nextDay(queryEndDate), timeZone)
   const branch = <T>(query: T): T => filters.branchId
     ? (query as { eq: (column: string, value: string) => T }).eq('branch_id', filters.branchId)
     : query
@@ -2931,9 +3030,9 @@ async function loadFinanceSummaryRecords(
       .from('sales')
       .select('id, code, branch_id, created_at, status, total_amount, payment_status, created_by', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .gte('created_at', startDate)
-      .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      .gte('created_at', startAt)
+      .lt('created_at', endBefore)
+      .order('id'),
   )
   const repairsQuery = branch(
     admin
@@ -2943,10 +3042,10 @@ async function loadFinanceSummaryRecords(
       // Entregadas en el período (aunque hayan entrado antes) y, para las viejas
       // sin fecha de entrega, las que entraron en el período. Fechas ya validadas.
       .or(
-        `and(delivered_at.gte.${startDate},delivered_at.lt.${nextDay(queryEndDate)}T00:00:00.000Z),` +
-        `and(delivered_at.is.null,created_at.gte.${startDate},created_at.lt.${nextDay(queryEndDate)}T00:00:00.000Z)`,
+        `and(delivered_at.gte.${startAt},delivered_at.lt.${endBefore}),` +
+        `and(delivered_at.is.null,created_at.gte.${startAt},created_at.lt.${endBefore})`,
       )
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      .order('id'),
   )
   const obligationsQuery = branch(
     admin
@@ -2956,7 +3055,7 @@ async function loadFinanceSummaryRecords(
       // The result uses the selected accounting period; the action list also
       // needs older unpaid obligations. All values here are validated dates.
       .or(`and(accounting_date.gte.${startDate},accounting_date.lte.${queryEndDate}),status.in.(pending,partially_paid,overdue)`)
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      .order('id'),
   )
   const payrollQuery = branch(
     admin
@@ -2964,9 +3063,11 @@ async function loadFinanceSummaryRecords(
       .select('id, branch_id, employee_id, net_amount, payroll_runs!inner(status, approved_at)', { count: 'exact' })
       .eq('organization_id', organizationId)
       .eq('payroll_runs.status', 'approved')
-      .gte('payroll_runs.approved_at', startDate)
-      .lte('payroll_runs.approved_at', queryEndDate)
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      // `approved_at` tiene hora: con `lte(día)` la nómina aprobada el último
+      // día del período quedaba afuera de ese período y del siguiente.
+      .gte('payroll_runs.approved_at', startAt)
+      .lt('payroll_runs.approved_at', endBefore)
+      .order('id'),
   )
   const financePaymentsQuery = branch(
     admin
@@ -2975,7 +3076,7 @@ async function loadFinanceSummaryRecords(
       .eq('organization_id', organizationId)
       .gte('payment_date', startDate)
       .lte('payment_date', queryEndDate)
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      .order('id'),
   )
   const payrollPaymentsQuery = branch(
     admin
@@ -2984,17 +3085,17 @@ async function loadFinanceSummaryRecords(
       .eq('organization_id', organizationId)
       .gte('payment_date', startDate)
       .lte('payment_date', queryEndDate)
-      .limit(FINANCE_REPORT_QUERY_LIMIT),
+      .order('id'),
   )
 
   const [salesResult, repairsResult, obligationsResult, payrollResult, financePaymentsResult, payrollPaymentsResult] =
     await Promise.all([
-      salesQuery,
-      repairsQuery,
-      obligationsQuery,
-      payrollQuery,
-      financePaymentsQuery,
-      payrollPaymentsQuery,
+      allFinanceRows(salesQuery),
+      allFinanceRows(repairsQuery),
+      allFinanceRows(obligationsQuery),
+      allFinanceRows(payrollQuery),
+      allFinanceRows(financePaymentsQuery),
+      allFinanceRows(payrollPaymentsQuery),
     ])
   for (const result of [salesResult, repairsResult, obligationsResult, payrollResult, financePaymentsResult, payrollPaymentsResult]) {
     if (result.error) throw toFinanceApiError(result.error)
@@ -3029,27 +3130,27 @@ async function loadFinanceSummaryRecords(
     admin,
     organizationId,
     filters,
-    startDate,
-    queryEndDate,
+    startAt,
+    endBefore,
   )
   const creditPaymentResult = await loadCreditInstallmentPayments(
     admin,
     organizationId,
     filters,
-    startDate,
-    queryEndDate,
+    startAt,
+    endBefore,
   )
 
-  const refunds = await loadAfterSalesRefunds(admin, organizationId, startDate, queryEndDate)
-  const orders = await loadCustomerOrders(admin, organizationId, startDate, queryEndDate, filters)
-  const technicianPayments = await loadTechnicianPayments(admin, organizationId, startDate, queryEndDate)
+  const refunds = await loadAfterSalesRefunds(admin, organizationId, startAt, endBefore)
+  const orders = await loadCustomerOrders(admin, organizationId, startAt, endBefore, filters)
+  const technicianPayments = await loadTechnicianPayments(admin, organizationId, startAt, endBefore)
   const orderItems = await loadOrderItemCosts(admin, organizationId, orders.map((order) => order.id))
   const repairPaymentResult = await loadRepairPayments(
     admin,
     organizationId,
     filters,
-    startDate,
-    queryEndDate,
+    startAt,
+    endBefore,
   )
   const repairPaymentsBySelectedRepair = repairPaymentResult.available
     ? await loadRepairPaymentsForRepairs(admin, repairs.map((repair) => repair.id))
@@ -3124,21 +3225,21 @@ async function loadSalePayments(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
   filters: FinanceFilters,
-  startDate: string,
-  endDate: string,
+  startAt: string,
+  endBefore: string,
 ): Promise<{ payments: FinanceSalePaymentRecord[]; available: boolean }> {
   let query = admin
     .from('sale_payments')
-    .select('sale_id, payment_method, amount, status, created_at, sales!inner(branch_id)', {
+    .select('sale_id, payment_method, amount, status, created_at, sales!inner(branch_id, status)', {
       count: 'exact',
     })
     .eq('organization_id', organizationId)
-    .gte('created_at', startDate)
-    .lt('created_at', `${nextDay(endDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('created_at', startAt)
+    .lt('created_at', endBefore)
+    .order('id')
   if (filters.branchId) query = query.eq('sales.branch_id', filters.branchId)
 
-  const result = await query
+  const result = await allFinanceRows(query)
   if (result.error) {
     if (isMissingTableError(result.error, 'sale_payments')) {
       return { payments: [], available: false }
@@ -3154,7 +3255,12 @@ async function loadSalePayments(
         branchId: sale?.branch_id ?? null,
         paymentDate: String(payment.created_at),
         paymentMethod: String(payment.payment_method ?? '').trim().toLowerCase(),
-        status: String(payment.status ?? '').trim().toLowerCase(),
+        // Anular una venta deja el cobro en `completed` y devuelve la plata por
+        // `cash_movements`, que Finanzas no lee: el cobro seguía sumando en
+        // «Entró» aunque la venta ya no existiera.
+        status: normalizeSaleStatus((sale as { status?: string | null } | null)?.status) === SALE_STATUS.CANCELLED
+          ? 'voided'
+          : String(payment.status ?? '').trim().toLowerCase(),
         amount: money(payment.amount),
       }
     }),
@@ -3166,8 +3272,8 @@ async function loadCreditInstallmentPayments(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
   filters: FinanceFilters,
-  startDate: string,
-  endDate: string,
+  startAt: string,
+  endBefore: string,
 ): Promise<{ payments: FinanceSalePaymentRecord[]; available: boolean }> {
   let query = admin
     .from('credit_payments')
@@ -3182,12 +3288,12 @@ async function loadCreditInstallmentPayments(
     .or('sale_id.not.is.null,origin_type.eq.repair', { referencedTable: 'customer_credits' })
     .in('payment_method', ['cash', 'card', 'transfer'])
     .gt('amount', 0)
-    .gte('created_at', startDate)
-    .lt('created_at', `${nextDay(endDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('created_at', startAt)
+    .lt('created_at', endBefore)
+    .order('id')
   if (filters.branchId) query = query.eq('customer_credits.branch_id', filters.branchId)
 
-  const result = await query
+  const result = await allFinanceRows(query)
   if (result.error) {
     if (isMissingTableError(result.error, 'credit_payments')) {
       return { payments: [], available: false }
@@ -3226,12 +3332,12 @@ async function loadSaleCostSnapshots(
   if (saleIds.length === 0) return new Map()
   const results = await Promise.all(
     chunkQueryValues(saleIds).map((ids) =>
-      admin
+      allFinanceRows(admin
         .from('sale_item_cost_snapshots')
         .select('sale_item_id, unit_cost', { count: 'exact' })
         .eq('organization_id', organizationId)
         .in('sale_id', ids)
-        .limit(FINANCE_REPORT_QUERY_LIMIT),
+        .order('id')),
     ),
   )
   const snapshots = new Map<string, number>()
@@ -3287,12 +3393,12 @@ async function loadSaleItems(
   const costSnapshots = await loadSaleCostSnapshots(admin, organizationId, saleIds)
   const results = await Promise.all(
     chunkQueryValues(saleIds).map((ids) =>
-      admin
+      allFinanceRows(admin
         .from('sale_items')
         .select('id, sale_id, product_id, quantity, subtotal, products(unit_measure)', { count: 'exact' })
         .eq('organization_id', organizationId)
         .in('sale_id', ids)
-        .limit(FINANCE_REPORT_QUERY_LIMIT),
+        .order('id')),
     ),
   )
   const items: FinanceSaleItemRecord[] = []
@@ -3344,19 +3450,19 @@ async function loadRepairPayments(
   admin: ReturnType<typeof createAdminSupabase>,
   organizationId: string,
   filters: FinanceFilters,
-  startDate: string,
-  endDate: string,
+  startAt: string,
+  endBefore: string,
 ): Promise<{ payments: FinanceRepairPaymentRecord[]; available: boolean }> {
   let query = admin
     .from('repair_payments')
     .select(REPAIR_PAYMENT_COLUMNS, { count: 'exact' })
     .eq('organization_id', organizationId)
-    .gte('created_at', startDate)
-    .lt('created_at', `${nextDay(endDate)}T00:00:00.000Z`)
-    .limit(FINANCE_REPORT_QUERY_LIMIT)
+    .gte('created_at', startAt)
+    .lt('created_at', endBefore)
+    .order('id')
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
 
-  const result = await query
+  const result = await allFinanceRows(query)
   if (result.error) {
     if (isMissingTableError(result.error, 'repair_payments')) {
       return { payments: [], available: false }
@@ -3381,11 +3487,11 @@ async function loadRepairPaymentsForRepairs(
   if (repairIds.length === 0) return []
   const results = await Promise.all(
     chunkQueryValues(repairIds).map((ids) =>
-      admin
+      allFinanceRows(admin
         .from('repair_payments')
         .select(REPAIR_PAYMENT_COLUMNS, { count: 'exact' })
         .in('repair_id', ids)
-        .limit(FINANCE_REPORT_QUERY_LIMIT),
+        .order('id')),
     ),
   )
   const payments: FinanceRepairPaymentRecord[] = []
@@ -3407,11 +3513,11 @@ async function loadRepairParts(
   if (repairIds.length === 0) return []
   const results = await Promise.all(
     chunkQueryValues(repairIds).map((ids) =>
-      admin
+      allFinanceRows(admin
         .from('repair_parts')
         .select('repair_id, quantity, unit_cost, status', { count: 'exact' })
         .in('repair_id', ids)
-        .limit(FINANCE_REPORT_QUERY_LIMIT),
+        .order('id')),
     ),
   )
   const parts: FinanceRepairPartRecord[] = []
@@ -3436,9 +3542,11 @@ export async function getFinanceSummary(
   organizationId: string,
   filters: FinanceFilters,
 ): Promise<FinanceSummaryReport> {
-  const records = await loadFinanceSummaryRecords(organizationId, filters)
-  const today = toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
-  return buildFinanceSummaryFromRecords(records, filters, today)
+  const timeZone = await loadOrganizationTimezone(organizationId)
+  const zonedFilters = { ...filters, timeZone }
+  const records = await loadFinanceSummaryRecords(organizationId, zonedFilters)
+  const today = toOrganizationDay(new Date(), timeZone)
+  return buildFinanceSummaryFromRecords(records, zonedFilters, today)
 }
 
 export async function getFinanceProfitability(
@@ -3446,8 +3554,9 @@ export async function getFinanceProfitability(
   filters: FinanceFilters,
   group: FinanceProfitabilityGroup,
 ): Promise<FinanceProfitabilityRow[]> {
-  const records = await loadFinanceSummaryRecords(organizationId, filters)
-  const rows = buildProfitabilityRows(records, filters, group)
+  const zonedFilters = { ...filters, timeZone: await loadOrganizationTimezone(organizationId) }
+  const records = await loadFinanceSummaryRecords(organizationId, zonedFilters)
+  const rows = buildProfitabilityRows(records, zonedFilters, group)
 
   // Al agrupar por empleado o sucursal, buildProfitabilityRows deja el UUID
   // como etiqueta (no tiene los nombres a mano). Acá se resuelven a nombres
@@ -3580,8 +3689,8 @@ export function buildProfitabilityRows(
   return Array.from(rows.entries())
     .map(([id, row]) => {
       const summary = calculateFinancialSummary({
-        revenue: [{ id, amount: row.revenue, cashAmount: 0, hasCost: row.complete }],
-        directCosts: [{ id, amount: row.directCosts, paidAmount: 0 }],
+        revenue: [{ id, amount: roundMoneyValue(row.revenue), cashAmount: 0, hasCost: row.complete }],
+        directCosts: [{ id, amount: roundMoneyValue(row.directCosts), paidAmount: 0 }],
         expenses: [],
         payroll: [],
       })

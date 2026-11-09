@@ -46,7 +46,9 @@ export function isEmptyFinanceSummary(data: FinanceSummaryData) {
   return (
     data.complete !== false &&
     !data.coverageWarnings?.length &&
-    Object.values(data.accrued).every((value) => value === 0) &&
+    // Solo los importes: la apertura de ingresos es un objeto y nunca es 0.
+    (['revenue', 'directCosts', 'grossProfit', 'operatingExpenses', 'payrollCost', 'netProfit'] as const)
+      .every((key) => data.accrued[key] === 0 || data.accrued[key] === null) &&
     Object.values(data.cash).every((value) => value === 0) &&
     !data.overdue.length &&
     !data.upcomingDue.length
@@ -68,6 +70,30 @@ export function financeHeadline(data: FinanceSummaryData) {
     estimated: !exact,
     /** Cuánto queda de cada 100 vendidos; sin ventas no hay margen. */
     marginPct: revenue > 0 ? Math.round((profit / revenue) * 100) : null,
+  };
+}
+
+/**
+ * «15 % más que el período anterior», en palabras. Sin base de comparación no
+ * se inventa un porcentaje. Misma regla que la web (`src/lib/finance/headline.ts`).
+ */
+export function comparisonText(current: number | null, previous: number | null | undefined): string | null {
+  if (current === null || previous === null || previous === undefined) return null;
+  if (previous === 0) return current === 0 ? 'Igual que el período anterior' : null;
+  const change = ((current - previous) / Math.abs(previous)) * 100;
+  if (Math.abs(change) < 0.5) return 'Igual que el período anterior';
+  const rounded = Math.round(Math.abs(change));
+  return change > 0 ? `${rounded} % más que el período anterior` : `${rounded} % menos que el período anterior`;
+}
+
+/** Cuentas a pagar en los próximos 7 días y las que vienen después. */
+export function splitDueThisWeek<T extends { dueDate: string }>(items: T[], today: string) {
+  const limit = new Date(`${today}T00:00:00Z`);
+  limit.setUTCDate(limit.getUTCDate() + 7);
+  const last = limit.toISOString().slice(0, 10);
+  return {
+    thisWeek: items.filter((item) => item.dueDate <= last),
+    later: items.filter((item) => item.dueDate > last),
   };
 }
 
