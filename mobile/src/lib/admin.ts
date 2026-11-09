@@ -289,6 +289,7 @@ export type FinanceSummaryData = {
       services: number;
       repairs: { total: number; labor: number; parts: number; count: number };
       orders: number;
+      interest?: number;
       refunds: number;
       grossRevenue: number;
     };
@@ -300,6 +301,8 @@ export type FinanceSummaryData = {
   };
   upcomingDue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
   overdue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
+  /** «Te deben»: lo que los clientes deben hoy (no depende del período). */
+  receivables?: { total: number; overdue: number; credits: number; repairs: number; customers: number };
   /** El mismo resumen del período anterior, para comparar. */
   comparison?: {
     accrued: Pick<FinanceSummaryData['accrued'], 'revenue' | 'directCosts' | 'grossProfit' | 'operatingExpenses' | 'payrollCost' | 'netProfit'>;

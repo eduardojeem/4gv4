@@ -93,6 +93,7 @@ export function RevenueSourcesBreakdown({ breakdown }: { breakdown: RevenueBreak
       icon: Wrench,
     },
     { key: 'orders', label: 'Pedidos web', hint: 'Tienda online', value: breakdown.orders, icon: Globe },
+    { key: 'interest', label: 'Intereses', hint: 'Cobrados en cuotas de créditos', value: breakdown.interest ?? 0, icon: Percent },
     // Solo lo que tuvo movimiento: una barbería no ve «Reparaciones» en cero.
   ].filter((source) => source.value > 0)
   const total = breakdown.grossRevenue
@@ -935,13 +936,25 @@ export function FinanceSummary({
             onClick={() => document.getElementById('finance-data-warnings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             icon={AlertTriangle}
           />
-          <PriorityAction
-            title="Sueldos y comisiones"
-            description="Prepará la liquidación del equipo y registrá el pago."
-            action="Ir a sueldos"
-            onClick={onViewPayroll}
-            icon={Users}
-          />
+          {summary.receivables && summary.receivables.total > 0 ? (
+            <PriorityAction
+              title="Te deben"
+              description={`${formatCurrency(summary.receivables.total)} de ${summary.receivables.customers === 1 ? '1 cliente' : `${summary.receivables.customers} clientes`}${summary.receivables.overdue > 0 ? ` · ${formatCurrency(summary.receivables.overdue)} ya vencido` : ''}.`}
+              count={summary.receivables.customers}
+              tone={summary.receivables.overdue > 0 ? 'urgent' : 'default'}
+              action="Ver quién te debe"
+              onClick={() => { window.location.href = '/dashboard/credits' }}
+              icon={Banknote}
+            />
+          ) : (
+            <PriorityAction
+              title="Sueldos y comisiones"
+              description="Prepará la liquidación del equipo y registrá el pago."
+              action="Ir a sueldos"
+              onClick={onViewPayroll}
+              icon={Users}
+            />
+          )}
         </div>
       </section>
 

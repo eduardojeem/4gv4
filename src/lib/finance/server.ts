@@ -762,6 +762,44 @@ export async function generateDueRecurringObligations(organizationId: string): P
   }
 }
 
+/**
+ * Genera los gastos recurrentes del período de hoy en todos los negocios con
+ * plantillas activas. Antes solo se generaban cuando alguien abría Finanzas:
+ * si nadie entraba en febrero, el alquiler de febrero nunca aparecía. La llama
+ * el cron diario con el rol de servicio (la función acepta llamadas sin
+ * usuario; con usuario exige permiso de finanzas). Es idempotente: no duplica
+ * un período ya generado.
+ */
+export async function generateRecurringObligationsForAllOrganizations(): Promise<{ organizations: number; created: number; failed: number }> {
+  const admin = createAdminSupabase()
+  const templates = await allFinanceRows(admin
+    .from('finance_expense_templates')
+    .select('id, organization_id', { count: 'exact' })
+    .eq('status', 'active')
+    .order('id'))
+  if (templates.error) {
+    if (isMissingTableError(templates.error, 'finance_expense_templates')) return { organizations: 0, created: 0, failed: 0 }
+    throw toFinanceApiError(templates.error)
+  }
+  const organizationIds = Array.from(new Set(
+    ((templates.data ?? []) as Array<{ organization_id: string | null }>)
+      .map((row) => row.organization_id)
+      .filter((id): id is string => Boolean(id)),
+  ))
+  let created = 0
+  let failed = 0
+  for (const organizationId of organizationIds) {
+    const today = toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
+    const { data, error } = await admin.rpc('generate_recurring_finance_obligations', {
+      p_generation_date: today,
+      p_organization_id: organizationId,
+    })
+    if (error) failed += 1
+    else created += Number(data ?? 0)
+  }
+  return { organizations: organizationIds.length, created, failed }
+}
+
 export type ExpenseUpdateInput = Partial<
   Omit<ExpenseInput, 'branchId' | 'recurrence' | 'dueDate' | 'vendor' | 'notes'>
 > & {
@@ -1955,6 +1993,11 @@ type FinanceSalePaymentRecord = {
   paymentMethod: string
   status: string
   amount: number
+  /**
+   * Parte del cobro de una cuota que es interés. La venta a crédito cuenta solo
+   * el capital (`sales.total_amount`): el interés es ingreso cuando se cobra.
+   */
+  interestAmount?: number
 }
 
 /**
@@ -1991,6 +2034,8 @@ type FinanceRepairRecord = {
   employeeId?: string | null
   /** Mano de obra cargada (`repairs.labor_cost`); el resto del precio son repuestos. */
   laborAmount?: number
+  /** Reingreso por garantía de otra reparación: se entrega sin cobrar a propósito. */
+  isWarranty?: boolean
 }
 
 /**
@@ -2007,6 +2052,7 @@ export function repairRevenueDate(repair: Pick<FinanceRepairRecord, 'status' | '
 }
 
 type FinanceRepairPartRecord = {
+  id?: string
   repairId: string
   quantity: number
   unitCost: number | null
@@ -2022,6 +2068,20 @@ type FinanceObligationRecord = {
   amount: number
   paidAmount?: number
   concept?: string | null
+  /** Tipo de la categoría: `operating_expense`, `direct_cost`, `payroll` u `other`. */
+  categoryType?: string | null
+  notes?: string | null
+}
+
+/**
+ * Una compra de mercadería o de un repuesto no es un gasto del negocio: es
+ * stock que se convierte en costo cuando se vende o se entrega la reparación.
+ * Contarla también como gasto restaba lo mismo dos veces. Se reconoce por la
+ * categoría (tipo `direct_cost`, «Compras de mercadería y repuestos») o, en
+ * las compras de repuestos anteriores a esa categoría, por su marca.
+ */
+export function isInventoryPurchase(obligation: Pick<FinanceObligationRecord, 'categoryType' | 'notes'>): boolean {
+  return obligation.categoryType === 'direct_cost' || Boolean(obligation.notes?.startsWith('repair-part-purchase:'))
 }
 
 type FinancePayrollEntryRecord = {
@@ -2099,6 +2159,21 @@ export interface FinanceRefundRecord {
   cashAmount: number
 }
 
+/**
+ * Cierre de una reparación sin reparar (`repair_closeouts`): qué repuestos
+ * volvieron al stock y si se le devolvió plata al cliente.
+ */
+export interface FinanceRepairCloseoutRecord {
+  repairId: string
+  branchId: string | null
+  createdAt: string
+  /** Repuestos que volvieron al stock: no son costo de la reparación. */
+  restockedPartIds: string[]
+  /** Devolución al cliente; solo efectivo o transferencia sale de caja. */
+  refundAmount: number
+  refundMethod: string | null
+}
+
 export interface FinanceSummaryRecords {
   sales: FinanceSaleRecord[]
   saleItems: FinanceSaleItemRecord[]
@@ -2126,12 +2201,44 @@ export interface FinanceSummaryRecords {
   repairPaymentsBySelectedRepair?: FinanceRepairPaymentRecord[]
   /** `false` si el despliegue todavia no tiene la tabla `repair_payments`. */
   repairPaymentTimingAvailable?: boolean
+  /** Cierres sin reparar de las reparaciones cargadas. */
+  repairCloseouts?: FinanceRepairCloseoutRecord[]
+  /**
+   * Cobros fechados de pedidos web (`customer_order_payment_history`). Si no
+   * viene, la caja usa el total de los pedidos pagados (como antes).
+   */
+  orderPayments?: FinanceOrderPaymentRecord[]
+}
+
+/** Un cobro de un pedido web: cuánto entró y qué día (ya sin el saldo a favor). */
+export interface FinanceOrderPaymentRecord {
+  orderId: string
+  branchId: string | null
+  paymentDate: string
+  amount: number
+}
+
+/**
+ * «Te deben»: plata que clientes todavía no pagaron, a hoy (no depende del
+ * período elegido). Cuotas de créditos pendientes o atrasadas y reparaciones
+ * entregadas sin cobrar del todo.
+ */
+export interface FinanceReceivables {
+  total: number
+  /** Parte ya vencida (cuotas con fecha pasada). */
+  overdue: number
+  credits: number
+  repairs: number
+  /** Cuántos clientes deben algo. */
+  customers: number
 }
 
 export interface FinanceSummaryReport extends FinanceSummary {
   generatedAt: string
   filters: FinanceFilters
   comparison: FinanceSummary
+  /** Opcional: un despliegue sin créditos ni reparaciones no lo trae. */
+  receivables?: FinanceReceivables
   upcomingDue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
   overdue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
 }
@@ -2257,6 +2364,19 @@ function previousPeriod(filters: FinanceFilters): FinanceFilters {
   }
 }
 
+function restockedPartIds(closeouts: FinanceRepairCloseoutRecord[] | undefined): Set<string> {
+  return new Set((closeouts ?? []).flatMap((closeout) => closeout.restockedPartIds))
+}
+
+/**
+ * Un repuesto cuenta como costo si se instaló o usó, salvo que haya vuelto al
+ * stock al cerrar la reparación sin reparar: antes seguía restando su costo
+ * aunque estuviera de nuevo en el inventario (margen negativo falso).
+ */
+function isCostedRepairPart(part: FinanceRepairPartRecord, restocked: Set<string>): boolean {
+  return isUsedRepairPart(part.status) && !(part.id && restocked.has(part.id))
+}
+
 function isUsedRepairPart(status: string | null | undefined): boolean {
   return ['installed', 'used', 'consumed'].includes(
     String(status ?? '').trim().toLowerCase(),
@@ -2372,19 +2492,25 @@ function buildFinancialSummary(
     (order) =>
       isInBranch(order.branchId, filters) &&
       isInPeriod(order.createdAt, filters) &&
-      String(order.status ?? '').toUpperCase() !== 'CANCELLED',
+      String(order.status ?? '').toUpperCase() !== 'CANCELLED' &&
+      // Un pedido reembolsado ya no es una venta.
+      String(order.paymentStatus ?? '').toUpperCase() !== 'REFUNDED',
   )
   const selectedRepairs = records.repairs.filter((repair) => {
     const recognizedAt = repairRevenueDate(repair)
     return isInBranch(repair.branchId, filters) && recognizedAt !== null && isInPeriod(recognizedAt, filters)
   })
+  const restocked = restockedPartIds(records.repairCloseouts)
   const usedPartsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
   for (const [repairId, parts] of partsByRepairId) {
     usedPartsByRepairId.set(
       repairId,
-      parts.filter((part) => isUsedRepairPart(part.status)),
+      parts.filter((part) => isCostedRepairPart(part, restocked)),
     )
   }
+  const interestCollected = roundMoneyValue((records.creditPayments ?? [])
+    .filter((payment) => isInBranch(payment.branchId, filters) && isInPeriod(payment.paymentDate, filters))
+    .reduce((total, payment) => total + money(payment.interestAmount), 0))
   const revenue = [
     ...selectedSales.map((sale) => {
       const items = saleItemsBySaleId.get(sale.id) ?? []
@@ -2409,6 +2535,10 @@ function buildFinancialSummary(
         sourceType: 'repair' as const,
       }
     }),
+    // Intereses cobrados en cuotas: ingreso sin costo, el día que se cobran.
+    ...(interestCollected > 0
+      ? [{ id: 'credit-interest', amount: interestCollected, cashAmount: 0, hasCost: true, label: 'Intereses de créditos' }]
+      : []),
     // El costo se captura al crear el pedido (trigger sobre customer_order_items).
     // Un pedido sin snapshot —anterior a esa migracion— queda declarado sin
     // cobertura en vez de estimarle un costo con la lista de precios de hoy.
@@ -2451,13 +2581,19 @@ function buildFinancialSummary(
       ),
     ),
   ]
-  const expenses = records.obligations
-    .filter(
-      (obligation) =>
-        isInBranch(obligation.branchId, filters) &&
-        isInPeriod(obligation.accountingDate, filters) &&
-        obligation.status !== 'voided',
-    )
+  const periodObligations = records.obligations.filter(
+    (obligation) =>
+      isInBranch(obligation.branchId, filters) &&
+      isInPeriod(obligation.accountingDate, filters) &&
+      obligation.status !== 'voided',
+  )
+  // Compras de stock: solo salen de caja (su pago ya está en `financePayments`).
+  // Gastos cargados con una categoría de sueldos: van a sueldos, no a gastos.
+  const expenses = periodObligations
+    .filter((obligation) => !isInventoryPurchase(obligation) && obligation.categoryType !== 'payroll')
+    .map((obligation) => ({ id: obligation.id, amount: money(obligation.amount), paidAmount: 0 }))
+  const payrollObligations = periodObligations
+    .filter((obligation) => obligation.categoryType === 'payroll')
     .map((obligation) => ({ id: obligation.id, amount: money(obligation.amount), paidAmount: 0 }))
   const payroll = records.payrollEntries
     .filter(
@@ -2484,7 +2620,7 @@ function buildFinancialSummary(
       paidAmount: money(payment.amount),
     }))
 
-  const payrollWithTechnicians = [...payroll, ...technicianPayments]
+  const payrollWithTechnicians = [...payroll, ...technicianPayments, ...payrollObligations]
   // Las devoluciones cerradas en el periodo revierten la venta que ya se conto.
   const selectedRefunds = (records.refunds ?? []).filter(
     (refund) =>
@@ -2523,9 +2659,17 @@ function buildFinancialSummary(
   // Los pedidos no tienen cobros fechados: se toma el total de los que figuran
   // pagados. Es menos preciso que un pago con fecha, pero deja de ignorar por
   // completo la plata que entro por la tienda.
-  const orderCollected = selectedOrders
-    .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID')
-    .reduce((total, order) => total + money(order.paidAmount || order.totalAmount), 0)
+  // Con el historial de cobros, cada cobro cuenta el día que entró (también los
+  // parciales, y sin lo pagado con saldo a favor). Sin historial (despliegue
+  // viejo), se toma el total de los pedidos pagados como antes.
+  const orderCollected = records.orderPayments
+    ? records.orderPayments
+        .filter((payment) => isInBranch(payment.branchId, filters) && isInPeriod(payment.paymentDate, filters))
+        .reduce((total, payment) => total + money(payment.amount), 0)
+    : selectedOrders
+        .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID')
+        .reduce((total, order) => total + money(order.paidAmount || order.totalAmount), 0)
+  const ordersWithDatedPayment = new Set((records.orderPayments ?? []).map((payment) => payment.orderId))
   // Cobros de reparaciones que si entraron en el periodo. Antes valian cero:
   // Finanzas no leia `repair_payments` y la plata de reparaciones no aparecia
   // en la vista de caja. Se excluyen `credit` y `mixed` por el mismo motivo que
@@ -2543,10 +2687,22 @@ function buildFinancialSummary(
   // Los pagos a tecnicos salen de `technician_payments`, no de `payroll_payments`
   // —esa tabla la alimenta la nomina administrativa—, asi que no hay doble conteo.
   const technicianPaid = technicianPayments.reduce((total, payment) => total + payment.paidAmount, 0)
+  // Devolución al cliente al cerrar una reparación sin reparar: sale por
+  // `cash_movements`, que Finanzas no lee, y no aparecía en «Salió».
+  const closeoutRefunds = (records.repairCloseouts ?? [])
+    .filter(
+      (closeout) =>
+        closeout.refundAmount > 0 &&
+        (closeout.refundMethod === 'cash' || closeout.refundMethod === 'transfer') &&
+        isInBranch(closeout.branchId, filters) &&
+        isInPeriod(closeout.createdAt, filters),
+    )
+    .reduce((total, closeout) => total + closeout.refundAmount, 0)
   const paid = signedPayments(records.financePayments, filters) +
     signedPayments(records.payrollPayments, filters) +
     refundedCash +
-    technicianPaid
+    technicianPaid +
+    closeoutRefunds
   const datedRepairPayments = new Map<string, number>()
   for (const payment of records.repairPaymentsBySelectedRepair ?? records.repairPayments ?? []) {
     datedRepairPayments.set(
@@ -2556,7 +2712,7 @@ function buildFinancialSummary(
   }
   const cashTimingWarnings = [
     ...selectedOrders
-      .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID')
+      .filter((order) => String(order.paymentStatus ?? '').toUpperCase() === 'PAID' && !ordersWithDatedPayment.has(order.id))
       .map((order) => ({
         code: 'MISSING_CASH_TIMING' as const,
         message: 'El pedido figura pagado, pero no tiene un cobro fechado: el flujo usa la fecha del pedido y requiere conciliación.',
@@ -2604,7 +2760,7 @@ function buildFinancialSummary(
   ]
 
   const unpricedRepairWarnings = selectedRepairs
-    .filter((repair) => money(repair.revenueAmount) <= 0)
+    .filter((repair) => money(repair.revenueAmount) <= 0 && !repair.isWarranty)
     .map((repair) => ({
       code: 'MISSING_REPAIR_PRICE' as const,
       message: 'La reparación se entregó sin precio: cuenta como ingreso cero hasta que cargues lo que se cobró.',
@@ -2619,6 +2775,7 @@ function buildFinancialSummary(
     repairs: selectedRepairs,
     orders: selectedOrders,
     refunds: refunds.reduce((total, refund) => total + refund.amount, 0),
+    interest: interestCollected,
   })
   const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings]
 
@@ -2656,6 +2813,7 @@ function buildRevenueBreakdown(input: {
   repairs: FinanceRepairRecord[]
   orders: FinanceOrderRecord[]
   refunds: number
+  interest?: number
 }): FinanceRevenueBreakdown {
   let merchandise = 0
   let services = 0
@@ -2688,8 +2846,9 @@ function buildRevenueBreakdown(input: {
       count: input.repairs.length,
     },
     orders: roundMoneyValue(orders),
+    interest: roundMoneyValue(input.interest ?? 0),
     refunds: roundMoneyValue(input.refunds),
-    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders),
+    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders + (input.interest ?? 0)),
   }
 }
 
@@ -3037,7 +3196,7 @@ async function loadFinanceSummaryRecords(
   const repairsQuery = branch(
     admin
       .from('repairs')
-      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, labor_cost, paid_amount, technician_id', { count: 'exact' })
+      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, labor_cost, paid_amount, technician_id, parent_repair_id', { count: 'exact' })
       .eq('organization_id', organizationId)
       // Entregadas en el período (aunque hayan entrado antes) y, para las viejas
       // sin fecha de entrega, las que entraron en el período. Fechas ya validadas.
@@ -3050,7 +3209,7 @@ async function loadFinanceSummaryRecords(
   const obligationsQuery = branch(
     admin
       .from('finance_obligations')
-      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept', { count: 'exact' })
+      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept, notes, finance_categories(category_type)', { count: 'exact' })
       .eq('organization_id', organizationId)
       // The result uses the selected accounting period; the action list also
       // needs older unpaid obligations. All values here are validated dates.
@@ -3123,9 +3282,11 @@ async function loadFinanceSummaryRecords(
     paidAmount: money(repair.paid_amount),
     employeeId: repair.technician_id ?? null,
     laborAmount: money((repair as { labor_cost?: number | string | null }).labor_cost),
+    isWarranty: Boolean((repair as { parent_repair_id?: string | null }).parent_repair_id),
   }))
   const saleItems = await loadSaleItems(admin, organizationId, sales.map((sale) => sale.id))
   const repairParts = await loadRepairParts(admin, repairs.map((repair) => repair.id))
+  const repairCloseouts = await loadRepairCloseouts(admin, repairs.map((repair) => repair.id))
   const salePaymentResult = await loadSalePayments(
     admin,
     organizationId,
@@ -3145,6 +3306,7 @@ async function loadFinanceSummaryRecords(
   const orders = await loadCustomerOrders(admin, organizationId, startAt, endBefore, filters)
   const technicianPayments = await loadTechnicianPayments(admin, organizationId, startAt, endBefore)
   const orderItems = await loadOrderItemCosts(admin, organizationId, orders.map((order) => order.id))
+  const orderPayments = await loadOrderPayments(admin, organizationId, orders)
   const repairPaymentResult = await loadRepairPayments(
     admin,
     organizationId,
@@ -3160,6 +3322,7 @@ async function loadFinanceSummaryRecords(
     refunds,
     orders,
     orderItems,
+    orderPayments,
     repairPayments: repairPaymentResult.payments,
     repairPaymentsBySelectedRepair,
     repairPaymentTimingAvailable: repairPaymentResult.available,
@@ -3172,6 +3335,7 @@ async function loadFinanceSummaryRecords(
     creditPaymentTimingAvailable: creditPaymentResult.available,
     repairs,
     repairParts,
+    repairCloseouts,
     obligations: (obligationsResult.data ?? []).map((obligation) => ({
       id: String(obligation.id),
       branchId: obligation.branch_id ?? null,
@@ -3181,6 +3345,11 @@ async function loadFinanceSummaryRecords(
       amount: money(obligation.amount),
       paidAmount: money(obligation.paid_amount),
       concept: obligation.concept,
+      notes: (obligation as { notes?: string | null }).notes ?? null,
+      categoryType: (() => {
+        const category = (obligation as { finance_categories?: { category_type?: string | null } | Array<{ category_type?: string | null }> | null }).finance_categories
+        return (Array.isArray(category) ? category[0]?.category_type : category?.category_type) ?? null
+      })(),
     })),
     payrollEntries: (payrollResult.data ?? []).map((entry) => {
       const payrollRun = Array.isArray(entry.payroll_runs)
@@ -3278,14 +3447,17 @@ async function loadCreditInstallmentPayments(
   let query = admin
     .from('credit_payments')
     .select(
-      'amount, payment_method, created_at, customer_credits!inner(id, sale_id, origin_type, branch_id, organization_id)',
+      'amount, payment_method, created_at, credit_installments(amount, interest_component), customer_credits!inner(id, sale_id, origin_type, branch_id, organization_id)',
       { count: 'exact' },
     )
     .eq('customer_credits.organization_id', organizationId)
     // Cuotas de créditos de una venta y de una reparación financiada («Cobrar a
     // crédito» en el taller no crea venta: sale_id queda vacío). Antes esas
     // cuotas no entraban nunca en «Cobrado».
-    .or('sale_id.not.is.null,origin_type.eq.repair', { referencedTable: 'customer_credits' })
+    // También las cuentas corrientes (crédito manual) y las refinanciaciones:
+    // es plata que entró. Los importados por migración se excluyen para no
+    // inflar «Entró» con pagos viejos cargados el día de la importación.
+    .or('sale_id.not.is.null,origin_type.in.(repair,manual,refinancing)', { referencedTable: 'customer_credits' })
     .in('payment_method', ['cash', 'card', 'transfer'])
     .gt('amount', 0)
     .gte('created_at', startAt)
@@ -3306,11 +3478,11 @@ async function loadCreditInstallmentPayments(
       const credit = Array.isArray(payment.customer_credits)
         ? payment.customer_credits[0]
         : payment.customer_credits
-      const fromRepair = !credit?.sale_id && credit?.origin_type === 'repair'
-      if (!credit?.sale_id && !fromRepair) return []
+      const withoutSale = !credit?.sale_id && ['repair', 'manual', 'refinancing'].includes(String(credit?.origin_type))
+      if (!credit?.sale_id && !withoutSale) return []
       return [{
-        // Una cuota de reparación no tiene venta: se identifica por su crédito.
-        saleId: credit.sale_id ? String(credit.sale_id) : `repair-credit:${String(credit.id)}`,
+        // Una cuota sin venta (reparación, cuenta corriente) se identifica por su crédito.
+        saleId: credit.sale_id ? String(credit.sale_id) : `credit:${String(credit.id)}`,
         branchId: credit.branch_id ?? null,
         paymentDate: String(payment.created_at),
         paymentMethod: String(payment.payment_method ?? '').trim().toLowerCase(),
@@ -3318,6 +3490,13 @@ async function loadCreditInstallmentPayments(
         // admitted only when it is a positive settlement in a schema-valid method.
         status: 'completed',
         amount: money(payment.amount),
+        interestAmount: (() => {
+          const installment = Array.isArray(payment.credit_installments) ? payment.credit_installments[0] : payment.credit_installments
+          const installmentAmount = money((installment as { amount?: number | string | null } | null)?.amount)
+          const interest = money((installment as { interest_component?: number | string | null } | null)?.interest_component)
+          if (installmentAmount <= 0 || interest <= 0) return 0
+          return roundMoneyValue(money(payment.amount) * Math.min(1, interest / installmentAmount))
+        })(),
       }]
     }),
     available: true,
@@ -3506,6 +3685,88 @@ async function loadRepairPaymentsForRepairs(
   return payments
 }
 
+/**
+ * Cobros fechados de los pedidos web cargados. Se leen por pedido (sin límite
+ * de fecha) para saber cuáles tienen cobro; la caja después toma solo los del
+ * período. `null` si el despliegue no tiene la tabla de historial.
+ */
+async function loadOrderPayments(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  orders: FinanceOrderRecord[],
+): Promise<FinanceOrderPaymentRecord[] | undefined> {
+  if (orders.length === 0) return []
+  const branchByOrder = new Map(orders.map((order) => [order.id, order.branchId]))
+  const results = await Promise.all(
+    chunkQueryValues(orders.map((order) => order.id)).map((ids) =>
+      allFinanceRows(admin
+        .from('customer_order_payment_history')
+        .select('id, order_id, amount, to_status, created_at', { count: 'exact' })
+        .eq('organization_id', organizationId)
+        .in('order_id', ids)
+        .in('to_status', ['PAID', 'PARTIAL'])
+        .gt('amount', 0)
+        .order('id')),
+    ),
+  )
+  const payments: FinanceOrderPaymentRecord[] = []
+  for (const result of results) {
+    if (result.error) {
+      if (isMissingTableError(result.error, 'customer_order_payment_history')) return undefined
+      throw toFinanceApiError(result.error)
+    }
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'cobros de pedidos', result.count)
+    for (const row of (result.data ?? []) as Array<Record<string, unknown>>) {
+      payments.push({
+        orderId: String(row.order_id),
+        branchId: branchByOrder.get(String(row.order_id)) ?? null,
+        paymentDate: String(row.created_at),
+        amount: money(row.amount as number | string),
+      })
+    }
+  }
+  return payments
+}
+
+async function loadRepairCloseouts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  repairIds: string[],
+): Promise<FinanceRepairCloseoutRecord[]> {
+  if (repairIds.length === 0) return []
+  const results = await Promise.all(
+    chunkQueryValues(repairIds).map((ids) =>
+      allFinanceRows(admin
+        .from('repair_closeouts')
+        .select('id, repair_id, branch_id, created_at, parts_resolution, settlement_kind, settlement_amount, settlement_method', { count: 'exact' })
+        .in('repair_id', ids)
+        .order('id')),
+    ),
+  )
+  const closeouts: FinanceRepairCloseoutRecord[] = []
+  for (const result of results) {
+    if (result.error) {
+      // Un despliegue sin el cierre sin reparar no tiene la tabla.
+      if (isMissingTableError(result.error, 'repair_closeouts')) return []
+      throw toFinanceApiError(result.error)
+    }
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'cierres de reparación', result.count)
+    for (const row of (result.data ?? []) as Array<Record<string, unknown>>) {
+      const parts = Array.isArray(row.parts_resolution) ? row.parts_resolution as Array<Record<string, unknown>> : []
+      closeouts.push({
+        repairId: String(row.repair_id),
+        branchId: (row.branch_id as string | null) ?? null,
+        createdAt: String(row.created_at),
+        restockedPartIds: parts
+          .filter((part) => part.disposition === 'restocked' && typeof part.repairPartId === 'string')
+          .map((part) => String(part.repairPartId)),
+        refundAmount: row.settlement_kind === 'refund' ? money(row.settlement_amount as number | string) : 0,
+        refundMethod: typeof row.settlement_method === 'string' ? row.settlement_method : null,
+      })
+    }
+  }
+  return closeouts
+}
+
 async function loadRepairParts(
   admin: ReturnType<typeof createAdminSupabase>,
   repairIds: string[],
@@ -3515,7 +3776,7 @@ async function loadRepairParts(
     chunkQueryValues(repairIds).map((ids) =>
       allFinanceRows(admin
         .from('repair_parts')
-        .select('repair_id, quantity, unit_cost, status', { count: 'exact' })
+        .select('id, repair_id, quantity, unit_cost, status', { count: 'exact' })
         .in('repair_id', ids)
         .order('id')),
     ),
@@ -3526,6 +3787,7 @@ async function loadRepairParts(
     assertBoundedFinanceRows(result.data as unknown[] | null, 'repuestos de reparación', result.count)
     for (const part of result.data ?? []) {
       parts.push({
+        id: part.id ? String(part.id) : undefined,
         repairId: String(part.repair_id),
         quantity: money(part.quantity),
         unitCost: part.unit_cost === null || part.unit_cost === undefined
@@ -3538,6 +3800,71 @@ async function loadRepairParts(
   return parts
 }
 
+const PENDING_INSTALLMENT_STATUSES = ['pending', 'late']
+const PAID_REPAIR_PAYMENT_STATUSES = ['pagado', 'paid']
+
+/**
+ * Cuánto te deben tus clientes hoy. Se calcula aparte del período: una cuota
+ * de marzo sigue debiéndose en noviembre.
+ */
+export async function getFinanceReceivables(
+  organizationId: string,
+  branchId: string | null | undefined,
+  today: string,
+): Promise<FinanceReceivables | undefined> {
+  const admin = createAdminSupabase()
+  let installmentsQuery = admin
+    .from('credit_installments')
+    .select('id, amount, amount_paid, status, due_date, customer_credits!inner(organization_id, branch_id, customer_id)', { count: 'exact' })
+    .eq('customer_credits.organization_id', organizationId)
+    .in('status', PENDING_INSTALLMENT_STATUSES)
+    .order('id')
+  if (branchId) installmentsQuery = installmentsQuery.eq('customer_credits.branch_id', branchId)
+  let repairsQuery = admin
+    .from('repairs')
+    .select('id, customer_id, final_cost, estimated_cost, paid_amount, payment_status', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .in('status', ['entregado', 'delivered'])
+    .not('payment_status', 'in', `(${PAID_REPAIR_PAYMENT_STATUSES.join(',')})`)
+    .order('id')
+  if (branchId) repairsQuery = repairsQuery.eq('branch_id', branchId)
+
+  const [installments, repairs] = await Promise.all([allFinanceRows(installmentsQuery), allFinanceRows(repairsQuery)])
+  // Un despliegue sin créditos o sin taller: «Te deben» simplemente no se muestra.
+  if (installments.error && !isMissingTableError(installments.error, 'credit_installments')) throw toFinanceApiError(installments.error)
+  if (repairs.error) throw toFinanceApiError(repairs.error)
+  if ((installments.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT || (repairs.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT) return undefined
+
+  const customers = new Set<string>()
+  let credits = 0
+  let overdue = 0
+  for (const row of (installments.error ? [] : installments.data ?? []) as Array<Record<string, unknown>>) {
+    const owed = Math.max(0, money(row.amount as number | string) - Math.min(money(row.amount as number | string), money(row.amount_paid as number | string | null)))
+    if (owed <= 0) continue
+    credits += owed
+    const dueDay = typeof row.due_date === 'string' ? row.due_date.slice(0, 10) : null
+    if (dueDay && dueDay < today) overdue += owed
+    const credit = Array.isArray(row.customer_credits) ? row.customer_credits[0] : row.customer_credits
+    const customerId = (credit as { customer_id?: string | null } | null)?.customer_id
+    if (customerId) customers.add(customerId)
+  }
+  let repairsOwed = 0
+  for (const row of (repairs.data ?? []) as Array<Record<string, unknown>>) {
+    const cost = money((row.final_cost ?? row.estimated_cost) as number | string | null)
+    const owed = Math.max(0, cost - money(row.paid_amount as number | string | null))
+    if (owed <= 0) continue
+    repairsOwed += owed
+    if (typeof row.customer_id === 'string') customers.add(row.customer_id)
+  }
+  return {
+    total: roundMoneyValue(credits + repairsOwed),
+    overdue: roundMoneyValue(overdue),
+    credits: roundMoneyValue(credits),
+    repairs: roundMoneyValue(repairsOwed),
+    customers: customers.size,
+  }
+}
+
 export async function getFinanceSummary(
   organizationId: string,
   filters: FinanceFilters,
@@ -3546,7 +3873,10 @@ export async function getFinanceSummary(
   const zonedFilters = { ...filters, timeZone }
   const records = await loadFinanceSummaryRecords(organizationId, zonedFilters)
   const today = toOrganizationDay(new Date(), timeZone)
-  return buildFinanceSummaryFromRecords(records, zonedFilters, today)
+  const report = buildFinanceSummaryFromRecords(records, zonedFilters, today)
+  // «Te deben» es un dato extra: si falla, el resumen se muestra igual.
+  const receivables = await getFinanceReceivables(organizationId, filters.branchId, today).catch(() => undefined)
+  return receivables ? { ...report, receivables } : report
 }
 
 export async function getFinanceProfitability(
@@ -3598,6 +3928,7 @@ export function buildProfitabilityRows(
   group: FinanceProfitabilityGroup,
 ): FinanceProfitabilityRow[] {
   const repairPortions = repairPortionBySale(records.repairPayments)
+  const restockedForProfitability = restockedPartIds(records.repairCloseouts)
   const allSaleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
   for (const item of records.saleItems) {
     allSaleItemsBySaleId.set(item.saleId, [...(allSaleItemsBySaleId.get(item.saleId) ?? []), item])
@@ -3674,7 +4005,7 @@ export function buildProfitabilityRows(
         // Ticket de la reparación como etiqueta legible, id corto de respaldo.
         : [`repair:${repair.id}`, repair.ticketNumber ?? `Reparación ${repair.id.slice(0, 8)}`] as const
     // Solo repuestos instalados o usados, igual que el resumen.
-    const parts = (repairPartsByRepairId.get(repair.id) ?? []).filter((part) => isUsedRepairPart(part.status))
+    const parts = (repairPartsByRepairId.get(repair.id) ?? []).filter((part) => isCostedRepairPart(part, restockedForProfitability))
     add(
       key[0],
       key[1],

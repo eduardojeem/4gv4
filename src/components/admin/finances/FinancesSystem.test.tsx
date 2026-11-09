@@ -158,6 +158,23 @@ describe('FinancesSystem', () => {
     expect(screen.getByText('Todavía no hay movimientos financieros')).toBeInTheDocument()
   })
 
+  it('shows what customers owe when there is debt', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary: { ...summary, receivables: { total: 750_000, overdue: 250_000, credits: 500_000, repairs: 250_000, customers: 3 } },
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getByText('Te deben')).toBeInTheDocument()
+    expect(screen.getByText(/de 3 clientes/)).toBeInTheDocument()
+    expect(screen.getByText(/ya vencido/)).toBeInTheDocument()
+  })
+
   it('keeps a cost-only period out of the empty state', () => {
     mockUseAdminFinances.mockReturnValue({
       summary: {

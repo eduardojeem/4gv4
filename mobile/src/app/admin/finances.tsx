@@ -376,6 +376,20 @@ export default function FinancesAdminScreen() {
                   />
                 </View>
 
+                {data.receivables && data.receivables.total > 0 && (
+                  <View style={card}>
+                    <View style={styles.heading}>
+                      <Ionicons name="people-outline" size={20} color={accent} />
+                      <Text style={[styles.cardTitle, { color: colors.text }]}>Te deben</Text>
+                    </View>
+                    <Text style={[styles.heroAmount, { color: colors.text, fontSize: 26 }]}>{amount(data.receivables.total)}</Text>
+                    <Text style={{ color: colors.muted }}>
+                      {data.receivables.customers === 1 ? '1 cliente' : `${data.receivables.customers} clientes`}
+                      {data.receivables.overdue > 0 ? ` · ${amount(data.receivables.overdue)} ya vencido` : ''}
+                    </Text>
+                  </View>
+                )}
+
                 {warnings.length > 0 && (
                   <View accessibilityRole="alert" style={[styles.card, { backgroundColor: tone.warnBg, borderColor: tone.warn }]}>
                     <View style={styles.heading}>
@@ -429,6 +443,9 @@ export default function FinancesAdminScreen() {
                     )}
                     {sources.orders > 0 && (
                       <Line icon="globe-outline" label="Pedidos web" value={amount(sources.orders)} colors={colors} />
+                    )}
+                    {(sources.interest ?? 0) > 0 && (
+                      <Line icon="trending-up-outline" label="Intereses" hint="Cobrados en cuotas de créditos" value={amount(sources.interest ?? 0)} colors={colors} />
                     )}
                     {sources.refunds > 0 && (
                       <Line icon="return-down-back-outline" label="Devoluciones" value={`− ${amount(sources.refunds)}`} colors={colors} />

@@ -95,6 +95,7 @@ describe('apertura de los ingresos', () => {
       services: 400,
       repairs: { total: 500, labor: 200, parts: 300, count: 1 },
       orders: 250,
+      interest: 0,
       refunds: 0,
       grossRevenue: 1_750,
     })
