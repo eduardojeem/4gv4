@@ -7,6 +7,8 @@ export function reconciliationGuidance(code: string): string {
       return 'Compará el pedido, venta o reparación con sus comprobantes y cobros fechados. No registres otro cobro si el dinero ya fue recibido; primero verificá el vínculo y la fecha.'
     case 'MISSING_BRANCH':
       return 'Verificá a qué sucursal pertenece el movimiento original. No lo asignes por suposición ni lo cuentes en todas las sucursales.'
+    case 'MISSING_REPAIR_PRICE':
+      return 'Abrí la reparación y cargá el precio que se cobró. No registres un cobro nuevo: el precio solo corrige el ingreso del período.'
     case 'MISSING_EMPLOYEE':
       return 'Revisá el colaborador y la liquidación de origen en Nómina. Conservá el historial y evitá generar un segundo pago.'
     default:

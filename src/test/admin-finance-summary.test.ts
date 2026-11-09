@@ -110,6 +110,14 @@ describe('canonical finance summary aggregation', () => {
       operatingExpenses: 200,
       payrollCost: 150,
       netProfit: 500,
+      revenueBreakdown: {
+        merchandise: 1_000,
+        services: 0,
+        repairs: { total: 300, labor: 0, parts: 300, count: 1 },
+        orders: 0,
+        refunds: 0,
+        grossRevenue: 1_300,
+      },
     })
     expect(result.cash).toEqual({ collected: 800, paid: 90, netCashFlow: 710 })
     expect(result.complete).toBe(true)

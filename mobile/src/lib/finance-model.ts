@@ -101,6 +101,9 @@ export function groupFinanceWarnings(warnings: FinanceSummaryData['coverageWarni
     if (group.code === 'MISSING_CASH_TIMING') {
       return { ...group, title: `${items} con cobros sin fecha`, hint: 'No sabemos qué día entró esa plata, así que puede faltar en «Entró».' };
     }
+    if (group.code === 'MISSING_REPAIR_PRICE') {
+      return { ...group, title: `${plural(group.count, ['reparación entregada', 'reparaciones entregadas'])} sin precio`, hint: 'Cuentan como venta cero hasta que cargues lo que cobraste.' };
+    }
     return { ...group, title: plural(group.count, ['dato para revisar', 'datos para revisar']) };
   });
 }
