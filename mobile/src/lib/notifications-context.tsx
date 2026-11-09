@@ -23,7 +23,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const scope = getPrivateCacheContext(), generation = ++countRequest.current
     if (!scope.userId || !scope.organizationId) { setUnreadCount(0); return }
     try {
-      const result = await apiFetch<{ count: number }>('/api/notifications/unread-count')
+      // includeGlobal: también cuenta los avisos de la plataforma sin leer.
+      const result = await apiFetch<{ count: number }>('/api/notifications/unread-count?includeGlobal=1')
       if (scope.epoch !== getPrivateCacheContext().epoch || generation !== countRequest.current) return
       setUnreadCount(result.count)
       void Notifications.setBadgeCountAsync(result.count).catch(() => undefined)

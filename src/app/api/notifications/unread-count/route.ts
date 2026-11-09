@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { countUnreadAnnouncements, loadGlobalAnnouncements } from '@/lib/notifications/global-announcements'
 
 /**
  * GET /api/notifications/unread-count
  * Retorna la cantidad de notificaciones no leídas para el usuario autenticado
- * en su organización activa.
+ * en su organización activa. Con `?includeGlobal=1` (app móvil) suma los avisos
+ * del superadmin sin leer.
  */
-export const GET = withTenantAuth({}, async (_request, { user, organization }) => {
+export const GET = withTenantAuth({}, async (request, { user, organization }) => {
   try {
     const admin = createAdminSupabase()
 
@@ -28,7 +30,14 @@ export const GET = withTenantAuth({}, async (_request, { user, organization }) =
       return NextResponse.json({ error: 'No se pudo obtener el conteo de no leídos.' }, { status: 500 })
     }
 
-    return NextResponse.json({ count: count ?? 0 })
+    let globalCount = 0
+    if (new URL(request.url).searchParams.get('includeGlobal') === '1') {
+      const announcements = await loadGlobalAnnouncements(admin, organization.id, user.id)
+      // Un fallo de los avisos no esconde el conteo de la bandeja.
+      if (!announcements.error) globalCount = countUnreadAnnouncements(announcements.items)
+    }
+
+    return NextResponse.json({ count: (count ?? 0) + globalCount, globalCount })
   } catch (error) {
     logger.error('Unread count GET error', { error })
     return NextResponse.json({ error: 'Error interno.' }, { status: 500 })

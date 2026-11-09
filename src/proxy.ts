@@ -19,9 +19,11 @@ import { deriveAccessFromSnapshot, type MiddlewareAccessSnapshot } from '@/lib/a
 import { getCachedSlugAlias, setCachedSlugAlias } from '@/lib/saas/slug-alias-cache'
 import {
   buildMfaPath,
+  hasVerifiedFactor,
   isAdminMfaRole,
   isMfaPending,
   needsAdminMfaEnrollment,
+  needsSuperAdminMfa,
   readTokenAal,
   type AssuranceLevel,
 } from '@/lib/auth/mfa'
@@ -504,6 +506,15 @@ export async function proxy(request: NextRequest) {
     if (!isSuperAdmin) {
       // No es super_admin → redirigir al dashboard
       return redirectWithCookies(request, supabaseResponse, '/dashboard')
+    }
+    // El superadmin ve y cambia datos de todas las tiendas: siempre con 2FA.
+    // Si todavía no la activó, la página de 2FA lo lleva a configurarla.
+    if (needsSuperAdminMfa(sessionAal)) {
+      return redirectWithCookies(
+        request,
+        supabaseResponse,
+        buildMfaPath(`${pathname}${request.nextUrl.search}`, { setup: !hasVerifiedFactor(user) })
+      )
     }
   }
 

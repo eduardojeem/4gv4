@@ -3,8 +3,12 @@ import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { renderBrandedEmail, sendEmail } from '@/lib/email/resend'
 import { getPlatformBranding } from '@/lib/platform/branding'
+import { rateLimiter } from '@/lib/rate-limiter'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Cada prueba es un envío real de Resend: tope por superadmin para no gastar cupo por error.
+const TEST_EMAIL_LIMIT = 5
+const TEST_EMAIL_WINDOW_MS = 10 * 60 * 1000
 
 export async function POST(request: Request) {
   const superAdmin = await getSuperAdminUser()
@@ -16,6 +20,15 @@ export async function POST(request: Request) {
   const to = typeof body.to === 'string' ? body.to.trim() : ''
   if (!EMAIL_RE.test(to)) {
     return NextResponse.json({ error: 'Ingresa un email valido.' }, { status: 400 })
+  }
+
+  const limitKey = `superadmin-test-email:${superAdmin.id}`
+  if (!(await rateLimiter.check(limitKey, TEST_EMAIL_LIMIT, TEST_EMAIL_WINDOW_MS))) {
+    const retryAfter = Math.max(rateLimiter.getResetTime(limitKey), 60)
+    return NextResponse.json(
+      { error: `Ya enviaste ${TEST_EMAIL_LIMIT} pruebas seguidas. Espera unos minutos antes de mandar otra.`, retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    )
   }
 
   const branding = await getPlatformBranding()

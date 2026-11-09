@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { markGlobalAnnouncements } from '@/lib/notifications/global-announcements'
 
 interface MarkReadBody {
   notificationId?: string
   id?: string
   all?: boolean
   dismiss?: boolean
+  /** 'global': avisos del superadmin (global_notification_reads). */
+  scope?: string
 }
 
 /**
@@ -19,25 +22,28 @@ export const POST = withTenantAuth({}, async (request, { user, organization }) =
   try {
     const body = (await request.json().catch(() => ({}))) as MarkReadBody
 
-    // Compatibilidad legacy con descarte de notificaciones globales
-    if (body.dismiss === true) {
-      const admin = createAdminSupabase()
+    // Avisos del superadmin: leer o descartar (dismiss: true siempre es un aviso global).
+    if (body.scope === 'global' || body.dismiss === true) {
       const globalId = body.id || body.notificationId
-      if (!globalId) {
+      if (!globalId && body.all !== true) {
+        return NextResponse.json({ error: 'Se requiere id o all: true.' }, { status: 400 })
+      }
+      if (body.dismiss === true && !globalId) {
         return NextResponse.json({ error: 'ID requerido para descartar.' }, { status: 400 })
       }
 
-      await admin.from('global_notification_reads').upsert(
-        {
-          notification_id: globalId,
-          user_id: user.id,
-          read_at: new Date().toISOString(),
-          dismissed: true,
-        },
-        { onConflict: 'notification_id,user_id' }
-      )
+      const { updated, error } = await markGlobalAnnouncements(createAdminSupabase(), {
+        organizationId: organization.id,
+        userId: user.id,
+        ids: globalId ? [globalId] : 'all',
+        dismiss: body.dismiss === true,
+      })
+      if (error) {
+        logger.error('Failed to update global notification reads', { error, userId: user.id, orgId: organization.id })
+        return NextResponse.json({ error: 'No se pudo guardar el aviso como leído.' }, { status: 500 })
+      }
 
-      return NextResponse.json({ success: true, dismissed: true })
+      return NextResponse.json({ success: true, updatedCount: updated, dismissed: body.dismiss === true })
     }
 
     const admin = createAdminSupabase()
