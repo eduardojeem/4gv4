@@ -24,6 +24,7 @@ import {
   Activity,
   Boxes,
   Building2,
+  CalendarDays,
   CalendarRange,
   Gauge,
   HelpCircle,
@@ -78,6 +79,7 @@ import {
   MiniStat,
 } from './analytics-widgets'
 import { WebsiteSnapshotCard } from './website-snapshot-card'
+import { AgendaAnalyticsPanel } from './AgendaAnalyticsPanel'
 import { ChartExporter, type ChartSection } from '@/components/reports/ChartExporter'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { SiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
@@ -89,6 +91,7 @@ import {
   isHeadlineCardVisible,
   resolveAnalyticsModules,
   revenueCardId,
+  soldItemsLabel,
 } from './analytics-modules'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
@@ -117,12 +120,14 @@ const KPI_ICONS: Record<string, typeof Wallet> = {
 
 const PIE_COLORS = ['#2563eb', '#0f766e', '#d97706', '#7c3aed', '#dc2626', '#4f46e5']
 
-type TabId = 'resumen' | 'ventas' | 'dinero' | 'inventario' | 'clientes' | 'taller'
+type TabId = 'resumen' | 'ventas' | 'agenda' | 'dinero' | 'inventario' | 'clientes' | 'taller'
 
 /** Las pestañas con `module` solo aparecen si la empresa tiene ese módulo activo. */
 const TABS: Array<{ id: TabId; label: string; icon: LucideIcon; module?: AnalyticsModuleKey }> = [
   { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
   { id: 'ventas', label: 'Ventas', icon: ShoppingBag },
+  // Barberías, salones y estética: venden turnos, y lo que importa es la asistencia.
+  { id: 'agenda', label: 'Agenda', icon: CalendarDays, module: 'services' },
   { id: 'dinero', label: 'Dinero y cajas', icon: Wallet },
   { id: 'inventario', label: 'Inventario', icon: Boxes, module: 'inventory' },
   { id: 'clientes', label: 'Clientes', icon: Users, module: 'crm' },
@@ -390,11 +395,13 @@ export default function AnalyticsDashboard() {
     url.searchParams.set('vista', value)
     window.history.replaceState(null, '', url)
   }, [])
+  const soldItems = soldItemsLabel(modules)
 
   const [preset, setPreset] = useState<AnalyticsPreset>('30d')
   const [branch, setBranch] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(buildPresetRange('30d'))
   const [guideOpen, setGuideOpen] = useState(false)
+  const [agendaRefresh, setAgendaRefresh] = useState(0)
 
   const normalizedRange = useMemo(() => {
     const fallback = buildPresetRange(preset)
@@ -647,7 +654,7 @@ export default function AnalyticsDashboard() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" onClick={forceRefresh} disabled={refreshing}>
+            <Button variant="outline" onClick={() => { forceRefresh(); setAgendaRefresh((value) => value + 1) }} disabled={refreshing}>
               <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
               Actualizar
             </Button>
@@ -804,11 +811,11 @@ export default function AnalyticsDashboard() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <Panel title="Productos más vendidos" description="Ordenados por lo facturado en el período.">
+            <Panel title={soldItems.title} description="Ordenados por lo facturado en el período.">
               <RankingTable
                 rows={snapshot.topProducts}
-                columns={['Producto', 'Vendido', 'Unidades', 'Margen y stock']}
-                emptyTitle="Todavía no hay ranking de productos"
+                columns={[soldItems.column, 'Vendido', 'Unidades', modules.inventory ? 'Margen y stock' : 'Margen']}
+                emptyTitle={soldItems.empty}
                 emptyDescription="Se necesita al menos una venta con ítems para armar la tabla."
               />
             </Panel>
@@ -832,6 +839,13 @@ export default function AnalyticsDashboard() {
             </Panel>
           ) : null}
         </TabsContent>
+
+        {/* ── Agenda (negocios de turnos) ──────────────────────────────────── */}
+        {modules.services ? (
+          <TabsContent value="agenda" className="mt-6 space-y-6">
+            <AgendaAnalyticsPanel from={filters.from} to={filters.to} refreshKey={agendaRefresh} />
+          </TabsContent>
+        ) : null}
 
         {/* ── Dinero y cajas ─────────────────────────────────────────────── */}
         <TabsContent value="dinero" className="mt-6 space-y-6">
