@@ -27,6 +27,8 @@ describe('¿De dónde vienen los ingresos?', () => {
     expect(within(repairs).getByText('Repuestos y materiales')).toBeInTheDocument()
     expect(within(screen.getByTestId('revenue-source-services')).getByText('27%')).toBeInTheDocument()
     expect(screen.getByText(/Menos devoluciones del período/)).toBeInTheDocument()
+    // Sin pedidos web en el período, esa fuente no aparece.
+    expect(screen.queryByTestId('revenue-source-orders')).not.toBeInTheDocument()
   })
 })
 

@@ -144,7 +144,7 @@ export default function AdministrationScreen() {
         <Link icon="people-outline" label="Usuarios y roles" hint="Invitar, cambiar rol, suspender" onPress={() => router.push('/admin/users' as never)} colors={colors} />
         <Link icon="business-outline" label="Sucursales" hint="Locales, cajas y puntos de venta" onPress={() => router.push('/admin/branches' as never)} colors={colors} />
         <Link icon="cash-outline" label="Monitor de cajas" hint="Suspender, bloquear o cerrar a distancia" onPress={() => router.push('/admin/cash' as never)} colors={colors} />
-        <Link icon="wallet-outline" label="Finanzas" hint="Resultados económicos y flujo de caja" onPress={() => router.push('/admin/finances' as never)} colors={colors} />
+        <Link icon="wallet-outline" label="Finanzas" hint="Cuánto ganaste y qué tenés que pagar" onPress={() => router.push('/admin/finances' as never)} colors={colors} />
         <Link icon="analytics-outline" label="Analítica" hint="Tráfico web y rendimiento comercial" onPress={() => router.push('/admin/analytics' as never)} colors={colors} />
         <Link icon="card-outline" label="Suscripción" hint="Plan, consumo de cuotas y facturación" onPress={() => router.push('/admin/subscriptions' as never)} colors={colors} />
         <Link icon="settings-outline" label="Configuración" hint="Parámetros de comercio e impuestos" onPress={() => router.push('/admin/settings' as never)} colors={colors} />

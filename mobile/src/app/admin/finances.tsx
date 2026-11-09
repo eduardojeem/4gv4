@@ -28,7 +28,9 @@ import {
 } from '@/lib/admin';
 import {
   financeBreakdown,
+  comparisonText,
   financeHeadline,
+  splitDueThisWeek,
   financePeriodDates,
   financeReportKey,
   groupFinanceWarnings,
@@ -196,6 +198,11 @@ export default function FinancesAdminScreen() {
   const headline = data ? financeHeadline(data) : null;
   const warnings = data ? groupFinanceWarnings(data.coverageWarnings) : [];
   const breakdown = data && headline ? financeBreakdown(data, headline.profit) : null;
+  const previous = data?.comparison ? financeHeadline({ ...data, accrued: { ...data.comparison.accrued } }) : null;
+  const profitComparison = headline ? comparisonText(headline.profit, previous?.profit) : null;
+  const revenueComparison = data ? comparisonText(data.accrued.revenue, data.comparison?.accrued.revenue) : null;
+  const due = data && shown ? splitDueThisWeek(data.upcomingDue, financePeriodDates('today', shown.timeZone).startDate) : null;
+  const sources = data?.accrued.revenueBreakdown;
   const branches = shown?.branches ?? [];
   const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
   const profitColor = !headline || headline.profit === 0 ? colors.text : headline.profit > 0 ? tone.good : tone.bad;
@@ -320,7 +327,7 @@ export default function FinancesAdminScreen() {
                     <Text style={[styles.bold, { color: colors.muted }]}>{profitTitle}</Text>
                     {headline.estimated && (
                       <View style={[styles.pill, { backgroundColor: tone.warnBg }]}>
-                        <Text style={{ color: tone.warn, fontSize: 12, fontWeight: '700' }}>Faltan costos</Text>
+                        <Text style={{ color: tone.warn, fontSize: 12, fontWeight: '700' }}>Aproximado</Text>
                       </View>
                     )}
                   </View>
@@ -337,9 +344,14 @@ export default function FinancesAdminScreen() {
                       Gastaste más de lo que ganaste con las ventas.
                     </Text>
                   )}
+                  {profitComparison && (
+                    <Text style={{ color: colors.text, fontWeight: '600' }}>
+                      {headline.profit < 0 ? 'Resultado' : 'Ganancia'}: {profitComparison}
+                    </Text>
+                  )}
                   {headline.estimated && (
                     <Text style={{ color: colors.muted }}>
-                      Es aproximada: algunas ventas no tienen el costo cargado y cuentan como si no te hubieran costado nada.
+                      Es aproximada: hay ventas sin costo cargado o reparaciones sin precio. Completalos abajo para que sea exacta.
                     </Text>
                   )}
                 </View>
@@ -349,16 +361,16 @@ export default function FinancesAdminScreen() {
                     icon="trending-up-outline"
                     label="Vendiste"
                     value={amount(data.accrued.revenue)}
-                    hint="Ventas, servicios, pedidos y reparaciones entregadas"
+                    hint={revenueComparison ?? 'Ventas, servicios, pedidos y reparaciones entregadas'}
                     colors={colors}
                     accent={accent}
                   />
                   <Tile
                     icon="swap-vertical-outline"
-                    label="Entró − salió"
+                    label="Entró menos salió"
                     value={amount(data.cash.netCashFlow)}
                     valueColor={data.cash.netCashFlow < 0 ? tone.bad : undefined}
-                    hint="Plata cobrada menos pagada"
+                    hint="No es lo que hay en caja"
                     colors={colors}
                     accent={accent}
                   />
@@ -383,27 +395,43 @@ export default function FinancesAdminScreen() {
                         onPress={() => router.push('/panel/products' as never)}
                       />
                     )}
-                    <Action label="Ver cuáles son en la web" color={accent} onPress={web} />
+                    {warnings.some((group) => group.code === 'MISSING_REPAIR_PRICE') && (
+                      <Action
+                        label="Poner precio en Reparaciones"
+                        color={accent}
+                        onPress={() => router.push('/panel/repairs' as never)}
+                      />
+                    )}
+                    <Action label="Ver el detalle en la web" color={accent} onPress={web} />
                   </View>
                 )}
 
-                {data.accrued.revenueBreakdown && data.accrued.revenueBreakdown.grossRevenue > 0 && (
+                {sources && sources.grossRevenue > 0 && (
                   <View style={card}>
                     <Text accessibilityRole="header" style={[styles.cardTitle, { color: colors.text }]}>
                       De dónde vienen las ventas
                     </Text>
-                    <Line icon="cube-outline" label="Mercadería" hint="Productos vendidos en caja" value={amount(data.accrued.revenueBreakdown.merchandise)} colors={colors} />
-                    <Line icon="cut-outline" label="Servicios" hint="Servicios y turnos cobrados en caja" value={amount(data.accrued.revenueBreakdown.services)} colors={colors} />
-                    <Line
-                      icon="construct-outline"
-                      label="Reparaciones"
-                      hint={`${data.accrued.revenueBreakdown.repairs.count === 1 ? '1 entregada' : `${data.accrued.revenueBreakdown.repairs.count} entregadas`} · mano de obra ${amount(data.accrued.revenueBreakdown.repairs.labor)}, repuestos ${amount(data.accrued.revenueBreakdown.repairs.parts)}`}
-                      value={amount(data.accrued.revenueBreakdown.repairs.total)}
-                      colors={colors}
-                    />
-                    <Line icon="globe-outline" label="Pedidos web" value={amount(data.accrued.revenueBreakdown.orders)} colors={colors} />
-                    {data.accrued.revenueBreakdown.refunds > 0 && (
-                      <Line icon="return-down-back-outline" label="Devoluciones" value={`− ${amount(data.accrued.revenueBreakdown.refunds)}`} colors={colors} />
+                    {/* Solo lo que tuvo movimiento: una barbería no ve «Reparaciones» en cero. */}
+                    {sources.merchandise > 0 && (
+                      <Line icon="cube-outline" label="Mercadería" hint="Productos vendidos en caja" value={amount(sources.merchandise)} colors={colors} />
+                    )}
+                    {sources.services > 0 && (
+                      <Line icon="cut-outline" label="Servicios" hint="Servicios y turnos cobrados en caja" value={amount(sources.services)} colors={colors} />
+                    )}
+                    {sources.repairs.total > 0 && (
+                      <Line
+                        icon="construct-outline"
+                        label="Reparaciones"
+                        hint={`${sources.repairs.count === 1 ? '1 entregada' : `${sources.repairs.count} entregadas`} · mano de obra ${amount(sources.repairs.labor)}, repuestos ${amount(sources.repairs.parts)}`}
+                        value={amount(sources.repairs.total)}
+                        colors={colors}
+                      />
+                    )}
+                    {sources.orders > 0 && (
+                      <Line icon="globe-outline" label="Pedidos web" value={amount(sources.orders)} colors={colors} />
+                    )}
+                    {sources.refunds > 0 && (
+                      <Line icon="return-down-back-outline" label="Devoluciones" value={`− ${amount(sources.refunds)}`} colors={colors} />
                     )}
                   </View>
                 )}
@@ -478,11 +506,27 @@ export default function FinancesAdminScreen() {
                 {data.overdue.length > 5 && (
                   <Text style={{ color: colors.muted }}>Y {data.overdue.length - 5} más.</Text>
                 )}
-                <Action label="Pagar o revisar en la web" color={accent} onPress={web} />
+                <Action label="Pagar en la web" color={accent} onPress={web} />
               </View>
             )}
 
-            {data.upcomingDue.length > 0 && (
+            {due && due.thisWeek.length > 0 && (
+              <View style={card}>
+                <View style={styles.heading}>
+                  <Ionicons name="calendar-outline" size={20} color={accent} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>
+                    Para pagar esta semana ({due.thisWeek.length})
+                  </Text>
+                </View>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Total: {amount(sumDue(due.thisWeek))}</Text>
+                <DueRows items={due.thisWeek.slice(0, 5)} amount={amount} colors={colors} />
+                {due.thisWeek.length > 5 && (
+                  <Text style={{ color: colors.muted }}>Y {due.thisWeek.length - 5} más.</Text>
+                )}
+              </View>
+            )}
+
+            {due && due.later.length > 0 && (
               <View style={card}>
                 <Pressable
                   accessibilityRole="button"
@@ -492,17 +536,17 @@ export default function FinancesAdminScreen() {
                 >
                   <View style={{ flexShrink: 1, gap: 2 }}>
                     <Text style={[styles.cardTitle, { color: colors.text }]}>
-                      Próximos pagos ({data.upcomingDue.length})
+                      Más adelante ({due.later.length})
                     </Text>
-                    <Text style={{ color: colors.muted }}>Total: {amount(sumDue(data.upcomingDue))}</Text>
+                    <Text style={{ color: colors.muted }}>Total: {amount(sumDue(due.later))}</Text>
                   </View>
                   <Ionicons name={showUpcoming ? 'chevron-up' : 'chevron-down'} size={20} color={colors.muted} />
                 </Pressable>
                 {showUpcoming && (
                   <>
-                    <DueRows items={data.upcomingDue.slice(0, 10)} amount={amount} colors={colors} />
-                    {data.upcomingDue.length > 10 && (
-                      <Text style={{ color: colors.muted }}>Y {data.upcomingDue.length - 10} más.</Text>
+                    <DueRows items={due.later.slice(0, 10)} amount={amount} colors={colors} />
+                    {due.later.length > 10 && (
+                      <Text style={{ color: colors.muted }}>Y {due.later.length - 10} más.</Text>
                     )}
                   </>
                 )}
@@ -524,8 +568,8 @@ export default function FinancesAdminScreen() {
         )}
         <Pressable accessibilityRole="button" onPress={web} style={[card, styles.between]}>
           <View style={{ flexShrink: 1, gap: 4 }}>
-            <Text style={[styles.bold, { color: colors.text }]}>Registrar gastos y pagar cuentas</Text>
-            <Text style={{ color: colors.muted }}>Gastos, cuentas a pagar y sueldos se cargan en la web.</Text>
+            <Text style={[styles.bold, { color: colors.text }]}>Anotar gastos y pagar cuentas</Text>
+            <Text style={{ color: colors.muted }}>Por ahora los gastos, las cuentas y los sueldos se cargan en la web.</Text>
           </View>
           <Ionicons name="open-outline" size={20} color={accent} />
         </Pressable>

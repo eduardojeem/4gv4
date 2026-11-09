@@ -79,3 +79,22 @@ describe('resumen financiero móvil', () => {
     ).toBe(false);
   });
 });
+
+import { comparisonText as mobileComparisonText, splitDueThisWeek } from '../../mobile/src/lib/finance-model';
+
+describe('app: comparación y cuentas de esta semana', () => {
+  it('compara en palabras, igual que la web', () => {
+    expect(mobileComparisonText(1_150, 1_000)).toBe('15 % más que el período anterior');
+    expect(mobileComparisonText(500, 0)).toBeNull();
+  });
+  it('separa lo que vence en 7 días de lo que viene después', () => {
+    const items = [
+      { id: 'a', dueDate: '2026-11-09', amount: 1 },
+      { id: 'b', dueDate: '2026-11-16', amount: 1 },
+      { id: 'c', dueDate: '2026-11-17', amount: 1 },
+    ];
+    const { thisWeek, later } = splitDueThisWeek(items, '2026-11-09');
+    expect(thisWeek.map((item) => item.id)).toEqual(['a', 'b']);
+    expect(later.map((item) => item.id)).toEqual(['c']);
+  });
+});
