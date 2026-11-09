@@ -97,9 +97,15 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const planInfo = await getOrganizationPlanInfo(ctx.organizationId).catch(() => null)
     const financesOn = Boolean(planInfo?.modules.includes('finances')) && total > 0
     const admin = createAdminSupabase()
-    const { data: category } = financesOn
-      ? await admin.from('finance_categories').select('id').eq('organization_id', ctx.organizationId).eq('code', 'suppliers_purchases').eq('is_active', true).maybeSingle()
+    // «Compras de mercadería y repuestos» (direct_cost): el repuesto ya es costo
+    // de la reparación, así que la compra no se resta otra vez como gasto.
+    // Sin esa categoría (migración pendiente) se usa la de siempre.
+    const { data: categories } = financesOn
+      ? await admin.from('finance_categories').select('id, code').eq('organization_id', ctx.organizationId).in('code', ['inventory_purchases', 'suppliers_purchases']).eq('is_active', true)
       : { data: null }
+    const category = (categories ?? []).find((row) => row.code === 'inventory_purchases')
+      ?? (categories ?? []).find((row) => row.code === 'suppliers_purchases')
+      ?? null
     const cashSessionId = financesOn && category && input.payment === 'cash' ? await openCashSessionId(ctx) : null
     if (financesOn && category && input.payment === 'cash' && !cashSessionId) {
       return NextResponse.json({ error: 'No hay una caja abierta en esta sucursal. Abrí caja o elegí otra forma de pago.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' }, { status: 409 })
@@ -122,7 +128,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       recorded: false,
       warning: !financesOn
         ? (total > 0 ? 'Finanzas no está activo: la compra no se registró como gasto.' : undefined)
-        : !category ? 'Falta la categoría «Proveedores y compras» en Finanzas: la compra no se registró como gasto.' : undefined,
+        : !category ? 'Falta la categoría «Compras de mercadería y repuestos» en Finanzas: la compra no se registró.' : undefined,
     }
     if (financesOn && category) {
       const marker = purchaseExpenseMarker(input.idempotencyKey)

@@ -1991,6 +1991,8 @@ type FinanceRepairRecord = {
   employeeId?: string | null
   /** Mano de obra cargada (`repairs.labor_cost`); el resto del precio son repuestos. */
   laborAmount?: number
+  /** Reingreso por garantía de otra reparación: se entrega sin cobrar a propósito. */
+  isWarranty?: boolean
 }
 
 /**
@@ -2007,6 +2009,7 @@ export function repairRevenueDate(repair: Pick<FinanceRepairRecord, 'status' | '
 }
 
 type FinanceRepairPartRecord = {
+  id?: string
   repairId: string
   quantity: number
   unitCost: number | null
@@ -2022,6 +2025,20 @@ type FinanceObligationRecord = {
   amount: number
   paidAmount?: number
   concept?: string | null
+  /** Tipo de la categoría: `operating_expense`, `direct_cost`, `payroll` u `other`. */
+  categoryType?: string | null
+  notes?: string | null
+}
+
+/**
+ * Una compra de mercadería o de un repuesto no es un gasto del negocio: es
+ * stock que se convierte en costo cuando se vende o se entrega la reparación.
+ * Contarla también como gasto restaba lo mismo dos veces. Se reconoce por la
+ * categoría (tipo `direct_cost`, «Compras de mercadería y repuestos») o, en
+ * las compras de repuestos anteriores a esa categoría, por su marca.
+ */
+export function isInventoryPurchase(obligation: Pick<FinanceObligationRecord, 'categoryType' | 'notes'>): boolean {
+  return obligation.categoryType === 'direct_cost' || Boolean(obligation.notes?.startsWith('repair-part-purchase:'))
 }
 
 type FinancePayrollEntryRecord = {
@@ -2099,6 +2116,21 @@ export interface FinanceRefundRecord {
   cashAmount: number
 }
 
+/**
+ * Cierre de una reparación sin reparar (`repair_closeouts`): qué repuestos
+ * volvieron al stock y si se le devolvió plata al cliente.
+ */
+export interface FinanceRepairCloseoutRecord {
+  repairId: string
+  branchId: string | null
+  createdAt: string
+  /** Repuestos que volvieron al stock: no son costo de la reparación. */
+  restockedPartIds: string[]
+  /** Devolución al cliente; solo efectivo o transferencia sale de caja. */
+  refundAmount: number
+  refundMethod: string | null
+}
+
 export interface FinanceSummaryRecords {
   sales: FinanceSaleRecord[]
   saleItems: FinanceSaleItemRecord[]
@@ -2126,6 +2158,8 @@ export interface FinanceSummaryRecords {
   repairPaymentsBySelectedRepair?: FinanceRepairPaymentRecord[]
   /** `false` si el despliegue todavia no tiene la tabla `repair_payments`. */
   repairPaymentTimingAvailable?: boolean
+  /** Cierres sin reparar de las reparaciones cargadas. */
+  repairCloseouts?: FinanceRepairCloseoutRecord[]
 }
 
 export interface FinanceSummaryReport extends FinanceSummary {
@@ -2257,6 +2291,19 @@ function previousPeriod(filters: FinanceFilters): FinanceFilters {
   }
 }
 
+function restockedPartIds(closeouts: FinanceRepairCloseoutRecord[] | undefined): Set<string> {
+  return new Set((closeouts ?? []).flatMap((closeout) => closeout.restockedPartIds))
+}
+
+/**
+ * Un repuesto cuenta como costo si se instaló o usó, salvo que haya vuelto al
+ * stock al cerrar la reparación sin reparar: antes seguía restando su costo
+ * aunque estuviera de nuevo en el inventario (margen negativo falso).
+ */
+function isCostedRepairPart(part: FinanceRepairPartRecord, restocked: Set<string>): boolean {
+  return isUsedRepairPart(part.status) && !(part.id && restocked.has(part.id))
+}
+
 function isUsedRepairPart(status: string | null | undefined): boolean {
   return ['installed', 'used', 'consumed'].includes(
     String(status ?? '').trim().toLowerCase(),
@@ -2378,11 +2425,12 @@ function buildFinancialSummary(
     const recognizedAt = repairRevenueDate(repair)
     return isInBranch(repair.branchId, filters) && recognizedAt !== null && isInPeriod(recognizedAt, filters)
   })
+  const restocked = restockedPartIds(records.repairCloseouts)
   const usedPartsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
   for (const [repairId, parts] of partsByRepairId) {
     usedPartsByRepairId.set(
       repairId,
-      parts.filter((part) => isUsedRepairPart(part.status)),
+      parts.filter((part) => isCostedRepairPart(part, restocked)),
     )
   }
   const revenue = [
@@ -2451,13 +2499,19 @@ function buildFinancialSummary(
       ),
     ),
   ]
-  const expenses = records.obligations
-    .filter(
-      (obligation) =>
-        isInBranch(obligation.branchId, filters) &&
-        isInPeriod(obligation.accountingDate, filters) &&
-        obligation.status !== 'voided',
-    )
+  const periodObligations = records.obligations.filter(
+    (obligation) =>
+      isInBranch(obligation.branchId, filters) &&
+      isInPeriod(obligation.accountingDate, filters) &&
+      obligation.status !== 'voided',
+  )
+  // Compras de stock: solo salen de caja (su pago ya está en `financePayments`).
+  // Gastos cargados con una categoría de sueldos: van a sueldos, no a gastos.
+  const expenses = periodObligations
+    .filter((obligation) => !isInventoryPurchase(obligation) && obligation.categoryType !== 'payroll')
+    .map((obligation) => ({ id: obligation.id, amount: money(obligation.amount), paidAmount: 0 }))
+  const payrollObligations = periodObligations
+    .filter((obligation) => obligation.categoryType === 'payroll')
     .map((obligation) => ({ id: obligation.id, amount: money(obligation.amount), paidAmount: 0 }))
   const payroll = records.payrollEntries
     .filter(
@@ -2484,7 +2538,7 @@ function buildFinancialSummary(
       paidAmount: money(payment.amount),
     }))
 
-  const payrollWithTechnicians = [...payroll, ...technicianPayments]
+  const payrollWithTechnicians = [...payroll, ...technicianPayments, ...payrollObligations]
   // Las devoluciones cerradas en el periodo revierten la venta que ya se conto.
   const selectedRefunds = (records.refunds ?? []).filter(
     (refund) =>
@@ -2543,10 +2597,22 @@ function buildFinancialSummary(
   // Los pagos a tecnicos salen de `technician_payments`, no de `payroll_payments`
   // —esa tabla la alimenta la nomina administrativa—, asi que no hay doble conteo.
   const technicianPaid = technicianPayments.reduce((total, payment) => total + payment.paidAmount, 0)
+  // Devolución al cliente al cerrar una reparación sin reparar: sale por
+  // `cash_movements`, que Finanzas no lee, y no aparecía en «Salió».
+  const closeoutRefunds = (records.repairCloseouts ?? [])
+    .filter(
+      (closeout) =>
+        closeout.refundAmount > 0 &&
+        (closeout.refundMethod === 'cash' || closeout.refundMethod === 'transfer') &&
+        isInBranch(closeout.branchId, filters) &&
+        isInPeriod(closeout.createdAt, filters),
+    )
+    .reduce((total, closeout) => total + closeout.refundAmount, 0)
   const paid = signedPayments(records.financePayments, filters) +
     signedPayments(records.payrollPayments, filters) +
     refundedCash +
-    technicianPaid
+    technicianPaid +
+    closeoutRefunds
   const datedRepairPayments = new Map<string, number>()
   for (const payment of records.repairPaymentsBySelectedRepair ?? records.repairPayments ?? []) {
     datedRepairPayments.set(
@@ -2604,7 +2670,7 @@ function buildFinancialSummary(
   ]
 
   const unpricedRepairWarnings = selectedRepairs
-    .filter((repair) => money(repair.revenueAmount) <= 0)
+    .filter((repair) => money(repair.revenueAmount) <= 0 && !repair.isWarranty)
     .map((repair) => ({
       code: 'MISSING_REPAIR_PRICE' as const,
       message: 'La reparación se entregó sin precio: cuenta como ingreso cero hasta que cargues lo que se cobró.',
@@ -3037,7 +3103,7 @@ async function loadFinanceSummaryRecords(
   const repairsQuery = branch(
     admin
       .from('repairs')
-      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, labor_cost, paid_amount, technician_id', { count: 'exact' })
+      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, labor_cost, paid_amount, technician_id, parent_repair_id', { count: 'exact' })
       .eq('organization_id', organizationId)
       // Entregadas en el período (aunque hayan entrado antes) y, para las viejas
       // sin fecha de entrega, las que entraron en el período. Fechas ya validadas.
@@ -3050,7 +3116,7 @@ async function loadFinanceSummaryRecords(
   const obligationsQuery = branch(
     admin
       .from('finance_obligations')
-      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept', { count: 'exact' })
+      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept, notes, finance_categories(category_type)', { count: 'exact' })
       .eq('organization_id', organizationId)
       // The result uses the selected accounting period; the action list also
       // needs older unpaid obligations. All values here are validated dates.
@@ -3123,9 +3189,11 @@ async function loadFinanceSummaryRecords(
     paidAmount: money(repair.paid_amount),
     employeeId: repair.technician_id ?? null,
     laborAmount: money((repair as { labor_cost?: number | string | null }).labor_cost),
+    isWarranty: Boolean((repair as { parent_repair_id?: string | null }).parent_repair_id),
   }))
   const saleItems = await loadSaleItems(admin, organizationId, sales.map((sale) => sale.id))
   const repairParts = await loadRepairParts(admin, repairs.map((repair) => repair.id))
+  const repairCloseouts = await loadRepairCloseouts(admin, repairs.map((repair) => repair.id))
   const salePaymentResult = await loadSalePayments(
     admin,
     organizationId,
@@ -3172,6 +3240,7 @@ async function loadFinanceSummaryRecords(
     creditPaymentTimingAvailable: creditPaymentResult.available,
     repairs,
     repairParts,
+    repairCloseouts,
     obligations: (obligationsResult.data ?? []).map((obligation) => ({
       id: String(obligation.id),
       branchId: obligation.branch_id ?? null,
@@ -3181,6 +3250,11 @@ async function loadFinanceSummaryRecords(
       amount: money(obligation.amount),
       paidAmount: money(obligation.paid_amount),
       concept: obligation.concept,
+      notes: (obligation as { notes?: string | null }).notes ?? null,
+      categoryType: (() => {
+        const category = (obligation as { finance_categories?: { category_type?: string | null } | Array<{ category_type?: string | null }> | null }).finance_categories
+        return (Array.isArray(category) ? category[0]?.category_type : category?.category_type) ?? null
+      })(),
     })),
     payrollEntries: (payrollResult.data ?? []).map((entry) => {
       const payrollRun = Array.isArray(entry.payroll_runs)
@@ -3506,6 +3580,45 @@ async function loadRepairPaymentsForRepairs(
   return payments
 }
 
+async function loadRepairCloseouts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  repairIds: string[],
+): Promise<FinanceRepairCloseoutRecord[]> {
+  if (repairIds.length === 0) return []
+  const results = await Promise.all(
+    chunkQueryValues(repairIds).map((ids) =>
+      allFinanceRows(admin
+        .from('repair_closeouts')
+        .select('id, repair_id, branch_id, created_at, parts_resolution, settlement_kind, settlement_amount, settlement_method', { count: 'exact' })
+        .in('repair_id', ids)
+        .order('id')),
+    ),
+  )
+  const closeouts: FinanceRepairCloseoutRecord[] = []
+  for (const result of results) {
+    if (result.error) {
+      // Un despliegue sin el cierre sin reparar no tiene la tabla.
+      if (isMissingTableError(result.error, 'repair_closeouts')) return []
+      throw toFinanceApiError(result.error)
+    }
+    assertBoundedFinanceRows(result.data as unknown[] | null, 'cierres de reparación', result.count)
+    for (const row of (result.data ?? []) as Array<Record<string, unknown>>) {
+      const parts = Array.isArray(row.parts_resolution) ? row.parts_resolution as Array<Record<string, unknown>> : []
+      closeouts.push({
+        repairId: String(row.repair_id),
+        branchId: (row.branch_id as string | null) ?? null,
+        createdAt: String(row.created_at),
+        restockedPartIds: parts
+          .filter((part) => part.disposition === 'restocked' && typeof part.repairPartId === 'string')
+          .map((part) => String(part.repairPartId)),
+        refundAmount: row.settlement_kind === 'refund' ? money(row.settlement_amount as number | string) : 0,
+        refundMethod: typeof row.settlement_method === 'string' ? row.settlement_method : null,
+      })
+    }
+  }
+  return closeouts
+}
+
 async function loadRepairParts(
   admin: ReturnType<typeof createAdminSupabase>,
   repairIds: string[],
@@ -3515,7 +3628,7 @@ async function loadRepairParts(
     chunkQueryValues(repairIds).map((ids) =>
       allFinanceRows(admin
         .from('repair_parts')
-        .select('repair_id, quantity, unit_cost, status', { count: 'exact' })
+        .select('id, repair_id, quantity, unit_cost, status', { count: 'exact' })
         .in('repair_id', ids)
         .order('id')),
     ),
@@ -3526,6 +3639,7 @@ async function loadRepairParts(
     assertBoundedFinanceRows(result.data as unknown[] | null, 'repuestos de reparación', result.count)
     for (const part of result.data ?? []) {
       parts.push({
+        id: part.id ? String(part.id) : undefined,
         repairId: String(part.repair_id),
         quantity: money(part.quantity),
         unitCost: part.unit_cost === null || part.unit_cost === undefined
@@ -3598,6 +3712,7 @@ export function buildProfitabilityRows(
   group: FinanceProfitabilityGroup,
 ): FinanceProfitabilityRow[] {
   const repairPortions = repairPortionBySale(records.repairPayments)
+  const restockedForProfitability = restockedPartIds(records.repairCloseouts)
   const allSaleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
   for (const item of records.saleItems) {
     allSaleItemsBySaleId.set(item.saleId, [...(allSaleItemsBySaleId.get(item.saleId) ?? []), item])
@@ -3674,7 +3789,7 @@ export function buildProfitabilityRows(
         // Ticket de la reparación como etiqueta legible, id corto de respaldo.
         : [`repair:${repair.id}`, repair.ticketNumber ?? `Reparación ${repair.id.slice(0, 8)}`] as const
     // Solo repuestos instalados o usados, igual que el resumen.
-    const parts = (repairPartsByRepairId.get(repair.id) ?? []).filter((part) => isUsedRepairPart(part.status))
+    const parts = (repairPartsByRepairId.get(repair.id) ?? []).filter((part) => isCostedRepairPart(part, restockedForProfitability))
     add(
       key[0],
       key[1],
