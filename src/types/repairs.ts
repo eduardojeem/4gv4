@@ -188,6 +188,8 @@ export interface Repair {
    * No confundir con `parentRepairId`, que es el retrabajo de posventa.
    */
   receptionId?: string | null
+  /** Repuesto comprado que todavía no llegó («No lo tengo, lo compro»). */
+  waitingPart?: { name: string; supplier: string | null; expected_on: string | null; ordered_at: string } | null
   /**
    * Reparacion original si esta nacio como retrabajo por garantia desde un
    * caso de posventa. Sin esto un retrabajo se veia igual que cualquier otra

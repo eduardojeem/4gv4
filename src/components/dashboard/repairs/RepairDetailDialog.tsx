@@ -35,7 +35,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
   Phone, Mail, Calendar, Wrench,
-  Smartphone, AlertCircle,
+  Smartphone, AlertCircle, ShoppingCart,
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Printer, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
@@ -76,6 +76,10 @@ import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
+import { PartPurchaseDialog } from './PartPurchaseDialog'
+import { partArrivedMessage } from '@/lib/repairs/part-purchase'
+import { branchHeaders } from '@/lib/branches/client'
+import { useOptionalBranch } from '@/contexts/branch-context'
 import { RepairCostSummary } from './RepairCostSummary'
 import { RepairCostsEditorDialog } from './RepairCostsEditorDialog'
 import { RepairInternalCostCorrectionDialog } from './RepairInternalCostCorrectionDialog'
@@ -191,6 +195,12 @@ export function RepairDetailDialog({
   const [warrantyDraft, setWarrantyDraft] = useState({ months: 0, type: 'full' as 'labor' | 'parts' | 'full', notes: '' })
   const [savingQuickEdit, setSavingQuickEdit] = useState(false)
   const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
+  // «No lo tengo, lo compro» y «Llegó el repuesto».
+  const [isPartPurchaseOpen, setIsPartPurchaseOpen] = useState(false)
+  const [isMarkingArrival, setIsMarkingArrival] = useState(false)
+  const selectedBranchId = useOptionalBranch()?.selectedBranchId ?? null
+  // Abierto desde «Definir precio»: el editor arranca preguntando cuánto se cobra.
+  const [costsEditorStartsWithPrice, setCostsEditorStartsWithPrice] = useState(false)
   const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
   const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
   const { settings } = useSharedSettings()
@@ -1066,6 +1076,61 @@ export function RepairDetailDialog({
           </div>
         </DialogHeader>
 
+        {/* Repuesto comprado que todavía no llegó. */}
+        {activeRepair.waitingPart && activeRepair.status !== 'entregado' && activeRepair.status !== 'cancelado' ? (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100 sm:px-6">
+            <div className="min-w-0 text-sm">
+              <p className="font-semibold">⏳ Esperando repuesto: {activeRepair.waitingPart.name}</p>
+              <p className="text-xs opacity-80">
+                {[
+                  activeRepair.waitingPart.supplier ? `Pedido a ${activeRepair.waitingPart.supplier}` : 'Pedido',
+                  activeRepair.waitingPart.expected_on
+                    ? `llega el ${new Date(`${activeRepair.waitingPart.expected_on}T12:00:00`).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' })}`
+                    : null,
+                ].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 bg-amber-600 text-white hover:bg-amber-700"
+                disabled={isMarkingArrival}
+                onClick={async () => {
+                  setIsMarkingArrival(true)
+                  try {
+                    const response = await fetch(`/api/repairs/${activeRepair.id}/part-purchase`, { method: 'DELETE', headers: branchHeaders(selectedBranchId ?? null) })
+                    const body = await response.json().catch(() => ({})) as { error?: string }
+                    if (!response.ok) throw new Error(body.error || 'No se pudo marcar la llegada.')
+                    toast.success('Repuesto recibido: la reparación sigue en curso')
+                    await onCostSaved?.()
+                  } catch (arrivalError) {
+                    toast.error(arrivalError instanceof Error ? arrivalError.message : 'No se pudo marcar la llegada.')
+                  } finally {
+                    setIsMarkingArrival(false)
+                  }
+                }}
+              >
+                Llegó el repuesto
+              </Button>
+              {repair.customer?.phone ? (
+                <Button type="button" size="sm" variant="outline" className="h-8" asChild>
+                  <a
+                    href={getWhatsAppLink({
+                      phone: repair.customer.phone,
+                      message: partArrivedMessage(repair.customer.name, activeRepair.waitingPart.name, [repair.brand, repair.model].filter(Boolean).join(' ') || 'equipo'),
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Avisar al cliente
+                  </a>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         {/* Stepper de progreso */}
         <div data-testid="repair-detail-progress" className="border-b bg-background/50 backdrop-blur-xs px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-1.5 shrink-0">
           {isCancelled ? (
@@ -1444,6 +1509,30 @@ export function RepairDetailDialog({
                         </>
                       )}
                     </div>
+                    {/* Sin precio, la reparación vale ₲ 0 en Finanzas: se marca bien a la vista. */}
+                    {!financial.priceDefined && repair.status !== 'cancelado' ? (
+                      <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">Falta el precio</p>
+                          <p className="text-xs opacity-80">
+                            {repair.status === 'entregado'
+                              ? 'Se entregó sin precio: en Finanzas cuenta ₲ 0.'
+                              : 'Definilo ahora: sin precio no se puede entregar.'}
+                          </p>
+                        </div>
+                        {repair.status === 'entregado' ? (
+                          isAdmin ? (
+                            <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsFinalPriceCorrectionOpen(true)}>
+                              Definir precio
+                            </Button>
+                          ) : null
+                        ) : (
+                          <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => { setCostsEditorStartsWithPrice(true); setIsCostsEditorOpen(true) }}>
+                            Definir precio
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
                     <dl className="divide-y divide-emerald-200/80 rounded-lg border border-emerald-200 bg-background/80 text-sm dark:divide-emerald-900/60 dark:border-emerald-900/60">
                       <div className="flex items-center justify-between px-3 py-2">
                         <dt className="text-muted-foreground">Total</dt>
@@ -2295,6 +2384,12 @@ export function RepairDetailDialog({
                       onCorrectInternalCost={(activeRepair.parts || []).length > 0 ? () => setIsInternalCostCorrectionOpen(true) : undefined}
                       onCorrectFinalPrice={() => setIsFinalPriceCorrectionOpen(true)}
                     />
+                    {activeRepair.status !== 'cancelado' && activeRepair.status !== 'entregado' ? (
+                      <Button type="button" variant="outline" className="w-full gap-2" onClick={() => setIsPartPurchaseOpen(true)}>
+                        <ShoppingCart className="h-4 w-4" />
+                        No lo tengo, lo compro
+                      </Button>
+                    ) : null}
                     {onQuickPay && financial.canCollect && (
                       <Button
                         type="button"
@@ -2641,12 +2736,23 @@ export function RepairDetailDialog({
           }
           onCreated={() => setWarrantyCaseVersion((version) => version + 1)}
         />
+        <PartPurchaseDialog
+          open={isPartPurchaseOpen}
+          repair={activeRepair}
+          branchId={selectedBranchId}
+          onOpenChange={setIsPartPurchaseOpen}
+          onSaved={async () => { await onCostSaved?.() }}
+        />
         <RepairCostsEditorDialog
           open={isCostsEditorOpen}
+          startWithPrice={costsEditorStartsWithPrice}
           repair={activeRepair}
           maxDiscountPercent={settings.repairMaxDiscountPercent}
           laborTaxRate={configuredTaxRate}
-          onOpenChange={setIsCostsEditorOpen}
+          onOpenChange={(nextOpen) => {
+            setIsCostsEditorOpen(nextOpen)
+            if (!nextOpen) setCostsEditorStartsWithPrice(false)
+          }}
           onSaved={async () => {
             await onCostSaved?.()
           }}

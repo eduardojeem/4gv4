@@ -1,6 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { describeSuggestion } from '@/lib/repairs/price-suggestion'
+import { useRepairPriceSuggestion } from '@/hooks/use-repair-price-suggestion'
+import { useOptionalBranch } from '@/contexts/branch-context'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -43,6 +46,7 @@ export function RepairCostsEditorDialog({
   repair,
   maxDiscountPercent = 20,
   laborTaxRate = 10,
+  startWithPrice = false,
   onOpenChange,
   onSaved
 }: {
@@ -50,6 +54,8 @@ export function RepairCostsEditorDialog({
   repair: Repair
   maxDiscountPercent?: number
   laborTaxRate?: 0 | 5 | 10
+  /** Abierto desde «Definir precio»: arranca en «¿Cuánto le cobrás?». */
+  startWithPrice?: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void | Promise<void>
 }) {
@@ -61,6 +67,7 @@ export function RepairCostsEditorDialog({
       repair={repair}
       maxDiscountPercent={maxDiscountPercent}
       laborTaxRate={laborTaxRate}
+      startWithPrice={startWithPrice}
       onOpenChange={onOpenChange}
       onSaved={onSaved}
     />
@@ -72,6 +79,7 @@ function RepairCostsEditorForm({
   repair,
   maxDiscountPercent,
   laborTaxRate,
+  startWithPrice,
   onOpenChange,
   onSaved
 }: {
@@ -79,6 +87,7 @@ function RepairCostsEditorForm({
   repair: Repair
   maxDiscountPercent: number
   laborTaxRate: 0 | 5 | 10
+  startWithPrice: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void | Promise<void>
 }) {
@@ -110,10 +119,17 @@ function RepairCostsEditorForm({
   const [reason, setReason] = useState(repair.priceOverrideReason || '')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [manualServiceOpen, setManualServiceOpen] = useState(false)
-  const [manualServiceName, setManualServiceName] = useState('Servicio técnico')
+  const [manualServiceOpen, setManualServiceOpen] = useState(startWithPrice)
+  const [manualServiceName, setManualServiceName] = useState(
+    startWithPrice && repair.issue ? `Reparación: ${repair.issue}`.slice(0, 120) : 'Servicio técnico',
+  )
   const [manualServiceAmount, setManualServiceAmount] = useState(0)
   const [financeGuideOpen, setFinanceGuideOpen] = useState(false)
+  const branchContext = useOptionalBranch()
+  const suggestion = useRepairPriceSuggestion({
+    brand: repair.brand, model: repair.model, issue: repair.issue, excludeId: repair.id,
+    branchId: branchContext?.selectedBranchId ?? null, enabled: startWithPrice,
+  })
 
   const input = useMemo(() => ({
     currency: 'PYG',
@@ -248,9 +264,11 @@ function RepairCostsEditorForm({
                 {manualServiceOpen && (
                   <section className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs">
                     <div>
-                      <h3 className="font-semibold text-sm">Agregar servicio manual</h3>
+                      <h3 className="font-semibold text-sm">{startWithPrice ? '¿Cuánto le cobrás al cliente?' : 'Agregar servicio manual'}</h3>
                       <p className="text-xs text-muted-foreground">
-                        Se mostrará como servicio cobrado y no modificará el inventario.
+                        {startWithPrice
+                          ? 'Escribí el precio de la reparación. Si usaste repuestos, agregalos abajo con su costo para ver la ganancia.'
+                          : 'Se mostrará como servicio cobrado y no modificará el inventario.'}
                       </p>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -269,7 +287,16 @@ function RepairCostsEditorForm({
                           id="manual-service-amount"
                           value={manualServiceAmount}
                           onChange={setManualServiceAmount}
+                          autoFocus={startWithPrice}
                         />
+                        {suggestion ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/80 px-2.5 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{describeSuggestion(suggestion, formatCurrency)}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={false} onClick={() => setManualServiceAmount(suggestion.lastPrice)}>
+                    Usar {formatCurrency(suggestion.lastPrice)}
+                  </Button>
+                </div>
+              ) : null}
                       </div>
                     </div>
                     <div className="mt-4 flex justify-end gap-2">
@@ -492,12 +519,14 @@ function MoneyInput({
   value,
   onChange,
   prominent,
+  autoFocus,
   quickPresets = [10000, 50000, 100000, 200000]
 }: {
   id: string
   value: number
   onChange: (value: number) => void
   prominent?: boolean
+  autoFocus?: boolean
   quickPresets?: number[]
 }) {
   return (
@@ -507,6 +536,7 @@ function MoneyInput({
           id={id}
           type="number"
           min={0}
+          autoFocus={autoFocus}
           value={value}
           onChange={(event) => onChange(Number(event.target.value) || 0)}
           className={`pr-10 text-right tabular-nums font-mono ${prominent ? 'h-11 font-bold text-base' : 'h-9'}`}

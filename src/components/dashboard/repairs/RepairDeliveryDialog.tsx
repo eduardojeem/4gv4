@@ -37,6 +37,10 @@ import {
 } from './UnrepairedCloseoutPanel'
 import { getDeliveryOutcomeForQualityResult } from '@/lib/repairs/quality-check'
 import { RepairQualityBadge } from './RepairQualityBadge'
+import { deliveryPricePatch, uiRepairHasDefinedPrice } from '@/lib/repairs/price-required'
+import { describeSuggestion } from '@/lib/repairs/price-suggestion'
+import { useRepairPriceSuggestion } from '@/hooks/use-repair-price-suggestion'
+import { useOptionalBranch } from '@/contexts/branch-context'
 
 export interface RepairedDeliveryConfirmPayload {
   idempotencyKey: string
@@ -67,6 +71,12 @@ interface RepairDeliveryDialogProps {
    */
   allowPayment?: boolean
   onOpenQualityCheck?: (repair: Repair) => void
+  /**
+   * Fija el precio antes de entregar cuando la reparación no tiene ninguno
+   * (PATCH con modo presupuesto). Sin esto no se puede entregar una reparación
+   * sin precio: el servidor la rechaza.
+   */
+  onDefinePrice?: (repairId: string, patch: ReturnType<typeof deliveryPricePatch>) => Promise<void>
 }
 
 const outcomes: {
@@ -114,6 +124,7 @@ export function RepairDeliveryDialog({
   onConfirm,
   allowPayment = true,
   onOpenQualityCheck,
+  onDefinePrice,
 }: RepairDeliveryDialogProps) {
   const router = useRouter()
   const cashRegister = useCashRegister()
@@ -142,16 +153,29 @@ export function RepairDeliveryDialog({
   const [isOpening, setIsOpening] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [unrepairedDraft, setUnrepairedDraft] = useState<UnrepairedCloseoutDraft | null>(null)
+  // «¿Cuánto cobraste?»: solo cuando se entrega reparado y la reparación no tiene
+  // ningún precio. Antes se podía «confirmar entrega con precio pendiente» y la
+  // reparación quedaba en ₲ 0 para Finanzas.
+  const [chargedPrice, setChargedPrice] = useState('')
+  const [noCharge, setNoCharge] = useState(false)
   const verifiedOutcome = repair?.qualityCheck
     ? getDeliveryOutcomeForQualityResult(repair.qualityCheck.result)
     : null
 
-  const totalDue = repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
+  const priceDefined = repair ? uiRepairHasDefinedPrice(repair) : false
+  const needsPrice = selected === 'repaired' && !priceDefined
+  const parsedPrice = Number(chargedPrice) || 0
+  const branchContext = useOptionalBranch()
+  const suggestion = useRepairPriceSuggestion({
+    brand: repair?.brand, model: repair?.model, issue: repair?.issue, excludeId: repair?.id,
+    branchId: branchContext?.selectedBranchId ?? null, enabled: needsPrice,
+  })
+  const priceReady = !needsPrice || noCharge || parsedPrice > 0
+  const totalDue = needsPrice
+    ? (noCharge ? 0 : parsedPrice)
+    : repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0
   const alreadyPaid = repair?.paidAmount ?? 0
   const balanceDue = Math.max(0, totalDue - alreadyPaid)
-  const priceDefined = repair
-    ? (repair.finalCost !== null && repair.finalCost !== undefined) || Number(repair.estimatedCost) > 0
-    : false
   const fullyPaid = priceDefined && balanceDue <= 0
   const hasAdvance = alreadyPaid > 0 && !fullyPaid
   const isCredit = method === 'credit'
@@ -229,15 +253,19 @@ export function RepairDeliveryDialog({
   // el saldo completo. En los otros resultados el monto arranca vacío: el
   // cobro queda disponible pero no se empuja (ver comentario arriba).
   useEffect(() => {
-    if (allowPayment && selected === 'repaired' && balanceDue > 0) {
+    // Con el precio recién escrito, el monto lo sigue el campo del precio (abajo).
+    if (allowPayment && selected === 'repaired' && balanceDue > 0 && !needsPrice) {
       setAmount(prev => (prev ? prev : balanceDue.toString()))
     }
-  }, [allowPayment, selected, balanceDue])
+  }, [allowPayment, selected, balanceDue, needsPrice])
 
   // Si el técnico ya certificó que funciona y queda saldo, no hay nada que
   // elegir en «Resultado»: la única tarjeta posible era un clic de más antes
   // de cobrar. Se abre directo en «Cobrar saldo y entregar».
-  const opensOnPayment = verifiedOutcome === 'repaired' && allowPayment && balanceDue > 0
+  // Con el saldo de la reparación tal como llegó: el precio que se escribe en
+  // «¿Cuánto cobraste?» no debe reabrir el diálogo ni cambiarle la clave.
+  const storedBalance = Math.max(0, (repair ? (repair.finalCost ?? repair.estimatedCost ?? 0) : 0) - alreadyPaid)
+  const opensOnPayment = verifiedOutcome === 'repaired' && allowPayment && priceDefined && storedBalance > 0
 
   useEffect(() => {
     if (open) {
@@ -270,6 +298,8 @@ export function RepairDeliveryDialog({
     setOpeningNote('')
     setSubmissionError(null)
     setUnrepairedDraft(null)
+    setChargedPrice('')
+    setNoCharge(false)
     onOpenChange(false)
   }
 
@@ -306,7 +336,8 @@ export function RepairDeliveryDialog({
   const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
 
   const canConfirm = !!selected && !isSubmitting && (selected === 'repaired'
-    ? !amountExceedsBalance &&
+    ? priceReady && (!needsPrice || Boolean(onDefinePrice)) &&
+      !amountExceedsBalance &&
       (!needsUnpaidConfirm || deliverUnpaid) &&
       (!wantsCharge || ((!selectedMethod?.requiresRef || reference.trim().length > 0) && (!isCredit || creditCount >= 1)))
     : !!unrepairedDraft && isUnrepairedCloseoutDraftComplete(repair!, unrepairedDraft)) &&
@@ -327,6 +358,10 @@ export function RepairDeliveryDialog({
         })
         handleClose()
         return
+      }
+      if (needsPrice) {
+        if (!onDefinePrice) return
+        await onDefinePrice(repair.id, deliveryPricePatch(parsedPrice, noCharge))
       }
       const payload: RepairDeliveryConfirmPayload = {
         idempotencyKey,
@@ -364,17 +399,18 @@ export function RepairDeliveryDialog({
       if (unrepairedDraft.settlement.kind === 'store_credit') return 'Crear saldo a favor y entregar'
       return 'Cerrar y entregar'
     }
+    if (step === 'outcome' && needsPrice && allowPayment && balanceDue > 0) return 'Siguiente: cobrar'
     if (isCredit && wantsCharge) return 'Registrar Crédito y Entregar'
     if (wantsCharge) return 'Cobrar y Entregar'
     return 'Confirmar Entrega'
-  }, [isCredit, selected, unrepairedDraft, wantsCharge])
+  }, [allowPayment, balanceDue, isCredit, needsPrice, selected, step, unrepairedDraft, wantsCharge])
 
   const dialogTitle = step === 'payment' && selected !== 'repaired'
     ? 'Cerrar reparación sin reparar'
     : step === 'payment' && selected === 'repaired' && balanceDue > 0
       ? 'Cobrar saldo y entregar'
-      : !priceDefined
-        ? 'Confirmar entrega con precio pendiente'
+      : needsPrice
+        ? 'Entregar: falta el precio'
         : fullyPaid
           ? 'Confirmar entrega — equipo pagado'
           : hasAdvance
@@ -459,8 +495,8 @@ export function RepairDeliveryDialog({
               </>
             ) : !priceDefined ? (
               <>
-                <p className="font-semibold">Precio final pendiente</p>
-                <p className="text-xs opacity-80">Definí el precio antes de entregar o confirmá el cierre según corresponda.</p>
+                <p className="font-semibold">Falta el precio</p>
+                <p className="text-xs opacity-80">Para entregarlo reparado, indicá cuánto cobraste (o marcá «Sin cargo»).</p>
               </>
             ) : (
               <>
@@ -472,6 +508,58 @@ export function RepairDeliveryDialog({
         </div>
 
         <div className="space-y-4 py-1">
+          {needsPrice && (
+            <div className="space-y-2.5 rounded-lg border border-amber-300 bg-amber-50/70 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <Label htmlFor="delivery-charged-price" className="text-sm font-semibold">
+                ¿Cuánto cobraste por esta reparación?
+              </Label>
+              <Input
+                id="delivery-charged-price"
+                inputMode="numeric"
+                autoFocus
+                disabled={noCharge || isSubmitting}
+                value={noCharge ? '' : formatThousands(chargedPrice)}
+                placeholder="Ej: 350.000"
+                onChange={(event) => {
+                  const value = parseThousands(event.target.value)
+                  setChargedPrice(value ? String(value) : '')
+                  if (allowPayment) setAmount(String(Math.max(0, value - alreadyPaid)))
+                }}
+                className="h-11 text-base font-semibold tabular-nums"
+              />
+{suggestion ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/80 px-2.5 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{describeSuggestion(suggestion, formatCurrency)}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={noCharge || isSubmitting} onClick={() => {
+                    setChargedPrice(String(suggestion.lastPrice))
+                    if (allowPayment) setAmount(String(Math.max(0, suggestion.lastPrice - alreadyPaid)))
+                  }}>
+                    Usar {formatCurrency(suggestion.lastPrice)}
+                  </Button>
+                </div>
+              ) : null}
+              {alreadyPaid > 0 && parsedPrice > 0 && !noCharge ? (
+                <p className="text-xs text-muted-foreground">
+                  {`Ya dejó ${formatCurrency(alreadyPaid)} de adelanto: ${balanceDue > 0 ? `queda ${formatCurrency(balanceDue)}` : 'está pagado'}.`}
+                </p>
+              ) : null}
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <Checkbox
+                  checked={noCharge}
+                  disabled={isSubmitting || alreadyPaid > 0}
+                  onCheckedChange={(checked) => {
+                    setNoCharge(checked === true)
+                    if (checked === true) setAmount('')
+                  }}
+                />
+                Sin cargo (garantía o cortesía)
+              </label>
+              {!onDefinePrice ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300">Desde acá no se puede fijar el precio: definilo en el detalle de la reparación.</p>
+              ) : null}
+            </div>
+          )}
+
           {step === 'outcome' && <div className="space-y-3" data-help-id="repair-delivery-resolution">
             <p className="text-sm font-medium">¿Cuál fue el resultado?</p>
             {repair.qualityCheck ? (
@@ -908,7 +996,14 @@ export function RepairDeliveryDialog({
             </Button>
           )}
           <Button
-            onClick={handleConfirm}
+            onClick={() => {
+              // Con el precio recién definido y saldo por cobrar, primero el cobro.
+              if (step === 'outcome' && needsPrice && allowPayment && balanceDue > 0) {
+                setStep('payment')
+                return
+              }
+              void handleConfirm()
+            }}
             disabled={!canConfirm}
             className="min-h-11 gap-2 bg-cyan-700 hover:bg-cyan-800 text-white font-semibold sm:min-h-9 shadow-xs"
           >
