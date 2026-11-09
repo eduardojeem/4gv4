@@ -7,6 +7,7 @@ import {
   isHeadlineCardVisible,
   resolveAnalyticsModules,
   revenueCardId,
+  soldItemsLabel,
 } from '@/components/admin/reports/analytics-modules'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
@@ -18,13 +19,13 @@ const TALLER = resolveAnalyticsModules('active', ['inventory', 'pos', 'crm', 're
 
 describe('analytics muestra lo que usa la empresa', () => {
   it('lee los modulos activos', () => {
-    expect(ROPA).toEqual({ repairs: false, inventory: true, crm: true })
-    expect(SERVICIOS).toEqual({ repairs: false, inventory: false, crm: true })
-    expect(TALLER).toEqual({ repairs: true, inventory: true, crm: true })
+    expect(ROPA).toEqual({ repairs: false, inventory: true, crm: true, services: false })
+    expect(SERVICIOS).toEqual({ repairs: false, inventory: false, crm: true, services: true })
+    expect(TALLER).toEqual({ repairs: true, inventory: true, crm: true, services: true })
   })
 
   it('mientras carga la suscripcion no esconde nada', () => {
-    expect(resolveAnalyticsModules(null, [])).toEqual({ repairs: true, inventory: true, crm: true })
+    expect(resolveAnalyticsModules(null, [])).toEqual({ repairs: true, inventory: true, crm: true, services: true })
   })
 
   it('saca los avisos de modulos apagados y deja los generales', () => {
@@ -54,15 +55,22 @@ describe('analytics muestra lo que usa la empresa', () => {
   })
 
   it('el subtitulo nombra solo las secciones que hay', () => {
-    expect(describeAnalyticsSections(TALLER)).toBe('Ventas, dinero, inventario, clientes y taller')
+    expect(describeAnalyticsSections(TALLER)).toBe('Ventas, agenda, dinero, inventario, clientes y taller')
     expect(describeAnalyticsSections(ROPA)).toBe('Ventas, dinero, inventario y clientes')
-    expect(describeAnalyticsSections(SERVICIOS)).toBe('Ventas, dinero y clientes')
+    expect(describeAnalyticsSections(SERVICIOS)).toBe('Ventas, agenda, dinero y clientes')
+  })
+
+  it('un negocio de turnos sin inventario vende servicios, no productos', () => {
+    expect(soldItemsLabel(SERVICIOS)).toMatchObject({ title: 'Servicios más vendidos', column: 'Servicio' })
+    expect(soldItemsLabel(TALLER)).toMatchObject({ title: 'Productos y servicios más vendidos' })
+    expect(soldItemsLabel(ROPA)).toMatchObject({ title: 'Productos más vendidos', column: 'Producto' })
   })
 
   it('las pestanas de inventario, clientes y taller dependen de su modulo', () => {
     expect(TABLERO).toContain("{ id: 'inventario', label: 'Inventario', icon: Boxes, module: 'inventory' }")
     expect(TABLERO).toContain("{ id: 'clientes', label: 'Clientes', icon: Users, module: 'crm' }")
     expect(TABLERO).toContain("{ id: 'taller', label: 'Taller', icon: Wrench, module: 'repairs' }")
+    expect(TABLERO).toContain("{ id: 'agenda', label: 'Agenda', icon: CalendarDays, module: 'services' }")
     expect(TABLERO).toContain('const visibleTabs = TABS.filter((item) => !item.module || modules[item.module])')
   })
 
