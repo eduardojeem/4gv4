@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { signIn, signOut } = vi.hoisted(() => ({ signIn: vi.fn(), signOut: vi.fn().mockResolvedValue({}) }))
 vi.mock('react-native', () => ({ AppState: { currentState: 'inactive', addEventListener: vi.fn() } }))
 vi.mock('../../mobile/node_modules/@supabase/supabase-js', () => ({ createClient: () => ({ auth: { signInWithPassword: signIn, signOut } }) }))
+// En CI no está mobile/node_modules: la app toma supabase-js de la raíz.
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ auth: { signInWithPassword: signIn, signOut } }) }))
 vi.mock('../../mobile/src/lib/secure-storage', () => ({ secureStorage: {} }))
 vi.mock('../../mobile/src/lib/runtime-config', () => ({ getMobileRuntimeConfig: () => ({ supabaseUrl: 'https://example.test', supabaseKey: 'fake' }) }))
 import { verifyCurrentPassword } from '../../mobile/src/lib/supabase'
