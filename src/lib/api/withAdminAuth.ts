@@ -5,12 +5,15 @@ import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { resolveUserOrganizationId } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
 import { moduleAccessResponse, moduleForAdminApi } from '@/lib/api/api-route-modules'
+import { MFA_ENROLLMENT_REQUIRED_CODE, needsSuperAdminMfa, type AssuranceLevel } from '@/lib/auth/mfa'
 
 export interface AdminAuthContext {
   user: {
     id: string
     email?: string
     role: string
+    /** Nivel de verificación de la sesión (`aal2` = pasó la verificación en dos pasos). */
+    aal?: AssuranceLevel | null
   }
   /** null for super_admin (global access). Set to the admin's organization_id for regular admins. */
   organizationId: string | null
@@ -197,6 +200,7 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
           id: auth.user.id,
           email: auth.user.email,
           role: auth.user.role,
+          aal: auth.user.aal,
         },
         organizationId,
       }
@@ -252,6 +256,17 @@ export function withSuperAdminAuth(handler: AdminAuthenticatedHandler) {
         {
           error: 'Forbidden',
           message: 'Super administrator privileges required',
+        },
+        { status: 403 }
+      )
+    }
+
+    if (needsSuperAdminMfa(context.user.aal ?? null)) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: 'Super administrator requires two-factor authentication',
+          code: MFA_ENROLLMENT_REQUIRED_CODE,
         },
         { status: 403 }
       )

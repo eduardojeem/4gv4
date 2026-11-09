@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   settings: vi.fn(),
   memberships: vi.fn(),
+  superAdmin: false,
 }))
 
 vi.mock('next/headers', () => ({
@@ -43,6 +44,9 @@ function fakeSupabase() {
         }
         return chain
       }
+      if (table === 'user_roles' && mocks.superAdmin) {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { role: 'super_admin', is_active: true }, error: null }) }) }) }
+      }
       // user_roles / profiles: activo, sin rol de plataforma.
       return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }
     },
@@ -58,6 +62,9 @@ import { requireAuth } from '@/lib/auth/require-auth'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { resetAdminMfaPolicyCache } from '@/lib/auth/admin-mfa-policy'
 import { proxy } from '@/proxy'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { withSuperAdminAuth } from '@/lib/api/withAdminAuth'
+import { isSuperAdminMfaEnforced } from '@/lib/auth/mfa'
 
 function token(aal: 'aal1' | 'aal2') {
   return ['eyJhbGciOiJIUzI1NiJ9', Buffer.from(JSON.stringify({ aal, sub: 'user-1' })).toString('base64url'), 'firma'].join('.')
@@ -87,6 +94,8 @@ beforeEach(() => {
   mocks.settings.mockReset().mockResolvedValue({ data: { require_admin_mfa: false }, error: null })
   mocks.memberships.mockReset().mockResolvedValue(ownerMembership)
   resetAdminMfaPolicyCache()
+  mocks.superAdmin = false
+  delete process.env.SUPERADMIN_MFA_REQUIRED
 })
 
 describe('cliente de Supabase del servidor', () => {
@@ -217,5 +226,57 @@ describe('proxy de páginas', () => {
     const response = await visit('/marketplace')
     expect(response.headers.get('location')).toBeNull()
     expect(mocks.getUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('superadmin: 2FA obligatoria', () => {
+  const visit = (path: string) => proxy(new NextRequest(`https://app.test${path}`))
+  const superAdminAccess = { data: { platformRole: 'super_admin', platformRoleActive: true, profileStatus: 'active' }, error: null }
+
+  beforeEach(() => {
+    mocks.superAdmin = true
+    mocks.rpc.mockResolvedValue(superAdminAccess)
+  })
+
+  it('sin 2FA activada, el panel lo manda a activarla conservando a dónde iba', async () => {
+    session('aal1', withoutTotp)
+    const response = await visit('/superadmin/communications?tab=email')
+    expect(response.headers.get('location'))
+      .toBe('https://app.test/auth/mfa?setup=1&redirect=%2Fsuperadmin%2Fcommunications%3Ftab%3Demail')
+  })
+
+  it('con aal2 entra al panel', async () => {
+    session('aal2', withTotp)
+    const response = await visit('/superadmin')
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('getSuperAdminUser no devuelve al superadmin sin el segundo paso', async () => {
+    session('aal1', withoutTotp)
+    await expect(getSuperAdminUser()).resolves.toBeNull()
+    session('aal2', withTotp)
+    await expect(getSuperAdminUser()).resolves.toMatchObject({ id: 'user-1', role: 'super_admin' })
+  })
+
+  it('withSuperAdminAuth responde 403 sin llegar al handler', async () => {
+    session('aal1', withoutTotp)
+    mocks.rpc.mockResolvedValue({ data: null, error: null })
+    const handler = vi.fn(async () => NextResponse.json({ ok: true }))
+    const response = await withSuperAdminAuth(handler)(new NextRequest('https://app.test/api/superadmin/database-monitoring'))
+    expect(handler).not.toHaveBeenCalled()
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ code: 'MFA_ENROLLMENT_REQUIRED' })
+  })
+
+  it('SUPERADMIN_MFA_REQUIRED=false es la única forma de apagarla', async () => {
+    expect(isSuperAdminMfaEnforced(undefined)).toBe(true)
+    expect(isSuperAdminMfaEnforced('')).toBe(true)
+    expect(isSuperAdminMfaEnforced('no')).toBe(true)
+    expect(isSuperAdminMfaEnforced(' FALSE ')).toBe(false)
+
+    process.env.SUPERADMIN_MFA_REQUIRED = 'false'
+    session('aal1', withoutTotp)
+    const response = await visit('/superadmin')
+    expect(response.headers.get('location')).toBeNull()
   })
 })

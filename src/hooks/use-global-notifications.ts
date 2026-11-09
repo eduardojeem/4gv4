@@ -26,7 +26,8 @@ export function useGlobalNotifications(enabled: boolean = true) {
   const fetchItems = useCallback(async () => {
     if (!enabled || !config.supabase.isConfigured) return
     try {
-      const res = await fetch('/api/notifications', { cache: 'no-store' })
+      // scope=global: sin él la API devuelve la bandeja operativa y estos avisos nunca llegaban.
+      const res = await fetch('/api/notifications?scope=global', { cache: 'no-store' })
       if (!res.ok) return
       const json = await res.json() as { data?: GlobalNotificationItem[] }
       const nextItems = json.data ?? []
@@ -68,17 +69,17 @@ export function useGlobalNotifications(enabled: boolean = true) {
 
   const markAsRead = useCallback((id: string) => {
     setItems(prev => syncSignature(prev.map(n => (n.id === id ? { ...n, read: true } : n))))
-    void post({ id })
+    void post({ id, scope: 'global' })
   }, [post])
 
   const markAllAsRead = useCallback(() => {
     setItems(prev => syncSignature(prev.map(n => ({ ...n, read: true }))))
-    void post({ all: true })
+    void post({ all: true, scope: 'global' })
   }, [post])
 
   const dismiss = useCallback((id: string) => {
     setItems(prev => syncSignature(prev.filter(n => n.id !== id)))
-    void post({ id, dismiss: true })
+    void post({ id, dismiss: true, scope: 'global' })
   }, [post])
 
   return { items, markAsRead, markAllAsRead, dismiss, refresh: fetchItems }
