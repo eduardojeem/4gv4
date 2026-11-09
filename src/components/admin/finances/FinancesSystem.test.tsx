@@ -107,8 +107,8 @@ describe('FinancesSystem', () => {
     // Las métricas de caja viven detrás de su propia solapa: acá alcanza con
     // que la vía de acceso esté presente.
     expect(screen.getByRole('tab', { name: 'Caja' })).toBeInTheDocument()
-    expect(screen.getByText('Qué requiere atención hoy')).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Faltan costos')
+    expect(screen.getByText('Qué necesita tu atención')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Para que los números sean exactos')
   })
 
   it('offers a retry action when the finance summary cannot be loaded', () => {
@@ -223,7 +223,8 @@ describe('FinancesSystem', () => {
 
     render(<FinancesSystem />)
 
-    expect(screen.getAllByText('El ingreso no tiene un costo directo registrado.')).toHaveLength(1)
+    expect(screen.getAllByText('2 ventas con productos sin costo cargado')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /Cargar costos en Productos/ })).toHaveAttribute('href', '/dashboard/products')
   })
 
   // Agrupar no puede significar esconder: el aviso decia que faltaba algo pero
@@ -256,7 +257,7 @@ describe('FinancesSystem', () => {
 
     render(<FinancesSystem />)
 
-    expect(screen.getByText(/2 registros/)).toBeInTheDocument()
+    expect(screen.getByText('2 ventas con productos sin costo cargado')).toBeInTheDocument()
     expect(screen.getByText(/Venta V-0012/)).toBeInTheDocument()
     expect(screen.getByText(/Reparación REP-77/)).toBeInTheDocument()
   })

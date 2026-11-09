@@ -191,7 +191,7 @@ describe('finance-reports-pdf-exporter', () => {
     })
   })
 
-  it('renders Exportar Resumen (PDF) button in FinanceSummary and triggers PDF export', async () => {
+  it('renders Descargar PDF button in FinanceSummary and triggers PDF export', async () => {
     const mockSummary: FinanceSummaryReport = {
       generatedAt: new Date().toISOString(),
       filters: { startDate: '2026-03-01', endDate: '2026-03-31' },
@@ -246,7 +246,7 @@ describe('finance-reports-pdf-exporter', () => {
       />
     )
 
-    const summaryPdfBtn = screen.getByRole('button', { name: /Exportar Resumen \(PDF\)/i })
+    const summaryPdfBtn = screen.getByRole('button', { name: /Descargar PDF/i })
     expect(summaryPdfBtn).toBeInTheDocument()
 
     const user = userEvent.setup()
