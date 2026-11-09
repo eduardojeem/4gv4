@@ -278,3 +278,47 @@ describe('RepairCostCalculator - Integración con pos-calculator', () => {
     expect(screen.getByText('IVA (15%):')).toBeInTheDocument()
   })
 })
+
+describe('RepairCostCalculator: precio simple', () => {
+  const props = {
+    laborCost: 100,
+    onLaborCostChange: vi.fn(),
+    finalCost: 400,
+    onFinalCostChange: vi.fn(),
+    calculationMode: 'budget' as const,
+    onCalculationModeChange: vi.fn(),
+    onDiscountAmountChange: vi.fn(),
+    parts: [{ name: 'Pantalla', cost: 300, internalCost: 180, quantity: 1 }],
+  }
+
+  it('lo primero es cuánto se cobra, y el desglose queda plegado', () => {
+    const { container } = render(<RepairCostCalculator {...props} />)
+    const question = screen.getByText('¿Cuánto le cobrás al cliente?')
+    const details = container.querySelector('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details.textContent).toContain('Mano de obra')
+    // El total va antes que el desglose.
+    expect(question.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('con descuento el desglose arranca abierto', () => {
+    const { container } = render(<RepairCostCalculator {...props} discountAmount={20} />)
+    expect((container.querySelector('details') as HTMLDetailsElement).open).toBe(true)
+  })
+
+  it('quien ve costos ve la ganancia en vivo; el resto solo lo que paga el cliente', () => {
+    const { rerender } = render(<RepairCostCalculator {...props} canViewCommission />)
+    const summary = screen.getByTestId('repair-price-summary')
+    expect(summary).toHaveTextContent('Cliente paga$400.00')
+    expect(summary).toHaveTextContent('Tu costo (repuestos)$180.00')
+    expect(summary).toHaveTextContent('Ganancia$220.00(55%)')
+
+    rerender(<RepairCostCalculator {...props} canViewCommission={false} />)
+    expect(screen.getByTestId('repair-price-summary')).not.toHaveTextContent('Ganancia')
+  })
+
+  it('avisa si faltan los costos de los repuestos para calcular la ganancia', () => {
+    render(<RepairCostCalculator {...props} canViewCommission parts={[{ name: 'Pantalla', cost: 300, quantity: 1 }]} />)
+    expect(screen.getByText('Cargá lo que te costaron los repuestos para ver la ganancia real.')).toBeInTheDocument()
+  })
+})

@@ -1,3 +1,4 @@
+import { readWaitingPart } from '@/lib/repairs/part-purchase'
 import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus, RepairCloseout, RepairQualityCheck } from '@/types/repairs'
 
 interface SupabaseCustomer {
@@ -193,6 +194,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         ticketNumber: r.ticket_number,
         parentRepairId: r.parent_repair_id ?? null,
         receptionId: r.reception_id ?? null,
+        waitingPart: readWaitingPart((r as { metadata?: unknown }).metadata),
         customer: {
             id: cust?.id,
             customerCode: cust?.customer_code,

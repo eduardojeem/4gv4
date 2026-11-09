@@ -19,6 +19,7 @@ import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
+import { REPAIR_PRICE_REQUIRED_MESSAGE, repairHasDefinedPrice } from '@/lib/repairs/price-required'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -102,6 +103,15 @@ export async function POST(request: NextRequest, context: RouteParams) {
         idempotent: operation.idempotent,
       })
     }
+    // Entregar reparado sin ningún precio dejaba la reparación en ₲ 0 para
+    // Finanzas. Con precio 0 explícito («sin cargo») sí se puede.
+    if (!repairHasDefinedPrice(currentRepair)) {
+      return NextResponse.json(
+        { error: REPAIR_PRICE_REQUIRED_MESSAGE, code: 'REPAIR_PRICE_REQUIRED' },
+        { status: 409 },
+      )
+    }
+
     const parsed = parseRepairDeliveryRequest(body)
     if (!parsed.success) {
       return NextResponse.json(
