@@ -267,9 +267,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
 
     // Un superadmin guardando la configuracion de SU organizacion. Sin este
     // alcance explicito, todo lo que guardaba desde /admin/settings —nombre,
-    // RUC, IVA, moneda de su empresa— se escribia en la fila global de la
-    // plataforma. La pantalla global (/superadmin/settings) no manda `scope` y
-    // sigue escribiendo en `system_settings` como antes.
+    // RUC, IVA, moneda de su empresa— se escribia en la fila global.
     if (body?.scope === 'organization') {
       const organizationId = await resolveSettingsOrganizationId(createAdminSupabase(), context.user.id, {
         requireStaff: true,
@@ -292,50 +290,18 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       )
     }
 
-    if (Object.keys(regionalValidation.data).length > 0) {
-      return NextResponse.json(
-        { success: false, error: 'La identidad regional solo puede guardarse en una organización' },
-        { status: 400 }
-      )
-    }
-
-    const supabase = createAdminSupabase()
-    const { data, error } = await supabase
-      .from('system_settings')
-      .upsert(
-        {
-          id: 'system',
-          ...mapSettingsToDB(validation.data),
-          updated_by: context.user.id,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
-      .select('*')
-      .single()
-
-    if (error) {
-      console.error('Failed to update global system settings', error)
-      return NextResponse.json(
-        { success: false, error: 'No se pudo actualizar la configuración global' },
-        { status: 500 }
-      )
-    }
-
-    const { error: auditError } = await supabase.from('audit_log').insert({
-      user_id: context.user.id,
-      action: 'update_system_settings',
-      resource: 'system_settings',
-      resource_id: 'system',
-      // Sin organizacion a proposito: son los ajustes globales de la
-      // plataforma, no los de un comercio. El otro insert de este archivo, que
-      // si es por tienda, la escribe.
-      severity: 'high',
-      new_values: validation.data,
-    })
-    if (auditError) console.error('Failed to audit global settings update', { auditError })
-
-    return NextResponse.json({ success: true, data })
+    // La configuración GLOBAL ya no se escribe acá: esta rama aceptaba cualquier
+    // clave del esquema completo (p. ej. `features`, que se reemplazaba entero y
+    // borraba la marca y el anuncio) y no pedía la verificación en dos pasos.
+    // Ahora vive en /api/superadmin/settings, con lista blanca, revisión y 2FA.
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'USE_SUPERADMIN_SETTINGS',
+        error: 'La configuración global de la plataforma se guarda desde Super Admin → Configuración.',
+      },
+      { status: 403 }
+    )
   } catch (error) {
     console.error('System settings API error:', error)
     return NextResponse.json(

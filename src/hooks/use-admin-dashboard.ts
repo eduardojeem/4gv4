@@ -236,84 +236,9 @@ export function useAdminDashboard() {
     return { success: false, error: 'User deletion not implemented yet in this version' }
   }, [])
 
-  const updateSettings = useCallback(async (newSettings: Partial<SystemSettings>) => {
-    try {
-      setIsLoading(true)
-
-      // 1. Validar con Zod
-      const { SystemSettingsPartialSchema } = await import('@/lib/validations/system-settings')
-      const validated = SystemSettingsPartialSchema.parse(newSettings)
-
-      // 2. Verificar rate limit
-      const { checkRateLimit } = await import('@/lib/security/rate-limit')
-      const rateLimitCheck = await checkRateLimit('settings_update')
-      if (!rateLimitCheck.allowed) {
-        return {
-          success: false,
-          error: `Demasiadas solicitudes. Intente nuevamente en ${rateLimitCheck.resetAt.toLocaleTimeString()}.`
-        }
-      }
-
-      // 3. Actualizar via endpoint protegido en servidor
-      const response = await fetch('/api/admin/system/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ settings: validated })
-      })
-
-      const responseData = await response.json().catch(() => ({}))
-      if (!response.ok || !responseData?.success || !responseData?.data) {
-        const errorMessage =
-          responseData?.error || `No se pudo guardar la configuración (${response.status})`
-        console.error('Error updating settings via API:', errorMessage)
-        return { success: false, error: errorMessage }
-      }
-
-      // 4. Registrar en audit log
-      const { logAuditEvent, getChangedFields, determineSeverity } = await import('@/lib/security/audit-log')
-      const changes = getChangedFields(settings, validated as SystemSettings)
-
-      // Registrar cada cambio individualmente
-      for (const change of changes) {
-        await logAuditEvent({
-          action: 'update',
-          fieldName: change.field,
-          oldValue: change.oldValue,
-          newValue: change.newValue,
-          severity: determineSeverity(change.field),
-          details: {
-            totalChanges: changes.length,
-            timestamp: new Date().toISOString()
-          }
-        })
-      }
-
-      // 5. Actualizar estado local
-      const { mapDBToSettings } = await import('@/lib/validations/system-settings')
-      const updatedSettings = mapDBToSettings(responseData.data)
-      setSettings(updatedSettings)
-
-      return { success: true }
-    } catch (error) {
-      console.error('Update settings error:', error)
-
-      if (error instanceof Error) {
-        return {
-          success: false,
-          error: error.message
-        }
-      }
-
-      return {
-        success: false,
-        error: 'Error al actualizar configuración'
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [settings])
+  // `updateSettings` escribía la fila GLOBAL (`system_settings`) sin alcance y
+  // no lo usaba nadie: se quitó. La configuración global se guarda desde
+  // /superadmin/settings (PUT /api/superadmin/settings).
 
   const performSystemAction = useCallback(async (action: string) => {
     try {
@@ -381,7 +306,6 @@ export function useAdminDashboard() {
     createUser,
     updateUser,
     deleteUser,
-    updateSettings,
     performSystemAction,
     getFilteredUsers,
     getSecurityLogsByPeriod
