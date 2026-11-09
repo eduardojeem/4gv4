@@ -1,3 +1,4 @@
+import { resolveRepairCashSessionId } from '@/lib/repairs/cash-session'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   fetchRepairById,
@@ -25,19 +26,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 
 async function resolveCashSessionId(ctx: Awaited<ReturnType<typeof resolveRepairRouteContext>>) {
   if (isNextResponse(ctx)) return null
-  const { data, error } = await ctx.supabase
-    .from('cash_closures')
-    .select('id, register_id')
-    .eq('organization_id', ctx.organizationId)
-    .eq('branch_id', ctx.branchId)
-    .is('date', null)
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-  const sessions = (data ?? []) as Array<{ id: string; register_id?: string | null }>
-  return sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal')?.id
-    ?? sessions[0]?.id
-    ?? null
+  return resolveRepairCashSessionId(ctx.supabase, ctx)
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {

@@ -14,6 +14,8 @@ export function financeWarningAction(code: string): FinanceWarningAction | null 
       return { kind: 'link', label: 'Cargar costos en Productos', href: '/dashboard/products' }
     case 'MISSING_REPAIR_PRICE':
       return { kind: 'link', label: 'Ver reparaciones', href: '/dashboard/repairs' }
+    case 'REJECTED_PAYMENT':
+      return { kind: 'link', label: 'Ver cobros electrónicos', href: '/dashboard/pos/caja' }
     case 'MISSING_EMPLOYEE':
       return { kind: 'section', label: 'Revisar sueldos', section: 'payroll' }
     default:
@@ -38,6 +40,8 @@ export function financeWarningTitle(code: string, count: number): string {
       return `${n('cobro', 'cobros')} sin fecha`
     case 'MISSING_REPAIR_PRICE':
       return `${n('reparación entregada', 'reparaciones entregadas')} sin precio`
+    case 'REJECTED_PAYMENT':
+      return `${n('cobro rechazado', 'cobros rechazados')} con tarjeta o transferencia`
     case 'MISSING_EMPLOYEE':
       return `${n('pago', 'pagos')} sin colaborador asignado`
     case 'MISSING_BRANCH':
@@ -56,6 +60,8 @@ export function financeWarningImpact(code: string): string {
       return 'No sabemos qué día entró esa plata, así que puede faltar en «Entró».'
     case 'MISSING_REPAIR_PRICE':
       return 'Cuentan como venta cero hasta que cargues lo que cobraste.'
+    case 'REJECTED_PAYMENT':
+      return 'Esa plata no entró: no suma en «Entró», pero la venta sigue contando hasta que el cliente pague de otra forma o la anules.'
     case 'MISSING_EMPLOYEE':
       return 'El sueldo no se puede atribuir a nadie en «Qué deja más».'
     case 'MISSING_BRANCH':

@@ -95,10 +95,11 @@ export function useCashMonitor() {
               q = q.not('date', 'is', null)
               break
             case 'suspended':
-              q = q.eq('status', 'suspended')
+              // La base guarda el estado normalizado en español.
+              q = q.in('status', ['suspended', 'suspendida'])
               break
             case 'blocked':
-              q = q.eq('status', 'blocked')
+              q = q.in('status', ['blocked', 'bloqueada'])
               break
           }
         }
@@ -288,9 +289,11 @@ export function useCashMonitor() {
         return {
           id: s.id,
           register_id: s.register_id,
-          status: (s.status === 'suspended' || s.status === 'blocked')
-            ? s.status
-            : (s.date ? 'closed' : 'open'),
+          status: (s.status === 'suspended' || s.status === 'suspendida')
+            ? 'suspended'
+            : (s.status === 'blocked' || s.status === 'bloqueada')
+              ? 'blocked'
+              : (s.date ? 'closed' : 'open'),
           opened_by: effectiveOpenedBy,
           opened_by_name: effectiveOpenedBy ? userMap[effectiveOpenedBy] : undefined,
           closed_by: s.closed_by,

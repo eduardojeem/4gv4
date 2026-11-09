@@ -19,68 +19,56 @@ const SIN_MOVIMIENTOS = {
 }
 
 /**
- * El monitor preguntaba `columnaDb > 0 ? columnaDb : calculadoDeMovimientos`.
- * Un turno sin ventas vale cero, y cero es un dato: se lo trataba como columna
- * vacia. Si la base decia 0 y los movimientos sumaban 500.000, la pantalla
- * mostraba 500.000 y tapaba justo la contradiccion que un arqueo debe exponer.
+ * Las columnas de totales de `cash_closures` tienen DEFAULT 0 y ningún RPC las
+ * escribe: el monitor mostraba 0 en efectivo, tarjeta, ingresos y egresos de
+ * cualquier turno. Con movimientos, mandan los movimientos.
  */
-describe('un cero guardado no es una columna vacia', () => {
-  it('respeta un cero de la base en vez de reemplazarlo', () => {
+describe('cifras de un turno', () => {
+  it('con movimientos, el cero por defecto de la columna no tapa las ventas', () => {
     const figures = calculateSessionFigures(
-      { total_sales: 0 },
-      { ...SIN_MOVIMIENTOS, total: 4, totalSales: 500_000 }
+      { total_sales: 0, sales_total_cash: 0, sales_total_card: 0, income_total: 0 },
+      { ...SIN_MOVIMIENTOS, total: 4, totalSales: 1_100_000, salesCash: 800_000, salesCard: 300_000, cashIn: 50_000 }
     )
 
-    expect(figures.totalSales).toBe(0)
+    expect(figures.totalSales).toBe(1_100_000)
+    expect(figures.salesCash).toBe(800_000)
+    expect(figures.salesCard).toBe(300_000)
+    expect(figures.incomeTotal).toBe(50_000)
+    // El cero por defecto no es un hallazgo.
+    expect(figures.salesMismatch).toBeNull()
   })
 
-  it('y avisa que la base y los movimientos no dicen lo mismo', () => {
+  it('un total guardado distinto de los movimientos se avisa', () => {
     const figures = calculateSessionFigures(
-      { total_sales: 0 },
-      { ...SIN_MOVIMIENTOS, total: 4, totalSales: 500_000 }
-    )
-
-    expect(figures.salesMismatch).toBe(500_000)
-  })
-
-  it('sin la columna cargada si usa los movimientos', () => {
-    const figures = calculateSessionFigures(
-      { total_sales: null },
+      { total_sales: 200_000 },
       { ...SIN_MOVIMIENTOS, total: 2, totalSales: 300_000 }
     )
 
     expect(figures.totalSales).toBe(300_000)
-    // No hay contra que comparar: no es un hallazgo.
-    expect(figures.salesMismatch).toBeNull()
+    expect(figures.salesMismatch).toBe(100_000)
   })
 
-  it('cuando coinciden no hay nada que avisar', () => {
+  it('sin movimientos usa lo guardado (turnos viejos)', () => {
+    expect(calculateSessionFigures({ total_sales: 300_000 }, SIN_MOVIMIENTOS).totalSales).toBe(300_000)
+  })
+
+  it('un turno abierto calcula lo que hay en el cajón: solo efectivo', () => {
     const figures = calculateSessionFigures(
-      { total_sales: 300_000 },
-      { ...SIN_MOVIMIENTOS, total: 2, totalSales: 300_000 }
+      { opening_balance: 200_000, expected_balance: 0, closing_balance: 0 },
+      { ...SIN_MOVIMIENTOS, total: 3, totalSales: 400_000, salesCash: 100_000, salesCard: 300_000, cashOut: 20_000 }
     )
 
-    expect(figures.salesMismatch).toBeNull()
+    expect(figures.currentBalance).toBe(280_000)
+    expect(figures.expectedBalance).toBe(280_000)
   })
 
-  it('una caja que se espera en cero no cae en el balance calculado', () => {
-    // Con `Number(...) || balance`, un esperado de 0 —todo retirado— se
-    // reemplazaba y el arqueo comparaba contra otra cosa.
+  it('un turno cerrado respeta el esperado y el cierre guardados, aunque sean cero', () => {
     const figures = calculateSessionFigures(
-      { expected_balance: 0, opening_balance: 200_000, total_sales: 100_000 },
+      { date: '2026-09-06T20:00:00Z', expected_balance: 0, closing_balance: 0, opening_balance: 200_000, total_sales: 100_000 },
       SIN_MOVIMIENTOS
     )
 
     expect(figures.expectedBalance).toBe(0)
-    expect(figures.currentBalance).toBe(300_000)
-  })
-
-  it('el cierre guardado manda sobre el calculo', () => {
-    const figures = calculateSessionFigures(
-      { closing_balance: 0, opening_balance: 200_000, total_sales: 100_000 },
-      SIN_MOVIMIENTOS
-    )
-
     expect(figures.currentBalance).toBe(0)
   })
 

@@ -42,13 +42,14 @@ interface ReasonOption {
   template?: string
 }
 
+// Sin «Cobro de crédito» ni «Cobro de servicio / taller»: un ingreso suelto
+// sumaba a la caja pero dejaba la cuota o la reparación impaga (y se podía
+// cobrar dos veces). Esos cobros se hacen desde Créditos o Reparaciones.
 const IN_REASONS: ReasonOption[] = [
   { id: 'cambio_inicial', label: 'Cambio Inicial', icon: '🪙', template: 'Cambio inicial para apertura de turno' },
   { id: 'aporte_capital', label: 'Aporte de Capital', icon: '💼', template: 'Aporte de capital / Inyección de efectivo' },
-  { id: 'cobro_servicio', label: 'Cobro de Servicio / Taller', icon: '🛠️', template: 'Cobro de servicio técnico / reparación' },
   { id: 'ajuste_positivo', label: 'Ajuste Positivo', icon: '📈', template: 'Ajuste positivo por sobrante de arqueo' },
   { id: 'devolucion_prov', label: 'Devolución de Proveedor', icon: '📦', template: 'Devolución de dinero de proveedor' },
-  { id: 'cobro_credito', label: 'Cobro de Crédito / Deuda', icon: '🤝', template: 'Cobro de cuenta pendiente de cliente' },
   { id: 'otro_ingreso', label: 'Otro Ingreso', icon: '🏷️', template: '' }
 ]
 

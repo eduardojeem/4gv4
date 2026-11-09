@@ -44,7 +44,10 @@ function getPreview(repair: Repair, draft: UnrepairedCloseoutDraft) {
     exceptionalAmount: 'amount' in draft.charge ? draft.charge.amount : 0,
     paidAmount: repair.paidAmount ?? 0,
     parts: (repair.parts ?? []).map((part) => ({
-      disposition: draft.parts.find((item) => item.repairPartId === (part.databaseId ?? String(part.id)))?.disposition ?? 'restocked',
+      // Un repuesto suelto (sin producto) no puede volver al stock: sin elegir, se
+      // calcula como consumido.
+      disposition: draft.parts.find((item) => item.repairPartId === (part.databaseId ?? String(part.id)))?.disposition
+        ?? (part.productId ? 'restocked' : 'consumed'),
       quantity: part.quantity,
       unitPrice: part.cost,
     })),
@@ -119,9 +122,9 @@ export function UnrepairedCloseoutPanel({ repair, value, onChange, disabled }: P
             <div className="mb-2 flex justify-between gap-2 text-sm"><span className="font-medium">{part.name} × {part.quantity}</span><span>{formatCurrency(part.cost * part.quantity)}</span></div>
             <div className="flex flex-wrap gap-3 text-xs">
               <label><input type="radio" name={`part-${repairPartId}`} checked={disposition === 'consumed'} onChange={() => updatePart(repairPartId, 'consumed')} disabled={disabled} /> Consumido o no recuperable</label>
-              <label><input type="radio" name={`part-${repairPartId}`} checked={disposition === 'restocked'} onChange={() => updatePart(repairPartId, 'restocked')} disabled={disabled} /> Volver a inventario</label>
+              <label><input type="radio" name={`part-${repairPartId}`} checked={disposition === 'restocked'} onChange={() => updatePart(repairPartId, 'restocked')} disabled={disabled || !part.productId} /> Volver a inventario</label>
             </div>
-            {!part.productId && disposition === 'restocked' && <p className="mt-2 text-xs text-amber-700">Quedará auditado, pero no suma stock porque no está vinculado a un producto.</p>}
+            {!part.productId && <p className="mt-2 text-xs text-muted-foreground">No está vinculado a un producto del inventario: no puede volver al stock y su costo queda en la reparación.</p>}
           </div>
         })}
         {unresolved > 0 && <div role="alert" className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"><AlertTriangle className="h-4 w-4" />Resolvé todos los repuestos ({unresolved} pendiente{unresolved === 1 ? '' : 's'}).</div>}

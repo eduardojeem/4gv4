@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { config } from '@/lib/config'
 import { calculateExpectedCashBalance } from '@/app/dashboard/pos/lib/cash-balance'
 import { normalizeCashMovementType } from '@/app/dashboard/pos/types'
+import { summarizeCashMovements } from '@/lib/cash/movement-totals'
 
 /**
  * Estado del POS para la app móvil, en un solo pedido: la sucursal en la que
@@ -61,23 +62,19 @@ export const GET = withTenantAuth({ permission: 'pos.sales.create', module: 'pos
         )
       if (movementsError) throw movementsError
       const rows = (movements ?? []).map((row) => ({ ...row, amount: Number(row.amount || 0) }))
-      const sales = rows.filter((row) => normalizeCashMovementType(row.type) === 'sale')
-      const byMethod = (method: string) =>
-        sales
-          .filter((row) => (row.payment_method || 'cash') === method || (method === 'cash' && row.payment_method === 'efectivo'))
-          .reduce((sum, row) => sum + row.amount, 0)
-      const manual = (type: 'cash_in' | 'cash_out') =>
-        rows.filter((row) => normalizeCashMovementType(row.type) === type).reduce((sum, row) => sum + row.amount, 0)
+      // La base guarda el medio en español (`tarjeta`, `transferencia`): la
+      // comparación contra `card`/`transfer` daba siempre 0.
+      const totals = summarizeCashMovements(rows)
       const hasOpening = rows.some((row) => normalizeCashMovementType(row.type) === 'opening')
       summary = {
         expectedCash: calculateExpectedCashBalance(rows) + (hasOpening ? 0 : Number(session.opening_balance ?? 0)),
-        salesCount: new Set(sales.map((row) => row.sale_id ?? row.id)).size,
-        salesTotal: sales.reduce((sum, row) => sum + row.amount, 0),
-        cash: byMethod('cash'),
-        card: byMethod('card'),
-        transfer: byMethod('transfer'),
-        cashIn: manual('cash_in'),
-        cashOut: manual('cash_out'),
+        salesCount: totals.salesCount,
+        salesTotal: totals.totalSales,
+        cash: totals.salesCash,
+        card: totals.salesCard,
+        transfer: totals.salesTransfer,
+        cashIn: totals.cashIn,
+        cashOut: totals.cashOut,
         movements: rows.slice(0, 30).map((row) => ({
           id: row.id,
           type: normalizeCashMovementType(row.type),
@@ -115,7 +112,7 @@ export const GET = withTenantAuth({ permission: 'pos.sales.create', module: 'pos
               registerName: registers.find((register) => register.id === session.register_id)?.name ?? 'Caja principal',
               openingBalance: Number(session.opening_balance ?? 0),
               openedAt: session.created_at,
-              suspended: session.status === 'suspended',
+              suspended: session.status === 'suspended' || session.status === 'suspendida',
             }
           : null,
         summary,

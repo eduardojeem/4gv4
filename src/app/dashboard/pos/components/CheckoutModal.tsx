@@ -26,7 +26,6 @@ import {
   ExternalLink,
   Info,
   Clock,
-  PackageX,
   ChevronDown,
   UserRound,
   WalletCards,
@@ -134,8 +133,6 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   markRepairDelivered,
   setMarkRepairDelivered,
   deliveryEligibility,
-  deliveryOutcome,
-  setDeliveryOutcome,
   supabaseStatusToLabel,
   cart,
   onUpdateQuantity,
@@ -552,29 +549,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                          })()}
 
                          {/* Delivery outcome selector: visible when markRepairDelivered is ON */}
+                         {/* El POS solo entrega reparaciones reparadas: cobraba el
+                             presupuesto completo de un equipo sin reparar y contaba
+                             los repuestos como costo, sin pasar por el cierre. */}
                          {markRepairDelivered && (
-                           <div className="sm:col-span-2 p-2 rounded-lg border bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resultado de la reparación</div>
-                             <div className="grid grid-cols-3 gap-1.5">
-                               {([
-                                 { value: 'repaired' as const, label: 'Reparado', Icon: CheckCircle2, cls: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
-                                 { value: 'withdrawn' as const, label: 'Retirado', Icon: PackageX, cls: 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
-                                 { value: 'unrepairable' as const, label: 'Sin reparar', Icon: Wrench, cls: 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' },
-                               ]).map(({ value, label, Icon, cls }) => (
-                                 <button
-                                   key={value}
-                                   type="button"
-                                   onClick={() => setDeliveryOutcome(value)}
-                                   aria-pressed={deliveryOutcome === value}
-                                   className={`flex flex-col items-center gap-1 rounded border p-2 text-center text-xs font-medium transition-all ${
-                                     deliveryOutcome === value ? cls : 'border-border bg-background text-muted-foreground hover:bg-muted/30'
-                                   }`}
-                                 >
-                                   <Icon className="h-3.5 w-3.5" />
-                                   {label}
-                                 </button>
-                               ))}
-                             </div>
+                           <div className="sm:col-span-2 flex items-start gap-2 p-2 rounded-lg border bg-muted/20 text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
+                             <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-emerald-600" />
+                             <span>
+                               Se entrega como <strong className="text-foreground">reparado</strong>. Si el cliente retira el equipo sin reparar, cerralo desde Reparaciones: ahí cobrás solo el diagnóstico y resolvés los repuestos.
+                             </span>
                            </div>
                          )}
 

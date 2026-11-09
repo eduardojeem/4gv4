@@ -1,3 +1,4 @@
+import { resolveRepairCashSessionId } from '@/lib/repairs/cash-session'
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchRepairById, isNextResponse, resolveRepairRouteContext } from '@/app/api/repairs/_lib'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -20,16 +21,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 type RouteContext = Exclude<Awaited<ReturnType<typeof resolveRepairRouteContext>>, NextResponse>
 
 async function openCashSessionId(ctx: RouteContext) {
-  const { data, error } = await ctx.supabase
-    .from('cash_closures')
-    .select('id, register_id')
-    .eq('organization_id', ctx.organizationId)
-    .eq('branch_id', ctx.branchId)
-    .is('date', null)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  const sessions = (data ?? []) as Array<{ id: string; register_id?: string | null }>
-  return sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal')?.id ?? sessions[0]?.id ?? null
+  return resolveRepairCashSessionId(ctx.supabase, ctx)
 }
 
 /** Pausa la reparación mientras espera el repuesto, si el estado lo permite, con su historial. */

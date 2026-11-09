@@ -510,6 +510,16 @@ export const POST = withTenantAuth(
         if (!deliveryOutcome || !['repaired', 'withdrawn', 'unrepairable'].includes(deliveryOutcome)) {
           return NextResponse.json({ success: false, error: 'Seleccioná un resultado de entrega válido.' }, { status: 400 })
         }
+        // Un equipo sin reparar se cierra desde Reparaciones (cobra el
+        // diagnóstico y resuelve los repuestos). Desde el POS se cobraba el
+        // presupuesto completo sin cierre.
+        if (deliveryOutcome !== 'repaired') {
+          return NextResponse.json({
+            success: false,
+            code: 'REPAIR_UNREPAIRED_USE_CLOSEOUT',
+            error: 'Para entregar un equipo sin reparar, cerralo desde Reparaciones.',
+          }, { status: 409 })
+        }
 
         for (const repair of repairRows ?? []) {
           const joined = Array.isArray(repair.qualityCheck) ? repair.qualityCheck[0] : repair.qualityCheck
