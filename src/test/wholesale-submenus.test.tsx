@@ -134,5 +134,36 @@ describe('Wholesale submenus and brands section', () => {
     // Category chips in "Explorá por categoría"
     const subManualesChip = screen.getByRole('link', { name: 'Manuales' })
     expect(subManualesChip.getAttribute('href')).toContain('category_id=sub-manuales')
+
+    // Switch series tab to "Herramientas"
+    const herramientasSeriesTab = screen.getByRole('tab', { name: /Herramientas/i })
+    fireEvent.click(herramientasSeriesTab)
+    expect(screen.getByText(/Subrubros y modelos \(Herramientas\)/i)).toBeDefined()
+    const modelLinks = screen.getAllByRole('link', { name: /Manuales/i })
+    expect(modelLinks.some((link) => link.getAttribute('href')?.includes('marca=DeWalt'))).toBe(true)
+  })
+
+  it('renders mobile navigation rail, direct account access and drawer search in WholesaleHeader', () => {
+    render(<WholesaleHeader settings={baseSettings} />)
+
+    // Mobile categories drawer trigger button in horizontal rail
+    const railDrawerBtn = screen.getByRole('button', { name: 'Abrir menú de categorías' })
+    expect(railDrawerBtn).toBeDefined()
+
+    // Mobile direct account button next to cart (along with top bar login link)
+    const loginLinks = screen.getAllByRole('link', { name: 'Iniciar sesión' })
+    expect(loginLinks.length).toBeGreaterThanOrEqual(2)
+
+    // Open mobile drawer
+    fireEvent.click(railDrawerBtn)
+    expect(screen.getAllByText('Departamentos').length).toBeGreaterThanOrEqual(2)
+
+    // Drawer search input
+    const drawerSearch = screen.getByPlaceholderText('Buscar categoría o subrubro…')
+    expect(drawerSearch).toBeDefined()
+
+    // Filter categories inside mobile drawer
+    fireEvent.change(drawerSearch, { target: { value: 'Bazar' } })
+    expect(screen.getAllByText('Bazar').length).toBeGreaterThan(0)
   })
 })

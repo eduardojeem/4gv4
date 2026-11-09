@@ -28,8 +28,8 @@ export function WholesaleFooter({ company, prefix }: { company?: CompanyInfo; pr
   return (
     <footer className="border-t border-border/80 bg-muted/30 text-foreground" data-wholesale-footer>
       {/* ── Main Multi-Column Distributor Grid (Desktop: 4-5 cols, Mobile: stacked) ── */}
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:py-12">
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-12">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 sm:gap-8">
           {/* Col 1: Empresa */}
           <div className="space-y-3 sm:col-span-2 lg:col-span-1">
             <p className="text-base font-bold tracking-tight text-foreground">{company?.name || 'Tienda'}</p>
