@@ -11,6 +11,11 @@ interface UseRepairFiltersProps {
     repairs: Repair[]
 }
 
+/** Código sin espacios, guiones ni puntos, en minúsculas, para comparar IMEI y series. */
+export function compactCode(value: string) {
+    return value.replace(/[\s.\-_/]/g, '').toLowerCase()
+}
+
 export function useRepairFilters({ repairs }: UseRepairFiltersProps) {
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState<RepairStatus | 'all'>('all')
@@ -87,6 +92,10 @@ export function useRepairFilters({ repairs }: UseRepairFiltersProps) {
                 const brand = (repair.brand || '').toLowerCase()
                 const model = (repair.model || '').toLowerCase()
                 const ticketNumber = (repair.ticketNumber || '').toLowerCase()
+                // IMEI / N° de serie: lo primero que se busca cuando el cliente vuelve con
+                // el equipo. Sin espacios ni guiones («35 209900 176148 1» = «352099001761481»).
+                const serial = compactCode(repair.serialNumber || repair.imei || '')
+                const searchCompact = compactCode(searchLower)
 
                 return (
                     customerName.includes(searchLower) ||
@@ -94,7 +103,9 @@ export function useRepairFilters({ repairs }: UseRepairFiltersProps) {
                     id.includes(searchLower) ||
                     brand.includes(searchLower) ||
                     model.includes(searchLower) ||
-                    ticketNumber.includes(searchLower)
+                    ticketNumber.includes(searchLower) ||
+                    (repair.issue || '').toLowerCase().includes(searchLower) ||
+                    (searchCompact.length >= 4 && serial.includes(searchCompact))
                 )
             }
 
