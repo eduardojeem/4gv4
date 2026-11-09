@@ -89,6 +89,9 @@ export function ExpenseDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
+  // Freno inmediato: `isSubmitting` recién cambia en el próximo render y dos clics
+  // seguidos (o Enter repetido) llegaban a mandar el gasto dos veces.
+  const inFlightRef = useRef(false)
 
   function getIdempotencyKey() {
     idempotencyKeyRef.current ??= `expense-${crypto.randomUUID()}`
@@ -97,7 +100,7 @@ export function ExpenseDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSubmitting) return
+    if (isSubmitting || inFlightRef.current) return
     if (!branchId) {
       const msg = 'No hay una sucursal activa. Seleccioná una sucursal arriba y volvé a intentar.'
       setError(msg)
@@ -147,6 +150,7 @@ export function ExpenseDialog({
       return
     }
 
+    inFlightRef.current = true
     setIsSubmitting(true)
     setError(null)
     const recurrence = recurring
@@ -156,33 +160,45 @@ export function ExpenseDialog({
           endsOn: String(formData.get('recurrenceEndsOn')) || undefined,
         }
       : undefined
-    const response = await fetch(
-      `/api/admin/finances/obligations?organizationId=${organizationId}`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-idempotency-key': getIdempotencyKey(),
+    let response: Response
+    let payload: { obligation?: unknown; error?: string; code?: string } | null
+    try {
+      // La clave se conserva entre reintentos: si el primer envío sí se guardó,
+      // el servidor devuelve ese gasto en vez de crear otro.
+      response = await fetch(
+        `/api/admin/finances/obligations?organizationId=${organizationId}`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-idempotency-key': getIdempotencyKey(),
+          },
+          body: JSON.stringify({
+            branchId,
+            categoryId,
+            amount,
+            concept,
+            accountingDate,
+            dueDate: String(formData.get('dueDate') ?? '') || undefined,
+            vendor: String(formData.get('vendor') ?? '').trim() || undefined,
+            notes: String(formData.get('notes') ?? '').trim() || undefined,
+            recurrence,
+          }),
         },
-        body: JSON.stringify({
-          branchId,
-          categoryId,
-          amount,
-          concept,
-          accountingDate,
-          dueDate: String(formData.get('dueDate') ?? '') || undefined,
-          vendor: String(formData.get('vendor') ?? '').trim() || undefined,
-          notes: String(formData.get('notes') ?? '').trim() || undefined,
-          recurrence,
-        }),
-      },
-    )
-    const payload = (await response.json().catch(() => null)) as {
-      obligation?: unknown
-      error?: string
-    } | null
-    setIsSubmitting(false)
+      )
+      payload = (await response.json().catch(() => null)) as typeof payload
+    } catch {
+      const errorMsg = 'Sin conexión con el servidor. Revisá internet y volvé a intentar: no se va a duplicar.'
+      setError(errorMsg)
+      toast.error('Error al guardar el gasto', { description: errorMsg })
+      return
+    } finally {
+      inFlightRef.current = false
+      setIsSubmitting(false)
+    }
     if (!response.ok) {
+      // Con otros datos, la misma clave ya no sirve: el próximo intento usa una nueva.
+      if (payload?.code === 'FINANCE_CONFLICT' || response.status === 409) idempotencyKeyRef.current = null
       const errorMsg = payload?.error ?? 'No se pudo guardar el gasto.'
       setError(errorMsg)
       toast.error('Error al guardar el gasto', { description: errorMsg })
@@ -558,26 +574,32 @@ export function EditExpenseDialog({
     setIsSubmitting(true)
     setError(null)
 
-    const response = await fetch(
-      `/api/admin/finances/obligations/${expense.id}?organizationId=${organizationId}`,
-      {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          branchId,
-          categoryId,
-          amount,
-          concept,
-          accountingDate,
-          dueDate,
-          vendor,
-          notes,
-        }),
-      },
-    )
-
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    setIsSubmitting(false)
+    let response: Response
+    let payload: { error?: string } | null
+    try {
+      response = await fetch(
+        `/api/admin/finances/obligations/${expense.id}?organizationId=${organizationId}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            branchId,
+            categoryId,
+            amount,
+            concept,
+            accountingDate,
+            dueDate,
+            vendor,
+            notes,
+          }),
+        },
+      )
+      payload = (await response.json().catch(() => null)) as { error?: string } | null
+    } catch {
+      return setError('Sin conexión con el servidor. Revisá internet y volvé a intentar.')
+    } finally {
+      setIsSubmitting(false)
+    }
 
     if (!response.ok) {
       setError(payload?.error ?? 'No se pudo actualizar el gasto.')
