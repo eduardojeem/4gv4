@@ -620,7 +620,7 @@ export async function createObligation(params: {
     const existing = await findObligationByCreationKey(organizationId, creationKey)
     if (existing) return replayCreatedObligation(existing, input, concept)
   }
-  // Sin la migración 20261017090000 la columna no existe todavía: se guarda igual.
+  // Sin la migración 20261109120000 la columna no existe todavía: se guarda igual.
   if (error && creationKey && isMissingCreationKeyColumn(error)) {
     ;({ data, error } = await insertObligation(row))
   }
