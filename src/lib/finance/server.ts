@@ -18,7 +18,7 @@ import type {
   PayrollGenerationInput,
   PayrollPaymentInput,
 } from './schemas'
-import type { FinanceFilters, FinanceSummary } from './types'
+import type { FinanceFilters, FinanceRevenueBreakdown, FinanceSummary } from './types'
 
 type SupabaseErrorLike = {
   code?: string
@@ -1780,6 +1780,12 @@ type FinanceSaleItemRecord = {
   quantity: number
   unitCost: number | null
   revenueAmount?: number | null
+  /**
+   * Producto con unidad «servicio» (corte, turno, servicio técnico). Se separa
+   * de la mercadería y, sin costo de compra cargado, su costo directo es cero:
+   * antes un servicio sin costo dejaba la ganancia de todo el período «Pendiente».
+   */
+  isService?: boolean
 }
 
 type FinanceSalePaymentRecord = {
@@ -1805,6 +1811,11 @@ type FinanceRepairPaymentRecord = {
   paymentDate: string
   paymentMethod: string
   amount: number
+  /**
+   * Venta del POS que cobró la reparación. Ese cobro ya está en la venta
+   * (`sales.total_amount` y `sale_payments`): contarlo acá también lo duplicaba.
+   */
+  saleId?: string | null
 }
 
 type FinanceRepairRecord = {
@@ -1818,6 +1829,8 @@ type FinanceRepairRecord = {
   revenueAmount: number
   paidAmount: number
   employeeId?: string | null
+  /** Mano de obra cargada (`repairs.labor_cost`); el resto del precio son repuestos. */
+  laborAmount?: number
 }
 
 /**
@@ -2057,10 +2070,54 @@ function signedPayments(
     )
 }
 
+/**
+ * Cuánto de cada venta del POS fue para saldar reparaciones.
+ *
+ * Al cobrar una reparación desde el POS, `sales.total_amount` incluye ese
+ * saldo y además queda un cobro en `repair_payments` con `sale_id`. La
+ * reparación ya cuenta como ingreso al entregarse, así que esa parte se resta
+ * de la venta para no sumarla dos veces.
+ */
+function repairPortionBySale(payments: FinanceRepairPaymentRecord[] | undefined): Map<string, number> {
+  const portions = new Map<string, number>()
+  for (const payment of payments ?? []) {
+    if (!payment.saleId) continue
+    portions.set(payment.saleId, (portions.get(payment.saleId) ?? 0) + money(payment.amount))
+  }
+  return portions
+}
+
+/** Importe de la venta que es venta propia (sin el saldo de reparaciones cobrado). */
+function saleOwnRevenue(sale: FinanceSaleRecord, repairPortions: Map<string, number>): number {
+  return Math.max(0, money(sale.totalAmount) - (repairPortions.get(sale.id) ?? 0))
+}
+
+/**
+ * Una venta que solo saldó reparaciones no es un ingreso propio: no tiene
+ * ítems y todo su importe ya está en la reparación.
+ */
+function isRepairOnlySale(
+  sale: FinanceSaleRecord,
+  items: FinanceSaleItemRecord[],
+  repairPortions: Map<string, number>,
+): boolean {
+  return items.length === 0 && repairPortions.has(sale.id) && saleOwnRevenue(sale, repairPortions) < 0.5
+}
+
+/** Un ítem tiene costo conocido, o es un servicio sin costo de compra (cero). */
+function hasKnownItemCost(item: FinanceSaleItemRecord): boolean {
+  return item.unitCost !== null || item.isService === true
+}
+
+function itemDirectCost(item: FinanceSaleItemRecord): number {
+  return item.unitCost === null ? 0 : money(item.quantity) * money(item.unitCost)
+}
+
 function buildFinancialSummary(
   records: FinanceSummaryRecords,
   filters: FinanceFilters,
 ): FinanceSummary {
+  const repairPortions = repairPortionBySale(records.repairPayments)
   const saleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
   for (const item of records.saleItems) {
     const items = saleItemsBySaleId.get(item.saleId) ?? []
@@ -2084,7 +2141,8 @@ function buildFinancialSummary(
     (sale) =>
       isInBranch(sale.branchId, filters) &&
       isInPeriod(sale.createdAt, filters) &&
-      isCompletedSaleStatus(sale.status),
+      isCompletedSaleStatus(sale.status) &&
+      !isRepairOnlySale(sale, saleItemsBySaleId.get(sale.id) ?? [], repairPortions),
   )
   // Un pedido cuenta como venta salvo que este cancelado: es facturacion del
   // canal web y hasta ahora no entraba en ningun total.
@@ -2108,10 +2166,10 @@ function buildFinancialSummary(
   const revenue = [
     ...selectedSales.map((sale) => {
       const items = saleItemsBySaleId.get(sale.id) ?? []
-      const hasCost = items.length > 0 && items.every((item) => item.unitCost !== null)
+      const hasCost = items.length > 0 && items.every(hasKnownItemCost)
       return {
         id: sale.id,
-        amount: money(sale.totalAmount),
+        amount: saleOwnRevenue(sale, repairPortions),
         cashAmount: 0,
         hasCost,
         label: sale.code ? `Venta ${sale.code}` : undefined,
@@ -2149,7 +2207,7 @@ function buildFinancialSummary(
       (saleItemsBySaleId.get(sale.id) ?? []).flatMap((item) =>
         item.unitCost === null
           ? []
-          : [{ id: `${sale.id}:${item.productId ?? item.productName ?? 'item'}`, amount: money(item.quantity) * money(item.unitCost), paidAmount: 0 }],
+          : [{ id: `${sale.id}:${item.productId ?? item.productName ?? 'item'}`, amount: itemDirectCost(item), paidAmount: 0 }],
       ),
     ),
     ...selectedRepairs.flatMap((repair) =>
@@ -2236,9 +2294,11 @@ function buildFinancialSummary(
   // Finanzas no leia `repair_payments` y la plata de reparaciones no aparecia
   // en la vista de caja. Se excluyen `credit` y `mixed` por el mismo motivo que
   // en ventas: esa parte se cobra despues como cuota y ya se cuenta ahi.
+  // Un cobro con `saleId` se hizo desde el POS: ya está en `sale_payments`.
   const repairCollected = (records.repairPayments ?? [])
     .filter(
       (payment) =>
+        !payment.saleId &&
         isInBranch(payment.branchId, filters) &&
         isInPeriod(payment.paymentDate, filters) &&
         ['cash', 'card', 'transfer'].includes(payment.paymentMethod),
@@ -2307,13 +2367,33 @@ function buildFinancialSummary(
       })),
   ]
 
+  const unpricedRepairWarnings = selectedRepairs
+    .filter((repair) => money(repair.revenueAmount) <= 0)
+    .map((repair) => ({
+      code: 'MISSING_REPAIR_PRICE' as const,
+      message: 'La reparación se entregó sin precio: cuenta como ingreso cero hasta que cargues lo que se cobró.',
+      sourceId: repair.id,
+      sourceLabel: repairLabel(repair),
+      sourceType: 'repair' as const,
+    }))
+  const revenueBreakdown = buildRevenueBreakdown({
+    sales: selectedSales,
+    saleItemsBySaleId,
+    repairPortions,
+    repairs: selectedRepairs,
+    orders: selectedOrders,
+    refunds: refunds.reduce((total, refund) => total + refund.amount, 0),
+  })
+  const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings]
+
   return {
     ...summary,
-    complete: summary.complete && cashTimingWarnings.length === 0,
-    coverageWarnings: [...summary.coverageWarnings, ...cashTimingWarnings],
+    complete: summary.complete && extraWarnings.length === 0,
+    coverageWarnings: [...summary.coverageWarnings, ...extraWarnings],
     accrued: {
       ...summary.accrued,
       revenue: roundMoneyValue(summary.accrued.revenue),
+      revenueBreakdown,
       directCosts: roundMoneyValue(summary.accrued.directCosts),
       grossProfit: summary.accrued.grossProfit === null ? null : roundMoneyValue(summary.accrued.grossProfit),
       operatingExpenses: roundMoneyValue(summary.accrued.operatingExpenses),
@@ -2325,6 +2405,55 @@ function buildFinancialSummary(
       paid: roundMoneyValue(paid),
       netCashFlow: roundMoneyValue(saleCollected + orderCollected + repairCollected - paid),
     },
+  }
+}
+
+/**
+ * Apertura de los ingresos: mercadería, servicios, reparaciones y pedidos.
+ * Una venta con productos y servicios se reparte en proporción a lo que pesa
+ * cada ítem; así los descuentos de la venta se reparten igual.
+ */
+function buildRevenueBreakdown(input: {
+  sales: FinanceSaleRecord[]
+  saleItemsBySaleId: Map<string, FinanceSaleItemRecord[]>
+  repairPortions: Map<string, number>
+  repairs: FinanceRepairRecord[]
+  orders: FinanceOrderRecord[]
+  refunds: number
+}): FinanceRevenueBreakdown {
+  let merchandise = 0
+  let services = 0
+  for (const sale of input.sales) {
+    const amount = saleOwnRevenue(sale, input.repairPortions)
+    const items = input.saleItemsBySaleId.get(sale.id) ?? []
+    const itemsTotal = items.reduce((total, item) => total + Math.max(0, money(item.revenueAmount)), 0)
+    const serviceTotal = items
+      .filter((item) => item.isService === true)
+      .reduce((total, item) => total + Math.max(0, money(item.revenueAmount)), 0)
+    const serviceShare = itemsTotal > 0 ? serviceTotal / itemsTotal : 0
+    services += amount * serviceShare
+    merchandise += amount * (1 - serviceShare)
+  }
+  let repairTotal = 0
+  let repairLabor = 0
+  for (const repair of input.repairs) {
+    const amount = Math.max(0, money(repair.revenueAmount))
+    repairTotal += amount
+    repairLabor += Math.min(amount, Math.max(0, money(repair.laborAmount)))
+  }
+  const orders = input.orders.reduce((total, order) => total + money(order.totalAmount), 0)
+  return {
+    merchandise: roundMoneyValue(merchandise),
+    services: roundMoneyValue(services),
+    repairs: {
+      total: roundMoneyValue(repairTotal),
+      labor: roundMoneyValue(repairLabor),
+      parts: roundMoneyValue(repairTotal - repairLabor),
+      count: input.repairs.length,
+    },
+    orders: roundMoneyValue(orders),
+    refunds: roundMoneyValue(input.refunds),
+    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders),
   }
 }
 
@@ -2668,7 +2797,7 @@ async function loadFinanceSummaryRecords(
   const repairsQuery = branch(
     admin
       .from('repairs')
-      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, paid_amount, technician_id', { count: 'exact' })
+      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, labor_cost, paid_amount, technician_id', { count: 'exact' })
       .eq('organization_id', organizationId)
       // Entregadas en el período (aunque hayan entrado antes) y, para las viejas
       // sin fecha de entrega, las que entraron en el período. Fechas ya validadas.
@@ -2751,6 +2880,7 @@ async function loadFinanceSummaryRecords(
     revenueAmount: money(repair.final_cost ?? repair.estimated_cost),
     paidAmount: money(repair.paid_amount),
     employeeId: repair.technician_id ?? null,
+    laborAmount: money((repair as { labor_cost?: number | string | null }).labor_cost),
   }))
   const saleItems = await loadSaleItems(admin, organizationId, sales.map((sale) => sale.id))
   const repairParts = await loadRepairParts(admin, repairs.map((repair) => repair.id))
@@ -2901,11 +3031,14 @@ async function loadCreditInstallmentPayments(
   let query = admin
     .from('credit_payments')
     .select(
-      'amount, payment_method, created_at, customer_credits!inner(sale_id, branch_id, organization_id)',
+      'amount, payment_method, created_at, customer_credits!inner(id, sale_id, origin_type, branch_id, organization_id)',
       { count: 'exact' },
     )
     .eq('customer_credits.organization_id', organizationId)
-    .not('customer_credits.sale_id', 'is', null)
+    // Cuotas de créditos de una venta y de una reparación financiada («Cobrar a
+    // crédito» en el taller no crea venta: sale_id queda vacío). Antes esas
+    // cuotas no entraban nunca en «Cobrado».
+    .or('sale_id.not.is.null,origin_type.eq.repair', { referencedTable: 'customer_credits' })
     .in('payment_method', ['cash', 'card', 'transfer'])
     .gt('amount', 0)
     .gte('created_at', startDate)
@@ -2926,9 +3059,11 @@ async function loadCreditInstallmentPayments(
       const credit = Array.isArray(payment.customer_credits)
         ? payment.customer_credits[0]
         : payment.customer_credits
-      if (!credit?.sale_id) return []
+      const fromRepair = !credit?.sale_id && credit?.origin_type === 'repair'
+      if (!credit?.sale_id && !fromRepair) return []
       return [{
-        saleId: String(credit.sale_id),
+        // Una cuota de reparación no tiene venta: se identifica por su crédito.
+        saleId: credit.sale_id ? String(credit.sale_id) : `repair-credit:${String(credit.id)}`,
         branchId: credit.branch_id ?? null,
         paymentDate: String(payment.created_at),
         paymentMethod: String(payment.payment_method ?? '').trim().toLowerCase(),
@@ -2987,6 +3122,7 @@ export function toFinanceSaleItemFromSnapshot(
     productId?: string | null
     quantity: number
     revenueAmount?: number | null
+    unitMeasure?: string | null
   },
   historicalUnitCost: number | null,
 ): FinanceSaleItemRecord {
@@ -2997,6 +3133,7 @@ export function toFinanceSaleItemFromSnapshot(
     quantity: money(item.quantity),
     unitCost: historicalUnitCost === null ? null : money(historicalUnitCost),
     revenueAmount: money(item.revenueAmount),
+    isService: String(item.unitMeasure ?? '').trim().toLowerCase() === 'servicio',
   }
 }
 
@@ -3011,7 +3148,7 @@ async function loadSaleItems(
     chunkQueryValues(saleIds).map((ids) =>
       admin
         .from('sale_items')
-        .select('id, sale_id, product_id, quantity, subtotal', { count: 'exact' })
+        .select('id, sale_id, product_id, quantity, subtotal, products(unit_measure)', { count: 'exact' })
         .eq('organization_id', organizationId)
         .in('sale_id', ids)
         .limit(FINANCE_REPORT_QUERY_LIMIT),
@@ -3023,11 +3160,16 @@ async function loadSaleItems(
     assertBoundedFinanceRows(result.data as unknown[] | null, 'items de venta', result.count)
     for (const item of result.data ?? []) {
       const snapshotCost = costSnapshots.get(String(item.id))
+      const product = (item as {
+        products?: { unit_measure?: string | null } | Array<{ unit_measure?: string | null }> | null
+      }).products
+      const unitMeasure = Array.isArray(product) ? product[0]?.unit_measure : product?.unit_measure
       items.push(toFinanceSaleItemFromSnapshot({
         saleId: String(item.sale_id),
         productId: item.product_id ?? null,
         quantity: money(item.quantity),
         revenueAmount: money(item.subtotal),
+        unitMeasure: unitMeasure ?? null,
       }, snapshotCost ?? null))
     }
   }
@@ -3040,6 +3182,7 @@ function toRepairPaymentRecord(row: {
   created_at: unknown
   payment_method?: unknown
   amount: unknown
+  sale_id?: unknown
 }): FinanceRepairPaymentRecord {
   return {
     repairId: String(row.repair_id),
@@ -3047,10 +3190,11 @@ function toRepairPaymentRecord(row: {
     paymentDate: String(row.created_at),
     paymentMethod: String(row.payment_method ?? '').trim().toLowerCase(),
     amount: money(row.amount as number | string),
+    saleId: typeof row.sale_id === 'string' && row.sale_id ? row.sale_id : null,
   }
 }
 
-const REPAIR_PAYMENT_COLUMNS = 'repair_id, branch_id, amount, payment_method, created_at'
+const REPAIR_PAYMENT_COLUMNS = 'repair_id, branch_id, amount, payment_method, created_at, sale_id'
 
 /**
  * Cobros de reparaciones fechados dentro del periodo, para la vista de caja.
@@ -3198,15 +3342,26 @@ export async function getFinanceProfitability(
   })
 }
 
-function buildProfitabilityRows(
+export function buildProfitabilityRows(
   records: FinanceSummaryRecords,
   filters: FinanceFilters,
   group: FinanceProfitabilityGroup,
 ): FinanceProfitabilityRow[] {
-  const sales = records.sales.filter(
-    (sale) => isInBranch(sale.branchId, filters) && isInPeriod(sale.createdAt, filters) && isCompletedSaleStatus(sale.status),
+  const repairPortions = repairPortionBySale(records.repairPayments)
+  const allSaleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
+  for (const item of records.saleItems) {
+    allSaleItemsBySaleId.set(item.saleId, [...(allSaleItemsBySaleId.get(item.saleId) ?? []), item])
+  }
+  // «Por reparación» no lista ventas y «Por venta» no lista reparaciones:
+  // antes las dos vistas salían mezcladas e iguales.
+  const sales = group === 'repair' ? [] : records.sales.filter(
+    (sale) =>
+      isInBranch(sale.branchId, filters) &&
+      isInPeriod(sale.createdAt, filters) &&
+      isCompletedSaleStatus(sale.status) &&
+      !isRepairOnlySale(sale, allSaleItemsBySaleId.get(sale.id) ?? [], repairPortions),
   )
-  const repairs = records.repairs.filter((repair) => {
+  const repairs = group === 'sale' ? [] : records.repairs.filter((repair) => {
     const recognizedAt = repairRevenueDate(repair)
     return isInBranch(repair.branchId, filters) && recognizedAt !== null && isInPeriod(recognizedAt, filters)
   })
@@ -3240,13 +3395,12 @@ function buildProfitabilityRows(
   for (const sale of sales) {
     if (group === 'product') {
       for (const item of saleItemsBySaleId.get(sale.id) ?? []) {
-        const complete = item.unitCost !== null
         add(
           `product:${item.productId ?? 'missing'}`,
           item.productName ?? item.productId ?? 'Producto sin identificar',
           money(item.revenueAmount),
-          complete ? money(item.quantity) * money(item.unitCost) : 0,
-          complete,
+          itemDirectCost(item),
+          hasKnownItemCost(item),
         )
       }
       continue
@@ -3256,9 +3410,9 @@ function buildProfitabilityRows(
     add(
       id,
       label,
-      money(sale.totalAmount),
-      items.reduce((total, item) => total + (item.unitCost === null ? 0 : money(item.quantity) * money(item.unitCost)), 0),
-      items.length > 0 && items.every((item) => item.unitCost !== null),
+      saleOwnRevenue(sale, repairPortions),
+      items.reduce((total, item) => total + itemDirectCost(item), 0),
+      items.length > 0 && items.every(hasKnownItemCost),
     )
   }
   for (const repair of repairs) {
@@ -3269,7 +3423,8 @@ function buildProfitabilityRows(
         ? [`branch:${repair.branchId ?? 'organization'}`, repair.branchId ?? 'Organización'] as const
         // Ticket de la reparación como etiqueta legible, id corto de respaldo.
         : [`repair:${repair.id}`, repair.ticketNumber ?? `Reparación ${repair.id.slice(0, 8)}`] as const
-    const parts = repairPartsByRepairId.get(repair.id) ?? []
+    // Solo repuestos instalados o usados, igual que el resumen.
+    const parts = (repairPartsByRepairId.get(repair.id) ?? []).filter((part) => isUsedRepairPart(part.status))
     add(
       key[0],
       key[1],

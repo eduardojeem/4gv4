@@ -349,7 +349,7 @@ export default function FinancesAdminScreen() {
                     icon="trending-up-outline"
                     label="Vendiste"
                     value={amount(data.accrued.revenue)}
-                    hint="Ventas, pedidos y reparaciones"
+                    hint="Ventas, servicios, pedidos y reparaciones entregadas"
                     colors={colors}
                     accent={accent}
                   />
@@ -384,6 +384,27 @@ export default function FinancesAdminScreen() {
                       />
                     )}
                     <Action label="Ver cuáles son en la web" color={accent} onPress={web} />
+                  </View>
+                )}
+
+                {data.accrued.revenueBreakdown && data.accrued.revenueBreakdown.grossRevenue > 0 && (
+                  <View style={card}>
+                    <Text accessibilityRole="header" style={[styles.cardTitle, { color: colors.text }]}>
+                      De dónde vienen las ventas
+                    </Text>
+                    <Line icon="cube-outline" label="Mercadería" hint="Productos vendidos en caja" value={amount(data.accrued.revenueBreakdown.merchandise)} colors={colors} />
+                    <Line icon="cut-outline" label="Servicios" hint="Servicios y turnos cobrados en caja" value={amount(data.accrued.revenueBreakdown.services)} colors={colors} />
+                    <Line
+                      icon="construct-outline"
+                      label="Reparaciones"
+                      hint={`${data.accrued.revenueBreakdown.repairs.count === 1 ? '1 entregada' : `${data.accrued.revenueBreakdown.repairs.count} entregadas`} · mano de obra ${amount(data.accrued.revenueBreakdown.repairs.labor)}, repuestos ${amount(data.accrued.revenueBreakdown.repairs.parts)}`}
+                      value={amount(data.accrued.revenueBreakdown.repairs.total)}
+                      colors={colors}
+                    />
+                    <Line icon="globe-outline" label="Pedidos web" value={amount(data.accrued.revenueBreakdown.orders)} colors={colors} />
+                    {data.accrued.revenueBreakdown.refunds > 0 && (
+                      <Line icon="return-down-back-outline" label="Devoluciones" value={`− ${amount(data.accrued.revenueBreakdown.refunds)}`} colors={colors} />
+                    )}
                   </View>
                 )}
 

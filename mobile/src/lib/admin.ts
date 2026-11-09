@@ -283,6 +283,15 @@ export type FinanceSummaryData = {
     operatingExpenses: number;
     payrollCost: number;
     netProfit: number | null;
+    /** De dónde vienen los ingresos. Opcional: un servidor viejo no lo manda. */
+    revenueBreakdown?: {
+      merchandise: number;
+      services: number;
+      repairs: { total: number; labor: number; parts: number; count: number };
+      orders: number;
+      refunds: number;
+      grossRevenue: number;
+    };
   };
   cash: {
     collected: number;

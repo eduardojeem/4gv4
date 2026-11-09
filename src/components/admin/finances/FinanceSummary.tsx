@@ -11,12 +11,16 @@ import {
   ChevronRight,
   CircleAlert,
   FileDown,
+  Globe,
   Landmark,
+  Package,
   Percent,
   PiggyBank,
+  Scissors,
   TrendingUp,
   Users,
   WalletCards,
+  Wrench,
 } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -62,6 +66,71 @@ function calculateDelta(
     percent: Math.round(change * 10) / 10,
     direction: change > 0 ? 'up' : 'down',
   }
+}
+
+type RevenueBreakdown = NonNullable<FinanceSummaryReport['accrued']['revenueBreakdown']>
+
+/**
+ * ¿De dónde vienen los ingresos? Mercadería, servicios, reparaciones (con su
+ * mano de obra y repuestos) y pedidos web. Antes todo era un solo número.
+ */
+export function RevenueSourcesBreakdown({ breakdown }: { breakdown: RevenueBreakdown }) {
+  const sources = [
+    { key: 'merchandise', label: 'Mercadería', hint: 'Productos vendidos en caja', value: breakdown.merchandise, icon: Package },
+    { key: 'services', label: 'Servicios', hint: 'Servicios y turnos cobrados en caja', value: breakdown.services, icon: Scissors },
+    {
+      key: 'repairs',
+      label: 'Reparaciones',
+      hint: breakdown.repairs.count === 1 ? '1 entregada en el período' : `${breakdown.repairs.count} entregadas en el período`,
+      value: breakdown.repairs.total,
+      icon: Wrench,
+    },
+    { key: 'orders', label: 'Pedidos web', hint: 'Tienda online', value: breakdown.orders, icon: Globe },
+  ]
+  const total = breakdown.grossRevenue
+  return (
+    <section aria-labelledby="finance-revenue-sources-heading" className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id="finance-revenue-sources-heading" className="text-sm font-semibold">¿De dónde vienen los ingresos?</h3>
+        <span className="text-xs text-muted-foreground">
+          Ventas, servicios y pedidos por fecha de venta; reparaciones por fecha de entrega
+        </span>
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {sources.map(({ key, label, hint, value, icon: Icon }) => {
+          const share = total > 0 ? Math.round((Math.max(0, value) / total) * 100) : 0
+          return (
+            <li key={key} className="rounded-lg border bg-muted/20 p-3" data-testid={`revenue-source-${key}`}>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                {label}
+                <span className="ml-auto text-xs font-normal text-muted-foreground">{share}%</span>
+              </div>
+              <p className="mt-1 text-lg font-bold tabular-nums">{formatCurrency(value)}</p>
+              <p className="text-xs text-muted-foreground">{hint}</p>
+              {key === 'repairs' && breakdown.repairs.total > 0 && (
+                <dl className="mt-2 grid grid-cols-2 gap-1 border-t pt-2 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">Mano de obra</dt>
+                    <dd className="font-semibold tabular-nums">{formatCurrency(breakdown.repairs.labor)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Repuestos y materiales</dt>
+                    <dd className="font-semibold tabular-nums">{formatCurrency(breakdown.repairs.parts)}</dd>
+                  </div>
+                </dl>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {breakdown.refunds > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Menos devoluciones del período: <span className="font-semibold tabular-nums">{formatCurrency(breakdown.refunds)}</span>
+        </p>
+      )}
+    </section>
+  )
 }
 
 function MetricCard({
@@ -887,7 +956,7 @@ export function FinanceSummary({
               <MetricCard
                 title="Ingresos devengados"
                 value={summary.accrued.revenue}
-                description="Ventas y reparaciones completadas"
+                description="Ventas, servicios, pedidos y reparaciones entregadas"
                 icon={TrendingUp}
                 tone="positive"
                 previousValue={summary.comparison?.accrued?.revenue}
@@ -925,6 +994,10 @@ export function FinanceSummary({
               />
             </div>
           </section>
+
+          {summary.accrued.revenueBreakdown && (
+            <RevenueSourcesBreakdown breakdown={summary.accrued.revenueBreakdown} />
+          )}
 
           {/* Desglose visual de rentabilidad y costos */}
           <CostStructureBreakdown

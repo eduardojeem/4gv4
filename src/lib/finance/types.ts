@@ -86,6 +86,8 @@ export type CoverageWarningCode =
   | 'MISSING_CASH_TIMING'
   | 'MISSING_BRANCH'
   | 'MISSING_EMPLOYEE'
+  /** Reparación entregada sin precio: cuenta como ingreso cero. */
+  | 'MISSING_REPAIR_PRICE'
 
 export interface CoverageWarning {
   code: CoverageWarningCode
@@ -96,9 +98,37 @@ export interface CoverageWarning {
   sourceType?: FinanceSourceType
 }
 
+/**
+ * De dónde salen los ingresos del período. Las partes suman `grossRevenue`;
+ * `revenue` del resumen es eso menos las devoluciones (`refunds`).
+ */
+export interface FinanceRevenueBreakdown {
+  /** Mercadería vendida en el mostrador (POS). */
+  merchandise: number
+  /** Servicios vendidos en el mostrador: productos con unidad «servicio», turnos. */
+  services: number
+  /** Reparaciones entregadas en el período. */
+  repairs: {
+    total: number
+    /** Mano de obra cargada en la reparación. */
+    labor: number
+    /** El resto del precio: repuestos y materiales cobrados. */
+    parts: number
+    /** Cuántas reparaciones se entregaron. */
+    count: number
+  }
+  /** Pedidos de la tienda web. */
+  orders: number
+  /** Devoluciones cerradas en el período (se restan). */
+  refunds: number
+  grossRevenue: number
+}
+
 export interface FinanceSummary {
   accrued: {
     revenue: number
+    /** Opcional para no romper consumidores viejos; el servidor siempre lo manda. */
+    revenueBreakdown?: FinanceRevenueBreakdown
     directCosts: number
     grossProfit: number | null
     operatingExpenses: number
