@@ -28,6 +28,8 @@ export interface SessionMovementTotals {
 }
 
 export interface SessionRow {
+  /** Fecha de cierre; vacía mientras el turno está abierto. */
+  date?: unknown
   total_sales?: unknown
   sales_total?: unknown
   sales_total_cash?: unknown
@@ -78,26 +80,37 @@ export function calculateSessionFigures(
   row: SessionRow,
   movements: SessionMovementTotals
 ): SessionFigures {
-  const salesCash = storedNumber(row.sales_total_cash) ?? movements.salesCash
-  const salesCard = storedNumber(row.sales_total_card) ?? movements.salesCard
-  const salesTransfer = storedNumber(row.sales_total_transfer) ?? movements.salesTransfer
-  const salesMixed = storedNumber(row.sales_total_mixed) ?? movements.salesMixed
+  // Las columnas por medio de pago, ingresos y egresos de `cash_closures` tienen
+  // DEFAULT 0 y ningún RPC las escribe: un turno con 800.000 en efectivo
+  // mostraba 0. Si el turno tiene movimientos, mandan los movimientos; las
+  // columnas solo sirven para turnos viejos sin movimientos.
+  const fromMovements = movements.total > 0
+  const pick = (stored: unknown, computed: number) => fromMovements ? computed : (storedNumber(stored) ?? computed)
+  const salesCash = pick(row.sales_total_cash, movements.salesCash)
+  const salesCard = pick(row.sales_total_card, movements.salesCard)
+  const salesTransfer = pick(row.sales_total_transfer, movements.salesTransfer)
+  const salesMixed = pick(row.sales_total_mixed, movements.salesMixed)
 
   const storedSales = firstStored(row.total_sales, row.sales_total)
-  const totalSales = storedSales ?? (
-    movements.total > 0 ? movements.totalSales : salesCash + salesCard + salesTransfer + salesMixed
-  )
+  const totalSales = fromMovements
+    ? movements.totalSales
+    : storedSales ?? salesCash + salesCard + salesTransfer + salesMixed
 
   const openingBalance = storedNumber(row.opening_balance) ?? 0
-  const incomeTotal = storedNumber(row.income_total) ?? movements.cashIn
-  const expenseTotal = storedNumber(row.expense_total) ?? movements.cashOut
+  const incomeTotal = pick(row.income_total, movements.cashIn)
+  const expenseTotal = pick(row.expense_total, movements.cashOut)
 
-  const closingBalance = storedNumber(row.closing_balance)
-  const currentBalance = closingBalance ?? (openingBalance + totalSales + incomeTotal - expenseTotal)
+  // Un turno abierto no tiene cierre: `closing_balance` y `expected_balance`
+  // valen 0 por defecto hasta que se cierra. Lo que hay en el cajón es la
+  // apertura más las ventas en efectivo, más ingresos, menos egresos.
+  const closed = Boolean(row.date)
+  const computedBalance = openingBalance + (fromMovements ? salesCash : totalSales) + incomeTotal - expenseTotal
+  const currentBalance = closed ? storedNumber(row.closing_balance) ?? computedBalance : computedBalance
 
-  // Solo tiene sentido comparar cuando hay las dos cosas.
+  // Un total guardado distinto de cero que no coincide con los movimientos es
+  // un hallazgo; el cero por defecto de la columna no lo es.
   const salesMismatch =
-    storedSales !== null && movements.total > 0 && storedSales !== movements.totalSales
+    storedSales !== null && storedSales !== 0 && fromMovements && storedSales !== movements.totalSales
       ? movements.totalSales - storedSales
       : null
 
@@ -111,7 +124,7 @@ export function calculateSessionFigures(
     incomeTotal,
     expenseTotal,
     currentBalance,
-    expectedBalance: storedNumber(row.expected_balance) ?? currentBalance,
+    expectedBalance: closed ? storedNumber(row.expected_balance) ?? currentBalance : currentBalance,
     salesMismatch,
   }
 }

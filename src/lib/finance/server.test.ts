@@ -308,10 +308,11 @@ describe('pagos a tecnicos en el resumen', () => {
     expect(summary.cash.netCashFlow).toBe(-400_000)
   })
 
+  // Un anulado en el mismo período sale y vuelve: no suma nada.
   it('ignora los anulados y los pendientes', () => {
     for (const status of ['anulado', 'pendiente']) {
       const summary = buildFinanceSummaryFromRecords(
-        { ...emptyRecords, technicianPayments: [{ ...payment, status }] },
+        { ...emptyRecords, technicianPayments: [{ ...payment, status, voidedAt: status === 'anulado' ? payment.paidAt : null }] },
         filters
       )
       expect(summary.accrued.payrollCost).toBe(0)

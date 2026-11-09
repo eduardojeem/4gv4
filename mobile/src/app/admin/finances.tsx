@@ -444,6 +444,9 @@ export default function FinancesAdminScreen() {
                     {sources.orders > 0 && (
                       <Line icon="globe-outline" label="Pedidos web" value={amount(sources.orders)} colors={colors} />
                     )}
+                    {(sources.cashOverage ?? 0) > 0 && (
+                      <Line icon="wallet-outline" label="Sobrantes de caja" hint="Contaste más de lo esperado al cerrar" value={amount(sources.cashOverage ?? 0)} colors={colors} />
+                    )}
                     {(sources.interest ?? 0) > 0 && (
                       <Line icon="trending-up-outline" label="Intereses" hint="Cobrados en cuotas de créditos" value={amount(sources.interest ?? 0)} colors={colors} />
                     )}

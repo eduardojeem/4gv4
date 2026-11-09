@@ -554,9 +554,13 @@ export type RepairedDelivery = {
   payment?: { method: PayMethod; amount: number; reference?: string };
 };
 
+export type PartDisposition = 'consumed' | 'restocked';
+
 export type UnrepairedDelivery = {
   outcome: 'unrepairable' | 'withdrawn';
   chargeAmount: number;
+  /** Qué pasa con cada repuesto cargado: el servidor exige resolverlos todos. */
+  parts: { repairPartId: string; disposition: PartDisposition }[];
   settlement:
     | { kind: 'none' }
     | { kind: 'payment'; method: PayMethod; amount: number; reference?: string }
@@ -590,7 +594,7 @@ export async function deliverRepair(id: string, input: RepairedDelivery | Unrepa
           outcome: input.outcome,
           // Sin cargo, o un cargo por la revisión (mano de obra), como el panel de la web.
           charge: input.chargeAmount > 0 ? { mode: 'labor', laborAmount: input.chargeAmount } : { mode: 'none' },
-          parts: [],
+          parts: input.parts,
           settlement:
             input.settlement.kind === 'payment'
               ? { ...input.settlement, reference: input.settlement.reference?.trim() || undefined }

@@ -93,6 +93,8 @@ export type CoverageWarningCode =
   | 'MISSING_EMPLOYEE'
   /** Reparación entregada sin precio: cuenta como ingreso cero. */
   | 'MISSING_REPAIR_PRICE'
+  /** Cobro con tarjeta o transferencia rechazado o devuelto al conciliar. */
+  | 'REJECTED_PAYMENT'
 
 export interface CoverageWarning {
   code: CoverageWarningCode
@@ -126,6 +128,8 @@ export interface FinanceRevenueBreakdown {
   orders: number
   /** Intereses cobrados en cuotas de créditos (la venta cuenta solo el capital). */
   interest?: number
+  /** Sobrantes de caja al cerrar (contaste más de lo esperado). */
+  cashOverage?: number
   /** Devoluciones cerradas en el período (se restan). */
   refunds: number
   grossRevenue: number

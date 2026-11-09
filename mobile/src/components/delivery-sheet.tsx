@@ -26,6 +26,7 @@ import {
   newIdempotencyKey,
   PAY_METHODS,
   ticketOf,
+  type PartDisposition,
   type PayMethod,
   type Repair,
   type UnrepairedDelivery,
@@ -70,6 +71,13 @@ export function DeliverySheet({
   const [confirmOutstanding, setConfirmOutstanding] = useState(false);
   const [charge, setCharge] = useState('');
   const [refund, setRefund] = useState<'store_credit' | 'refund'>('store_credit');
+  // Sin reparar, cada repuesto se resuelve: vuelve al stock (solo si es un
+  // producto del inventario) o quedó consumido. Antes se mandaba vacío y el
+  // servidor rechazaba la entrega de cualquier reparación con repuestos.
+  const repairParts = repair.parts ?? [];
+  const defaultDispositions = () =>
+    Object.fromEntries(repairParts.map((part) => [part.id, (part.product_id ? 'restocked' : 'consumed') as PartDisposition]));
+  const [dispositions, setDispositions] = useState<Record<string, PartDisposition>>(defaultDispositions);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +91,7 @@ export function DeliverySheet({
     setConfirmOutstanding(false);
     setCharge('');
     setRefund('store_credit');
+    setDispositions(defaultDispositions());
     setNote('');
     setError(null);
   };
@@ -110,7 +119,7 @@ export function DeliverySheet({
       if (remaining > 0 && !confirmOutstanding) return `Confirmá que se entrega con ${formatGs(remaining)} pendiente.`;
       return null;
     }
-    if (difference > 0 && collect && method === 'transfer' && !reference.trim()) return 'Anotá la referencia de la transferencia.';
+    if (difference > 0 && collect && needsReference && !reference.trim()) return 'Anotá la referencia del comprobante.';
     return null;
   })();
 
@@ -152,7 +161,11 @@ export function DeliverySheet({
                 ? { kind: 'refund', method: 'cash' }
                 : { kind: 'store_credit' }
               : { kind: 'none' };
-        updated = await deliverRepair(repair.id, { outcome, chargeAmount, settlement, note }, key);
+        const parts = repairParts.map((part) => ({
+          repairPartId: part.id,
+          disposition: dispositions[part.id] ?? (part.product_id ? 'restocked' : 'consumed'),
+        }));
+        updated = await deliverRepair(repair.id, { outcome, chargeAmount, parts, settlement, note }, key);
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onDelivered(updated);
@@ -287,6 +300,41 @@ export function DeliverySheet({
                 <Text style={[styles.small, { color: colors.muted }]}>
                   Sin reparar no se cobra el presupuesto. Ya pagó {formatGs(paid)}.
                 </Text>
+                {repairParts.length > 0 && (
+                  <>
+                    <Text style={[styles.label, { color: colors.text }]}>Repuestos</Text>
+                    {repairParts.map((part) => (
+                      <View key={part.id} style={{ gap: 6 }}>
+                        <Text style={[styles.small, { color: colors.text }]}>
+                          {part.part_name} × {part.quantity}
+                        </Text>
+                        <View style={styles.chips}>
+                          <Choice
+                            label="Consumido"
+                            icon="construct-outline"
+                            selected={dispositions[part.id] === 'consumed'}
+                            onPress={() => setDispositions((current) => ({ ...current, [part.id]: 'consumed' }))}
+                            colors={colors}
+                          />
+                          {part.product_id ? (
+                            <Choice
+                              label="Vuelve al stock"
+                              icon="return-down-back-outline"
+                              selected={dispositions[part.id] === 'restocked'}
+                              onPress={() => setDispositions((current) => ({ ...current, [part.id]: 'restocked' }))}
+                              colors={colors}
+                            />
+                          ) : null}
+                        </View>
+                        {!part.product_id && (
+                          <Text style={[styles.small, { color: colors.muted }]}>
+                            No es un producto del inventario: no puede volver al stock.
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </>
+                )}
                 {difference > 0 && (
                   <>
                     <Text style={[styles.label, { color: colors.text }]}>Falta cobrar {formatGs(difference)}</Text>
@@ -295,8 +343,8 @@ export function DeliverySheet({
                       <Choice label="Queda debiendo" icon="time-outline" selected={!collect} onPress={() => setCollect(false)} colors={colors} />
                     </View>
                     {collect && renderMethods()}
-                    {collect && method === 'transfer' && (
-                      <Field label="Referencia de la transferencia" colors={colors}>
+                    {collect && needsReference && (
+                      <Field label={method === 'card' ? 'Comprobante de la tarjeta' : 'Referencia de la transferencia'} colors={colors}>
                         <TextInput value={reference} onChangeText={setReference} autoCapitalize="characters" style={[styles.input, { color: colors.text }]} />
                       </Field>
                     )}

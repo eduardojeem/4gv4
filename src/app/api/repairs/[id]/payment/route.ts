@@ -1,3 +1,4 @@
+import { resolveRepairCashSessionId } from '@/lib/repairs/cash-session'
 import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -119,19 +120,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     let cashSessionId: string | null = null
     if (!isCredit) {
-      const { data, error } = await ctx.supabase
-        .from('cash_closures')
-        .select('id, register_id')
-        .eq('organization_id', ctx.organizationId)
-        .eq('branch_id', ctx.branchId)
-        .is('date', null)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      const sessions = (data ?? []) as Array<{ id: string; register_id?: string | null }>
-      cashSessionId = sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal')?.id
-        ?? sessions[0]?.id
-        ?? null
+      cashSessionId = await resolveRepairCashSessionId(ctx.supabase, ctx)
 
       if (!cashSessionId) {
         return NextResponse.json(

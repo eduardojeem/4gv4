@@ -1998,6 +1998,8 @@ type FinanceSalePaymentRecord = {
    * el capital (`sales.total_amount`): el interés es ingreso cuando se cobra.
    */
   interestAmount?: number
+  /** Comisión que se queda el banco o la billetera (conciliación). */
+  feeAmount?: number
 }
 
 /**
@@ -2125,6 +2127,19 @@ export interface FinanceTechnicianPaymentRecord {
   /** En efectivo salio de la caja; por transferencia tambien es plata que se fue. */
   method: string | null
   status: string | null
+  /** Cuándo se anuló (si se anuló): la plata vuelve ese día, no el del pago. */
+  voidedAt?: string | null
+}
+
+/**
+ * Cierre de caja con diferencia entre lo contado y lo esperado. Negativa es
+ * faltante (plata que se perdió); positiva, sobrante.
+ */
+export interface FinanceCashClosureRecord {
+  id: string
+  branchId: string | null
+  closedAt: string
+  discrepancy: number
 }
 
 /**
@@ -2175,6 +2190,8 @@ export interface FinanceRepairCloseoutRecord {
 }
 
 export interface FinanceSummaryRecords {
+  /** Cierres de caja del período con faltante o sobrante. */
+  cashClosures?: FinanceCashClosureRecord[]
   sales: FinanceSaleRecord[]
   saleItems: FinanceSaleItemRecord[]
   salePayments?: FinanceSalePaymentRecord[]
@@ -2508,6 +2525,16 @@ function buildFinancialSummary(
       parts.filter((part) => isCostedRepairPart(part, restocked)),
     )
   }
+  // Faltante o sobrante al cerrar la caja: la plata que se contó manda.
+  const periodClosures = (records.cashClosures ?? []).filter((closure) =>
+    isInBranch(closure.branchId, filters) && isInPeriod(closure.closedAt, filters))
+  const cashShortages = periodClosures
+    .filter((closure) => closure.discrepancy < 0)
+    .map((closure) => ({ id: `cash-shortage:${closure.id}`, amount: -closure.discrepancy, paidAmount: 0 }))
+  const shortageTotal = cashShortages.reduce((total, line) => total + line.amount, 0)
+  const overageTotal = roundMoneyValue(periodClosures
+    .filter((closure) => closure.discrepancy > 0)
+    .reduce((total, closure) => total + closure.discrepancy, 0))
   const interestCollected = roundMoneyValue((records.creditPayments ?? [])
     .filter((payment) => isInBranch(payment.branchId, filters) && isInPeriod(payment.paymentDate, filters))
     .reduce((total, payment) => total + money(payment.interestAmount), 0))
@@ -2538,6 +2565,9 @@ function buildFinancialSummary(
     // Intereses cobrados en cuotas: ingreso sin costo, el día que se cobran.
     ...(interestCollected > 0
       ? [{ id: 'credit-interest', amount: interestCollected, cashAmount: 0, hasCost: true, label: 'Intereses de créditos' }]
+      : []),
+    ...(overageTotal > 0
+      ? [{ id: 'cash-overage', amount: overageTotal, cashAmount: 0, hasCost: true, label: 'Sobrantes de caja' }]
       : []),
     // El costo se captura al crear el pedido (trigger sobre customer_order_items).
     // Un pedido sin snapshot —anterior a esa migracion— queda declarado sin
@@ -2621,6 +2651,16 @@ function buildFinancialSummary(
     }))
 
   const payrollWithTechnicians = [...payroll, ...technicianPayments, ...payrollObligations]
+  // Comisión de tarjeta o QR: el banco acredita menos de lo cobrado. Es un
+  // gasto y es plata que no llega a la cuenta.
+  const paymentFees = (records.salePayments ?? [])
+    .filter((payment) =>
+      money(payment.feeAmount) > 0 &&
+      isCompletedNonCreditSalePayment(payment) &&
+      isInBranch(payment.branchId, filters) &&
+      isInPeriod(payment.paymentDate, filters))
+    .map((payment, index) => ({ id: `payment-fee:${payment.saleId}:${index}`, amount: money(payment.feeAmount), paidAmount: 0 }))
+  const feesTotal = paymentFees.reduce((total, fee) => total + fee.amount, 0)
   // Las devoluciones cerradas en el periodo revierten la venta que ya se conto.
   const selectedRefunds = (records.refunds ?? []).filter(
     (refund) =>
@@ -2638,7 +2678,7 @@ function buildFinancialSummary(
   const summary = calculateFinancialSummary({
     revenue: roundLines(revenue),
     directCosts: roundLines(directCosts),
-    expenses: roundLines(expenses),
+    expenses: roundLines([...expenses, ...paymentFees, ...cashShortages]),
     payroll: roundLines(payrollWithTechnicians),
     refunds: refunds.map((refund) => ({
       ...refund,
@@ -2686,7 +2726,19 @@ function buildFinancialSummary(
     .reduce((total, payment) => total + money(payment.amount), 0)
   // Los pagos a tecnicos salen de `technician_payments`, no de `payroll_payments`
   // —esa tabla la alimenta la nomina administrativa—, asi que no hay doble conteo.
-  const technicianPaid = technicianPayments.reduce((total, payment) => total + payment.paidAmount, 0)
+  // Un pago anulado salió de caja el día que se pagó y volvió el día que se
+  // anuló: no se borra del período en que se pagó (ese día ya cerró).
+  const technicianCashMoves = (records.technicianPayments ?? [])
+    .filter((payment) =>
+      !payment.payrollMapped &&
+      isInBranch(payment.branchId ?? null, filters) &&
+      String(payment.status ?? '').toLowerCase() === 'anulado' &&
+      Boolean(payment.paidAt))
+    .reduce((total, payment) =>
+      total +
+      (isInPeriod(payment.paidAt, filters) ? money(payment.amount) : 0) -
+      (isInPeriod(payment.voidedAt, filters) ? money(payment.amount) : 0), 0)
+  const technicianPaid = technicianPayments.reduce((total, payment) => total + payment.paidAmount, 0) + technicianCashMoves
   // Devolución al cliente al cerrar una reparación sin reparar: sale por
   // `cash_movements`, que Finanzas no lee, y no aparecía en «Salió».
   const closeoutRefunds = (records.repairCloseouts ?? [])
@@ -2702,7 +2754,9 @@ function buildFinancialSummary(
     signedPayments(records.payrollPayments, filters) +
     refundedCash +
     technicianPaid +
-    closeoutRefunds
+    closeoutRefunds +
+    feesTotal +
+    shortageTotal
   const datedRepairPayments = new Map<string, number>()
   for (const payment of records.repairPaymentsBySelectedRepair ?? records.repairPayments ?? []) {
     datedRepairPayments.set(
@@ -2776,8 +2830,22 @@ function buildFinancialSummary(
     orders: selectedOrders,
     refunds: refunds.reduce((total, refund) => total + refund.amount, 0),
     interest: interestCollected,
+    cashOverage: overageTotal,
   })
-  const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings]
+  const saleCodes = new Map(records.sales.map((sale) => [sale.id, sale.code ?? null]))
+  const rejectedPaymentWarnings = (records.salePayments ?? [])
+    .filter((payment) =>
+      payment.status === 'rejected' &&
+      isInBranch(payment.branchId, filters) &&
+      isInPeriod(payment.paymentDate, filters))
+    .map((payment) => ({
+      code: 'REJECTED_PAYMENT' as const,
+      message: 'Un cobro con tarjeta o transferencia se rechazó o se devolvió al conciliar: esa plata no entró. Revisá si el cliente pagó de otra forma.',
+      sourceId: payment.saleId,
+      sourceLabel: saleCodes.get(payment.saleId) ? `Venta ${saleCodes.get(payment.saleId)}` : undefined,
+      sourceType: 'sale' as const,
+    }))
+  const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings, ...rejectedPaymentWarnings]
 
   return {
     ...summary,
@@ -2794,9 +2862,9 @@ function buildFinancialSummary(
       netProfit: summary.accrued.netProfit === null ? null : roundMoneyValue(summary.accrued.netProfit),
     },
     cash: {
-      collected: roundMoneyValue(saleCollected + orderCollected + repairCollected),
+      collected: roundMoneyValue(saleCollected + orderCollected + repairCollected + overageTotal),
       paid: roundMoneyValue(paid),
-      netCashFlow: roundMoneyValue(saleCollected + orderCollected + repairCollected - paid),
+      netCashFlow: roundMoneyValue(saleCollected + orderCollected + repairCollected + overageTotal - paid),
     },
   }
 }
@@ -2814,6 +2882,7 @@ function buildRevenueBreakdown(input: {
   orders: FinanceOrderRecord[]
   refunds: number
   interest?: number
+  cashOverage?: number
 }): FinanceRevenueBreakdown {
   let merchandise = 0
   let services = 0
@@ -2847,8 +2916,9 @@ function buildRevenueBreakdown(input: {
     },
     orders: roundMoneyValue(orders),
     interest: roundMoneyValue(input.interest ?? 0),
+    cashOverage: roundMoneyValue(input.cashOverage ?? 0),
     refunds: roundMoneyValue(input.refunds),
-    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders + (input.interest ?? 0)),
+    grossRevenue: roundMoneyValue(merchandise + services + repairTotal + orders + (input.interest ?? 0) + (input.cashOverage ?? 0)),
   }
 }
 
@@ -2989,10 +3059,11 @@ async function loadTechnicianPayments(
 ): Promise<FinanceTechnicianPaymentRecord[]> {
   const result = await allFinanceRows(admin
     .from('technician_payments')
-    .select('id, amount, method, status, paid_at, branch_id', { count: 'exact' })
+    .select('id, amount, method, status, paid_at, updated_at, branch_id', { count: 'exact' })
     .eq('organization_id', organizationId)
-    .gte('paid_at', startAt)
-    .lt('paid_at', endBefore)
+    // Los pagados en el período y los anulados en el período (aunque se hayan
+    // pagado antes): la anulación devuelve la plata el día que ocurre.
+    .or(`and(paid_at.gte."${startAt}",paid_at.lt."${endBefore}"),and(status.eq.anulado,updated_at.gte."${startAt}",updated_at.lt."${endBefore}")`)
     .order('id'))
 
   if (result.error) {
@@ -3023,6 +3094,35 @@ async function loadTechnicianPayments(
     amount: money(row.amount as number | string | null),
     method: (row.method as string | null) ?? null,
     status: (row.status as string | null) ?? null,
+    voidedAt: row.status === 'anulado' && row.updated_at ? String(row.updated_at) : null,
+  }))
+}
+
+/** Cierres de caja del período con diferencia (faltante o sobrante). */
+async function loadCashClosures(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  startAt: string,
+  endBefore: string,
+): Promise<FinanceCashClosureRecord[]> {
+  const result = await allFinanceRows(admin
+    .from('cash_closures')
+    .select('id, branch_id, date, discrepancy', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .gte('date', startAt)
+    .lt('date', endBefore)
+    .neq('discrepancy', 0)
+    .order('id'))
+  if (result.error) {
+    if (isMissingTableError(result.error, 'cash_closures')) return []
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'cierres de caja', result.count)
+  return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    branchId: (row.branch_id as string | null) ?? null,
+    closedAt: String(row.date),
+    discrepancy: money(row.discrepancy as number | string | null),
   }))
 }
 
@@ -3305,6 +3405,7 @@ async function loadFinanceSummaryRecords(
   const refunds = await loadAfterSalesRefunds(admin, organizationId, startAt, endBefore)
   const orders = await loadCustomerOrders(admin, organizationId, startAt, endBefore, filters)
   const technicianPayments = await loadTechnicianPayments(admin, organizationId, startAt, endBefore)
+  const cashClosures = await loadCashClosures(admin, organizationId, startAt, endBefore)
   const orderItems = await loadOrderItemCosts(admin, organizationId, orders.map((order) => order.id))
   const orderPayments = await loadOrderPayments(admin, organizationId, orders)
   const repairPaymentResult = await loadRepairPayments(
@@ -3327,6 +3428,7 @@ async function loadFinanceSummaryRecords(
     repairPaymentsBySelectedRepair,
     repairPaymentTimingAvailable: repairPaymentResult.available,
     technicianPayments,
+    cashClosures,
     sales,
     saleItems,
     salePayments: salePaymentResult.payments,
@@ -3399,7 +3501,7 @@ async function loadSalePayments(
 ): Promise<{ payments: FinanceSalePaymentRecord[]; available: boolean }> {
   let query = admin
     .from('sale_payments')
-    .select('sale_id, payment_method, amount, status, created_at, sales!inner(branch_id, status)', {
+    .select('sale_id, payment_method, amount, status, created_at, fee_amount, reconciliation_status, sales!inner(branch_id, status)', {
       count: 'exact',
     })
     .eq('organization_id', organizationId)
@@ -3427,10 +3529,14 @@ async function loadSalePayments(
         // Anular una venta deja el cobro en `completed` y devuelve la plata por
         // `cash_movements`, que Finanzas no lee: el cobro seguía sumando en
         // «Entró» aunque la venta ya no existiera.
+        // Un cobro electrónico rechazado o devuelto al conciliar no entró.
         status: normalizeSaleStatus((sale as { status?: string | null } | null)?.status) === SALE_STATUS.CANCELLED
           ? 'voided'
-          : String(payment.status ?? '').trim().toLowerCase(),
+          : ['rejected', 'refunded'].includes(String((payment as { reconciliation_status?: string | null }).reconciliation_status ?? ''))
+            ? 'rejected'
+            : String(payment.status ?? '').trim().toLowerCase(),
         amount: money(payment.amount),
+        feeAmount: money((payment as { fee_amount?: number | string | null }).fee_amount),
       }
     }),
     available: true,
@@ -3757,7 +3863,11 @@ async function loadRepairCloseouts(
         branchId: (row.branch_id as string | null) ?? null,
         createdAt: String(row.created_at),
         restockedPartIds: parts
-          .filter((part) => part.disposition === 'restocked' && typeof part.repairPartId === 'string')
+          // Solo vuelve al stock (y deja de ser costo) un repuesto vinculado a un
+          // producto: uno suelto marcado «volver a inventario» no suma stock, así
+          // que su compra sigue siendo costo de la reparación.
+          .filter((part) => part.disposition === 'restocked' && typeof part.repairPartId === 'string'
+            && typeof part.productId === 'string' && part.productId.length > 0)
           .map((part) => String(part.repairPartId)),
         refundAmount: row.settlement_kind === 'refund' ? money(row.settlement_amount as number | string) : 0,
         refundMethod: typeof row.settlement_method === 'string' ? row.settlement_method : null,

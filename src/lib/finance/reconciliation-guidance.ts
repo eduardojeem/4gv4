@@ -9,6 +9,8 @@ export function reconciliationGuidance(code: string): string {
       return 'Verificá a qué sucursal pertenece el movimiento original. No lo asignes por suposición ni lo cuentes en todas las sucursales.'
     case 'MISSING_REPAIR_PRICE':
       return 'Abrí la reparación y cargá el precio que se cobró. No registres un cobro nuevo: el precio solo corrige el ingreso del período.'
+    case 'REJECTED_PAYMENT':
+      return 'Confirmá con el banco o la billetera por qué se rechazó. Si el cliente pagó de otra forma, registrá ese cobro; si no pagó, anulá la venta o cobrásela.'
     case 'MISSING_EMPLOYEE':
       return 'Revisá el colaborador y la liquidación de origen en Nómina. Conservá el historial y evitá generar un segundo pago.'
     default:

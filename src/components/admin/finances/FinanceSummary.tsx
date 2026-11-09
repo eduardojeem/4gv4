@@ -94,6 +94,7 @@ export function RevenueSourcesBreakdown({ breakdown }: { breakdown: RevenueBreak
     },
     { key: 'orders', label: 'Pedidos web', hint: 'Tienda online', value: breakdown.orders, icon: Globe },
     { key: 'interest', label: 'Intereses', hint: 'Cobrados en cuotas de créditos', value: breakdown.interest ?? 0, icon: Percent },
+    { key: 'cashOverage', label: 'Sobrantes de caja', hint: 'Contaste más de lo esperado al cerrar', value: breakdown.cashOverage ?? 0, icon: WalletCards },
     // Solo lo que tuvo movimiento: una barbería no ve «Reparaciones» en cero.
   ].filter((source) => source.value > 0)
   const total = breakdown.grossRevenue

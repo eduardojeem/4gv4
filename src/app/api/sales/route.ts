@@ -342,6 +342,17 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
     
     const validated = validationResult.data
     
+    // Cancelar cambiando el estado no devolvía stock, plata de caja ni cuotas, y
+    // Finanzas daba el cobro por anulado mientras el efectivo seguía en el cajón.
+    // Una venta se anula con DELETE /api/sales (void_pos_sale).
+    if (validated.status === 'cancelled') {
+      return NextResponse.json({
+        success: false,
+        code: 'SALE_USE_VOID',
+        error: 'Para anular una venta usá la anulación: devuelve el stock, la plata y las cuotas.',
+      }, { status: 409 })
+    }
+
     // Only allow updating status for now (to prevent complex scenarios)
     const updates: { status?: 'completed' | 'cancelled' | 'pending' | 'draft' } = {}
     if (validated.status) updates.status = validated.status
