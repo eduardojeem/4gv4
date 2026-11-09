@@ -35,9 +35,17 @@ describe('preparar la página web para el rubro', () => {
     expect(values.booking_section).toBeUndefined()
   })
 
-  it('la plantilla vuelve a «Automático» y se conservan nombre, logo y contacto', () => {
+  it('una plantilla elegida a mano se conserva; nombre, logo y contacto también', () => {
     const { values } = prepare('clothing', 'retail', ['inventory', 'orders'], myStore)
-    expect(values.company_info).toMatchObject({ storefrontStyle: 'auto', name: 'Mi Tienda', logoUrl: '/logo.png', phone: '0981123456' })
+    expect(values.company_info).toMatchObject({ storefrontStyle: 'tech', name: 'Mi Tienda', logoUrl: '/logo.png', phone: '0981123456' })
+  })
+
+  it('vuelve a «Automático» solo si el dueño lo pide, o si ya estaba en Automático', () => {
+    const capabilities = resolveStorefrontCapabilities({ businessVertical: 'clothing', operatingModel: 'retail', effectiveModules: ['inventory', 'orders'] })
+    const forced = buildVerticalWebsitePreset({ vertical: 'clothing', model: 'retail', capabilities, effectiveModules: ['inventory', 'orders'], current: myStore, resetStorefrontStyleToAuto: true })
+    expect(forced.values.company_info).toMatchObject({ storefrontStyle: 'auto', name: 'Mi Tienda' })
+    const { values } = prepare('clothing', 'retail', ['inventory', 'orders'], { company_info: { ...myStore.company_info, storefrontStyle: 'auto' } })
+    expect(values.company_info?.storefrontStyle).toBe('auto')
   })
 
   it('los números de ejemplo quedan apagados', () => {

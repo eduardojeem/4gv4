@@ -6,6 +6,7 @@ import { ArrowRight, BadgePercent, Baby, PersonStanding, UserRound } from 'lucid
 
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { cn } from '@/lib/utils'
 
 const SHOPPING_PATHS = [
@@ -54,14 +55,37 @@ const AUDIENCE_ACCENTS: Record<string, { iconBg: string; hoverBorder: string }> 
   },
 }
 
-export function StorefrontAudienceLinks() {
+export interface StorefrontAudienceLinksProps {
+  categories?: Array<{ name: string; slug?: string }>
+}
+
+export function StorefrontAudienceLinks({ categories }: StorefrontAudienceLinksProps = {}) {
   const style = useStorefrontStyle()
   const pathname = usePathname()
-  const tenantSlug = getTenantSlugFromPathname(pathname)
-  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
+  const { categories: fetchedCategories } = usePublicCategories()
 
   // Comprar por público solo tiene sentido en ropa y deporte.
   if (style !== 'fashion' && style !== 'sport') return null
+
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
+  const availableCategories = categories ?? fetchedCategories
+
+  // Derivar accesos desde categorías reales existentes: si no existen, ocultar
+  const hasMujer = availableCategories.some((c) => /mujer|dama|femenin/i.test(c.name))
+  const hasHombre = availableCategories.some((c) => /hombre|caballero|masculin/i.test(c.name))
+  const hasNinos = availableCategories.some((c) => /niñ|nino|infantil|kids|bebe|chicos/i.test(c.name))
+
+  if (!hasMujer && !hasHombre && !hasNinos) {
+    return null
+  }
+
+  const activePaths = SHOPPING_PATHS.filter(({ label }) => {
+    if (label === 'Mujer') return hasMujer
+    if (label === 'Hombre') return hasHombre
+    if (label === 'Niños') return hasNinos
+    return true // Ofertas acompaña a los públicos existentes
+  })
 
   const sport = style === 'sport'
 
@@ -95,7 +119,7 @@ export function StorefrontAudienceLinks() {
         </div>
 
         <nav aria-label="Comprar por público" className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
-          {SHOPPING_PATHS.map(({ label, description, query, icon: Icon }) => {
+          {activePaths.map(({ label, description, query, icon: Icon }) => {
             const accent = AUDIENCE_ACCENTS[label]
             return (
               <Link
