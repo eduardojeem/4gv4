@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { imeiWarning } from '@/lib/repairs/imei'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/auth-context'
@@ -1522,6 +1523,15 @@ export function RepairFormDialogV2({
                             placeholder="356789012345678..."
                             className={`h-9 text-sm font-mono ${fieldClass}`}
                           />
+                          {/* Solo avisa: el campo también guarda números de serie que no son IMEI. */}
+                          {(() => {
+                            const warning = imeiWarning(watch(`devices.${index}.serialNumber`))
+                            return warning ? (
+                              <p role="status" className="text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+                                {warning}
+                              </p>
+                            ) : null
+                          })()}
                         </div>
                       </div>
 
