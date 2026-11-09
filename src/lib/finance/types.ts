@@ -25,6 +25,11 @@ export interface FinanceFilters {
   startDate: string
   endDate: string
   branchId?: string | null
+  /**
+   * Zona horaria del negocio. Los días del período se cortan en esta zona;
+   * sin ella, en UTC (como antes).
+   */
+  timeZone?: string
 }
 
 /** Tipo de registro que origina un importe, para poder nombrarlo en el panel. */
