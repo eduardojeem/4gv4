@@ -376,6 +376,20 @@ export default function FinancesAdminScreen() {
                   />
                 </View>
 
+                {data.receivables && data.receivables.total > 0 && (
+                  <View style={card}>
+                    <View style={styles.heading}>
+                      <Ionicons name="people-outline" size={20} color={accent} />
+                      <Text style={[styles.cardTitle, { color: colors.text }]}>Te deben</Text>
+                    </View>
+                    <Text style={[styles.heroAmount, { color: colors.text, fontSize: 26 }]}>{amount(data.receivables.total)}</Text>
+                    <Text style={{ color: colors.muted }}>
+                      {data.receivables.customers === 1 ? '1 cliente' : `${data.receivables.customers} clientes`}
+                      {data.receivables.overdue > 0 ? ` · ${amount(data.receivables.overdue)} ya vencido` : ''}
+                    </Text>
+                  </View>
+                )}
+
                 {warnings.length > 0 && (
                   <View accessibilityRole="alert" style={[styles.card, { backgroundColor: tone.warnBg, borderColor: tone.warn }]}>
                     <View style={styles.heading}>

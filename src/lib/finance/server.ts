@@ -2175,10 +2175,27 @@ export interface FinanceOrderPaymentRecord {
   amount: number
 }
 
+/**
+ * «Te deben»: plata que clientes todavía no pagaron, a hoy (no depende del
+ * período elegido). Cuotas de créditos pendientes o atrasadas y reparaciones
+ * entregadas sin cobrar del todo.
+ */
+export interface FinanceReceivables {
+  total: number
+  /** Parte ya vencida (cuotas con fecha pasada). */
+  overdue: number
+  credits: number
+  repairs: number
+  /** Cuántos clientes deben algo. */
+  customers: number
+}
+
 export interface FinanceSummaryReport extends FinanceSummary {
   generatedAt: string
   filters: FinanceFilters
   comparison: FinanceSummary
+  /** Opcional: un despliegue sin créditos ni reparaciones no lo trae. */
+  receivables?: FinanceReceivables
   upcomingDue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
   overdue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
 }
@@ -3723,6 +3740,71 @@ async function loadRepairParts(
   return parts
 }
 
+const PENDING_INSTALLMENT_STATUSES = ['pending', 'late']
+const PAID_REPAIR_PAYMENT_STATUSES = ['pagado', 'paid']
+
+/**
+ * Cuánto te deben tus clientes hoy. Se calcula aparte del período: una cuota
+ * de marzo sigue debiéndose en noviembre.
+ */
+export async function getFinanceReceivables(
+  organizationId: string,
+  branchId: string | null | undefined,
+  today: string,
+): Promise<FinanceReceivables | undefined> {
+  const admin = createAdminSupabase()
+  let installmentsQuery = admin
+    .from('credit_installments')
+    .select('id, amount, amount_paid, status, due_date, customer_credits!inner(organization_id, branch_id, customer_id)', { count: 'exact' })
+    .eq('customer_credits.organization_id', organizationId)
+    .in('status', PENDING_INSTALLMENT_STATUSES)
+    .order('id')
+  if (branchId) installmentsQuery = installmentsQuery.eq('customer_credits.branch_id', branchId)
+  let repairsQuery = admin
+    .from('repairs')
+    .select('id, customer_id, final_cost, estimated_cost, paid_amount, payment_status', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .in('status', ['entregado', 'delivered'])
+    .not('payment_status', 'in', `(${PAID_REPAIR_PAYMENT_STATUSES.join(',')})`)
+    .order('id')
+  if (branchId) repairsQuery = repairsQuery.eq('branch_id', branchId)
+
+  const [installments, repairs] = await Promise.all([allFinanceRows(installmentsQuery), allFinanceRows(repairsQuery)])
+  // Un despliegue sin créditos o sin taller: «Te deben» simplemente no se muestra.
+  if (installments.error && !isMissingTableError(installments.error, 'credit_installments')) throw toFinanceApiError(installments.error)
+  if (repairs.error) throw toFinanceApiError(repairs.error)
+  if ((installments.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT || (repairs.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT) return undefined
+
+  const customers = new Set<string>()
+  let credits = 0
+  let overdue = 0
+  for (const row of (installments.error ? [] : installments.data ?? []) as Array<Record<string, unknown>>) {
+    const owed = Math.max(0, money(row.amount as number | string) - Math.min(money(row.amount as number | string), money(row.amount_paid as number | string | null)))
+    if (owed <= 0) continue
+    credits += owed
+    const dueDay = typeof row.due_date === 'string' ? row.due_date.slice(0, 10) : null
+    if (dueDay && dueDay < today) overdue += owed
+    const credit = Array.isArray(row.customer_credits) ? row.customer_credits[0] : row.customer_credits
+    const customerId = (credit as { customer_id?: string | null } | null)?.customer_id
+    if (customerId) customers.add(customerId)
+  }
+  let repairsOwed = 0
+  for (const row of (repairs.data ?? []) as Array<Record<string, unknown>>) {
+    const cost = money((row.final_cost ?? row.estimated_cost) as number | string | null)
+    const owed = Math.max(0, cost - money(row.paid_amount as number | string | null))
+    if (owed <= 0) continue
+    repairsOwed += owed
+    if (typeof row.customer_id === 'string') customers.add(row.customer_id)
+  }
+  return {
+    total: roundMoneyValue(credits + repairsOwed),
+    overdue: roundMoneyValue(overdue),
+    credits: roundMoneyValue(credits),
+    repairs: roundMoneyValue(repairsOwed),
+    customers: customers.size,
+  }
+}
+
 export async function getFinanceSummary(
   organizationId: string,
   filters: FinanceFilters,
@@ -3731,7 +3813,10 @@ export async function getFinanceSummary(
   const zonedFilters = { ...filters, timeZone }
   const records = await loadFinanceSummaryRecords(organizationId, zonedFilters)
   const today = toOrganizationDay(new Date(), timeZone)
-  return buildFinanceSummaryFromRecords(records, zonedFilters, today)
+  const report = buildFinanceSummaryFromRecords(records, zonedFilters, today)
+  // «Te deben» es un dato extra: si falla, el resumen se muestra igual.
+  const receivables = await getFinanceReceivables(organizationId, filters.branchId, today).catch(() => undefined)
+  return receivables ? { ...report, receivables } : report
 }
 
 export async function getFinanceProfitability(
