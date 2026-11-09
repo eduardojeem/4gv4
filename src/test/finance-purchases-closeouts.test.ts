@@ -68,3 +68,40 @@ describe('reparaciones cerradas sin reparar', () => {
     expect(result.coverageWarnings.map((warning) => warning.code)).not.toContain('MISSING_REPAIR_PRICE')
   })
 })
+
+describe('pedidos web con cobros reales', () => {
+  const order = { id: 'o1', code: 'P-1', branchId: null, createdAt: '2026-10-30T12:00:00Z', status: 'PENDING', paymentStatus: 'PARTIAL', totalAmount: 500_000, paidAmount: 500_000 }
+
+  it('un cobro parcial cuenta el día que entró, y no avisa «sin fecha»', () => {
+    const records = {
+      orders: [{ ...order, paymentStatus: 'PAID' }],
+      orderItems: [{ orderId: 'o1', productId: 'x', quantity: 1, unitCost: 100_000 }],
+      orderPayments: [
+        { orderId: 'o1', branchId: null, paymentDate: '2026-10-30T12:00:00Z', amount: 200_000 },
+        { orderId: 'o1', branchId: null, paymentDate: '2026-11-02T12:00:00Z', amount: 300_000 },
+      ],
+    }
+    const october = summary(records)
+    expect(october.accrued.revenue).toBe(500_000)
+    expect(october.cash.collected).toBe(200_000)
+    expect(october.coverageWarnings.map((warning) => warning.code)).not.toContain('MISSING_CASH_TIMING')
+  })
+
+  it('un pedido reembolsado no es venta', () => {
+    expect(summary({ orders: [{ ...order, paymentStatus: 'REFUNDED' }], orderPayments: [] }).accrued.revenue).toBe(0)
+  })
+
+  it('sin historial de cobros (despliegue viejo) usa el total de los pagados', () => {
+    const result = summary({ orders: [{ ...order, paymentStatus: 'PAID' }], orderItems: [{ orderId: 'o1', productId: 'x', quantity: 1, unitCost: 100_000 }] })
+    expect(result.cash.collected).toBe(500_000)
+  })
+})
+
+describe('cuotas de cuentas corrientes', () => {
+  it('entran en caja aunque el crédito no venga de una venta', () => {
+    const result = summary({
+      creditPayments: [{ saleId: 'credit:c9', branchId: null, paymentDate: '2026-10-20T12:00:00Z', paymentMethod: 'transfer', status: 'completed', amount: 400_000 }],
+    })
+    expect(result.cash.collected).toBe(400_000)
+  })
+})
