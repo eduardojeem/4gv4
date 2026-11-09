@@ -10,6 +10,7 @@ import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/pu
 import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { invalidateMarketplaceCatalog, samePublicValue } from '@/lib/public/cache-invalidation'
 import { mergeTenantAdminSettings } from '@/lib/organization/admin-settings'
+import { checkStorefrontTemplateChange } from '@/lib/website/template-plan-access.server'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -146,6 +147,15 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     || currentSlug !== canonicalSlug
     || currentOrganization.marketplace_public !== publication.marketplacePublic
     || currentOrganization.storefront_public !== publication.storefrontPublic
+
+  // Cambiar de plantilla solo a una que traiga el plan (la actual se conserva siempre).
+  if (previousCompanyError) {
+    return NextResponse.json({ error: 'No se pudo verificar la plantilla actual.' }, { status: 500 })
+  }
+  const templateError = await checkStorefrontTemplateChange(orgId, validation.data, previousCompany?.value)
+  if (templateError) {
+    return NextResponse.json({ error: templateError, code: 'TEMPLATE_NOT_IN_PLAN' }, { status: 403 })
+  }
 
   // `organizations.logo_url` es el logo canonico de la tienda: de ahi lo toman el
   // directorio del marketplace, el contexto de la organizacion y los recibos de

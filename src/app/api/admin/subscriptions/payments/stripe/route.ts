@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { SubscriptionCheckoutError } from '@/lib/saas/pagopar-subscription-checkout'
+import { SubscriptionCheckoutError } from '@/lib/saas/subscription-checkout'
 import { createSubscriptionStripeCheckout } from '@/lib/saas/stripe-subscription-checkout'
 import { getBrowserRequestOrigin } from '@/lib/payments/stripe'
 

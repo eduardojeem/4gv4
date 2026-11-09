@@ -13,6 +13,7 @@ import {
   Tag,
   ExternalLink,
 } from 'lucide-react'
+import { AppImage } from '@/components/ui/app-image'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -299,6 +300,18 @@ export function ServicesPageClient({ services, companyName, whatsapp, sectionTex
                   {service.featured && (
                     <div className="absolute right-3 top-3 z-10 rounded-full bg-amber-500 text-slate-950 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide shadow-md">
                       ★ Destacado
+                    </div>
+                  )}
+
+                  {service.imageUrl && (
+                    <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
+                      <AppImage
+                        src={service.imageUrl}
+                        alt={`Portada de ${service.title}`}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                      />
                     </div>
                   )}
 

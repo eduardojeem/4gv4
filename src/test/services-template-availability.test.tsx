@@ -42,14 +42,14 @@ describe('la plantilla Servicios necesita la agenda', () => {
 })
 
 describe('el selector de plantillas', () => {
-  it('no ofrece Servicios a una cuenta sin agenda', () => {
+  it('muestra Servicios apagada, con el motivo, a una cuenta sin agenda', () => {
     render(<StorefrontTemplateSelector value="auto" onChange={vi.fn()} businessVertical="clothing" servicesAvailable={false} />)
-    expect(screen.queryByRole('button', { name: /^Servicios/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Moda/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Turnos & Servicios/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Boutique de Moda/ })).toBeEnabled()
   })
 
   it('sí la ofrece cuando la cuenta tiene agenda', () => {
     render(<StorefrontTemplateSelector value="auto" onChange={vi.fn()} businessVertical="cosmetics" servicesAvailable />)
-    expect(screen.getByRole('button', { name: /^Servicios/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Turnos & Servicios/ })).toBeEnabled()
   })
 })

@@ -41,6 +41,8 @@ export interface ChannelStats {
   channel: string
   sent: number
   failed: number
+  pending?: number
+  other?: number
 }
 
 export interface EmailConfigCheck {
@@ -67,7 +69,7 @@ export interface CommunicationsData {
   organizations: Array<{ id: string; name: string }>
   messages: MessageLogEntry[]
   channelStats: ChannelStats[]
-  failedLast7Days: number
+  failedLast7Days: number | null
   emailChecks: EmailConfigCheck[]
   templates: EmailTemplateInfo[]
   supabaseProjectRef: string | null
@@ -94,11 +96,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
   const admin = createAdminSupabase()
   const loadErrors: string[] = []
 
-  // Mismo paso que hace la bandeja de las tiendas (/api/notifications): publica
-  // las programadas cuya hora ya llegó, para que acá se vea el estado real.
-  const dispatch = await admin.rpc('dispatch_due_global_notifications')
-  if (dispatch.error) loadErrors.push(`No se pudieron publicar las programadas vencidas: ${dispatch.error.message}`)
-
+  // Carga de consulta: nunca publica avisos.
   const since7d = new Date(Date.now() - 7 * 86_400_000).toISOString()
   const [announcementsResult, organizationsResult, messagesResult, failedResult, reads] = await Promise.all([
     admin
@@ -106,7 +104,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
       .select('id, title, body, type, target, target_org_ids, status, scheduled_at, sent_at, created_at')
       .order('created_at', { ascending: false })
       .limit(300),
-    admin.from('organizations').select('id, name').order('name'),
+    fetchAllRows<{id:string;name:string}>((from,to) => admin.from('organizations').select('id, name').order('id').range(from,to)).then(data => ({data,error:null})).catch((error:Error) => ({data:[],error:{message:error.message}})),
     admin
       .from('communication_messages')
       .select('id, organization_id, customer_name, to_email, subject, channel, status, error, sent_at, created_at')
@@ -129,6 +127,7 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     ['Avisos', announcementsResult],
     ['Organizaciones', organizationsResult],
     ['Mensajes', messagesResult],
+    ['Fallidos de los últimos 7 días', failedResult],
   ] as const) {
     if (result.error) loadErrors.push(`${label}: ${result.error.message}`)
   }
@@ -182,7 +181,9 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
   for (const m of messages) {
     const stat = statsMap.get(m.channel) ?? { channel: m.channel, sent: 0, failed: 0 }
     if (m.status === 'failed') stat.failed += 1
-    else stat.sent += 1
+    else if (['sent','delivered','read'].includes(m.status)) stat.sent += 1
+    else if (['pending','queued','scheduled','sending','draft'].includes(m.status)) stat.pending = (stat.pending ?? 0) + 1
+    else stat.other = (stat.other ?? 0) + 1
     statsMap.set(m.channel, stat)
   }
 
@@ -195,10 +196,10 @@ export async function getCommunicationsData(): Promise<CommunicationsData> {
     organizations,
     messages,
     channelStats: [...statsMap.values()].sort((a, b) => b.sent + b.failed - (a.sent + a.failed)),
-    failedLast7Days: failedResult.count ?? 0,
+    failedLast7Days: failedResult.error ? null : failedResult.count ?? 0,
     emailChecks: [
       { key: 'RESEND_API_KEY', label: 'Proveedor de email (Resend)', configured: resendReady, critical: true, description: 'Sin esto no salen los emails propios: bienvenida, pedidos, recordatorios y campañas.' },
-      { key: 'EMAIL_FROM', label: 'Remitente verificado', configured: configured('EMAIL_FROM'), critical: false, description: 'Sin esto se usa el remitente de pruebas de Resend, que suele caer en spam.' },
+      { key: 'EMAIL_FROM', label: 'Remitente configurado', configured: configured('EMAIL_FROM'), critical: false, description: 'Sin esto se usa el remitente de pruebas de Resend, que suele caer en spam.' },
       { key: 'EMAIL_REPLY_TO', label: 'Dirección de respuesta', configured: configured('EMAIL_REPLY_TO'), critical: false, description: 'A dónde llegan las respuestas de los clientes.' },
       { key: 'NEXT_PUBLIC_APP_URL', label: 'URL pública de la app', configured: configured('NEXT_PUBLIC_APP_URL') || configured('APP_URL'), critical: true, description: 'Se usa para armar los enlaces dentro de los emails.' },
       { key: 'SUPABASE_SERVICE_ROLE_KEY', label: 'Invitaciones de Supabase', configured: supabaseReady, critical: true, description: 'Necesaria para invitar dueños de empresa desde SuperAdmin.' },

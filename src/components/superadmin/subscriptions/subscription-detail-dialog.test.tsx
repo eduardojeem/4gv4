@@ -91,6 +91,7 @@ describe('SubscriptionDetailDialog - Public Store Features', () => {
       />
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Editar suscripción' }))
     expect(screen.getByText('Página Pública & Presencia Online')).toBeInTheDocument()
     expect(screen.getByText('Habilitar Tienda Pública')).toBeInTheDocument()
     expect(screen.getByText('Visible en Marketplace')).toBeInTheDocument()
@@ -126,7 +127,7 @@ describe('SubscriptionDetailDialog - Public Store Features', () => {
     )
 
     // Switch to details tab
-    const detailsTabBtn = screen.getByText('Ficha del Tenant & Límites')
+    const detailsTabBtn = screen.getByText('Resumen y límites')
     fireEvent.click(detailsTabBtn)
 
     expect(screen.getByText('Presencia Web & Tienda Pública')).toBeInTheDocument()

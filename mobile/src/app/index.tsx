@@ -1,4 +1,7 @@
+import { MarketplaceBusinessPromo } from '@/components/marketplace-business-promo';
 import { MarketplaceLocationPicker } from '@/components/marketplace-location-picker';
+import { MarketplaceStoresShowcase } from '@/components/marketplace-stores-showcase';
+import { MarketplaceCategoriesShowcase } from '@/components/marketplace-categories-showcase';
 import { ALL_LOCATIONS, parseMarketplaceLocation, type MarketplaceLocation } from '../../../src/lib/public/marketplace-location';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -824,6 +827,17 @@ export default function MarketplaceScreen() {
                     </View>
                   )}
 
+                  {/* Carrusel Showcase de Categorías destacadas (como en Web) */}
+                  <MarketplaceCategoriesShowcase
+                    onSelectCategory={(term) => {
+                      setProductQuery(term);
+                      setProductPage(1);
+                      setActiveTab('productos');
+                      scrollRef.current?.scrollTo({ y: 0, animated: true });
+                    }}
+                    onExploreAll={() => setShowCategoriesSheet(true)}
+                  />
+
                   {/* Sección: Ofertas de la semana (Destacadas) */}
                   {(data.home?.offers??data.offers).length > 0 && (
                     <Section
@@ -949,85 +963,7 @@ export default function MarketplaceScreen() {
                     )}
                   </Section>
 
-                  {/* Banner SaaS / Comercios */}
-                  <View style={styles.promo}>
-                    <View
-                      pointerEvents="none"
-                      style={[styles.promoGlow, { left: -40, top: -40, backgroundColor: '#0284C7' }]}
-                    />
-                    <View
-                      pointerEvents="none"
-                      style={[styles.promoGlow, { right: -40, bottom: -40, backgroundColor: palette.primary }]}
-                    />
-                    <View style={styles.promoPill}>
-                      <Ionicons name="rocket" size={13} color="#38BDF8" />
-                      <Text style={styles.promoPillText}>Para Comercios & Talleres de Reparación</Text>
-                    </View>
-                    <Text style={styles.promoTitle}>¿Tenés un negocio o servicio técnico?</Text>
-                    <Text style={styles.promoText}>
-                      Sumá tu comercio a Mi tiendaPY.com. Controlá ventas, cobros, órdenes de taller e inventario en un solo sistema.
-                    </Text>
-                    <View style={styles.promoBenefits}>
-                      {['Catálogo online integrado', 'Órdenes de servicio técnico', 'Facturación & POS móvil'].map(
-                        (benefit) => (
-                          <View key={benefit} style={styles.benefit}>
-                            <Ionicons name="checkmark-circle" size={14} color="#38BDF8" />
-                            <Text style={styles.benefitText}>{benefit}</Text>
-                          </View>
-                        )
-                      )}
-                    </View>
-                    <View style={styles.promoActionsRow}>
-                      <Pressable
-                        onPress={async () => {
-                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          router.push('/saas' as any);
-                        }}
-                        style={[styles.promoSaaSBtn, { backgroundColor: palette.primary }]}>
-                        <Ionicons name="rocket" size={16} color="#FFFFFF" />
-                        <Text style={styles.promoSaaSBtnText}>Ver Sistema SaaS & Planes</Text>
-                        <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
-                      </Pressable>
-
-                      <Pressable
-                        onPress={async () => {
-                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          void openRegistration();
-                        }}
-                        style={styles.promoRegisterBtn}>
-                        <Text style={styles.promoRegisterBtnText}>{registerLabel}</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  {/* Tiendas oficiales preview */}
-                  {data.stores.length > 0 && (
-                    <Section
-                      title="Tiendas oficiales"
-                      icon="business"
-                      accent={palette.primary}
-                      colors={colors}
-                      subtitle="Empresas con atención directa y catálogo verificado"
-                      action={{ label: 'Ver directorio', onPress: () => handleTabPress('tiendas') }}>
-                      <View style={styles.grid}>
-                        {(data.home?.stores??data.stores).slice(0, 4).map((store) => (
-                          <StoreCard
-                            key={store.id}
-                            store={store}
-                            colors={colors}
-                            accent={palette.primary}
-                            onPress={() => setSelectedStorePreview(store)}
-                            onViewProducts={() => {
-                              setProductStore(store.slug);
-                              setProductPage(1);
-                              setActiveTab('productos');
-                              scrollRef.current?.scrollTo({ y: 0, animated: true });
-                            }}
-                          />
-                        ))}
-                      </View>
-                    </Section>
-                  )}
+                  <MarketplaceBusinessPromo onPlans={() => router.push('/saas/planes' as never)} onSystem={() => router.push('/saas/soluciones' as never)} />
                 </>
               )}
             </>
@@ -1839,6 +1775,21 @@ export default function MarketplaceScreen() {
                 </View>
 
               </View>
+
+              {/* Carrusel de Tiendas destacadas y sus productos */}
+              {Boolean(data?.stores && data.stores.length > 0 && !storeQuery) && (
+                <MarketplaceStoresShowcase
+                  stores={data?.home?.stores ?? data?.stores ?? []}
+                  products={data?.products ?? []}
+                  onSelectStore={(store) => setSelectedStorePreview(store)}
+                  onViewProducts={(store) => {
+                    setProductStore(store.slug);
+                    setProductPage(1);
+                    setActiveTab('productos');
+                    scrollRef.current?.scrollTo({ y: 0, animated: true });
+                  }}
+                />
+              )}
 
               <View pointerEvents={catalogPending?'none':'auto'} style={[styles.productsArea,{opacity:catalogPending&&data?.pagination?.products?0.6:1}] }>
                 {!data&&catalogPending?<ActivityIndicator color={accent}/>:!data&&error?null:storeTotal === 0 ? (
@@ -3104,12 +3055,14 @@ function StoreCard({
   store,
   colors,
   accent,
+  width,
   onPress,
   onViewProducts,
 }: {
   store: MarketStore;
   colors: Colors;
   accent: string;
+  width?: number;
   onPress?: () => void;
   onViewProducts?: () => void;
 }) {
@@ -3129,7 +3082,7 @@ function StoreCard({
       accessibilityLabel={store.name}
       style={({ pressed }) => [
         styles.storeCard,
-        styles.gridItem,
+        width ? { width } : styles.gridItem,
         {
           backgroundColor: colors.card,
           borderColor: colors.border,

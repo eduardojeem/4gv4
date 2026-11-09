@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { CheckCircle2, ExternalLink, Loader2, Send, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -22,19 +22,29 @@ export function EmailSetupPanel({
 }) {
   const [to, setTo] = useState('')
   const [pending, startTransition] = useTransition()
+  const inFlight = useRef(false)
+  const [error,setError] = useState<string | null>(null)
+  const [acceptedTo,setAcceptedTo] = useState<string | null>(null)
   const resendReady = checks.find((c) => c.key === 'RESEND_API_KEY')?.configured ?? false
 
-  const sendTest = () =>
+  const sendTest = () => {
+    if (inFlight.current) return
+    const recipient = to.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) { setError('Ingresá un email válido.'); return }
+    inFlight.current = true
+    setError(null); setAcceptedTo(null)
     startTransition(async () => {
-      const response = await fetch('/api/superadmin/emails/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to }),
-      })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
-      if (!response.ok) toast.error(payload?.error ?? 'No se pudo enviar')
-      else toast.success(`Email de prueba enviado a ${to}`)
+      try {
+        const response = await fetch('/api/superadmin/emails/test', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:recipient}) }).catch(()=>{ throw new Error('Error de conexión. Volvé a intentar.') })
+        const payload = await response.json().catch(()=>null) as {error?:string}|null
+        if (!response.ok) throw new Error(payload?.error || 'No se pudo enviar')
+        setAcceptedTo(recipient)
+        toast.success('Resend aceptó el email de prueba. Revisá la bandeja del destinatario.')
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Error de conexión. Volvé a intentar.')
+      } finally { inFlight.current=false }
     })
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -57,7 +67,7 @@ export function EmailSetupPanel({
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge variant="outline" className="rounded-full">{t.provider === 'supabase' ? 'Supabase' : 'Resend'}</Badge>
                   <Badge variant="outline" className={cn('rounded-full', t.available ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300')}>
-                    {t.available ? 'Activo' : 'Sin proveedor'}
+                    {t.available ? 'Configurado · sin verificar entrega' : 'Sin configurar'}
                   </Badge>
                 </div>
               </li>
@@ -99,16 +109,18 @@ export function EmailSetupPanel({
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Enviar email de prueba</CardTitle>
-            <CardDescription>Confirma que Resend entrega correos desde este entorno.</CardDescription>
+            <CardDescription>Envía una prueba real a la dirección indicada. La aceptación del proveedor no confirma su entrega.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Label htmlFor="test-email">Enviar a</Label>
             <div className="flex gap-2">
-              <Input id="test-email" type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="tu@email.com" />
+              <Input id="test-email" type="email" value={to} disabled={pending} onChange={(e) => setTo(e.target.value)} placeholder="tu@email.com" />
               <Button onClick={sendTest} disabled={pending || !resendReady || !to.includes('@')}>
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Enviar
               </Button>
             </div>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            {acceptedTo && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">Aceptado por Resend para {acceptedTo}. Entrega aún no verificada.</p>}
             {!resendReady && <p className="text-xs text-red-600">Configurá RESEND_API_KEY para poder enviar.</p>}
           </CardContent>
         </Card>

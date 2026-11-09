@@ -25,7 +25,7 @@ type Props = {
 
 /**
  * Registra el reembolso de un pago. La devolución de la plata se hace afuera
- * (panel de Pagopar o banco); este paso deja el registro y, si se marca, quita
+ * (portal de Bancard o banco); este paso deja el registro y, si se marca, quita
  * el período que ese pago cubría.
  */
 export function RefundPaymentButton({ paymentId, organizationName, amountLabel, onRefunded }: Props) {
@@ -71,7 +71,7 @@ export function RefundPaymentButton({ paymentId, organizationName, amountLabel, 
           <DialogHeader>
             <DialogTitle>Reembolsar {amountLabel}</DialogTitle>
             <DialogDescription>
-              {organizationName}. Devolvé la plata desde el panel de Pagopar o por banco; acá queda registrado.
+              {organizationName}. Devolvé la plata desde el portal de Bancard o por banco; acá queda registrado.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

@@ -47,6 +47,7 @@ export function daysUntil(value: string | null): number | null {
   if (!value) return null
   const today = new Date()
   const target = new Date(value)
+  if (!Number.isFinite(target.getTime())) return null
   today.setHours(0, 0, 0, 0)
   target.setHours(0, 0, 0, 0)
   return Math.ceil((target.getTime() - today.getTime()) / 86400000)
@@ -66,8 +67,12 @@ export function periodLabel(subscription: SuperAdminSubscription) {
   return `${formatDate(subscription.current_period_starts_at)} – ${formatDate(subscription.current_period_ends_at)}`
 }
 
+export function subscriptionEndDate(subscription: SuperAdminSubscription) {
+  return subscription.status === 'trialing' ? subscription.trial_ends_at : subscription.current_period_ends_at
+}
+
 export function getRecommendation(subscription: SuperAdminSubscription) {
-  const renewalDays = daysUntil(subscription.current_period_ends_at)
+  const renewalDays = daysUntil(subscriptionEndDate(subscription))
   const trialDays = daysUntil(subscription.trial_ends_at)
 
   if (['past_due', 'unpaid'].includes(subscription.status)) return 'Contactar por cobro pendiente'
@@ -99,7 +104,7 @@ export function getRecommendation(subscription: SuperAdminSubscription) {
 export type AttentionLevel = 'none' | 'watch' | 'urgent'
 
 export function getAttentionLevel(subscription: SuperAdminSubscription): AttentionLevel {
-  const renewalDays = daysUntil(subscription.current_period_ends_at)
+  const renewalDays = daysUntil(subscriptionEndDate(subscription))
   const trialDays = daysUntil(subscription.trial_ends_at)
 
   // Ya paso algo: no cobra, o el periodo quedo atras.
@@ -109,7 +114,7 @@ export function getAttentionLevel(subscription: SuperAdminSubscription): Attenti
   // Va a pasar: hay margen para actuar.
   if (subscription.cancel_at_period_end) return 'watch'
   if (renewalDays !== null && renewalDays <= 14) return 'watch'
-  if (trialDays !== null && trialDays >= 0 && trialDays <= 14) return 'watch'
+  if (subscription.status === 'trialing' && trialDays !== null && trialDays >= 0 && trialDays <= 14) return 'watch'
 
   return 'none'
 }
@@ -120,6 +125,7 @@ export function getAttentionLevel(subscription: SuperAdminSubscription): Attenti
  * contando: el numero no bajaba nunca.
  */
 export function isRunningTrial(subscription: SuperAdminSubscription) {
+  if (subscription.status !== 'trialing') return false
   const trialDays = daysUntil(subscription.trial_ends_at)
   if (trialDays !== null) return trialDays >= 0
   // Sin fecha de fin, el estado es lo unico que hay.

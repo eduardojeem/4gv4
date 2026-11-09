@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
     const brand = searchParams.get('brand')
     const { page, perPage, minPrice, maxPrice } = parsePublicProductsQuery(searchParams)
     const inStock = searchParams.get('in_stock') === 'true'
-    const hasOffer = searchParams.get('has_offer') === 'true'
+    const hasOffer = searchParams.get('has_offer') === 'true' || searchParams.get('offers') === 'true' || searchParams.get('ofertas') === 'true'
+    const isWholesaleFilter = searchParams.get('wholesale') === 'true' || searchParams.get('mayorista') === 'true'
     const sort = searchParams.get('sort') || 'name'
 
     const supabase = createAdminSupabase()
@@ -90,6 +91,11 @@ export async function GET(request: NextRequest) {
 
     if (hasOffer) {
       queryBuilder = queryBuilder.or(buildPublicOfferCandidateFilter(automaticPromotions))
+    }
+
+    // Filtrar por mayorista solo si el usuario tiene acceso mayorista habilitado
+    if (isWholesale && isWholesaleFilter) {
+      queryBuilder = queryBuilder.not('wholesale_price', 'is', null).gt('wholesale_price', 0)
     }
 
     // Apply search filter with sanitized input

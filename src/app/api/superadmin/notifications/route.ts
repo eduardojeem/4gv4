@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
   const PAGE_SIZE = 25
 
   const admin = createAdminSupabase()
-  await admin.rpc('dispatch_due_global_notifications')
 
   let query = admin
     .from('global_notifications')

@@ -8,6 +8,7 @@ import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-s
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 import { samePublicValue } from '@/lib/public/cache-invalidation'
+import { checkStorefrontTemplateChange } from '@/lib/website/template-plan-access.server'
 
 import { rateLimiter } from '@/lib/rate-limiter'
 
@@ -132,6 +133,14 @@ async function handler(
 
     if (existingError) {
       throw existingError
+    }
+
+    // Cambiar de plantilla solo a una que traiga el plan (la actual se conserva siempre).
+    if (key === 'company_info') {
+      const templateError = await checkStorefrontTemplateChange(orgId, value, existingRow?.value)
+      if (templateError) {
+        return NextResponse.json({ success: false, error: templateError, code: 'TEMPLATE_NOT_IN_PLAN' }, { status: 403 })
+      }
     }
 
     const writePayload = {

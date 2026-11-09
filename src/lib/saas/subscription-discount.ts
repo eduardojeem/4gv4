@@ -7,7 +7,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
  * El canje solo registra el cupón; el descuento se aplica en el cobro con
  * tarjeta o QR. Al iniciar ese cobro el cupón queda reservado para el pago
  * (applied_payment_id). Si el pago falla, o queda pendiente más que el plazo
- * de Pagopar, el cupón vuelve a estar disponible.
+ * de Bancard, el cupón vuelve a estar disponible.
  */
 
 const PENDING_PAYMENT_TTL_MS = 72 * 60 * 60 * 1000

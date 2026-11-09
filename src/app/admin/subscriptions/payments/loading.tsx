@@ -1,6 +1,6 @@
 export default function SubscriptionPaymentLoading() {
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-5 py-4 sm:py-8" aria-busy="true" aria-label="Verificando pago con Pagopar">
+    <main className="mx-auto w-full max-w-2xl space-y-5 py-4 sm:py-8" aria-busy="true" aria-label="Verificando pago">
       <div className="h-9 w-44 animate-pulse rounded-md bg-muted" />
       <section className="space-y-5 rounded-xl border p-5 sm:p-6">
         <div className="flex gap-4">

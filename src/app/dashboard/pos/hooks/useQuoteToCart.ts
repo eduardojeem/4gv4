@@ -19,13 +19,15 @@ type LoadedDocument = {
   code: string
   convertible: boolean
   customer_id: string | null
+  customer_name?: string
+  customer_phone?: string | null
   price_mode: 'retail' | 'wholesale'
   items: QuoteItem[]
 }
 
 type Variant = { id: string; price: number; wholesale_price?: number | null }
 
-export type ActiveQuote = { kind: 'quote' | 'appointment'; id: string; number: number; code: string }
+export type ActiveQuote = { kind: 'quote' | 'appointment'; id: string; number: number; code: string; customer?: { id: string | null; name: string; phone: string | null } }
 
 type AppointmentRow = {
   id: string
@@ -33,6 +35,8 @@ type AppointmentRow = {
   status: string
   sale_id: string | null
   customer_id: string | null
+  customer_name: string
+  customer_phone: string | null
   service_product_id: string | null
   service_name: string
   price: number
@@ -56,6 +60,8 @@ async function fetchDocument(kind: ActiveQuote['kind'], id: string): Promise<{ d
       code: appointmentCode(appointment.number),
       convertible: !appointment.sale_id && ['pending', 'confirmed', 'completed'].includes(appointment.status),
       customer_id: appointment.customer_id,
+      customer_name: appointment.customer_name,
+      customer_phone: appointment.customer_phone,
       price_mode: 'retail',
       items: [{
         product_id: appointment.service_product_id,
@@ -143,6 +149,7 @@ export function useQuoteToCart({
       clearCart(true)
       setIsWholesale(mode === 'wholesale')
       if (quote.customer_id) setSelectedCustomer(quote.customer_id)
+      else if (kind === 'appointment') setSelectedCustomer('')
 
       let loaded = 0
       let free = 0
@@ -182,7 +189,7 @@ export function useQuoteToCart({
         loaded += 1
       }
 
-      setActiveQuote({ kind, id: quote.id, number: quote.number, code: quote.code })
+      setActiveQuote({ kind, id: quote.id, number: quote.number, code: quote.code, ...(kind === 'appointment' ? { customer: { id: quote.customer_id, name: quote.customer_name || 'Cliente de la reserva', phone: quote.customer_phone || null } } : {}) })
       onLoaded?.()
       const skipped = [
         free ? `${free} línea${free === 1 ? '' : 's'} libre${free === 1 ? '' : 's'} para agregar a mano` : null,

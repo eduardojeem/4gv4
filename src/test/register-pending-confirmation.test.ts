@@ -120,3 +120,14 @@ describe('registro repetido antes de confirmar el email', () => {
     expect(state.inserts.filter((item) => item.table === 'organizations')).toHaveLength(1)
   })
 })
+
+it('traduce el rechazo de contraseña sin crear registros',async()=>{
+ state.signUp.mockResolvedValueOnce({data:{user:null,session:null},error:{code:'weak_password',message:'Password is known to be weak and easy to guess, please choose a different one.'}})
+ const response=await register()
+ const payload=await response.json()
+ expect(response.status).toBe(400)
+ expect(payload.error).toMatch(/contraseña/i)
+ expect(payload.error).not.toContain('Password')
+ expect(payload.fieldErrors).toEqual([{field:'password',message:payload.error}])
+ expect(state.inserts).toHaveLength(0)
+})

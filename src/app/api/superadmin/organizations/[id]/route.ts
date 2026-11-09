@@ -234,20 +234,20 @@ export async function PATCH(
     if (cancelAtPeriodEnd !== undefined) subUpdates.cancel_at_period_end = cancelAtPeriodEnd
 
     // Check if subscription exists
-    const { data: existingSub } = await admin.from('subscriptions').select('id').eq('organization_id', targetId).maybeSingle()
-    if (existingSub) {
-      await admin.from('subscriptions').update(subUpdates).eq('id', existingSub.id)
-    } else if (plan !== undefined) {
-      await admin.from('subscriptions').insert({
-        organization_id: targetId,
-        plan: plan,
-        status: status || 'active',
-        provider: 'manual',
-        trial_ends_at: trialEndsAt || null,
-        current_period_ends_at: currentPeriodEndsAt || null,
-        cancel_at_period_end: cancelAtPeriodEnd || false,
-      })
-    }
+    const { data: existingSub, error: lookupError } = await admin.from('subscriptions').select('id').eq('organization_id', targetId).maybeSingle()
+    if (lookupError) return NextResponse.json({ error: 'No se pudo consultar la suscripción. Volvé a intentar.' }, { status: 500 })
+    const result = existingSub
+      ? await admin.from('subscriptions').update(subUpdates).eq('id', existingSub.id)
+      : await admin.from('subscriptions').insert({
+          organization_id: targetId,
+          plan: plan ?? currentOrg.plan ?? 'FREE',
+          status: status || 'active',
+          provider: 'manual',
+          trial_ends_at: trialEndsAt || null,
+          current_period_ends_at: currentPeriodEndsAt || null,
+          cancel_at_period_end: cancelAtPeriodEnd || false,
+        })
+    if (result.error) return NextResponse.json({ error: 'No se pudo guardar la suscripción. Revisá los datos y volvé a intentar.' }, { status: 500 })
   }
 
   // 3. Update organization_settings table if currency/timezone provided

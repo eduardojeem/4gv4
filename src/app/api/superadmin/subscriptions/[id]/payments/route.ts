@@ -22,7 +22,7 @@ const ERRORS: Record<string, [number, string]> = {
 }
 
 /**
- * Registra un cobro hecho fuera de Pagopar o de la transferencia con
+ * Registra un cobro hecho fuera de Bancard o de la transferencia con
  * comprobante y aplica el plan con la misma lógica que los demás pagos.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {

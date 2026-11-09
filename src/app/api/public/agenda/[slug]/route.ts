@@ -99,8 +99,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     const result = await slotsFor(agenda, date, serviceId, professional && z.string().uuid().safeParse(professional).success ? professional : null)
     if (!result) return NextResponse.json({ error: 'Servicio o profesional no disponible' }, { status: 404 })
     return NextResponse.json({
-      slots: result.slots.map((slot) => ({ startsAt: slot.startsAt, time: utcToZoned(slot.startsAt, config.timeZone).time })),
-    })
+      slots: result.slots.map((slot) => ({ startsAt: slot.startsAt, time: utcToZoned(slot.startsAt, config.timeZone).time,
+        professionalIds: slot.professionalIds.filter(id => id && config.professionals.some(pro => pro.id === id && pro.online_visible !== false)),
+      })),
+      unavailableSlots: ('unavailableSlots' in result ? result.unavailableSlots : []).map(slot => ({ startsAt: slot.startsAt, time: utcToZoned(slot.startsAt, config.timeZone).time })),
+    }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   return NextResponse.json({

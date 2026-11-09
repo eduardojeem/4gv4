@@ -11,7 +11,7 @@ export default function SaasPlans() {
   const { catalog, loading, error, updatedAt, refresh } = useSaas();
   return <SaasPage>
     <SaasHeading eyebrow="Planes" title="Elegí con información clara."
-      description="Precios mensuales, límites y funciones del catálogo vigente. La creación de la cuenta continúa en la web con el plan seleccionado." />
+      description="Precios mensuales, límites y funciones de cada plan. Creás tu cuenta desde la app y gestionás el pago del plan desde tu cuenta." />
     {loading && !catalog && <View accessibilityRole="progressbar" accessibilityLabel="Cargando planes" style={styles.loading}>
       <ActivityIndicator color={palette.primary} /><Text style={{ color: colors.muted }}>Consultando planes disponibles…</Text>
     </View>}
@@ -59,7 +59,7 @@ function PlanCard({ plan, disabled }: { plan: SaasPlan; disabled: boolean }) {
         <Text style={[styles.featureLabel, { color: colors.text }]}>{feature.label}</Text>
       </View>)}
     </>}
-    <SaasButton label={plan.trial_days > 0 ? `Probar ${plan.trial_days} días gratis` : plan.price === 0 ? 'Crear cuenta gratis' : 'Elegir este plan'}
+    <SaasButton label={plan.trial_days > 0 ? `Probar ${plan.trial_days} días gratis` : plan.price === 0 ? 'Crear cuenta gratis' : 'Crear mi cuenta'}
       icon="open-outline" disabled={disabled} onPress={() => void openSaasLink(plan.ctaHref)} />
   </SaasCard>;
 }

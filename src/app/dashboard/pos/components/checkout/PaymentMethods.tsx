@@ -795,7 +795,7 @@ export function PaymentMethods({
 
       {paymentMethod === 'card' && !isMixedPayment && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Bancard, Pagopar..." /></div>
+          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Bancard, Dinelco..." /></div>
           <div><label className="text-sm font-medium mb-2 block">Terminal</label><Input value={terminalId} onChange={(e) => setTerminalId(e.target.value)} placeholder="POS-01" /></div>
           <div><label className="text-sm font-medium mb-2 block">Entidad</label><Input value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Banco emisor" /></div>
           <div><label className="text-sm font-medium mb-2 block">Últimos 4 dígitos</label><Input type="text" inputMode="numeric" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1234" maxLength={4} /></div>
@@ -804,15 +804,15 @@ export function PaymentMethods({
 
       {paymentMethod === 'transfer' && !isMixedPayment && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Pagopar') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia bancaria</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
-          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Banco o Pagopar" /></div>
+          <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Bancard') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia bancaria</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
+          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Banco o Bancard" /></div>
           <div><label className="text-sm font-medium mb-2 block">Banco o entidad</label><Input list="financial-institutions" value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Entidad receptora" /></div>
           <div><label className="text-sm font-medium mb-2 block">Referencia</label><Input type="text" value={transferReference} onChange={(e) => setTransferReference(e.target.value)} placeholder="Número de referencia" /></div>
         </div>
       )}
 
-      <datalist id="electronic-providers"><option value="Bancard" /><option value="Pagopar" /><option value="Dinelco" /><option value="Terminal POS" /></datalist>
-      <datalist id="financial-institutions"><option value="Banco Nacional de Fomento" /><option value="Banco Continental" /><option value="Banco Familiar" /><option value="Banco Atlas" /><option value="Banco Itaú" /><option value="Sudameris" /><option value="ueno bank" /><option value="Bancop" /></datalist>
+      <datalist id="electronic-providers"><option value="Bancard" /><option value="Dinelco" /><option value="Terminal POS" /></datalist>
+      <datalist id="financial-institutions"><option value="Banco Nacional de Fomento" /><option value="Banco Continental" /><option value="Banco Familiar" /><option value="Banco Atlas" /><option value="Banco Itaú" /><option value="Sudameris" /><option value="Bancop" /></datalist>
 
       {/* Campos para pago mixto */}
       {isMixedPayment && paymentMethod && (
@@ -891,7 +891,7 @@ export function PaymentMethods({
           {(paymentMethod === 'card' || paymentMethod === 'transfer') && (
             <div className="grid gap-3 sm:grid-cols-2">
               {paymentMethod === 'transfer' && (
-                <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Pagopar') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
+                <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Bancard') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
               )}
               <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Proveedor" /></div>
               <div><label className="text-sm font-medium mb-2 block">Entidad</label><Input list="financial-institutions" value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Banco o entidad" /></div>

@@ -13,9 +13,9 @@ import { webhookErrorCode, webhookOutcome } from '@/lib/health/webhook-log'
 import type { HealthCheckResult, HealthStatus } from '@/lib/health/types'
 
 describe('sanitizeMessage', () => {
-  const original = process.env.PAGOPAR_PRIVATE_KEY
+  const original = process.env.BANCARD_PRIVATE_KEY
   afterEach(() => {
-    process.env.PAGOPAR_PRIVATE_KEY = original
+    process.env.BANCARD_PRIVATE_KEY = original
   })
 
   it('oculta JWT, bearer tokens, cadenas de conexión y parámetros sensibles', () => {
@@ -30,15 +30,15 @@ describe('sanitizeMessage', () => {
   })
 
   it('oculta el valor literal de variables privadas', () => {
-    process.env.PAGOPAR_PRIVATE_KEY = 'pagopar-private-value-xyz'
-    expect(sanitizeMessage('error con pagopar-private-value-xyz')).toBe('error con [oculto]')
+    process.env.BANCARD_PRIVATE_KEY = 'bancard-private-value-xyz'
+    expect(sanitizeMessage('error con bancard-private-value-xyz')).toBe('error con [oculto]')
   })
 
   it('buildResult sanea resumen y hallazgos', () => {
-    process.env.PAGOPAR_PRIVATE_KEY = 'pagopar-private-value-xyz'
+    process.env.BANCARD_PRIVATE_KEY = 'bancard-private-value-xyz'
     const result = buildResult(
       { id: 'x', category: 'payments', name: 'x', description: '', method: '' },
-      { status: 'error', severity: 'high', summary: 'pagopar-private-value-xyz', findings: ['token=abc'] },
+      { status: 'error', severity: 'high', summary: 'bancard-private-value-xyz', findings: ['token=abc'] },
     )
     expect(result.summary).toBe('[oculto]')
     expect(result.findings[0]).toBe('token=[oculto]')

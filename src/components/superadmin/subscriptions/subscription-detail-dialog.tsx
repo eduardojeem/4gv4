@@ -31,16 +31,17 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
+import { SubscriptionPaymentSummary } from './subscription-payment-summary'
 import { ManualPaymentForm } from './manual-payment-form'
 import type { EditForm, SuperAdminSubscription } from './types'
 import { PlanBadge, StatusBadge } from './subscription-badges'
 import {
   daysUntil,
   formatDate,
-  formatMoney,
   getRecommendation,
   normalizeLimitValue, periodProgress
 } from './utils'
+import { subscriptionPriceLabel, subscriptionChanges, SUBSCRIPTION_EDIT_LABELS, SUBSCRIPTION_STATUS_LABELS } from './subscription-edit'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -132,14 +133,19 @@ export function SubscriptionDetailDialog({
   onCopyValue,
   onPaymentRecorded,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'edit' | 'details' | 'payment'>('edit')
+  const [activeTab, setActiveTab] = useState<'edit' | 'details' | 'payment'>('details')
 
+  const [reviewing, setReviewing] = useState(false)
+  const [paymentSaving, setPaymentSaving] = useState(false)
+  const busy = isSaving || paymentSaving
   if (!sub) return null
+  const changes = editForm ? subscriptionChanges(sub, editForm) : []
 
   void (periodProgress(sub));
-  const renewalDays = daysUntil(sub.current_period_ends_at)
+  const effectiveEnd = sub.status === 'trialing' ? sub.trial_ends_at : sub.current_period_ends_at
+  const renewalDays = daysUntil(effectiveEnd)
   void (daysUntil(sub.trial_ends_at));
-  const monthlyPrice = sub.plan_details ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG') : 'Gratuito'
+  const monthlyPrice = subscriptionPriceLabel(sub)
   const owner = sub.owner_name || sub.owner_email || sub.owner_id
 
   // Quick preset helper functions
@@ -154,7 +160,7 @@ export function SubscriptionDetailDialog({
       status: 'active',
       cancel_at_period_end: false,
     })
-    toast.success(`Período extendido por ${daysToAdd} días`)
+    toast.info('Borrador actualizado. Revisá y guardá los cambios.')
   }
 
   const addDaysToTrial = (daysToAdd: number) => {
@@ -167,7 +173,7 @@ export function SubscriptionDetailDialog({
       trial_ends_at: localStr,
       status: 'trialing',
     })
-    toast.success(`Trial extendido por ${daysToAdd} días`)
+    toast.info('Borrador actualizado. Revisá y guardá los cambios.')
   }
 
   const activateAndRenew = () => {
@@ -186,17 +192,17 @@ export function SubscriptionDetailDialog({
       current_period_ends_at: futureStr,
       cancel_at_period_end: false,
     })
-    toast.success('Suscripción activada y renovada por 30 días')
+    toast.info('Borrador actualizado. Revisá y guardá los cambios.')
   }
 
   return (
     <Dialog
       open={Boolean(sub)}
       onOpenChange={(open) => {
-        if (!open) onClose()
+        if (!open && !busy) onClose()
       }}
     >
-      <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden p-0 sm:max-w-4xl rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl">
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden p-0 sm:max-w-4xl rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl">
 
         {/* Header with Hero Banner */}
         <div className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50 via-white to-violet-50/50 p-6 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/30">
@@ -235,10 +241,10 @@ export function SubscriptionDetailDialog({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div inert={busy} className="flex items-center gap-2">
               <EnterSupportButton organizationId={sub.organization_id} organizationName={sub.organization_name} />
               {sub.organization_slug && (
-                <Button asChild variant="outline" size="sm" className="h-8 rounded-xl text-xs font-bold gap-1 border-slate-200 dark:border-slate-800 cursor-pointer">
+                <Button asChild variant="outline" size="sm" className="min-h-11 rounded-xl text-xs font-bold gap-1 border-slate-200 dark:border-slate-800 cursor-pointer">
                   <a href={`/${sub.organization_slug}/inicio`} target="_blank" rel="noreferrer">
                     <Globe className="h-3.5 w-3.5 text-cyan-600" />
                     Tienda
@@ -249,21 +255,21 @@ export function SubscriptionDetailDialog({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1 mt-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 p-1 w-fit">
+          <div className="flex flex-wrap items-center gap-1 mt-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 p-1 w-fit">
             <button
-              onClick={() => setActiveTab('edit')}
+              disabled={busy} aria-pressed={activeTab === 'edit'} onClick={() => { setActiveTab('edit'); setReviewing(false) }}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
+                'flex items-center gap-1.5 rounded-lg px-3.5 py-3 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'edit'
                   ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-900 dark:text-slate-50'
                   : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
               )}
             >
               <Wrench className="h-3.5 w-3.5 text-violet-500" />
-              Editor de Suscripción
+              Editar suscripción
             </button>
             <button
-              onClick={() => setActiveTab('details')}
+              disabled={busy} aria-pressed={activeTab === 'details'} onClick={() => { setActiveTab('details'); setReviewing(false) }}
               className={cn(
                 'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'details'
@@ -272,10 +278,10 @@ export function SubscriptionDetailDialog({
               )}
             >
               <Building2 className="h-3.5 w-3.5 text-cyan-500" />
-              Ficha del Tenant & Límites
+              Resumen y límites
             </button>
             <button
-              onClick={() => setActiveTab('payment')}
+              disabled={busy} aria-pressed={activeTab === 'payment'} onClick={() => { setActiveTab('payment'); setReviewing(false) }}
               className={cn(
                 'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
                 activeTab === 'payment'
@@ -295,13 +301,15 @@ export function SubscriptionDetailDialog({
           {/* Quick Summary Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <SummaryTile icon={CreditCard} label="Plan Actual" value={sub.plan.toUpperCase()} helper={monthlyPrice} />
-            <SummaryTile icon={CalendarClock} label="Vencimiento" value={formatDayCounter(renewalDays)} helper={formatDate(sub.current_period_ends_at)} />
+            <SummaryTile icon={CalendarClock} label={sub.status === 'trialing' ? 'Fin de prueba' : 'Vencimiento'} value={formatDayCounter(renewalDays)} helper={formatDate(effectiveEnd)} />
             <SummaryTile icon={Globe} label="Tienda Online" value={sub.storefront_public ? 'PÚBLICA' : 'PRIVADA'} helper={sub.marketplace_public ? 'En marketplace' : 'Solo link directo'} />
             <SummaryTile icon={Building2} label="Personal" value={`${sub.members_count ?? 0} miembros`} helper="En la tienda" />
             <SummaryTile icon={Layers3} label="Catálogo" value={`${sub.products_count ?? 0} productos`} helper={`${sub.sales_count ?? 0} ventas`} />
           </div>
 
-          {activeTab === 'edit' && editForm && (
+          {saveError && reviewing && <Alert variant="destructive" role="alert"><AlertTitle>No se pudo guardar</AlertTitle><AlertDescription>{saveError}</AlertDescription></Alert>}
+          {activeTab === 'edit' && reviewing && <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:bg-violet-950/30"><h3 className="font-semibold">Revisá antes de guardar</h3><p className="text-sm text-muted-foreground">Modificar el estado o las fechas no registra un cobro. Para eso usá Registrar pago.</p><ul className="my-3 space-y-2 text-sm">{changes.map(key => <li key={key}><strong>{SUBSCRIPTION_EDIT_LABELS[key]}:</strong> {typeof editForm?.[key] === 'boolean' ? (editForm[key] ? 'Sí' : 'No') : String(editForm?.[key] || 'Sin definir')}</li>)}</ul><Button variant="outline" disabled={busy} onClick={() => setReviewing(false)}>Volver a editar</Button></div>}
+          {activeTab === 'edit' && !reviewing && editForm && (
             <div className="space-y-6">
 
               {/* ⚡ Acciones Rápidas (1-Click Presets) */}
@@ -394,7 +402,7 @@ export function SubscriptionDetailDialog({
                       <SelectContent className="rounded-xl">
                         {['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'expired', 'unpaid'].map((opt) => (
                           <SelectItem key={opt} value={opt} className="text-xs font-bold uppercase">
-                            {opt.replace(/_/g, ' ')}
+                            {SUBSCRIPTION_STATUS_LABELS[opt] || opt}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -529,12 +537,17 @@ export function SubscriptionDetailDialog({
           )}
 
           {activeTab === 'payment' && (
+            <div className="space-y-4">
+            <div inert={busy}><SubscriptionPaymentSummary subscription={sub} /></div>
+            <div className="rounded-xl border bg-background p-4 text-sm"><h3 className="font-semibold">Pagos online y configuración</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">La disponibilidad de tarjeta, transferencia y cobro automático se administra para la plataforma. Un proveedor asignado no asegura que esté habilitado o configurado.</p><Button asChild variant="outline" className="mt-3 min-h-11 whitespace-normal text-left"><Link aria-disabled={busy} tabIndex={busy ? -1 : undefined} onClick={event => { if (busy) event.preventDefault() }} href="/superadmin/billing/payment-methods">Ver medios de pago de la plataforma</Link></Button></div>
             <ManualPaymentForm
               subscriptionId={sub.id}
               currentPlan={sub.plan}
               suggestedAmount={sub.plan_details?.price_monthly ?? null}
+              onPendingChange={setPaymentSaving}
               onRecorded={() => onPaymentRecorded?.()}
             />
+            </div>
           )}
 
           {activeTab === 'details' && (
@@ -685,26 +698,26 @@ export function SubscriptionDetailDialog({
         {/* Modal Footer */}
         <DialogFooter className="shrink-0 border-t border-slate-200/90 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-950 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer" onClick={() => onCopyValue(sub.id)}>
+            <Button variant="outline" size="sm" className="min-h-11 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer" onClick={() => onCopyValue(sub.id)}>
               <Copy className="h-3.5 w-3.5" />
               Copiar ID
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
-              <Link href={`/superadmin/organizations?q=${encodeURIComponent(sub.organization_slug || sub.organization_name)}`}>
+            <Button asChild variant="outline" size="sm" className="min-h-11 gap-1.5 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer">
+              <Link aria-disabled={busy} tabIndex={busy ? -1 : undefined} onClick={event => { if (busy) event.preventDefault() }} href={`/superadmin/organizations/${encodeURIComponent(sub.organization_slug || sub.organization_id)}`}>
                 <Building2 className="h-3.5 w-3.5 text-violet-600" />
                 Ver Empresa
               </Link>
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 rounded-xl text-xs font-bold cursor-pointer">
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={busy} className="h-8 rounded-xl text-xs font-bold cursor-pointer">
               Cerrar
             </Button>
             {/* El pago manual tiene su propio botón: guardar acá no lo registra. */}
-            {activeTab !== 'payment' && (
-              <Button size="sm" className="h-8 gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer" onClick={onSave} disabled={isSaving || !editForm}>
+            {activeTab === 'edit' && (
+              <Button size="sm" className="min-h-11 gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer" onClick={() => reviewing ? onSave() : setReviewing(true)} disabled={busy || !editForm || changes.length === 0}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                {isSaving ? 'Guardando...' : reviewing ? 'Confirmar cambios' : 'Revisar cambios'}
               </Button>
             )}
           </div>

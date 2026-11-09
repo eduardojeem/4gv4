@@ -1,6 +1,5 @@
 import 'server-only'
-import { isPagoparConfigured } from './pagopar'
-import { isPagoparRecurringEnabled } from './pagopar-recurring'
+import { isBancardConfigured, isBancardRecurringEnabled } from './bancard'
 import { isStripeCheckoutEnabled } from './stripe'
 import { readPaymentControlPolicy, updatePaymentControlPolicy } from './control-store'
 import { PaymentControlError, requireControlEnabled, type PaymentControl, type PaymentControlSnapshot, type SubscriptionControlId } from './control-contract'
@@ -11,11 +10,10 @@ import { commercePaymentControlsReady, requireCommercePaymentControlsReady } fro
 
 export type SubscriptionPaymentAvailability = Record<SubscriptionControlId | 'transfer', boolean>
 function readiness(): Record<SubscriptionControlId, boolean> {
-  return { pagopar_card: isPagoparConfigured(), pagopar_qr: isPagoparConfigured(), stripe: isStripeCheckoutEnabled(), autopay: isPagoparRecurringEnabled(), promo: true }
+  return { bancard_card: isBancardConfigured(), stripe: isStripeCheckoutEnabled(), autopay: isBancardRecurringEnabled(), promo: true }
 }
 const descriptions: Record<SubscriptionControlId, [string, string]> = {
-  pagopar_card: ['Tarjeta · Pagopar', 'Pago del plan mediante el checkout de Pagopar.'],
-  pagopar_qr: ['QR · Pagopar', 'Pago del plan con el QR de Pagopar.'],
+  bancard_card: ['Tarjeta · Bancard', 'Pago del plan con tarjeta de crédito o débito en el formulario seguro de Bancard (vPOS).'],
   stripe: ['Tarjeta · Stripe', 'Requiere las claves y la habilitación técnica de Stripe en el servidor.'],
   autopay: ['Débito automático · nuevas adhesiones', 'Pausa nuevas adhesiones. Los débitos previamente autorizados y la baja de tarjetas continúan funcionando.'],
   promo: ['Códigos de activación y promociones', 'Controla nuevos canjes. No modifica beneficios o descuentos ya aplicados.'],
@@ -28,7 +26,7 @@ export async function getSubscriptionPaymentControls(): Promise<PaymentControlSn
     id, title: descriptions[id][0], description: descriptions[id][1], channels: ['Suscripciones'],
     enabled: policy.flags[id], configured: configured[id], available: policy.flags[id] && configured[id], editable: true,
     implementation: 'implemented',
-    nextSteps: configured[id] ? [] : id === 'stripe' ? ['Configurar las claves de Stripe y el secreto del webhook.', 'Habilitar Stripe para suscripciones en el servidor y verificar un cobro completo.'] : id === 'autopay' ? ['Configurar Pagopar y contratar/habilitar pagos recurrentes.', 'Habilitar la función recurrente en el servidor y verificar adhesión y débito.'] : ['Configurar las claves de Pagopar en el servidor y verificar el circuito de confirmación.'],
+    nextSteps: configured[id] ? [] : id === 'stripe' ? ['Configurar las claves de Stripe y el secreto del webhook.', 'Habilitar Stripe para suscripciones en el servidor y verificar un cobro completo.'] : id === 'autopay' ? ['Configurar Bancard y solicitar la habilitación de tarjetas guardadas (pagos recurrentes).', 'Activar BANCARD_RECURRING_ENABLED en el servidor y verificar adhesión y débito.'] : ['Configurar BANCARD_PUBLIC_KEY y BANCARD_PRIVATE_KEY en el servidor.', 'Cargar la URL de confirmación (/api/payments/bancard/webhook) en el portal de Bancard y verificar un pago completo.'],
   }))
   // The schema is strict: construct only editable fields, never leak account details in this catalog.
   const transferConfigured = bankTransferSettingsSchema.safeParse({

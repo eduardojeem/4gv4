@@ -1,4 +1,5 @@
 'use client'
+import { describeAuthError } from '@/lib/auth/auth-error-messages'
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
@@ -162,7 +163,7 @@ export function ChangePasswordDialog({ className }: ChangePasswordDialogProps = 
       setFormData({ password: '', confirmPassword: '' })
       setCooldownRemaining(COOLDOWN_MS)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error al actualizar contraseña'
+      const message = describeAuthError(error instanceof Error ? error.message : null, 'password')
       toast.error(message)
     } finally {
       setIsLoading(false)

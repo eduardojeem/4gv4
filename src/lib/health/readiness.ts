@@ -43,7 +43,7 @@ export const READINESS_ITEMS: ReadinessItem[] = [
   { id: 'superadmin', label: 'Protección SuperAdmin', checkIds: ['security.superadmin_protection', 'security.admin_api_guards'] },
   { id: 'storage', label: 'Storage', checkIds: ['supabase.storage', 'storage.public_buckets'] },
   { id: 'backups', label: 'Backups / recuperación', checkIds: ['deployment.backups'] },
-  { id: 'payments', label: 'Pagos', checkIds: ['payments.pagopar'] },
+  { id: 'payments', label: 'Pagos', checkIds: ['payments.bancard'] },
   { id: 'webhooks', label: 'Webhooks', checkIds: ['webhooks.payments'] },
   { id: 'turnstile', label: 'Turnstile', checkIds: ['security.turnstile'] },
   { id: 'ratelimit', label: 'Rate limiting', checkIds: ['security.rate_limiting'] },

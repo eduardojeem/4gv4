@@ -42,7 +42,7 @@ describe('plantilla Belleza', () => {
 
   it('aparece en el selector de plantillas', () => {
     render(<StorefrontTemplateSelector value="auto" onChange={vi.fn()} businessVertical="cosmetics" servicesAvailable={false} />)
-    expect(screen.getByRole('button', { name: /^Belleza/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Cosmética & Perfumería/ })).toBeInTheDocument()
   })
 })
 

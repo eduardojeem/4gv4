@@ -5,6 +5,7 @@ const refresh = vi.fn()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, push: vi.fn() }),
   usePathname: () => '/superadmin/test',
+  useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -28,10 +29,10 @@ describe('AnnouncementsPanel', () => {
   it('filtra por estado y por texto, mostrando el destino y las lecturas', () => {
     render(<AnnouncementsPanel announcements={items} organizations={[{ id: 'o1', name: 'Tienda Uno' }]} />)
     expect(screen.getByText(/3 lecturas/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: /Programados/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Programados/ }))
     expect(screen.getByText('Promo futura')).toBeInTheDocument()
     expect(screen.queryByText('Mantenimiento')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: /Todos/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Todos/ }))
     fireEvent.change(screen.getByLabelText('Buscar aviso'), { target: { value: 'idea' } })
     expect(screen.getByText('Idea')).toBeInTheDocument()
     expect(screen.getByText(/Tienda Uno/)).toBeInTheDocument()

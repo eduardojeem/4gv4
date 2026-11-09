@@ -122,6 +122,7 @@ export const NOTIFICATION_TYPES = [
   'SUBSCRIPTION_PAYMENT_FAILED',
   'PLAN_CHANGED',
   'IMPORTANT_SYSTEM_MESSAGE',
+  'SYSTEM_NEWS',
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -832,6 +833,7 @@ export const NOTIFICATION_METADATA: Record<NotificationType, NotificationEventMe
     defaultPush: true,
     defaultInApp: true,
   },
+  SYSTEM_NEWS: { type:'SYSTEM_NEWS',category:'system',title:'Novedades del sistema',requiredModule:null,requiredPermission:null,personal:false,target:'all_members',supportsBranchScope:false,defaultRoutePattern:'/panel/system-news',defaultPush:false,defaultInApp:true },
   IMPORTANT_SYSTEM_MESSAGE: {
     type: 'IMPORTANT_SYSTEM_MESSAGE',
     category: 'system',

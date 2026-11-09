@@ -108,7 +108,7 @@ export function NewServiceDialog({
             </div>
           </div>
           <label className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
-            <span><span className="block font-medium">Mostrar en catálogo</span><span className="block text-xs text-muted-foreground">Los clientes podrán verlo en tu página pública.</span></span>
+            <span><span className="block font-medium">Mostrar en la página web</span><span className="block text-xs text-muted-foreground">Los clientes podrán verlo en tu página pública. Después de crearlo podés agregar su portada en Foto y página web.</span></span>
             <Switch checked={catalogVisible} onCheckedChange={setCatalogVisible} aria-label="Mostrar en catálogo" />
           </label>
           <label className="flex items-start justify-between gap-3 rounded-xl border p-3 text-sm">

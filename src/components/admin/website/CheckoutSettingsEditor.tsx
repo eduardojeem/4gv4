@@ -75,7 +75,7 @@ const PM_META = {
     Icon: QrCode,
     accentColor: 'text-amber-600 dark:text-amber-400',
     accentBg: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
-    hint: 'Ueno, Bancard, MercadoPago, etc. Carga tu alias o sube la imagen de tu QR.',
+    hint: 'Bancard, MercadoPago, etc. Carga tu alias o sube la imagen de tu QR.',
     placeholder: 'Ej. Escaneá el código QR o transferí a nuestro alias y envianos el comprobante.',
   },
 } as const
@@ -193,7 +193,7 @@ function PaymentMethodCard({
                   id="wallet-alias"
                   value={config.walletAlias ?? ''}
                   onChange={(e) => set('walletAlias', e.target.value)}
-                  placeholder="Ej. mi.negocio.ueno o alias.mp"
+                  placeholder="Ej. mi.negocio o alias.mp"
                   maxLength={100}
                   className="h-9 rounded-xl text-xs bg-background"
                 />

@@ -18,7 +18,7 @@ const ERRORS: Record<string, [number, string]> = {
 
 /**
  * Registra el reembolso de un pago de suscripción. La plata se devuelve fuera
- * del sistema (panel de Pagopar o banco); acá queda el registro y, si se pide,
+ * del sistema (portal de Bancard o banco); acá queda el registro y, si se pide,
  * se quita el período que ese pago cubría.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {

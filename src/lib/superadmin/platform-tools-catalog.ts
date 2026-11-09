@@ -245,13 +245,13 @@ export const PLATFORM_SYSTEM_TOOLS: readonly PlatformSystemTool[] = [
     websiteUrl: 'https://play.google.com/console',
   },
   {
-    id: 'pagopar',
-    name: 'Pasarela de Cobros (Pagopar / Bancard)',
-    provider: 'Pagopar',
+    id: 'bancard',
+    name: 'Pasarela de Cobros (Bancard vPOS)',
+    provider: 'Bancard',
     category: 'comisiones',
     role: 'Cobro de Suscripciones y Pagos Online',
     description:
-      'Pasarela de cobro que procesa los pagos de las suscripciones de los comercios a la plataforma y habilita el checkout online en las tiendas web (tarjetas de crédito, débito, QR y transferencias SIPAP).',
+      'Pasarela de cobro que procesa los pagos de las suscripciones de los comercios a la plataforma y habilita el checkout online en las tiendas web (tarjetas de crédito y débito).',
     typicalPricing: 'Comisión por transacción (~3.5% a 5% + IVA)',
     defaultCurrency: 'PYG',
     defaultAmount: 0,
@@ -260,11 +260,11 @@ export const PLATFORM_SYSTEM_TOOLS: readonly PlatformSystemTool[] = [
     icon: CreditCard,
     keyFeatures: [
       'Cobro de planes de suscripción de la plataforma',
-      'Procesamiento de tarjetas Visa, Mastercard, Panal',
-      'Pagos QR interoperables Bancard y transferencias SIPAP',
-      'Webhooks de conciliación automática en tiempo real',
+      'Procesamiento de tarjetas Visa, Mastercard, Panal y Bancard',
+      'Tarjetas guardadas para el débito automático',
+      'Confirmación por webhook y conciliación automática',
     ],
-    websiteUrl: 'https://www.pagopar.com',
+    websiteUrl: 'https://www.bancard.com.py',
   },
   {
     id: 'sentry',

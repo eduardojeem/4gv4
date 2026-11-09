@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ExternalLink, Globe, Home, Laptop, Loader2, ShoppingBag, Smartphone, Sparkles, Tablet, Tag } from 'lucide-react'
+import { Check, ExternalLink, Globe, Home, Laptop, Loader2, Lock, ShoppingBag, Smartphone, Sparkles, Store, Tablet, Tag } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -9,13 +9,12 @@ import { Switch } from '@/components/ui/switch'
 import { BrandColorScope, StorefrontTemplateThumbnail } from '@/components/admin/website/StorefrontTemplateThumbnail'
 import { StorefrontAppearancePreview } from '@/components/admin/website/StorefrontAppearancePreview'
 import { getPremiumHeroForVertical } from '@/lib/website/premium-hero'
-import { BRAND_COLORS } from '@/lib/website/brand-colors'
+import { BRAND_COLORS, findExtraBrandColor } from '@/lib/website/brand-colors'
+import { ExtraBrandColorSwatches } from '@/components/admin/website/ExtraBrandColorSwatches'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import {
   STOREFRONT_HEADER_OPTIONS,
   STOREFRONT_STYLE_LABELS,
-  STOREFRONT_STYLE_OPTIONS,
-  isStorefrontStyleAvailable,
   STOREFRONT_TEMPLATES_METADATA,
   headerOptionFor,
   resolveStorefrontStyle,
@@ -27,6 +26,9 @@ import {
   type StorefrontPreviewDraft,
 } from '@/lib/website/storefront-preview-message'
 import type { CompanyInfo, PublicCommerceMode } from '@/types/website-settings'
+import { buildTemplateCatalog } from '@/lib/website/template-catalog'
+import { useStorefrontTemplateAccess } from '@/hooks/use-storefront-template-access'
+import { TEMPLATE_GROUP_ICONS } from '@/components/admin/website/StorefrontTemplateSelector'
 import { cn } from '@/lib/utils'
 
 type PreviewPage = 'inicio' | 'productos' | 'ofertas'
@@ -91,17 +93,31 @@ export function StorefrontTemplatePreviewDialog({
   const [isLoading, setIsLoading] = useState(true)
   const update = (patch: Partial<StorefrontLook>) => setLook((current) => ({ ...current, ...patch }))
 
+  const { access } = useStorefrontTemplateAccess(open)
+  const templateGroups = useMemo(
+    () => buildTemplateCatalog({
+      businessVertical,
+      context: { servicesAvailable, catalogAvailable, commerceMode },
+      savedValue: initial.storefrontStyle,
+      suggestedStyle,
+      access,
+    }),
+    [businessVertical, servicesAvailable, catalogAvailable, commerceMode, initial.storefrontStyle, suggestedStyle, access]
+  )
+
   const verticalDef = getPremiumHeroForVertical(businessVertical)
   const candidateStyle = resolveStorefrontStyle(look.storefrontStyle, businessVertical, { servicesAvailable, catalogAvailable, commerceMode })
   const meta = STOREFRONT_TEMPLATES_METADATA[candidateStyle]
   const templateLabel = look.storefrontStyle === 'auto' ? `Automático (${STOREFRONT_STYLE_LABELS[candidateStyle]})` : STOREFRONT_STYLE_LABELS[candidateStyle]
-  const colorLabel = look.brandColor === 'custom' ? 'personalizado' : BRAND_COLORS.find((color) => color.key === look.brandColor)?.name ?? look.brandColor
+  const colorLabel = look.brandColor === 'custom' ? (findExtraBrandColor(look.customBrandColor)?.name ?? 'personalizado') : BRAND_COLORS.find((color) => color.key === look.brandColor)?.name ?? look.brandColor
   const headerLabel = STOREFRONT_HEADER_OPTIONS.find((option) => option.value === headerOptionFor(look.headerStyle))?.label ?? ''
 
   const changes = useMemo(() => {
     const diff: Partial<CompanyInfo> = {}
     if (look.storefrontStyle !== initial.storefrontStyle) diff.storefrontStyle = look.storefrontStyle
     if (look.brandColor !== initial.brandColor) diff.brandColor = look.brandColor as CompanyInfo['brandColor']
+    // Los tonos extra se guardan como color personalizado: cambia el HEX aunque brandColor siga en 'custom'.
+    if (look.brandColor === 'custom' && look.customBrandColor !== initial.customBrandColor) diff.customBrandColor = look.customBrandColor
     if (look.headerStyle !== initial.headerStyle) diff.headerStyle = look.headerStyle
     if (look.showTopBar !== initial.showTopBar) diff.showTopBar = look.showTopBar
     return diff
@@ -218,50 +234,70 @@ export function StorefrontTemplatePreviewDialog({
               {tab === 'template' ? (
                 <>
                   <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor}>
-                    <div role="radiogroup" aria-label="Plantillas" className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-1">
-                      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable, catalogAvailable, businessVertical, commerceMode })).map((option) => {
-                        const optionStyle = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable, catalogAvailable, commerceMode })
-                        const selected = look.storefrontStyle === option.value
-                        const label = option.value === 'auto' ? 'Automático' : option.label
+                    <div role="radiogroup" aria-label="Plantillas" className="space-y-4 p-3">
+                      {templateGroups.map((group) => {
+                        const GroupIcon = TEMPLATE_GROUP_ICONS[group.id] ?? Store
                         return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            onClick={() => update({ storefrontStyle: option.value })}
-                            className={cn(
-                              'flex items-center gap-3 rounded-xl border p-2 text-left transition-colors',
-                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                              selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:bg-muted/50'
-                            )}
-                          >
-                            <StorefrontTemplateThumbnail style={optionStyle} className="hidden h-16 w-20 shrink-0 rounded-md border lg:flex" />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                                {label}
-                                {selected && <Check aria-hidden="true" className="h-3.5 w-3.5 text-primary" />}
-                              </span>{' '}
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {option.value === 'auto'
-                                  ? `Hoy: ${STOREFRONT_STYLE_LABELS[optionStyle]}`
-                                  : STOREFRONT_TEMPLATES_METADATA[optionStyle].badge}
+                          <div key={group.id} className="space-y-2">
+                            <div className="flex items-center gap-1.5 px-1">
+                              <GroupIcon className="h-3.5 w-3.5 text-primary" />
+                              <span className="text-xs font-bold tracking-tight text-foreground">{group.title}</span>
+                              <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {group.badge}
                               </span>
-                              {(option.value === initial.storefrontStyle || option.value === suggestedStyle) && (
-                                <span className="mt-1 flex flex-wrap gap-1">
-                                  {option.value === initial.storefrontStyle && (
-                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Actual</span>
-                                  )}
-                                  {option.value === suggestedStyle && (
-                                    <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                                      <Sparkles aria-hidden="true" className="h-2.5 w-2.5" />
-                                      Sugerida
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                              {group.options.map((option) => {
+                                const selected = look.storefrontStyle === option.value
+                                const blocked = option.status !== 'available'
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    disabled={blocked}
+                                    title={option.reason}
+                                    onClick={() => update({ storefrontStyle: option.value })}
+                                    className={cn(
+                                      'flex items-center gap-3 rounded-xl border p-2 text-left transition-colors',
+                                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                                      selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border',
+                                      !blocked && !selected && 'hover:bg-muted/50',
+                                      blocked && 'cursor-not-allowed opacity-60'
+                                    )}
+                                  >
+                                    <span aria-hidden="true" className="contents">
+                                      <StorefrontTemplateThumbnail style={option.resolvedStyle} className="hidden h-16 w-20 shrink-0 rounded-md border lg:flex" />
                                     </span>
-                                  )}
-                                </span>
-                              )}
-                            </span>
-                          </button>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="flex items-center gap-1.5 text-sm font-semibold">
+                                        {option.label}
+                                        {selected && <Check aria-hidden="true" className="h-3.5 w-3.5 text-primary" />}
+                                        {option.status === 'locked_plan' && <Lock aria-label="Bloqueada por plan" className="h-3 w-3 text-muted-foreground" />}
+                                      </span>{' '}
+                                      <span className="block truncate text-xs text-muted-foreground">
+                                        {blocked ? option.reason : option.subtitle}
+                                      </span>
+                                      {(option.value === initial.storefrontStyle || option.isSuggested) && (
+                                        <span className="mt-1 flex flex-wrap gap-1">
+                                          {option.value === initial.storefrontStyle && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Actual</span>
+                                          )}
+                                          {option.isSuggested && (
+                                            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                              <Sparkles aria-hidden="true" className="h-2.5 w-2.5" />
+                                              Sugerida
+                                            </span>
+                                          )}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
                         )
                       })}
                     </div>
@@ -284,7 +320,7 @@ export function StorefrontTemplatePreviewDialog({
                   </div>
                 </>
               ) : (
-                <LookEditor look={look} onChange={update} recommendedColors={meta.recommendedColors} templateName={STOREFRONT_STYLE_LABELS[candidateStyle]} />
+                <LookEditor look={look} onChange={update} ownCustomColor={initial.customBrandColor} recommendedColors={meta.recommendedColors} templateName={STOREFRONT_STYLE_LABELS[candidateStyle]} />
               )}
             </div>
           </aside>
@@ -385,16 +421,22 @@ export function StorefrontTemplatePreviewDialog({
 function LookEditor({
   look,
   onChange,
+  ownCustomColor,
   recommendedColors,
   templateName,
 }: {
   look: StorefrontLook
   onChange: (patch: Partial<StorefrontLook>) => void
+  /** El color personalizado que ya tenía guardado; elegir un tono extra no lo pierde. */
+  ownCustomColor?: string
   recommendedColors: readonly string[]
   templateName: string
 }) {
   const headerOption = headerOptionFor(look.headerStyle)
-  const customValid = isValidBrandHexColor(look.customBrandColor)
+  // Solo se ofrece "mi color" si es un HEX propio, no uno de los tonos extra.
+  const ownCustomValid = isValidBrandHexColor(ownCustomColor) && !findExtraBrandColor(ownCustomColor)
+  const ownCustomSelected = ownCustomValid && look.brandColor === 'custom'
+    && look.customBrandColor?.toUpperCase() === ownCustomColor?.toUpperCase()
 
   return (
     <div className="space-y-6 p-4">
@@ -424,24 +466,30 @@ function LookEditor({
               </button>
             )
           })}
-          {customValid && (
+          {ownCustomValid && (
             <button
               type="button"
-              onClick={() => onChange({ brandColor: 'custom' })}
+              onClick={() => onChange({ brandColor: 'custom', customBrandColor: ownCustomColor })}
               aria-label="Usar mi color personalizado"
-              aria-pressed={look.brandColor === 'custom'}
+              aria-pressed={ownCustomSelected}
               title="Personalizado"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-full border transition-transform',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                look.brandColor === 'custom' ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : 'hover:scale-110'
+                ownCustomSelected ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : 'hover:scale-110'
               )}
-              style={{ backgroundColor: look.customBrandColor }}
+              style={{ backgroundColor: ownCustomColor }}
             >
-              {look.brandColor === 'custom' && <Check aria-hidden="true" className="h-4 w-4 text-white" />}
+              {ownCustomSelected && <Check aria-hidden="true" className="h-4 w-4 text-white" />}
             </button>
           )}
         </div>
+        <ExtraBrandColorSwatches
+          size="sm"
+          brandColor={look.brandColor}
+          customBrandColor={look.customBrandColor}
+          onSelect={(hex) => onChange({ brandColor: 'custom', customBrandColor: hex })}
+        />
         <p className="text-xs text-muted-foreground">Los marcados con un punto combinan con {templateName}.</p>
       </section>
 

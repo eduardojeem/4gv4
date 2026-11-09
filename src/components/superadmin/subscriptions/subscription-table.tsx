@@ -26,8 +26,10 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { SuperAdminSubscription } from './types'
+import { SubscriptionPaymentSummary } from './subscription-payment-summary'
 import { PlanBadge, StatusBadge } from './subscription-badges'
 import {
+  subscriptionEndDate,
   daysUntil,
   daysLabel,
   formatDate,
@@ -53,9 +55,9 @@ type Props = {
  * compite con nada y deja el fondo libre para el hover.
  */
 const ATTENTION_STRIPE: Record<AttentionLevel, string> = {
-  urgent: 'before:bg-rose-500',
-  watch: 'before:bg-amber-400',
-  none: 'before:bg-transparent',
+  urgent: '[&>td:first-child]:border-l-rose-500',
+  watch: '[&>td:first-child]:border-l-amber-400',
+  none: '[&>td:first-child]:border-l-transparent',
 }
 
 // Medido: con `py-3`, tres lineas en «Ciclo» y el avatar de 36px, cada fila
@@ -79,42 +81,42 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
     // cuanto cambiaba cualquier cosa arriba. `min-h-0` deja que el contenedor
     // padre reparta el espacio.
     <div className="min-h-0 overflow-auto">
-      {/* Ancho automatico, no `table-fixed` con porcentajes: con dos columnas
-          ocultas por `media query`, el reparto fijo les seguia reservando su
-          parte y «Qué hacer» quedaba en 52px para un texto de 119. Cada columna
-          se dimensiona por su contenido y una sola —la que dice que hacer—
-          absorbe el sobrante con `w-full`. */}
-      <Table className="w-full">
+      {/* Las columnas ocultas tienen el mismo breakpoint en colgroup y celdas. */}
+      <Table className="w-full table-fixed">
+        <colgroup>
+          <col className="w-[23%] 2xl:w-[19%]" />
+          <col className="w-[12%] 2xl:w-[10%]" />
+          <col className="w-[20%] 2xl:w-[16%]" />
+          <col className="w-[18%] 2xl:w-[14%]" />
+          <col className="hidden 2xl:table-column 2xl:w-[10%]" />
+          <col className="hidden 2xl:table-column 2xl:w-[11%]" />
+          <col className="w-[21%] 2xl:w-[14%]" />
+          <col className="w-[6%]" />
+        </colgroup>
         <TableHeader className="sticky top-0 z-10">
           <TableRow className="border-b border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/95">
-            {/* Sin porcentajes: un ancho declarado convierte el minimo de la
-                celda mas ancha en un minimo de TODA la tabla —223px al 26% son
-                858px de piso—. Con ancho automatico el piso es la suma de los
-                minimos reales, que es la mitad. Solo «Qué hacer» absorbe el
-                sobrante. */}
             <Th className="pl-5">Organización</Th>
             <Th>Plan</Th>
-            <Th>Estado</Th>
+            <Th>Estado y pago</Th>
             <Th>Ciclo</Th>
             <Th className={SECONDARY}>Uso</Th>
             {/* Decia «Owner» en una interfaz en castellano. */}
             <Th className={SECONDARY}>Responsable</Th>
-            {/* Absorbe el sobrante: es la que dice QUE HACER y era la unica que
-                venia truncada, con el texto completo escondido en un `title`
-                que en tactil no existe. */}
-            <Th className="w-full">Qué hacer</Th>
+            <Th>Qué hacer</Th>
             <Th className="pr-3 text-right">Acción</Th>
           </TableRow>
         </TableHeader>
 
         <TableBody>
           {items.map((sub) => {
-            const renewalDays = daysUntil(sub.current_period_ends_at)
+            const end = subscriptionEndDate(sub)
+            const start = sub.status === 'trialing' ? sub.created_at : sub.current_period_starts_at
+            const renewalDays = daysUntil(end)
             const trialDays = daysUntil(sub.trial_ends_at)
             const level = getAttentionLevel(sub)
-            const progress = periodProgress(sub)
+            const progress = periodProgress({...sub,current_period_starts_at:start,current_period_ends_at:end})
             const recommendation = getRecommendation(sub)
-            const hasPeriod = Boolean(sub.current_period_starts_at && sub.current_period_ends_at)
+            const hasPeriod = Boolean(start && end && new Date(end).getTime() > new Date(start).getTime())
 
             const initials = (sub.organization_name || 'OR')
               .trim()
@@ -143,7 +145,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                   'group relative cursor-pointer border-b border-slate-100 transition-colors dark:border-slate-800/60',
                   'hover:bg-violet-50/60 dark:hover:bg-violet-950/20',
                   // La franja de severidad, sin tocar el fondo.
-                  'before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[""]',
+                  '[&>td:first-child]:border-l-4',
                   ATTENTION_STRIPE[level]
                 )}
                 aria-label={`Ver suscripción de ${sub.organization_name}`}
@@ -238,16 +240,17 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                         {daysLabel(trialDays, 'trial')}
                       </span>
                     ) : (
-                      <span className="capitalize text-slate-400">Vía {sub.provider || 'manual'}</span>
+                      <span className="text-slate-400">Estado de acceso</span>
                     )}
                   </p>
+                  <SubscriptionPaymentSummary subscription={sub} compact />
                 </TableCell>
 
                 {/* Ciclo */}
                 <TableCell className={CELL}>
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {sub.current_period_ends_at ? formatDate(sub.current_period_ends_at) : 'Sin cierre'}
+                      {end ? formatDate(end) : 'Sin fecha definida'}
                     </span>
                     <span
                       className={cn(
@@ -260,7 +263,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                       )}
                     >
                       {renewalDays === null
-                        ? 'Perpetuo'
+                        ? 'Sin fecha definida'
                         : renewalDays < 0
                           ? `${Math.abs(renewalDays)}d vencido`
                           : renewalDays === 0
@@ -275,7 +278,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                   {hasPeriod ? (
                     <>
                       <div
-                        title={`Desde ${formatDate(sub.current_period_starts_at)}`}
+                        title={`Desde ${formatDate(start)}`}
                         role="progressbar"
                         aria-valuenow={progress}
                         aria-valuemin={0}
@@ -358,7 +361,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        className="h-11 w-11 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                         aria-label={`Opciones de ${sub.organization_name}`}
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -394,7 +397,7 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem asChild className="cursor-pointer">
-                        <Link href={`/superadmin/organizations?query=${encodeURIComponent(sub.organization_name)}`}>
+                        <Link href={`/superadmin/organizations/${encodeURIComponent(sub.organization_slug || sub.organization_id)}`}>
                           <Users className="mr-2 h-3.5 w-3.5 text-indigo-500" />
                           Ver en Organizaciones
                         </Link>

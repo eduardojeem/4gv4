@@ -85,8 +85,9 @@ export default async function ProductsPage(props: {
   const ALLOWED_PER_PAGE = [25, 28, 50, 56, 75, 84, 100, 112]
   const perPage = ALLOWED_PER_PAGE.includes(rawPerPage) ? rawPerPage : PRODUCTS_PER_PAGE
 
-  // Resolve wholesale status once
+  // Resolve wholesale status once: solo los usuarios habilitados como mayoristas pueden ver y filtrar por mayorista
   const { isWholesale } = await resolveWholesaleStatus()
+  const wholesale = isWholesale && (searchParams.wholesale === 'true' || searchParams.mayorista === 'true')
 
   // Fetch data in parallel
   const [productsData, categories, branches, settings] = await Promise.all([
@@ -99,6 +100,7 @@ export default async function ProductsPage(props: {
       maxPrice,
       inStock,
       offers,
+      wholesaleOnly: wholesale,
       audience,
       size,
       color,
@@ -131,6 +133,7 @@ export default async function ProductsPage(props: {
     branchId !== '' ||
     inStock ||
     offers ||
+    wholesale ||
     Boolean(audience) ||
     size !== '' ||
     color !== '' ||
@@ -145,6 +148,7 @@ export default async function ProductsPage(props: {
     branchId !== '',
     inStock,
     offers,
+    wholesale,
     Boolean(audience),
     size !== '',
     color !== '',
@@ -200,6 +204,7 @@ export default async function ProductsPage(props: {
                     branches={branches}
                     fashionFacets={fashionFacets}
                     deviceFacets={deviceFacets}
+                    isWholesale={isWholesale}
                   />
                 </Suspense>
               </div>
@@ -222,6 +227,7 @@ export default async function ProductsPage(props: {
                   branches={branches}
                   fashionFacets={fashionFacets}
                   deviceFacets={deviceFacets}
+                  isWholesale={isWholesale}
                 />
 
                 <div className="flex items-center gap-2">
@@ -240,13 +246,13 @@ export default async function ProductsPage(props: {
 
               {/* Fila 2 (Abajo): Franja Deslizable de Subcategorías y Marcas */}
               <div className="pt-1 border-t border-border/60">
-                <StoreContextFilterBar categories={categories} brands={brands} />
+                <StoreContextFilterBar categories={categories} brands={brands} isWholesale={isWholesale} />
               </div>
 
               {/* Fila 3: Chips de Filtros Activos lado a lado */}
               <div>
                 <Suspense>
-                  <FilterBadges categories={categories} branches={branches} />
+                  <FilterBadges categories={categories} branches={branches} isWholesale={isWholesale} />
                 </Suspense>
               </div>
             </StorefrontCatalogToolbar>

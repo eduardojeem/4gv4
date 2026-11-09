@@ -20,7 +20,7 @@ const SERVICE_DEFINITIONS = [
   { id: 'telegram', name: 'Telegram', checkId: 'integrations.telegram', source: 'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID', runtimeVerified: false },
   { id: 'turnstile', name: 'Cloudflare Turnstile', checkId: 'security.turnstile', source: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY', runtimeVerified: false },
   { id: 'cloudflare', name: 'Cloudflare', checkId: 'cloudflare.edge', source: 'Headers públicos y API opcional Zone:Read', runtimeVerified: true },
-  { id: 'pagopar', name: 'Pagopar', checkId: 'payments.pagopar', source: 'Código, variables requeridas y actividad registrada', runtimeVerified: false },
+  { id: 'bancard', name: 'Bancard', checkId: 'payments.bancard', source: 'Código, variables requeridas y actividad registrada', runtimeVerified: false },
 ] as const
 
 function pairConfiguration(first: string, second: string): ServiceConfigurationState {
@@ -36,7 +36,7 @@ function runtimeServiceConfiguration(): ServiceConfiguration {
     telegram: pairConfiguration('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'),
     turnstile: pairConfiguration('NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY'),
     cloudflare: pairConfiguration('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ZONE_ID'),
-    pagopar: pairConfiguration('PAGOPAR_PUBLIC_KEY', 'PAGOPAR_PRIVATE_KEY'),
+    bancard: pairConfiguration('BANCARD_PUBLIC_KEY', 'BANCARD_PRIVATE_KEY'),
   }
 }
 
@@ -119,7 +119,7 @@ export function buildScheduledTaskHealth(
  * el resto aparece como no implementado, sin inventar estado.
  */
 const PAYMENT_PROVIDERS: Record<string, { label: string; env: string[] }> = {
-  pagopar: { label: 'Pagopar', env: ['PAGOPAR_PUBLIC_KEY', 'PAGOPAR_PRIVATE_KEY'] },
+  bancard: { label: 'Bancard', env: ['BANCARD_PUBLIC_KEY', 'BANCARD_PRIVATE_KEY'] },
   mercadopago: { label: 'Mercado Pago', env: ['MERCADOPAGO_ACCESS_TOKEN'] },
 }
 

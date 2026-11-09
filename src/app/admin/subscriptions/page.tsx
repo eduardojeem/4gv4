@@ -213,8 +213,8 @@ export default async function AdminSubscriptionsPage() {
   const regularAmount = money(state.currentPlan.price_monthly, state.currentPlan.currency)
   const averageUsage = averageUsagePercent(state.currentPlan, state.usage)
 
-  const paymentProvider = subscription?.provider === 'pagopar'
-    ? 'Pagopar'
+  const paymentProvider = subscription?.provider === 'bancard'
+    ? 'Bancard'
     : subscription?.provider === 'stripe'
       ? 'Stripe'
       : subscription?.provider === 'mercado_pago'

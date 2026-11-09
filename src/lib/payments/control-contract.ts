@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const SUBSCRIPTION_CONTROL_IDS = ['pagopar_card', 'pagopar_qr', 'stripe', 'autopay', 'promo'] as const
+export const SUBSCRIPTION_CONTROL_IDS = ['bancard_card', 'stripe', 'autopay', 'promo'] as const
 export const COMMERCE_CONTROL_IDS = ['cash', 'card', 'transfer', 'qr', 'digital_wallet', 'credit', 'store_credit'] as const
 export type SubscriptionControlId = typeof SUBSCRIPTION_CONTROL_IDS[number]
 export type CommerceControlId = typeof COMMERCE_CONTROL_IDS[number]

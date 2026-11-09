@@ -30,6 +30,8 @@ export const STOREFRONT_STYLE_PREFERENCES = [
   'beauty',
   'wholesale-pro',
   'catalog-basic',
+  'informatica-electronica',
+  'barber',
 ] as const
 
 export type StorefrontStylePreference = (typeof STOREFRONT_STYLE_PREFERENCES)[number]
@@ -102,7 +104,7 @@ export function isStorefrontStyleAvailable(style: StorefrontStylePreference, con
     return context.commerceMode === 'catalog'
   }
   const vertical = typeof context.businessVertical === 'string' ? context.businessVertical : ''
-  if (style === 'services') {
+  if (style === 'services' || style === 'barber') {
     return context.servicesAvailable !== false && !PRODUCT_VERTICALS.has(vertical)
   }
   if (SERVICE_VERTICALS.has(vertical)) {
@@ -128,7 +130,9 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     preference === 'services' ||
     preference === 'beauty' ||
     preference === 'wholesale-pro' ||
-    preference === 'catalog-basic'
+    preference === 'catalog-basic' ||
+    preference === 'informatica-electronica' ||
+    preference === 'barber'
   )
 
   const chosen: StorefrontStyle = isExplicit
@@ -184,6 +188,10 @@ export function getTemplateCompatibility(input: {
     : (vertical ? STYLE_BY_VERTICAL[vertical] : DEFAULT_STOREFRONT_STYLE)
   const isRecommended = storefrontStyle === 'wholesale-pro'
     ? ['electronics', 'hardware', 'general'].includes(String(vertical))
+    : storefrontStyle === 'informatica-electronica'
+    ? ['electronics', 'general'].includes(String(vertical))
+    : storefrontStyle === 'barber'
+    ? ['barbershop', 'beauty_services'].includes(String(vertical))
     : storefrontStyle === recommendedStyle
   const resolvedCurrent = currentStyle === 'auto'
     ? resolveStorefrontStyle('auto', businessVertical, { servicesAvailable })
@@ -194,8 +202,8 @@ export function getTemplateCompatibility(input: {
   const missingModules: string[] = []
   const missingData: string[] = []
 
-  // Plantilla Servicios: requiere módulos de servicios/agenda
-  if (storefrontStyle === 'services') {
+  // Plantillas de Servicios / Barbería: requieren módulos de servicios/agenda
+  if (storefrontStyle === 'services' || storefrontStyle === 'barber') {
     const hasServicesModule = modules ? modules.includes('services') : servicesAvailable !== false
     if (!hasServicesModule || servicesAvailable === false) {
       missingModules.push('services')
@@ -242,16 +250,18 @@ export function getTemplateCompatibility(input: {
 }
 
 export const STOREFRONT_STYLE_LABELS: Record<StorefrontStyle, string> = {
-  'wholesale-pro': 'Mayorista & Retail',
-  'catalog-basic': 'Catálogo básico',
-  classic: 'Clásico',
-  fashion: 'Moda',
-  sport: 'Deportivo',
-  tech: 'Tecnología',
-  market: 'Supermercado',
-  modern: 'Moderno',
-  services: 'Servicios',
-  beauty: 'Belleza',
+  'wholesale-pro': 'Mayorista & Distribuidora',
+  'catalog-basic': 'Vitrina sin Carrito',
+  classic: 'Tienda Clásica',
+  fashion: 'Boutique de Moda',
+  sport: 'Deportes & Zapatillas',
+  tech: 'Celulares & Gadgets',
+  market: 'Supermercado & Almacén',
+  modern: 'Estudio Minimalista',
+  services: 'Turnos & Servicios',
+  beauty: 'Cosmética & Perfumería',
+  'informatica-electronica': 'Mega Tienda Tech',
+  barber: 'Barbería Club',
 }
 
 export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
@@ -259,17 +269,85 @@ export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
-  { value: 'wholesale-pro', label: 'Mayorista & Retail', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.' },
-  { value: 'catalog-basic', label: 'Catálogo básico', description: 'Vitrina simple para exhibir productos con foto, precio y descripción, sin carrito ni botones de compra.' },
+  { value: 'barber', label: 'Barbería Club', description: 'Inspirada en exclusivos clubes de caballeros como Club Varsovia: carta de rituales, atención personalizada, café o bebidas de cortesía, maestros barberos y turnos online.' },
+  { value: 'wholesale-pro', label: 'Mayorista & Distribuidora', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.' },
+  { value: 'catalog-basic', label: 'Vitrina sin Carrito', description: 'Vitrina simple para exhibir productos con foto, precio y descripción, sin carrito ni botones de compra.' },
+  { value: 'informatica-electronica', label: 'Mega Tienda Tech', description: 'Tienda de tecnología con compra por marca y por categoría, ofertas reales y diseño neutro adaptable a tu marca.' },
   { value: 'auto', label: 'Automático', description: 'Se elige según el rubro de tu negocio.' },
-  { value: 'classic', label: 'Clásico', description: 'Foto completa en tarjetas apaisadas. Para tecnología, ferretería o almacén.' },
-  { value: 'fashion', label: 'Moda', description: 'Fotos verticales a sangre, títulos elegantes y categorías con foto.' },
-  { value: 'sport', label: 'Deportivo', description: 'Fotos verticales, títulos grandes en mayúsculas y más contraste.' },
-  { value: 'tech', label: 'Tecnología', description: 'Diseño enfocado en dispositivos, ficha técnica, gadgets y servicios técnicos.' },
-  { value: 'market', label: 'Supermercado', description: 'Pasillos, descuentos por porcentaje y compra rápida: se suman cantidades desde la misma tarjeta.' },
-  { value: 'modern', label: 'Moderno', description: 'Estilo contemporáneo con bordes suaves redondeados, atmósfera limpia y premium.' },
-  { value: 'services', label: 'Servicios', description: 'Peluquerías, barberías y estética: servicios con precio y reserva de turnos al frente.' },
-  { value: 'beauty', label: 'Belleza', description: 'Cosmética, maquillaje, skincare y perfumería: compra por necesidad, marcas y rutinas.' },
+  { value: 'classic', label: 'Tienda Clásica', description: 'Foto completa en tarjetas apaisadas. Para tecnología, ferretería o almacén.' },
+  { value: 'fashion', label: 'Boutique de Moda', description: 'Fotos verticales a sangre, títulos elegantes y categorías con foto.' },
+  { value: 'sport', label: 'Deportes & Zapatillas', description: 'Fotos verticales, títulos grandes en mayúsculas y más contraste.' },
+  { value: 'tech', label: 'Celulares & Gadgets', description: 'Diseño enfocado en dispositivos, ficha técnica, gadgets y servicios técnicos.' },
+  { value: 'market', label: 'Supermercado & Almacén', description: 'Pasillos, descuentos por porcentaje y compra rápida: se suman cantidades desde la misma tarjeta.' },
+  { value: 'modern', label: 'Estudio Minimalista', description: 'Estilo contemporáneo con bordes suaves redondeados, atmósfera limpia y premium.' },
+  { value: 'services', label: 'Turnos & Servicios', description: 'Peluquerías, barberías y estética: servicios con precio y reserva de turnos al frente.' },
+  { value: 'beauty', label: 'Cosmética & Perfumería', description: 'Cosmética, maquillaje, skincare y perfumería: compra por necesidad, marcas y rutinas.' },
+]
+
+export type StorefrontTemplateGroupId = 'auto' | 'general' | 'tech' | 'fashion' | 'beauty' | 'food'
+
+export interface StorefrontTemplateGroup {
+  id: StorefrontTemplateGroupId
+  title: string
+  label: string
+  badge: string
+  description: string
+  templateKeys: readonly StorefrontStylePreference[]
+}
+
+/**
+ * Plantillas agrupadas por tipo de negocio. Cada plantilla está en un solo grupo;
+ * el orden dentro del grupo va de la más simple a la más completa.
+ */
+export const STOREFRONT_TEMPLATE_GROUPS: ReadonlyArray<StorefrontTemplateGroup> = [
+  {
+    id: 'auto',
+    title: 'Selección automática',
+    label: 'Automático',
+    badge: 'Según tu rubro',
+    description: 'Elige la plantilla que mejor encaja con el rubro de tu negocio.',
+    templateKeys: ['auto'],
+  },
+  {
+    id: 'general',
+    title: 'Comercio general',
+    label: 'Comercio',
+    badge: 'Multirrubro',
+    description: 'Para cualquier negocio: ferreterías, librerías, bazares, regalerías y tiendas con productos variados.',
+    templateKeys: ['classic', 'modern', 'catalog-basic'],
+  },
+  {
+    id: 'tech',
+    title: 'Tecnología & Electrónica',
+    label: 'Tecnología',
+    badge: 'Celulares, PC y gadgets',
+    description: 'Celulares, informática, accesorios, repuestos y servicio técnico.',
+    templateKeys: ['tech', 'informatica-electronica'],
+  },
+  {
+    id: 'fashion',
+    title: 'Moda & Deportes',
+    label: 'Moda',
+    badge: 'Ropa y calzado',
+    description: 'Indumentaria, calzado, accesorios, ropa deportiva y zapatillas, con fotos verticales.',
+    templateKeys: ['fashion', 'sport'],
+  },
+  {
+    id: 'beauty',
+    title: 'Belleza & Estética',
+    label: 'Belleza',
+    badge: 'Productos y turnos',
+    description: 'Cosmética y perfumería, peluquerías, barberías y centros de estética con reserva de turnos.',
+    templateKeys: ['beauty', 'services', 'barber'],
+  },
+  {
+    id: 'food',
+    title: 'Almacén & Mayoristas',
+    label: 'Almacén',
+    badge: 'Alto volumen',
+    description: 'Supermercados, almacenes, distribuidoras y ventas por mayor con muchos productos.',
+    templateKeys: ['market', 'wholesale-pro'],
+  },
 ]
 
 /** Variantes específicas de cada plantilla */
@@ -298,10 +376,23 @@ export interface StorefrontTemplateMeta {
 }
 
 export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTemplateMeta> = {
-  'wholesale-pro': { id: 'wholesale-pro', name: 'Mayorista & Retail', badge: 'Catálogo profesional', tagline: 'Encontrá lo que necesitás', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.', recommendedVerticals: ['Electrónica', 'Ferretería', 'General'], recommendedColors: ['blue','indigo','teal'], features: ['Buscador protagonista','Categorías accesibles','Precios según tu cuenta'], accentGradient: 'from-slate-700 to-slate-900', badgeColorClass: 'bg-primary/10 text-primary', variants: [] },
+  'informatica-electronica': {
+    id: 'informatica-electronica',
+    name: 'Mega Tienda Tech',
+    badge: 'Tech & Informática',
+    tagline: 'Mega tienda de tecnología, informática y dispositivos',
+    description: 'Diseño para tecnología y electrónica: categorías con íconos, compra por marca, ofertas con descuento real y estética neutra adaptable a tu color de marca.',
+    recommendedVerticals: ['Electrónica', 'Informática', 'General', 'Repuestos'],
+    recommendedColors: ['blue', 'indigo', 'cyan', 'emerald'],
+    features: ['Header técnico con buscador y categorías', 'Compra por marca y por categoría', 'Ofertas con % OFF real', 'Carrito o WhatsApp según tu forma de venta'],
+    accentGradient: 'from-slate-800 to-slate-950',
+    badgeColorClass: 'bg-primary/10 text-primary border-primary/20',
+    variants: [],
+  },
+  'wholesale-pro': { id: 'wholesale-pro', name: 'Mayorista & Distribuidora', badge: 'Catálogo profesional', tagline: 'Encontrá lo que necesitás', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.', recommendedVerticals: ['Electrónica', 'Ferretería', 'General'], recommendedColors: ['blue','indigo','teal'], features: ['Buscador protagonista','Categorías accesibles','Precios según tu cuenta'], accentGradient: 'from-slate-700 to-slate-900', badgeColorClass: 'bg-primary/10 text-primary', variants: [] },
   'catalog-basic': {
     id: 'catalog-basic',
-    name: 'Catálogo básico',
+    name: 'Vitrina sin Carrito',
     badge: 'Vitrina simple',
     tagline: 'Vitrina rápida y directa para exhibir tus productos',
     description: 'Diseño limpio y liviano optimizado para celulares. Muestra fotos, precios y stock sin botones de compra ni carrito.',
@@ -314,7 +405,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   classic: {
     id: 'classic',
-    name: 'Clásico Universal',
+    name: 'Tienda Clásica',
     badge: 'Equilibrado',
     tagline: 'Diseño comprobado para cualquier tipo de negocio',
     description: 'Tarjetas apaisadas que muestran productos completos sin recortes. Ideal para catálogos con variedad amplia de artículos.',
@@ -331,7 +422,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   fashion: {
     id: 'fashion',
-    name: 'Boutique & Moda',
+    name: 'Boutique de Moda',
     badge: 'Visual & Elegante',
     tagline: 'Impacto visual con fotografía vertical de prendas',
     description: 'Inspirado en marcas internacionales de moda. Fotografías en proporción 3:4 a sangre, tipografía refinada y lookbook integrado.',
@@ -348,7 +439,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   sport: {
     id: 'sport',
-    name: 'Deportivo & Activo',
+    name: 'Deportes & Zapatillas',
     badge: 'Dinámico & Bold',
     tagline: 'Fuerza visual para zapatillas, fitness y rendimiento',
     description: 'Líneas angulares, tipografía en mayúsculas inclinadas, alto contraste y estética dinámica inspirada en marcas de entrenamiento.',
@@ -365,7 +456,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   tech: {
     id: 'tech',
-    name: 'Tech & Electrónica',
+    name: 'Celulares & Gadgets',
     badge: 'Innovación',
     tagline: 'Especializado en celulares, computación y gadgets',
     description: 'Estética moderna con micro-bordes tecnológicos, badges tipo tag técnico y resaltado de compatibilidad y especificaciones.',
@@ -382,7 +473,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   market: {
     id: 'market',
-    name: 'Supermercado & Retail',
+    name: 'Supermercado & Almacén',
     badge: 'Alta Conversión',
     tagline: 'Catálogo masivo con precios grandes y compras rápidas',
     description: 'Optimizado para carritos con múltiples artículos. Tarjetas compactas de alta densidad, precios destacados y badges de ahorro.',
@@ -399,7 +490,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   modern: {
     id: 'modern',
-    name: 'Moderno & Studio',
+    name: 'Estudio Minimalista',
     badge: 'Contemporáneo',
     tagline: 'Minimalismo premium con formas suaves y espaciadas',
     description: 'Tarjetas con bordes ultra-redondeados suaves (rounded-2xl), sombras delicadas y paletas sobrias para marcas de autor.',
@@ -416,7 +507,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   services: {
     id: 'services',
-    name: 'Servicios & Turnos',
+    name: 'Turnos & Servicios',
     badge: 'Reservas online',
     tagline: 'Para negocios que venden su tiempo: cortes, color, uñas y tratamientos',
     description: 'La portada invita a reservar: carta de servicios con precio y duración, tu equipo, horarios y cómo llegar. Los productos quedan como complemento.',
@@ -429,7 +520,7 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
   },
   beauty: {
     id: 'beauty',
-    name: 'Belleza & Cosmética',
+    name: 'Cosmética & Perfumería',
     badge: 'Suave & Cuidado',
     tagline: 'Para tiendas de cosmética, maquillaje, skincare y perfumería',
     description: 'Tonos suaves, compra por necesidad (rostro, cabello, maquillaje, fragancias), marcas que vendés y una rutina armada con tus productos.',
@@ -439,6 +530,22 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
     accentGradient: 'from-rose-400 to-fuchsia-500',
     badgeColorClass: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
     variants: [],
+  },
+  barber: {
+    id: 'barber',
+    name: 'Barbería Club',
+    badge: 'Club de Caballeros',
+    tagline: 'Rituales tradicionales, ambiente exclusivo y turnos online',
+    description: 'Inspirada en exclusivos clubes de caballeros como Club Varsovia: carta de rituales, atención personalizada, cortesía de café o bebidas, maestros barberos y turnos online.',
+    recommendedVerticals: ['Barbería', 'Peluquería Masculina', 'Grooming', 'Estética Masculina'],
+    recommendedColors: ['amber', 'orange', 'teal', 'indigo'],
+    features: ['Carta de rituales y servicios', 'Reserva de turnos online integrada', 'Presentación de maestros barberos', 'Sedes y experiencia de hospitalidad', 'Boutique de grooming masculino'],
+    accentGradient: 'from-amber-600 via-amber-500 to-yellow-600',
+    badgeColorClass: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
+    variants: [
+      { id: 'barber-club', name: 'Gentlemen Club', tagline: 'Estética vintage club con madera y cuero', description: 'Ambiente clásico inspirado en barberías europeas con rituales a navaja y barra.', badgeText: 'Club' },
+      { id: 'barber-modern', name: 'Barber Modern Fade', tagline: 'Cortes urbanos y degradados precisos', description: 'Enfoque en tendencias actuales de corte, perfilado de barba y styling contemporáneo.', badgeText: 'Modern' },
+    ],
   },
 }
 
@@ -499,6 +606,8 @@ const STYLE_BY_VERTICAL_SUGGESTION: Record<BusinessVertical, StorefrontStyle | n
 const words = (alternatives: string) => new RegExp(`(?<!\\p{L})(?:${alternatives})(?!\\p{L})`, 'u')
 
 const STYLE_KEYWORDS: ReadonlyArray<{ style: StorefrontStyle; pattern: RegExp }> = [
+  { style: 'barber', pattern: words('varsovia|club de caballeros?|afeitad\\p{L}* a navaja|toallas? calientes?|fade master') },
+  { style: 'informatica-electronica', pattern: words('inform[aá]tica|computaci[oó]n|hardware|perif[eé]ricos?|electr[oó]nica tech|componentes? pc') },
   { style: 'services', pattern: words('peluquer\\p{L}*|barber\\p{L}*|sal[oó]n de belleza|u[nñ]as|manicur\\p{L}*|pedicur\\p{L}*|spa|masajes?|est[eé]tica|tatuajes?|tattoo|pesta[nñ]as|cejas') },
   { style: 'sport', pattern: words('deport\\p{L}*|fitness|gym|gimnasio|suplementos?|zapatillas?|sneakers?|running') },
   { style: 'fashion', pattern: words('ropa|moda|boutique|indumentaria|calzados?|zapater\\p{L}*|lencer\\p{L}*|joyer\\p{L}*|carteras?') },
@@ -511,6 +620,7 @@ const STYLE_KEYWORDS: ReadonlyArray<{ style: StorefrontStyle; pattern: RegExp }>
 const HEADER_BY_STYLE: Record<StorefrontStyle, Exclude<StorefrontHeaderStyle, 'glass'>> = {
   'wholesale-pro': 'solid',
   'catalog-basic': 'solid',
+  'informatica-electronica': 'accent',
   classic: 'solid',
   fashion: 'solid',
   sport: 'dark',
@@ -519,6 +629,7 @@ const HEADER_BY_STYLE: Record<StorefrontStyle, Exclude<StorefrontHeaderStyle, 'g
   modern: 'solid',
   services: 'dark',
   beauty: 'solid',
+  barber: 'dark',
 }
 
 /**
@@ -592,6 +703,7 @@ export function usesPortraitMedia(style: StorefrontStyle) {
 export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'font-semibold tracking-tight',
   'catalog-basic': 'font-bold tracking-tight',
+  'informatica-electronica': 'font-black tracking-tight',
   classic: 'font-extrabold tracking-tight',
   fashion: 'font-serif tracking-tight',
   sport: 'font-black uppercase italic tracking-tighter',
@@ -600,12 +712,14 @@ export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
   modern: 'font-semibold tracking-tight',
   services: 'font-serif tracking-tight',
   beauty: 'font-serif tracking-tight',
+  barber: 'font-serif tracking-tight',
 }
 
 /** Etiqueta chica sobre los titulos. */
 export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'text-xs font-semibold uppercase tracking-wide text-muted-foreground',
   'catalog-basic': 'text-xs font-semibold uppercase tracking-wider text-muted-foreground',
+  'informatica-electronica': 'inline-block rounded-full bg-primary/10 border border-primary/25 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary',
   classic: 'text-xs font-bold uppercase tracking-wider text-primary',
   fashion: 'text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground',
   sport: 'inline-block -skew-x-6 bg-primary px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-primary-foreground',
@@ -614,12 +728,14 @@ export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
   modern: 'text-[11px] font-semibold uppercase tracking-widest text-primary/80',
   services: 'text-[11px] font-semibold uppercase tracking-[0.2em] text-primary',
   beauty: 'inline-block rounded-full bg-pink-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-pink-700 dark:text-pink-300',
+  barber: 'inline-block tracking-[0.2em] uppercase text-xs font-bold text-amber-600 dark:text-amber-400',
 }
 
 /** Esquinas de fotos y botones. */
 export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
   'wholesale-pro': 'rounded-lg',
   'catalog-basic': 'rounded-lg',
+  'informatica-electronica': 'rounded-xl',
   classic: 'rounded-xl',
   fashion: 'rounded-none',
   sport: 'rounded-md',
@@ -628,4 +744,5 @@ export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
   modern: 'rounded-2xl',
   services: 'rounded-2xl',
   beauty: 'rounded-3xl',
+  barber: 'rounded-2xl',
 }

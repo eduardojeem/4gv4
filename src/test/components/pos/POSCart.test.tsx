@@ -64,3 +64,24 @@ describe('POSCart current component contract', () => {
     expect(handlers.onCheckout).toHaveBeenCalledOnce()
   })
 })
+
+describe('cash register primary action', () => {
+ it('offers opening the register without triggering checkout', () => {
+  const open = vi.fn()
+  render(<POSCart {...baseProps} items={[{id:'s',name:'Corte',price:50000,quantity:1,isService:true}]} cartItemCount={1} cashRegisterClosed onOpenCash={open} checkoutEligibility={{canOpen:true,canConfirm:false,reason:'Abrí la caja para continuar'}} />)
+  const action = screen.getByRole('button',{name:'Abrir caja para cobrar'})
+  expect(action).toBeEnabled()
+  fireEvent.click(action)
+  expect(open).toHaveBeenCalledOnce()
+  expect(handlers.onCheckout).not.toHaveBeenCalled()
+ })
+})
+
+describe('cart scrolling boundaries', () => {
+ it('keeps the primary action outside the scrolling items and pricing area', () => {
+  render(<POSCart {...baseProps} items={[{id:'s',name:'Corte',price:50000,quantity:1,isService:true}]} cartItemCount={1} />)
+  const details = screen.getByRole('region', {name:'Detalle del carrito y ajustes'})
+  expect(details).toContainElement(screen.getByText('Corte'))
+  expect(details).not.toContainElement(screen.getByRole('button', {name:'Cobrar ahora'}))
+ })
+})

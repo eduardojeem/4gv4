@@ -47,7 +47,6 @@ import { CreditPaperPicker } from '@/components/dashboard/credits/CreditPaperPic
 
 export const PARAGUAY_BANKS = [
   'Banco Itaú',
-  'Ueno Bank',
   'Banco Continental',
   'Banco Familiar',
   'Sudameris Bank',

@@ -19,7 +19,7 @@ export interface CompanyInfo {
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
-  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro' | 'catalog-basic'
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro' | 'catalog-basic' | 'informatica-electronica' | 'barber'
   /** Variante específica dentro de la plantilla elegida */
   storefrontVariant?: string
   serviceWebsiteVariant?: 'barber' | 'salon' | 'studio' | 'professional'
@@ -206,6 +206,8 @@ export interface Service {
   featured?: boolean
   category?: string
   source?: 'catalog' | 'inventory' | 'template'
+  /** Portada del servicio (foto del producto del catálogo). */
+  imageUrl?: string
 }
 
 export interface Testimonial {

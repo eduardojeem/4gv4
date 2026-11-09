@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X, Loader2, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { X, Loader2, ChevronDown, PanelLeftClose, PanelLeftOpen, Flame, Briefcase } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { clearAllProductFilters } from '@/lib/utils/product-filters'
@@ -35,6 +35,7 @@ interface ProductFiltersProps {
   fashionFacets?: { sizes: string[]; colors: string[] }
   /** Marcas y modelos de celular con productos publicados; vacio en tiendas que no los usan. */
   deviceFacets?: DeviceOptions
+  isWholesale?: boolean
 }
 
 export function ProductFilters({
@@ -46,6 +47,7 @@ export function ProductFilters({
   hideHeader = false,
   fashionFacets = { sizes: [], colors: [] },
   deviceFacets = { brands: [], modelsByBrand: {} },
+  isWholesale = false,
 }: ProductFiltersProps) {
   const storefrontStyle = useStorefrontStyle()
   const router = useRouter()
@@ -56,6 +58,8 @@ export function ProductFilters({
   const brand = searchParams.get('brand') || ''
   const branchId = searchParams.get('branch_id') || ''
   const inStock = searchParams.get('in_stock') === 'true'
+  const isOnlyOffers = searchParams.get('offers') === 'true' || searchParams.get('ofertas') === 'true'
+  const isOnlyWholesale = isWholesale && (searchParams.get('wholesale') === 'true' || searchParams.get('mayorista') === 'true')
   const audience = searchParams.get('audience') || ''
   const size = searchParams.get('size') || ''
   const color = searchParams.get('color') || ''
@@ -113,6 +117,8 @@ export function ProductFilters({
     brand !== '',
     branchId !== '',
     inStock,
+    isOnlyOffers,
+    isOnlyWholesale,
     audience !== '',
     size !== '',
     color !== '',
@@ -219,6 +225,24 @@ export function ProductFilters({
                 </button>
               </Badge>
             )}
+            {isOnlyOffers && (
+              <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800 shadow-sm">
+                <Flame className="h-3 w-3" />
+                Solo ofertas
+                <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ offers: false, ofertas: null })} aria-label="Quitar filtro de ofertas">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {isOnlyWholesale && (
+              <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200 dark:border-sky-800 shadow-sm">
+                <Briefcase className="h-3 w-3" />
+                Precios mayoristas
+                <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ wholesale: false, mayorista: null })} aria-label="Quitar filtro de mayoristas">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             {hasPriceFilter && (
               <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-background hover:bg-background shadow-sm">
                 {formatPrice(minPrice)} - {formatPrice(maxPrice)}
@@ -244,7 +268,14 @@ export function ProductFilters({
           <DeviceFilter facets={deviceFacets} selectedBrand={deviceBrand} selectedModel={deviceModel} onChange={updateFilters} />
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
-          <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />
+          <StockFilter
+            inStock={inStock}
+            onChange={(checked) => updateFilters({ in_stock: checked })}
+            offers={isOnlyOffers}
+            onOffersChange={(checked) => updateFilters({ offers: checked ? true : null, ofertas: null })}
+            wholesale={isOnlyWholesale}
+            onWholesaleChange={isWholesale ? (checked) => updateFilters({ wholesale: checked ? true : null, mayorista: null }) : undefined}
+          />
           <PriceFilter priceRange={priceRange} localRange={localPriceRange} onChange={setDraftPriceRange} onCommit={(values) => { setDraftPriceRange(null); updateFilters({ min_price: values[0] > priceRange.min ? values[0] : null, max_price: values[1] < priceRange.max ? values[1] : null }) }} />
         </Accordion>
       </div>

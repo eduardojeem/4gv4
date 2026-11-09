@@ -67,7 +67,7 @@ describe('GET de la reserva online', () => {
 
   it('devuelve los horarios de un día', async () => {
     const body = await (await call(`?date=2026-10-05&service=${SERVICE}`)).json()
-    expect(body.slots).toEqual([{ startsAt: '2026-10-05T13:00:00.000Z', time: '10:00' }])
+    expect(body.slots).toEqual([{ startsAt: '2026-10-05T13:00:00.000Z', time: '10:00', professionalIds: ['pepe'] }])
   })
 
   it('devuelve el próximo turno libre', async () => {

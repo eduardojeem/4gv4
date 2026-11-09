@@ -6,7 +6,7 @@ import { getStripe, getStripeReturnOrigin, isStripeCheckoutEnabled, toStripeUnit
 import {
   resolveSubscriptionCheckoutTarget,
   SubscriptionCheckoutError,
-} from '@/lib/saas/pagopar-subscription-checkout'
+} from '@/lib/saas/subscription-checkout'
 
 type CheckoutOrganization = {
   id: string

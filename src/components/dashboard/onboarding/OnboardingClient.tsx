@@ -49,7 +49,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/auth-context'
 import { SUPPORTED_CURRENCIES, SUPPORTED_LANGUAGES, formatCurrency } from '@/lib/currency'
 import { getAdminSettingsText } from '@/lib/i18n/admin-settings'
@@ -60,6 +59,7 @@ import {
   OPERATING_MODELS,
   ORGANIZATION_MODULES,
   getSuggestedModules,
+  moduleDependencyProblems,
   type BusinessVertical,
   type OperatingModel,
   type OrganizationModule,
@@ -112,6 +112,7 @@ type CompanyInfoForm = {
   brandColor: string
   /** La tienda arranca sin publicar y nada lo decia. */
   storefrontPublic: boolean
+  enabledModules?: OrganizationModule[]
   businessVertical: string
   serviceSpecialties?: ServiceBusinessDetails['serviceSpecialties']
   attentionMode?: ServiceBusinessDetails['attentionMode']
@@ -126,14 +127,15 @@ type CompanyInfoForm = {
 
 /**
  * Los pasos del asistente. La primera vez se recorren en orden con
- * «Siguiente»; después quedan como pestañas para editar cualquiera.
+ * «Siguiente»; al volver se revisan de nuevo antes de confirmar los cambios.
  */
 const FORM_STEPS = [
-  { id: 'business', label: 'Rubro', icon: Store },
+  { id: 'business', label: 'Rubro y herramientas', icon: Store },
   { id: 'contact', label: 'Datos y contacto', icon: Building2 },
   { id: 'payments', label: 'Cobro y entrega', icon: CreditCard },
   { id: 'public', label: 'Tu tienda', icon: Globe },
   { id: 'social', label: 'Redes', icon: MessageCircle },
+  { id: 'review', label: 'Revisar y finalizar', icon: CheckCircle2 },
 ] as const
 type FormStepId = (typeof FORM_STEPS)[number]['id']
 
@@ -369,7 +371,8 @@ export function OnboardingClient({
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<CompanyInfoForm>(initialCompanyInfo)
   const [activeTab, setActiveTab] = useState<string>('business')
-  const wizard = !isRevisit
+  const [finished,setFinished] = useState(false)
+  const saveLock = useRef(false)
   const stepIndex = Math.max(0, FORM_STEPS.findIndex((step) => step.id === activeTab))
   const [furthestStep, setFurthestStep] = useState(0)
   const [error, setError] = useState('')
@@ -392,7 +395,7 @@ export function OnboardingClient({
   const currencyChanged = form.currency !== initialCompanyInfo.currency
   // Una empresa nueva, sin productos ni ventas, no tiene importes que se vean afectados.
   const currencyNeedsConfirmation = currencyChanged && hasBusinessData
-  const hasChanges = JSON.stringify(form) !== JSON.stringify(initialCompanyInfo)
+  const hasChanges = !finished && JSON.stringify(form) !== JSON.stringify(initialCompanyInfo)
   const timeZoneOptions = Object.entries(getAdminSettingsText('es').regional.timeZones)
 
   const fieldErrors = useMemo<FieldErrors>(() => {
@@ -417,7 +420,7 @@ export function OnboardingClient({
     && !checkoutError
     && (!currencyNeedsConfirmation || confirmCurrencyChange)
     && (!publishingNow || confirmPublication)
-    && (!isRevisit || hasChanges)
+
 
   // Suggested modules calculation based on chosen vertical & model
   const suggestedModules = useMemo(() => {
@@ -434,6 +437,9 @@ export function OnboardingClient({
     () => splitSuggestedModules(suggestedModules, entitledModules),
     [suggestedModules, entitledModules],
   )
+
+  const selectedTools = form.enabledModules ?? (isRevisit ? (entitledModules ?? []).filter((item):item is OrganizationModule => ORGANIZATION_MODULES.includes(item as OrganizationModule)) : suggestedSplit.included)
+  const toolsProblem = entitledModules === null ? 'No se pudo validar tu plan. Recargá antes de guardar las herramientas.' : selectedTools.some(module=>!entitledModules?.includes(module)) ? 'Hay herramientas que tu plan no incluye. Desmarcalas para continuar.' : moduleDependencyProblems(selectedTools)[0] ?? null
 
   const uploadLogo = async (file: File) => {
     setUploadingLogo(true)
@@ -534,6 +540,7 @@ export function OnboardingClient({
 
   /** Lo que falta en un paso para poder seguir. null = se puede avanzar. */
   const stepProblem = (stepId: FormStepId): string | null => {
+    if (stepId === 'business') return toolsProblem
     if (stepId === 'contact') {
       const contactErrors = (['displayName', 'phone', 'email', 'address', 'city'] as const).filter((field) => fieldErrors[field])
       if (contactErrors.length) return 'Completá los datos marcados para seguir.'
@@ -548,6 +555,7 @@ export function OnboardingClient({
   }
 
   const goToStep = (index: number) => {
+    if (saveLock.current) return
     const target = FORM_STEPS[Math.min(FORM_STEPS.length - 1, Math.max(0, index))]
     setActiveTab(target.id)
     setFurthestStep((current) => Math.max(current, index))
@@ -579,6 +587,9 @@ export function OnboardingClient({
   }
 
   const completeOnboarding = async () => {
+    if (saveLock.current) return
+    if (stepIndex !== FORM_STEPS.length - 1) { setError('Recorré los pasos y revisá el resumen antes de guardar.'); return }
+    for (const [index,step] of FORM_STEPS.entries()) { const problem=stepProblem(step.id); if(problem){goToStep(index);setError(problem);return} }
     if (!isAdmin) {
       toast.error('Solo administradores pueden guardar esta configuración.')
       return
@@ -604,6 +615,7 @@ export function OnboardingClient({
       return
     }
 
+    saveLock.current = true
     try {
       setSaving(true)
       setError('')
@@ -630,16 +642,18 @@ export function OnboardingClient({
       if (payload?.websiteContentIncomplete) {
         toast.warning('Tu tienda quedó sin el contenido inicial. Podés cargarlo desde Sitio Web.')
       }
-      if (isRevisit) router.refresh()
-      else router.push('/dashboard')
+      setFinished(true)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'No se pudo guardar la configuración'
       setError(message)
       toast.error(message)
     } finally {
+      saveLock.current = false
       setSaving(false)
     }
   }
+
+  if (finished) return <main className="mx-auto max-w-xl space-y-5 rounded-2xl border bg-card p-8 text-center"><CheckCircle2 className="mx-auto size-12 text-emerald-600"/><h1 className="text-2xl font-bold">Configuración guardada</h1><p className="text-muted-foreground">Terminaste la configuración de {form.displayName}. Tu rubro, herramientas y datos quedaron guardados.</p><Button className="min-h-11" onClick={()=>{router.push('/dashboard');router.refresh()}}>Ir al panel</Button></main>
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-32 sm:pb-24">
@@ -659,7 +673,7 @@ export function OnboardingClient({
                 {isRevisit ? (
                   <Badge variant="secondary" className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    Completado
+                    Revisión en curso
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-xs font-medium">
@@ -694,7 +708,7 @@ export function OnboardingClient({
         {/* Barra de Progreso del Onboarding */}
         <div className="mt-6 border-t border-border/60 pt-4 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Progreso de activación</span>
+            <span className="font-medium text-foreground">Próximos pasos del negocio</span>
             <span>{stepsCompleted} de {steps.length} pasos completados ({progressValue}%)</span>
           </div>
           <Progress value={progressValue} className="h-2 rounded-full" />
@@ -704,10 +718,10 @@ export function OnboardingClient({
       {/* Grid Principal: Formulario + Barra Lateral */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <main id="company-info" className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="border-b border-border/80 bg-muted/20 p-3 sm:p-4">
-              {wizard ? (
-                // Primera vez: un paso a la vez. Se puede volver a cualquiera ya visitado.
+          <div>
+            <div className="border-b border-border/80 bg-muted/20 p-3 sm:p-4"><p className="mb-3 text-xs text-muted-foreground">Paso {stepIndex+1} de {FORM_STEPS.length} · Los cambios se guardan al finalizar</p>
+
+                {/* Un paso a la vez; se puede volver a cualquiera ya visitado. */}
                 <ol className="flex items-center gap-1.5 overflow-x-auto" aria-label="Pasos de la configuración">
                   {FORM_STEPS.map((step, index) => {
                     const current = index === stepIndex
@@ -734,19 +748,7 @@ export function OnboardingClient({
                     )
                   })}
                 </ol>
-              ) : (
-                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-muted/70 p-1 rounded-xl sm:grid-cols-5">
-                  {FORM_STEPS.map((step) => {
-                    const Icon = step.icon
-                    return (
-                      <TabsTrigger key={step.id} value={step.id} className="gap-1.5 text-xs font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                        <Icon className="h-4 w-4" />
-                        <span className="truncate">{step.label}</span>
-                      </TabsTrigger>
-                    )
-                  })}
-                </TabsList>
-              )}
+
             </div>
 
             {draftRestored ? (
@@ -773,7 +775,7 @@ export function OnboardingClient({
             ) : null}
 
             {/* TAB 1: ESENCIALES (RUBRO, IDENTIDAD, MONEDA) */}
-            <TabsContent value="business" className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
+            {activeTab === 'business' && <section className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
               {/* SECCIÓN 1: SELECCIÓN DE RUBRO Y FORMA DE TRABAJO */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -919,41 +921,17 @@ export function OnboardingClient({
                   </select>
                 </div>
 
-                {/* Banner de Módulos Sugeridos Automáticamente */}
-                <div className="rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4">
-                  <div className="flex items-start gap-2.5">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-foreground">
-                        {isRevisit ? 'Herramientas que suelen usar los negocios de tu rubro:' : 'Herramientas que se activan para tu actividad:'}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {suggestedSplit.included.map((module) => (
-                          <Badge key={module} variant="secondary" className="border-primary/20 bg-background text-[11px] font-normal text-foreground">
-                            {MODULE_LABELS[module]}
-                          </Badge>
-                        ))}
-                      </div>
-                      {suggestedSplit.notIncluded.length > 0 ? (
-                        <p className="mt-2 text-[11px] text-muted-foreground">
-                          Tu plan no incluye: {suggestedSplit.notIncluded.map((module) => MODULE_LABELS[module]).join(', ')}.{' '}
-                          <Link href="/admin/subscriptions" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">Ver planes</Link>
-                        </p>
-                      ) : null}
-                      {isRevisit ? (
-                        <p className="mt-2 text-[11px] text-muted-foreground">
-                          Cambiar el rubro no activa ni desactiva herramientas. Las activás o apagás en{' '}
-                          <Link href="/admin/settings" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">Configuración → Empresa</Link>.
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
+                <fieldset className="space-y-3 rounded-xl border bg-muted/20 p-4" disabled={saving}>
+                  <legend className="px-1 text-sm font-semibold">Elegí tus herramientas</legend>
+                  <p className="text-xs leading-relaxed text-muted-foreground">Marcá lo que vas a usar. Se aplicará al finalizar; las funciones no incluidas en tu plan permanecen bloqueadas.</p>
+                  <Button type="button" variant="outline" className="min-h-11" onClick={()=>setForm(current=>({...current,enabledModules:suggestedSplit.included}))}>Usar recomendaciones del rubro</Button>
+                  <div className="grid gap-2 sm:grid-cols-2">{ORGANIZATION_MODULES.map(module=>{const allowed=entitledModules?.includes(module)===true;const checked=selectedTools.includes(module);return <label key={module} className={cn('flex min-h-12 items-center gap-3 rounded-xl border bg-background p-3 text-sm',!allowed&&!checked&&'opacity-60')}><input type="checkbox" aria-label={'Herramienta: '+MODULE_LABELS[module]} checked={checked} disabled={!allowed&&!checked} onChange={()=>setForm(current=>({...current,enabledModules:checked?selectedTools.filter(item=>item!==module):[...selectedTools,module]}))}/><span>{MODULE_LABELS[module]}</span>{!allowed&&<span className="ml-auto text-xs text-muted-foreground">No incluido</span>}</label>})}</div>
+                  {toolsProblem&&<p className="text-sm text-destructive">{toolsProblem}</p>}
+                </fieldset>
               </div>
+            </section>}
 
-            </TabsContent>
-
-            <TabsContent value="contact" className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
+            {activeTab === 'contact' && <section className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
               {/* SECCIÓN 2: IDENTIDAD Y CONTACTO */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -1166,10 +1144,10 @@ export function OnboardingClient({
                   </Alert>
                 ) : null}
               </div>
-            </TabsContent>
+            </section>}
 
             {/* COBRO Y ENTREGA: lo mínimo para que el cliente pueda comprar. */}
-            <TabsContent value="payments" className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
+            {activeTab === 'payments' && <section className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <CreditCard className="h-4 w-4" />
@@ -1257,10 +1235,10 @@ export function OnboardingClient({
               ) : null}
 
               {checkoutError ? <FieldError id="checkout-error" message={checkoutError} /> : null}
-            </TabsContent>
+            </section>}
 
             {/* TAB 2: PÚBLICO (HORARIOS, LOGO, WHATSAPP) */}
-            <TabsContent value="public" className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
+            {activeTab === 'public' && <section className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Globe className="h-4 w-4" />
@@ -1496,10 +1474,10 @@ export function OnboardingClient({
                   />
                 </div>
               </div>
-            </TabsContent>
+            </section>}
 
             {/* TAB 3: REDES SOCIALES */}
-            <TabsContent value="social" className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
+            {activeTab === 'social' && <section className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <MessageCircle className="h-4 w-4" />
@@ -1570,8 +1548,9 @@ export function OnboardingClient({
                   </div>
                 </div>
               </div>
-            </TabsContent>
-          </Tabs>
+            </section>}
+            {activeTab === 'review' && <section className="space-y-5 p-5 sm:p-6"><h2 className="text-xl font-bold">Revisá tu configuración</h2><p className="text-sm text-muted-foreground">Todavía no guardaste estos cambios. Confirmá el resumen para terminar.</p><dl className="grid gap-4 sm:grid-cols-2">{[['Negocio',form.displayName],['Rubro',VERTICAL_METADATA[form.businessVertical as BusinessVertical]?.label??form.businessVertical],['Forma de trabajo',MODEL_METADATA[form.operatingModel as OperatingModel]?.label??form.operatingModel],['Herramientas',selectedTools.map(item=>MODULE_LABELS[item]).join(', ')||'Ninguna seleccionada'],['Contacto',form.phone],['Ubicación',form.address+', '+form.city],['Moneda',form.currency],['Tienda online',form.storefrontPublic?'Publicar':'Mantener privada']].map(([label,value])=><div key={label} className="rounded-xl bg-muted/30 p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-words text-sm font-medium">{value}</dd></div>)}</dl></section>}
+          </div>
         </main>
 
         {/* Barra Lateral: Checklist y Vista Previa */}
@@ -1713,15 +1692,11 @@ export function OnboardingClient({
                 ? 'Solo administradores pueden guardar'
                 : hasChanges
                   ? 'Tenés cambios sin guardar'
-                  : isRevisit
-                    ? 'Todo está actualizado'
-                    : wizard
-                      ? `Paso ${stepIndex + 1} de ${FORM_STEPS.length}: ${FORM_STEPS[stepIndex].label}`
-                      : 'Listo para completar tu configuración'}
+                  : `Paso ${stepIndex + 1} de ${FORM_STEPS.length}: ${FORM_STEPS[stepIndex].label}`}
             </p>
             <p className="text-xs text-muted-foreground">
               {isRevisit
-                ? 'Los cambios se sincronizan en tiempo real con la Configuración general.'
+                ? 'Los cambios se aplican al finalizar. El avance se conserva como borrador en este dispositivo.'
                 : 'Luego podrás gestionar productos, ventas en POS y revisar tu tienda online.'}
             </p>
           </div>
@@ -1732,6 +1707,7 @@ export function OnboardingClient({
                 type="button"
                 variant="outline"
                 onClick={discardChanges}
+                disabled={saving}
                 className="gap-1.5 text-xs"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -1739,14 +1715,14 @@ export function OnboardingClient({
               </Button>
             ) : null}
 
-            {wizard && stepIndex > 0 ? (
-              <Button type="button" variant="outline" onClick={() => goToStep(stepIndex - 1)} className="gap-1.5 text-xs">
+            {stepIndex > 0 ? (
+              <Button type="button" variant="outline" onClick={() => goToStep(stepIndex - 1)} disabled={saving} className="gap-1.5 text-xs">
                 <ArrowLeft className="h-3.5 w-3.5" /> Atrás
               </Button>
             ) : null}
 
-            {wizard && stepIndex < FORM_STEPS.length - 1 ? (
-              <Button type="button" onClick={nextStep} className="min-w-0 flex-1 sm:min-w-[170px] sm:flex-none gap-2 shadow-sm text-xs font-semibold">
+            {stepIndex < FORM_STEPS.length - 1 ? (
+              <Button type="button" onClick={nextStep} disabled={saving} className="min-w-0 flex-1 sm:min-w-[170px] sm:flex-none gap-2 shadow-sm text-xs font-semibold">
                 Siguiente: {FORM_STEPS[stepIndex + 1].label}
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -1761,7 +1737,7 @@ export function OnboardingClient({
               ) : (
                 <CheckCircle2 className="h-4 w-4" />
               )}
-              {saving ? 'Guardando…' : isRevisit ? 'Guardar cambios' : 'Finalizar configuración'}
+              {saving ? 'Guardando…' : 'Finalizar y guardar'}
             </Button>
             )}
           </div>

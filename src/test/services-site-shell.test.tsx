@@ -79,11 +79,11 @@ describe('la plantilla Servicios es un sitio de servicios, no una tienda', () =>
     expect(screen.queryByRole('link', { name: 'Turnos' })).not.toBeInTheDocument()
   })
 
-  it('en el celular: Reservar al centro, cómo llegar y WhatsApp; nada de carrito ni ofertas', async () => {
+  it('en el celular: Reservas al centro, cómo llegar y WhatsApp; nada de carrito ni ofertas', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => agenda }))
     pintar(<StorefrontMobileNav />, 'services')
     const nav = screen.getByRole('navigation', { name: 'Accesos rápidos' })
-    expect(await within(nav).findByRole('link', { name: /Reservar/ })).toHaveAttribute('href', '/don-pepe/inicio#reservar')
+    expect(await within(nav).findByRole('link', { name: /Reservas/ })).toHaveAttribute('href', '/don-pepe/reservas')
     expect(within(nav).getByRole('link', { name: /Cómo llegar/ })).toHaveAttribute('href', expect.stringContaining('google.com/maps'))
     expect(within(nav).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/595981123456')
     expect(within(nav).queryByText(/Carrito|Ofertas/)).not.toBeInTheDocument()

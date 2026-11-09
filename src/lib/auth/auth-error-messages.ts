@@ -11,18 +11,22 @@
  * guarda en el log, no se le muestra a nadie.
  */
 
-export type AuthFlow = 'login' | 'register'
+export type AuthFlow = 'login' | 'register' | 'company-register' | 'password' | 'recovery'
 
 const MENSAJE_GENERICO: Record<AuthFlow, string> = {
+  password: 'No pudimos cambiar tu contraseña. Intentá de nuevo.',
+  recovery: 'No pudimos enviar el correo. Intentá de nuevo.',
   login: 'El correo o la contraseña no coinciden con una cuenta activa.',
+  'company-register': 'No pudimos crear tu cuenta. Revisá los datos e intentá de nuevo.',
   register: 'No pudimos crear tu cuenta. Revisá los datos e intentá de nuevo.',
 }
 
-type Regla = { patron: RegExp; login?: string; register?: string }
+type Regla = { patron: RegExp; login?: string; register?: string; 'company-register'?: string }
 
 const REGLAS: Regla[] = [
   {
     patron: /user already registered|already been registered|email address is already/i,
+    'company-register': 'Ese correo ya tiene una cuenta. Iniciá sesión para continuar.',
     register:
       'Ese correo ya tiene una cuenta. Iniciá sesión y desde ahí te vinculamos con esta tienda.',
   },
@@ -41,6 +45,10 @@ const REGLAS: Regla[] = [
     register: 'Revisá el correo: parece que tiene un error de tipeo.',
   },
   {
+    patron: /password is known to be weak|easy to guess|compromised|breached/i,
+    register: 'Esa contraseña es demasiado común o fácil de adivinar. Elegí una más larga y única, que no uses en otras cuentas.',
+  },
+  {
     patron: /password should be|password is too short|weak.?password/i,
     register: 'La contraseña es demasiado corta o insegura. Usá al menos 8 caracteres, con mayúscula, minúscula y número.',
   },
@@ -57,6 +65,7 @@ const REGLAS: Regla[] = [
   },
   {
     patron: /signups? not allowed|disabled/i,
+    'company-register': 'El registro de cuentas está cerrado por ahora. Intentá más tarde o contactá a soporte.',
     register: 'La tienda tiene el registro de clientes cerrado por ahora. Escribinos y te damos una mano.',
   },
   {
@@ -73,7 +82,7 @@ export function describeAuthError(mensajeOriginal: string | null | undefined, fl
 
   for (const regla of REGLAS) {
     if (!regla.patron.test(texto)) continue
-    const mensaje = regla[flujo]
+    const mensaje = regla[flujo === 'password' ? 'register' : flujo === 'recovery' ? 'login' : flujo] ?? (flujo === 'company-register' ? regla.register : undefined)
     if (mensaje) return mensaje
   }
 

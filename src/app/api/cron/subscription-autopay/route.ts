@@ -4,7 +4,7 @@ import { runSubscriptionAutopay } from '@/lib/saas/subscription-autopay'
 
 /**
  * Cobro diario del débito automático de las suscripciones (tarjeta guardada en
- * uPay). Conviene ejecutarlo una vez por día; correrlo más seguido no duplica
+ * Bancard). Conviene ejecutarlo una vez por día; correrlo más seguido no duplica
  * cobros porque cada organización se toma con un bloqueo y se reintenta según
  * su propio calendario.
  *

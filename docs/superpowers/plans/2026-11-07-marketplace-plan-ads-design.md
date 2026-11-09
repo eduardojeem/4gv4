@@ -1,0 +1,5 @@
+# Diseño aprobado: planes como publicidad
+El usuario aprobó el carrusel con un plan protagonista, información de negocios compatibles y acceso para empresas existentes. Web y móvil: tarjetas de ancho completo, cabecera azul/slate, precio y prueba reales, límites y funciones publicados, indicadores y anterior/siguiente sin reproducción automática. Comercios, talleres y servicios se muestran únicamente si las claves de funciones correspondientes existen. Registro conserva public_slug. Web ingresa por /login; móvil por /sign-in. Mantener errores/reintento y comparador completo. Sin cambios en DB, dependencias o trabajo de Claude.
+
+## Ajuste solicitado: movimiento
+El usuario pidió agregar movimiento. Los planes avanzan automáticamente cada 8 segundos con desplazamiento suave. Web: pausa al pasar el cursor, enfocar o interactuar manualmente; botón de pausa/reanudar; no avanza fuera de pantalla o con pestaña oculta. Native: pausa al deslizar y control manual; no avanza fuera de pantalla, en segundo plano, con lector de pantalla o reducir movimiento. La navegación manual sigue disponible. Este pedido reemplaza la decisión inicial sin autoplay.

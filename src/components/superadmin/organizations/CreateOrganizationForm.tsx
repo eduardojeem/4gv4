@@ -1,10 +1,10 @@
 'use client'
+import { OrganizationPageHeader, OrganizationSectionNav } from './organization-page-header'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
-  ArrowLeft,
   Building2,
   CheckCircle2,
   CircleDashed,
@@ -583,28 +583,16 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Nueva organización</h1>
-          <p className="text-sm text-muted-foreground">
-            Crea la empresa, su suscripción de prueba y su sucursal principal, y le asigna un propietario.
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm" className="w-fit gap-1.5 text-xs font-bold">
-          <Link href="/superadmin/organizations">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Volver
-          </Link>
-        </Button>
-      </header>
+      <OrganizationPageHeader back title="Nueva organización" description="Configurá la empresa, elegí un plan y asigná a la persona que la va a administrar. Revisá el resumen antes de crearla."/>
+      <OrganizationSectionNav sections={[{id:'empresa',title:'Empresa',hint:'Nombre y dirección pública'},{id:'plan',title:'Plan',hint:'Funciones y capacidades'},{id:'region',title:'Región',hint:'Moneda y horarios'},{id:'propietario',title:'Propietario',hint:'Cuenta e invitación'}]}/>
 
       <form onSubmit={handleSubmit} noValidate>
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
             {/* Identidad */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="empresa" className="scroll-mt-24 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-4">
-                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <Building2 className="h-4 w-4 text-violet-500" />
                   La empresa
                 </CardTitle>
@@ -641,7 +629,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                           setSlugEdited(false)
                           setSlugInput('')
                         }}
-                        className="text-[11px] font-medium text-violet-600 hover:underline dark:text-violet-400"
+                        className="text-xs font-medium text-violet-600 hover:underline dark:text-violet-400"
                       >
                         Volver a generarla desde el nombre
                       </button>
@@ -713,9 +701,9 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
             </Card>
 
             {/* Plan */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="plan" className="scroll-mt-24 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-4">
-                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <Store className="h-4 w-4 text-violet-500" />
                   Plan
                 </CardTitle>
@@ -751,7 +739,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-sm font-bold text-foreground">{p.name}</p>
+                              <p className="text-base font-semibold text-foreground">{p.name}</p>
                               <p className="mt-0.5 text-xs font-semibold text-foreground">
                                 {p.price > 0 ? (
                                   <>
@@ -775,7 +763,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                             </div>
                           </div>
 
-                          <dl className="mt-3 space-y-1 border-t border-border/60 pt-2.5 text-[11px]">
+                          <dl className="mt-3 space-y-1 border-t border-border/60 pt-2.5 text-xs">
                             {LIMIT_KEYS.map((item) => (
                               <div key={item.key} className="flex justify-between gap-2">
                                 <dt className="text-muted-foreground">{item.label}</dt>
@@ -815,9 +803,9 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
             </Card>
 
             {/* Region */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="region" className="scroll-mt-24 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-4">
-                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <MapPin className="h-4 w-4 text-violet-500" />
                   Moneda y zona horaria
                 </CardTitle>
@@ -831,7 +819,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                     Moneda
                   </Label>
                   <Select value={currency} onValueChange={setCurrency}>
-                    <SelectTrigger id="org-currency" className="h-10 text-xs">
+                    <SelectTrigger id="org-currency" className="h-11 text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -850,7 +838,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                     Zona horaria
                   </Label>
                   <Select value={timezone} onValueChange={setTimezone}>
-                    <SelectTrigger id="org-timezone" className="h-10 text-xs">
+                    <SelectTrigger id="org-timezone" className="h-11 text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -868,9 +856,9 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
             </Card>
 
             {/* Propietario */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="propietario" className="scroll-mt-24 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-4">
-                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <User className="h-4 w-4 text-violet-500" />
                   Propietario
                 </CardTitle>
@@ -891,7 +879,7 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                       value={ownerEmail}
                       onChange={(e) => setOwnerEmail(e.target.value)}
                       aria-invalid={emailInvalido}
-                      className="h-10 text-xs"
+                      className="h-11 text-sm"
                     />
                     {emailInvalido && <FieldError message="El correo no es válido." />}
                     <FieldError message={errors.ownerEmail} />
@@ -905,9 +893,9 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
                       placeholder="Ej: Juan Pérez"
                       value={ownerName}
                       onChange={(e) => setOwnerName(e.target.value)}
-                      className="h-10 text-xs"
+                      className="h-11 text-sm"
                     />
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Solo se usa si no tiene cuenta. Si ya tiene, se conserva su nombre.
                     </p>
                   </div>
@@ -923,12 +911,12 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={Boolean(bloqueo) || submitting} className="h-10 gap-2 px-5 text-xs font-bold">
+            <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card/95 p-4 shadow-lg backdrop-blur-sm">
+              <Button type="submit" disabled={Boolean(bloqueo) || submitting} className="h-11 gap-2 px-5 text-base font-semibold">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
                 {submitting ? 'Creando…' : 'Crear organización'}
               </Button>
-              <Button asChild variant="ghost" className="h-10 text-xs font-bold">
+              <Button asChild variant="ghost" className="h-11 text-base font-semibold">
                 <Link href="/superadmin/organizations">Cancelar</Link>
               </Button>
               {bloqueo && <span className="text-xs text-muted-foreground">{bloqueo}</span>}
@@ -943,15 +931,15 @@ export function CreateOrganizationForm({ plans, plansFailed }: { plans: PlanOpti
           <aside className="xl:sticky xl:top-6 xl:self-start">
             <Card className="rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-4">
-                <CardTitle className="text-sm font-bold">Qué se va a crear</CardTitle>
+                <CardTitle className="text-base font-semibold">Resumen de creación</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 p-5 text-xs">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold text-white">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-base font-semibold text-white">
                     {(name.trim() || '··').slice(0, 2).toUpperCase()}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-foreground">{name.trim() || 'Sin nombre'}</p>
+                    <p className="truncate text-base font-semibold text-foreground">{name.trim() || 'Sin nombre'}</p>
                     <p className="truncate font-mono text-muted-foreground">/{slug || '…'}</p>
                   </div>
                 </div>

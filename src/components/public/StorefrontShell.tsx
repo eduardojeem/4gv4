@@ -1,5 +1,6 @@
 'use client'
 
+import { BarberHeader } from '@/components/public/barber/BarberHeader'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { ServicesSiteHeader } from '@/components/public/services/ServicesSiteHeader'
@@ -24,6 +25,7 @@ export function StorefrontHeader({
   catalogEnabled?: boolean
 }) {
   const style = useStorefrontStyle()
+  if (style === 'barber') return <BarberHeader settings={initialSettings} catalogEnabled={catalogEnabled} />
   if (style === 'services') return <ServicesSiteHeader initialSettings={initialSettings} catalogEnabled={catalogEnabled} />
   return (
     <PublicHeader
@@ -42,6 +44,6 @@ export function StorefrontMobileNav({
   offersEnabled?: boolean
 }) {
   const style = useStorefrontStyle()
-  if (style === 'services') return <ServicesMobileNav initialSettings={initialSettings} />
+  if (style === 'services' || style === 'barber') return <ServicesMobileNav initialSettings={initialSettings} />
   return <StoreMobileBottomNav offersEnabled={offersEnabled} />
 }

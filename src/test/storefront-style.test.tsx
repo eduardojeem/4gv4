@@ -332,13 +332,13 @@ describe('«Aspecto de la tienda» en Sitio Web', () => {
   it('dice qué aspecto elige Automático para el rubro', () => {
     state.vertical = 'clothing'
     render(<CompanyInfoForm />)
-    expect(screen.getByRole('button', { name: /^Automático Según tu rubro: Moda/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^Automático Según tu rubro: Boutique de Moda/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('guardar envía el aspecto elegido', async () => {
     render(<CompanyInfoForm />)
-    fireEvent.click(screen.getByRole('button', { name: /^Deportivo/ }))
-    expect(screen.getByRole('button', { name: /^Deportivo/ })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: /^Deportes & Zapatillas/ }))
+    expect(screen.getByRole('button', { name: /^Deportes & Zapatillas/ })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
 
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
@@ -348,7 +348,7 @@ describe('«Aspecto de la tienda» en Sitio Web', () => {
 
   it('permite elegir temas avanzados (Tecnología, Supermercado, Moderno)', async () => {
     render(<CompanyInfoForm />)
-    const techBtn = screen.getByRole('button', { name: /^Tecnología/ })
+    const techBtn = screen.getByRole('button', { name: /^Celulares & Gadgets/ })
     fireEvent.click(techBtn)
     expect(techBtn).toHaveAttribute('aria-pressed', 'true')
 

@@ -24,7 +24,8 @@ export type ValidGlobalNotification = {
 }
 
 export function validateGlobalNotification(
-  input: GlobalNotificationInput
+  input: GlobalNotificationInput,
+  existingScheduledAt?: string | null
 ): { data: ValidGlobalNotification; error: null } | { data: null; error: string } {
   const title = typeof input.title === 'string' ? input.title.trim() : ''
   const body = typeof input.body === 'string' ? input.body.trim() : ''
@@ -60,6 +61,9 @@ export function validateGlobalNotification(
       return { data: null, error: 'La fecha de programacion es invalida.' }
     }
     scheduledAt = date.toISOString()
+    if (date.getTime() <= Date.now() && scheduledAt !== existingScheduledAt) {
+      return { data: null, error: 'Elegí una fecha futura para programar el aviso.' }
+    }
   }
 
   return {

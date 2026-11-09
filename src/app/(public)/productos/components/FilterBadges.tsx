@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Flame, Package, Smartphone, X } from 'lucide-react'
+import { Briefcase, Flame, Package, Smartphone, X } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
@@ -18,9 +18,11 @@ interface Branch {
 export function FilterBadges({
   categories,
   branches = [],
+  isWholesale = false,
 }: {
   categories: Category[]
   branches?: Branch[]
+  isWholesale?: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -30,10 +32,12 @@ export function FilterBadges({
     new URLSearchParams(searchParams.toString())
   )
   const isOnlyOffers = searchParams.get('offers') === 'true'
+  const isOnlyWholesale = searchParams.get('wholesale') === 'true' || searchParams.get('mayorista') === 'true'
 
   const removeFilter = (key: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.delete(key)
+    if (key === 'wholesale') params.delete('mayorista')
     if (key === 'brand') params.delete('marca')
     if (key === 'category_id') params.delete('categoria')
     if (key === 'query') params.delete('q')
@@ -48,6 +52,8 @@ export function FilterBadges({
   const clearAll = () => {
     const params = clearAllProductFilters(new URLSearchParams(searchParams.toString()))
     params.delete('offers')
+    params.delete('wholesale')
+    params.delete('mayorista')
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })
     })
@@ -65,6 +71,7 @@ export function FilterBadges({
     !!deviceModel ||
     inStock ||
     isOnlyOffers ||
+    isOnlyWholesale ||
     minPrice > 0 ||
     maxPrice < PRODUCTS_MAX_PRICE
 
@@ -175,6 +182,19 @@ export function FilterBadges({
         >
           <Flame className="h-3 w-3" />
           <span>Solo ofertas</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Solo Mayoristas */}
+      {isWholesale && isOnlyWholesale && (
+        <button
+          type="button"
+          onClick={() => removeFilter('wholesale')}
+          className="flex items-center gap-1.5 rounded-full border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-800/40 dark:bg-sky-950/40 dark:text-sky-300"
+        >
+          <Briefcase className="h-3 w-3" />
+          <span>Solo mayoristas</span>
           <X className="h-3 w-3" />
         </button>
       )}

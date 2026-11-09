@@ -59,6 +59,14 @@ describe('LoginPage Redesign', () => {
     mockSearchParams = new URLSearchParams()
   })
 
+  it('does not expose an external return URL in customer navigation', () => {
+    mockSearchParams = new URLSearchParams({ redirect: '/marketplace/\\\\evil.test' })
+    render(<LoginPage />)
+    for (const link of screen.getAllByRole('link')) {
+      expect(link.getAttribute('href')).not.toContain('evil.test')
+    }
+  })
+
   // El panel de marketing («Control total de tu taller» y las cuatro tarjetas)
   // se quito en un rediseño posterior: la pantalla es el formulario y las dos
   // salidas de registro. Lo que se comprueba es eso.

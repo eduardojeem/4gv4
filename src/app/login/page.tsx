@@ -34,6 +34,7 @@ import { siteUrl } from '@/lib/site-url'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { browserSupportsPasskeys, describePasskeyError, isPasskeyCancellation } from '@/lib/auth/passkeys'
+import { describeAuthError } from '@/lib/auth/auth-error-messages'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
 
@@ -84,7 +85,7 @@ export default function LoginPage() {
       : ''
   const visibleError = error || callbackError
 
-  const rawRedirect = searchParams.get('redirect') || ''
+  const rawRedirect = sanitizeRedirectPath(searchParams.get('redirect'), '')
   const redirectQuery = rawRedirect ? `?redirect=${encodeURIComponent(rawRedirect)}` : ''
   const companyRegisterHref = `/register${redirectQuery}`
   const redirectTenantSlug = getTenantSlugFromPathname(rawRedirect)
@@ -267,10 +268,10 @@ export default function LoginPage() {
       const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email: targetEmail,
-        options: origin ? { emailRedirectTo: `${origin}/auth/callback?next=/dashboard` } : undefined,
+        options: origin ? { emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(rawRedirect || "/dashboard")}` } : undefined,
       })
       if (resendError) {
-        toast.error(resendError.message)
+        toast.error(describeAuthError(resendError.message, 'recovery'))
       } else {
         toast.success('Te enviamos nuevamente el correo de confirmación.')
         setUnconfirmed(false)
@@ -301,12 +302,12 @@ export default function LoginPage() {
     try {
       setResetLoading(true)
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: siteUrl('/auth/reset-password'),
+        redirectTo: siteUrl(`/auth/reset-password?next=${encodeURIComponent(rawRedirect || '/dashboard')}`),
         captchaToken: resetCaptchaToken,
       })
 
       if (resetErr) {
-        toast.error(resetErr.message || 'No se pudo procesar la solicitud.')
+        toast.error(describeAuthError(resetErr.message, 'recovery'))
       } else {
         toast.success('Te enviamos un enlace para restablecer tu contraseña. Revisá tu bandeja de entrada.')
         setResetOpen(false)

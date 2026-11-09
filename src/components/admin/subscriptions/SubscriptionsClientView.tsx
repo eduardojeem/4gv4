@@ -899,8 +899,8 @@ export function SubscriptionsClientView({
                               <span className="font-semibold capitalize text-foreground">
                                 {payment.payment_method === 'activation_code' || payment.provider === 'activation'
                                   ? 'Canje de Código'
-                                  : payment.provider === 'pagopar'
-                                    ? 'Pagopar'
+                                  : payment.provider === 'bancard'
+                                    ? 'Bancard'
                                     : payment.provider === 'mercado_pago'
                                       ? 'Mercado Pago'
                                       : payment.payment_method || payment.provider || 'Manual'}
@@ -938,19 +938,19 @@ export function SubscriptionsClientView({
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              {/* receipt_url es la página de pago de Pagopar, no un recibo:
+                              {/* receipt_url es la página de pago con Bancard, no un recibo:
                                   sirve para terminar un pago pendiente. Un pago cobrado
-                                  muestra el detalle verificado contra Pagopar. */}
+                                  muestra el detalle verificado contra Bancard. */}
                               {payment.status === 'pending' && payment.receipt_url ? (
                                 <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
-                                  <a href={payment.receipt_url} target="_blank" rel="noreferrer">
+                                  <a href={payment.receipt_url}>
                                     <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                                     Continuar pago
                                   </a>
                                 </Button>
-                              ) : payment.status === 'paid' && payment.provider === 'pagopar' && payment.external_reference ? (
+                              ) : payment.status === 'paid' && payment.provider === 'bancard' && payment.external_reference ? (
                                 <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs font-semibold">
-                                  <a href={`/admin/subscriptions/payments?hash=${encodeURIComponent(payment.external_reference)}`}>
+                                  <a href={`/admin/subscriptions/payments?ref=${encodeURIComponent(payment.external_reference)}`}>
                                     Ver detalle
                                   </a>
                                 </Button>

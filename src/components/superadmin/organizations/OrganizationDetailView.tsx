@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
-  ArrowLeft,
   BarChart3,
   Boxes,
   Building2,
@@ -98,9 +97,8 @@ import {
 } from '@/lib/superadmin/organization-volume'
 import { describeLastAccess, summarizeTeamAccess } from '@/lib/superadmin/last-access'
 import { auditActionLabel } from '@/lib/superadmin/audit-labels'
-import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
-import { RobotGuide } from '@/components/common/RobotGuide'
-import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
+import { OrganizationDetailHeader, OrganizationOverviewNavigation } from './organization-detail-header'
+import { EditOrganizationDialog, OPERATING_MODELS, type EditableOrganization } from './EditOrganizationDialog'
 import { cn } from '@/lib/utils'
 import { planLabel } from '@/lib/superadmin/plan-names'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
@@ -291,14 +289,6 @@ const PLAN_STYLES: Record<string, string> = {
   ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  active: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
-  trialing: 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-300',
-  past_due: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300',
-  suspended: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
-  cancelled: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300',
-}
-
 export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string; desc: string; badge: string }> = {
   electronics: {
     label: 'Tecnología & Celulares',
@@ -336,6 +326,7 @@ export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string
     desc: 'Herramientas, materiales y electricidad con venta fraccionada, créditos a cuenta corriente y remisiones.',
     badge: 'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-orange-300',
   },
+  barbershop: { label: 'Barbería y peluquería', icon: '💈', desc: 'Servicios de barbería y peluquería. Revisá sus funciones habilitadas y su actividad.', badge: 'bg-muted text-foreground border-border' },
   other: {
     label: 'Otros Rubros Comerciales',
     icon: '🏷️',
@@ -554,18 +545,18 @@ function MetricTile({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
         <Icon className={cn('h-4 w-4 shrink-0', warn ? 'text-amber-500' : 'text-muted-foreground/50')} />
       </div>
       <p
         className={cn(
-          'mt-1.5 text-lg font-bold leading-tight tracking-tight',
+          'mt-2 break-words text-base font-bold leading-tight tracking-tight sm:text-lg',
           muted ? 'text-muted-foreground' : 'text-foreground'
         )}
       >
         {value}
       </p>
-      <p className={cn('mt-0.5 text-[11px]', warn ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+      <p className={cn('mt-0.5 text-xs', warn ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
         {hint}
       </p>
     </div>
@@ -601,16 +592,16 @@ function UsageBar({
   if (unavailable) {
     return (
       <div className="space-y-1.5">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
         <p className="text-xl font-bold leading-none text-muted-foreground">Sin dato</p>
-        <p className="text-[11px] text-muted-foreground">{unavailable}</p>
+        <p className="text-xs text-muted-foreground">{unavailable}</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="text-xl font-bold tabular-nums leading-none text-foreground">
         {used.toLocaleString('es-PY')}
         {percent !== null && (
@@ -628,7 +619,7 @@ function UsageBar({
               style={{ width: `${percent}%` }}
             />
           </div>
-          <p className={cn('text-[11px]', cerca ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+          <p className={cn('text-xs', cerca ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
             {cerca ? `${percent}% del plan — cerca del tope` : `${percent}% del plan`}
             {total !== undefined && total !== used
               ? ` · ${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}`
@@ -636,7 +627,7 @@ function UsageBar({
           </p>
         </>
       ) : (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {[
             total !== undefined && total !== used
               ? `${total.toLocaleString('es-PY')} en total${totalNote ? `, ${totalNote}` : ''}`
@@ -677,21 +668,21 @@ function MemberRow({
   return (
     <div className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/40">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
           {iniciales}
         </div>
         <div className="min-w-0">
           <p className="truncate text-xs font-bold text-foreground">
             {nombre || (correo ? correo : 'Sin perfil cargado')}
           </p>
-          <p className="truncate text-[11px] font-medium text-muted-foreground">
+          <p className="truncate text-xs font-medium text-muted-foreground">
             {nombre && correo ? correo : !correo ? 'Sin correo registrado' : ''}
           </p>
-          {hint && <p className="mt-0.5 text-[10px] text-muted-foreground/80">{hint}</p>}
+          {hint && <p className="mt-0.5 text-xs text-muted-foreground/80">{hint}</p>}
           {acceso && (
             <p
               className={cn(
-                'mt-0.5 flex items-center gap-1 text-[10px] font-medium',
+                'mt-0.5 flex items-center gap-1 text-xs font-medium',
                 acceso.stale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
               )}
             >
@@ -706,7 +697,7 @@ function MemberRow({
         <Badge
           variant="outline"
           className={cn(
-            'px-2 py-0.5 text-[10px] font-black uppercase',
+            'px-2 py-0.5 text-xs font-bold uppercase',
             member.role === 'owner' && 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
           )}
         >
@@ -716,7 +707,7 @@ function MemberRow({
           <Badge
             variant="outline"
             className={cn(
-              'px-2 py-0.5 text-[10px] font-extrabold uppercase',
+              'px-2 py-0.5 text-xs font-semibold uppercase',
               estado === 'suspended'
                 ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300'
                 : 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
@@ -762,7 +753,7 @@ function StreamCard({
         <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg', tone)}>
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
       </div>
 
       {disabled ? (
@@ -770,16 +761,16 @@ function StreamCard({
       ) : (
         <>
           <p className="mt-3 text-lg font-bold tabular-nums leading-none text-foreground">{headline}</p>
-          {sub && <p className="mt-1 text-[11px] text-muted-foreground">{sub}</p>}
+          {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
 
           {rows && rows.length > 0 && (
             <dl className="mt-3 space-y-1 border-t border-border/60 pt-2">
               {rows.map((row) => (
                 <div key={row.label} className="flex items-baseline justify-between gap-2">
-                  <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
+                  <dt className="text-xs text-muted-foreground">{row.label}</dt>
                   <dd
                     className={cn(
-                      'text-[11px] font-bold tabular-nums',
+                      'text-xs font-bold tabular-nums',
                       row.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
                     )}
                   >
@@ -791,7 +782,7 @@ function StreamCard({
           )}
 
           {notes?.filter(Boolean).map((nota) => (
-            <p key={nota as string} className="mt-2 text-[10px] leading-snug text-muted-foreground">
+            <p key={nota as string} className="mt-2 text-xs leading-snug text-muted-foreground">
               {nota}
             </p>
           ))}
@@ -833,16 +824,16 @@ function DataRow({
       <div className="flex min-w-0 items-start gap-2">
         <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', vacio ? 'text-muted-foreground/50' : 'text-violet-500')} />
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
           {vacio ? (
             <p className="text-xs font-medium text-muted-foreground/70">{fallback}</p>
           ) : (
-            <p className={cn('break-words text-xs font-bold text-foreground', mono && 'font-mono text-[11px]')}>
+            <p className={cn('break-words text-xs font-bold text-foreground', mono && 'font-mono text-xs')}>
               {field.value}
             </p>
           )}
           {source && (
-            <p className="text-[10px] text-muted-foreground/70">{SOURCE_LABELS[source]}</p>
+            <p className="text-xs text-muted-foreground/70">{SOURCE_LABELS[source]}</p>
           )}
         </div>
       </div>
@@ -854,7 +845,7 @@ function DataRow({
               asChild
               variant="ghost"
               size="sm"
-              className="h-6 rounded-lg px-2 text-[10px] font-bold text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/40"
+              className="h-6 rounded-lg px-2 text-xs font-bold text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/40"
             >
               <a
                 href={href}
@@ -927,9 +918,9 @@ function LimitCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{row.label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{row.label}</p>
         {estilo.chip && (
-          <Badge variant="outline" className={cn('shrink-0 px-1.5 py-0 text-[9px] font-black uppercase', estilo.chip)}>
+          <Badge variant="outline" className={cn('shrink-0 px-1.5 py-0 text-xs font-bold uppercase', estilo.chip)}>
             {estilo.chipLabel}
           </Badge>
         )}
@@ -938,7 +929,7 @@ function LimitCard({
       {row.state === 'uncounted' ? (
         <>
           <p className="mt-2 text-xl font-bold leading-none text-muted-foreground">Sin dato</p>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">Esta pantalla no cuenta este recurso</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">Esta pantalla no cuenta este recurso</p>
         </>
       ) : (
         <>
@@ -954,28 +945,28 @@ function LimitCard({
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div className={cn('h-full rounded-full', estilo.bar)} style={{ width: `${row.percent}%` }} />
               </div>
-              <p className={cn('mt-1.5 text-[11px] font-medium', estilo.text)}>
+              <p className={cn('mt-1.5 text-xs font-medium', estilo.text)}>
                 {row.state === 'full'
                   ? 'Llegó al tope del plan'
                   : `${row.percent}% · quedan ${numero(row.remaining ?? 0)}`}
               </p>
             </>
           ) : (
-            <p className="mt-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               {row.state === 'unlimited' ? 'Sin tope en el plan' : 'El plan no define este tope'}
             </p>
           )}
         </>
       )}
 
-      <p className="mt-2 border-t border-border/60 pt-2 text-[10px] leading-snug text-muted-foreground">{row.hint}</p>
+      <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground">{row.hint}</p>
 
       {(row.state === 'full' || row.state === 'near') && row.atCap && (
-        <p className={cn('mt-1.5 text-[10px] font-semibold leading-snug', estilo.text)}>{row.atCap}</p>
+        <p className={cn('mt-1.5 text-xs font-semibold leading-snug', estilo.text)}>{row.atCap}</p>
       )}
 
       {(row.state === 'full' || row.state === 'near') && upgrade && nextPlanName && (
-        <p className="mt-1.5 text-[10px] leading-snug text-violet-600 dark:text-violet-400">
+        <p className="mt-1.5 text-xs leading-snug text-violet-600 dark:text-violet-400">
           Con {nextPlanName}: {upgrade.unlimited ? 'sin tope' : numero(upgrade.limit ?? 0)}
         </p>
       )}
@@ -1128,7 +1119,8 @@ export function OrganizationDetailView({ data }: Props) {
   // una cuenta sin suscripcion registrada.
   const sinSuscripcion = !subscription
   const effectiveStatus = subscription?.status || 'sin_registro'
-  const renewalDays = daysUntil(subscription?.current_period_ends_at)
+  const renewalDate = effectiveStatus === 'trialing' ? subscription?.trial_ends_at || subscription?.current_period_ends_at : subscription?.current_period_ends_at || subscription?.trial_ends_at
+  const renewalDays = daysUntil(renewalDate)
 
   // Los topes, ordenados por lo apretados que estan. Un catalogo al 99% no
   // puede quedar sepultado debajo de uno al 2% solo porque se escribio antes.
@@ -1233,160 +1225,85 @@ export function OrganizationDetailView({ data }: Props) {
     timezone: settings?.timezone || 'America/Asuncion',
     business_vertical: org.business_vertical || 'general',
     operating_model: org.operating_model || 'retail',
-    enabled_modules: enabledModulesList,
+    enabled_modules: org.enabled_modules,
+    effective_modules: enabledModulesList,
     trial_ends_at: subscription?.trial_ends_at,
     current_period_ends_at: subscription?.current_period_ends_at,
     cancel_at_period_end: subscription?.cancel_at_period_end,
   }
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success(`${label} copiado al portapapeles`)
+  const copyToClipboard = async (text: string, label: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success(`${label} copiado al portapapeles`) }
+    catch { toast.error('No se pudo copiar. Probá de nuevo.') }
   }
 
   return (
-    <div className="space-y-6">
-      {/* Top Breadcrumb & Return Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/90 p-3.5 backdrop-blur-sm shadow-xs">
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="gap-1.5 rounded-xl text-xs font-bold hover:bg-muted cursor-pointer">
-            <Link href="/superadmin/organizations">
-              <ArrowLeft className="h-4 w-4" />
-              Volver al Directorio
-            </Link>
-          </Button>
-          <span className="text-muted-foreground/60">/</span>
-          <span className="text-xs font-bold text-foreground">
-            Expediente: <strong className="text-violet-600 dark:text-violet-400">{org.name}</strong>
-          </span>
+    <div className="mx-auto min-w-0 max-w-[1440px] space-y-6">
+      <OrganizationDetailHeader id={org.id} name={org.name} slug={org.slug} planName={planName} statusLabel={SUBSCRIPTION_STATUS_LABELS[effectiveStatus] ?? effectiveStatus} statusClass={SUBSCRIPTION_STATUS_STYLES[effectiveStatus] ?? SUBSCRIPTION_STATUS_STYLES.sin_registro} verticalLabel={verticalMeta.label} verticalIcon={verticalMeta.icon} ownerLabel={owner?.full_name || owner?.email || (org.owner_id ? 'Datos del propietario no disponibles' : 'Sin propietario asignado')} currency={currency} cancelScheduled={Boolean(subscription?.cancel_at_period_end)} onEdit={() => setEditDialogOpen(true)} onRefresh={() => router.refresh()} onCopy={(value,label) => void copyToClipboard(value,label)}/>
+
+
+      {/* Tabs Navigation Section */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <div className="sticky top-2 z-20 max-w-full overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-sm">
+          <TabsList className="inline-flex h-auto min-w-max gap-1 bg-transparent p-0">
+            <TabsTrigger
+              value="overview"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              Resumen
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="modules"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              Funciones ({activeCount})
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="members"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Equipo{membersFailed ? '' : ` (${equipo.staff.length})`}
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="subscription"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              Suscripción
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="branches"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <Store className="h-3.5 w-3.5" />
+              Sucursales ({branches.length})
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditDialogOpen(true)}
-            className="h-8 gap-1.5 rounded-xl text-xs font-bold border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-300 cursor-pointer"
-          >
-            <Wrench className="h-3.5 w-3.5 text-violet-600" />
-            Editar Organización & Módulos
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.refresh()}
-            className="h-8 w-8 rounded-xl cursor-pointer"
-            title="Recargar datos del tenant"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Hero Header Card with Core Tenant Info */}
-      <Card className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-md">
-        <div className="border-b border-border bg-gradient-to-r from-violet-50/80 via-muted/40 to-blue-50/50 p-6 dark:from-violet-950/30 dark:to-blue-950/20">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            {/* Left: Avatar & Identity */}
-            <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-3xl bg-violet-600 text-white font-black text-2xl shadow-lg ring-4 ring-background">
-                {org.name.slice(0, 2).toUpperCase()}
-              </div>
-
-              <div className="space-y-1.5 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate">
-                    {org.name}
-                  </h1>
-                  <Badge variant="outline" className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full', PLAN_STYLES[effectivePlan] ?? PLAN_STYLES.FREE)}>
-                    {planName}
-                  </Badge>
-                  <Badge variant="outline" className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full uppercase', STATUS_STYLES[effectiveStatus] ?? STATUS_STYLES.active)}>
-                    {effectiveStatus}
-                  </Badge>
-                  {subscription?.cancel_at_period_end && (
-                    <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400 font-bold text-[10px]">
-                      Cancela al cierre
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground font-medium">
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(`${window.location.origin}/${org.slug}/inicio`, 'URL de tienda')}
-                    className="inline-flex items-center gap-1 font-mono font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
-                  >
-                    <span>/{org.slug}</span>
-                    <Copy className="h-3 w-3 text-muted-foreground" />
-                  </button>
-                  <span className="text-muted-foreground/60">·</span>
-                  <Badge variant="outline" className={cn('rounded-lg px-2 py-0 text-[10px] font-extrabold gap-1', verticalMeta.badge)}>
-                    <span>{verticalMeta.icon}</span>
-                    <span>{verticalMeta.label}</span>
-                  </Badge>
-                  <span className="text-muted-foreground/60">·</span>
-                  <span>Moneda: <strong className="text-foreground">{settings?.currency || 'PYG'}</strong></span>
-                  <span className="text-muted-foreground/60">·</span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(org.id, 'UUID de organización')}
-                    className="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    <span>ID: {org.id.slice(0, 13)}…</span>
-                    <Copy className="h-3 w-3 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Quick Action Controls */}
-            <div className="flex flex-wrap items-center gap-2">
-              <EnterSupportButton organizationId={org.id} organizationName={org.name} />
-              
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer"
-              >
-                <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer">
-                  <Globe className="h-3.5 w-3.5 text-cyan-600" />
-                  Abrir Tienda
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                </a>
-              </Button>
-
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-9 gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer"
-              >
-                <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
-                  <CreditCard className="h-3.5 w-3.5 text-violet-600" />
-                  Facturación
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-
+      <Card className="overflow-hidden rounded-2xl border-border bg-card py-0 shadow-none">
         {/* Operational Telemetry Metric Bar */}
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-border bg-card">
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Equipo</p>
-            <p className="text-base font-black text-foreground">
+        <div className="grid grid-cols-2 divide-x divide-y xl:grid-cols-4 xl:divide-y-0 bg-card">
+          <div className="min-w-0 space-y-1 p-4 sm:p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Equipo</p>
+            <p className="text-base font-bold text-foreground">
               {membersFailed
                 ? 'Sin dato'
                 : `${equipo.staff.length} ${equipo.staff.length === 1 ? 'persona' : 'personas'}`}
             </p>
             <p className="text-xs font-medium text-muted-foreground">
               {membersFailed
-                ? `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`
+                ? `Propietario: ${owner?.full_name || owner?.email || 'Sin asignar'}`
                 : equipo.customers.length > 0
                   ? `+ ${equipo.customers.length.toLocaleString('es-PY')} clientes con cuenta web`
-                  : `Owner: ${owner?.full_name || owner?.email || 'Sin asignar'}`}
+                  : `Propietario: ${owner?.full_name || owner?.email || 'Sin asignar'}`}
             </p>
             {ultimoAccesoEquipo && (
               <p className={cn('text-xs font-semibold', ultimoAccesoEquipo.stale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
@@ -1396,14 +1313,14 @@ export function OrganizationDetailView({ data }: Props) {
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Catálogo & Sucursales</p>
-            <p className="text-base font-black text-foreground">{counts.products} productos</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Catálogo & Sucursales</p>
+            <p className="text-base font-bold text-foreground">{counts.products} productos</p>
             <p className="text-xs text-muted-foreground font-medium">{branches.length} sucursales registradas</p>
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Capacidad Funcional</p>
-            <p className="text-base font-black text-foreground">{activeCount} módulos activos</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Funciones disponibles</p>
+            <p className="text-base font-bold text-foreground">{activeCount} módulos activos</p>
             <p className="text-xs font-medium text-muted-foreground">
               {cobertura.percent === null
                 ? 'El plan no tiene módulos cargados'
@@ -1412,101 +1329,28 @@ export function OrganizationDetailView({ data }: Props) {
           </div>
 
           <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Vigencia del Plan</p>
-            <p className="text-base font-black text-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vigencia de suscripción</p>
+            <p className="text-base font-bold text-foreground">
               {renewalDays === null ? 'Sin fecha' : renewalDays < 0 ? `${Math.abs(renewalDays)}d vencido` : `${renewalDays}d restantes`}
             </p>
             <p className="text-xs text-muted-foreground font-medium">
-              Vence: {formatDate(subscription?.current_period_ends_at || subscription?.trial_ends_at)}
+              Vence: {formatDate(renewalDate)}
             </p>
           </div>
         </div>
       </Card>
 
-      {/* 🤖 Robot Mascot Contextual Consultant */}
-      <div className="rounded-3xl border border-border bg-gradient-to-r from-blue-50/60 via-card to-violet-50/60 p-5 dark:from-blue-950/30 dark:to-violet-950/30 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <RobotGuide
-          variant="navy-gold"
-          size="md"
-          speechTitle={`Supervisor de Organización: ${org.name}`}
-          speechText={`Esta empresa opera en el rubro ${verticalMeta.label} (${org.operating_model === 'wholesale' ? 'Venta Mayorista' : org.operating_model === 'repair' ? 'Taller SAT' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}). Cuenta con ${activeCount} módulos operativos habilitados y ${equipo.staff.length} personas en el equipo.`}
-        />
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setActiveTab('modules')}
-            className="h-8 rounded-xl text-xs font-bold bg-card/90 border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-100 cursor-pointer"
-          >
-            <Boxes className="h-3.5 w-3.5 mr-1.5 text-violet-600" />
-            Ver Matriz de Módulos
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setEditDialogOpen(true)}
-            className="h-8 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 cursor-pointer shadow-xs"
-          >
-            <Wrench className="h-3.5 w-3.5 mr-1.5" />
-            Configurar Módulos
-          </Button>
-        </div>
-      </div>
-
-      {/* Tabs Navigation Section */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="overflow-x-auto rounded-2xl border border-border bg-card/95 p-1.5 shadow-2xs w-fit">
-          <TabsList className="bg-transparent gap-1 p-0 h-auto">
-            <TabsTrigger
-              value="overview"
-              className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
-            >
-              <Building2 className="h-3.5 w-3.5" />
-              Ficha General
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="modules"
-              className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
-            >
-              <Boxes className="h-3.5 w-3.5" />
-              Rubro & Módulos ({activeCount})
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="members"
-              className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
-            >
-              <Users className="h-3.5 w-3.5" />
-              Equipo{membersFailed ? '' : ` (${equipo.staff.length})`}
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="subscription"
-              className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
-            >
-              <CreditCard className="h-3.5 w-3.5" />
-              Suscripción & Límites
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="branches"
-              className="gap-2 rounded-xl px-4 py-2 text-xs font-bold data-[state=active]:bg-violet-600 data-[state=active]:text-white cursor-pointer"
-            >
-              <Store className="h-3.5 w-3.5" />
-              Sucursales ({branches.length})
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
         {/* Tab 1: Overview */}
         <TabsContent value="overview" className="space-y-6 m-0">
+          <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Resumen de la empresa</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">Actividad, datos de contacto y estado de la cuenta. Los valores no disponibles se señalan por separado.</p></div>
           {/* Como le va al negocio.
               El resumen abria con dos tarjetas de metadatos —nombre, slug,
               UUID, zona horaria— que son configuracion. Nada decia cuanto
               factura ni cuando vendio por ultima vez, asi que una empresa que
               dejo de operar hace ocho meses se veia igual que una que vendio
               hoy. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <OrganizationOverviewNavigation/>
+          <div id="org-activity" className="grid scroll-mt-28 grid-cols-2 gap-3 lg:grid-cols-3">
             <MetricTile
               label="Facturado"
               value={formatMoney(activity.revenueTotal, currency)}
@@ -1758,13 +1602,13 @@ export function OrganizationDetailView({ data }: Props) {
             </CardHeader>
             <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total cobrado</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total cobrado</p>
                 <p className="text-xl font-bold tabular-nums leading-none text-foreground">
                   {billing_summary === null
                     ? 'Sin dato'
                     : formatMoney(billing_summary.paidTotal, billing_summary.currency ?? currency)}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {billing_summary === null
                     ? 'No se pudieron leer los pagos'
                     : billing_summary.paidCount === 0
@@ -1772,20 +1616,20 @@ export function OrganizationDetailView({ data }: Props) {
                       : `${billing_summary.paidCount} ${billing_summary.paidCount === 1 ? 'pago' : 'pagos'} cobrados`}
                 </p>
                 {billing_summary?.mixedCurrency && (
-                  <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
                     Hay pagos en más de una moneda: el total suma importes distintos.
                   </p>
                 )}
               </div>
 
               <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Último pago</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Último pago</p>
                 <p className="text-xl font-bold tabular-nums leading-none text-foreground">
                   {billing_summary?.lastPaidAmount != null
                     ? formatMoney(billing_summary.lastPaidAmount, billing_summary.currency ?? currency)
                     : 'Sin pagos'}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {billing_summary?.lastPaidAt
                     ? `${formatDate(billing_summary.lastPaidAt)}${billing_summary.lastPaidMethod ? ` · ${billing_summary.lastPaidMethod}` : ''}`
                     : 'Ninguno registrado'}
@@ -1793,9 +1637,9 @@ export function OrganizationDetailView({ data }: Props) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Plan actual</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Plan actual</p>
                 <p className="text-xl font-bold leading-none text-foreground">{planName}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {plan_details?.price_monthly
                     ? `${formatMoney(plan_details.price_monthly, plan_details.currency || currency)} por mes`
                     : 'Sin precio cargado en el plan'}
@@ -1803,7 +1647,7 @@ export function OrganizationDetailView({ data }: Props) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cobertura</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cobertura</p>
                 <p
                   className={cn(
                     'text-xl font-bold tabular-nums leading-none',
@@ -1814,7 +1658,7 @@ export function OrganizationDetailView({ data }: Props) {
                     ? '—'
                     : `${coberturaPagos.paidMonths} de ${coberturaPagos.expectedMonths} meses`}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {coberturaPagos.paidMonths === null
                     ? 'El plan no tiene precio mensual: no hay contra qué comparar'
                     : coberturaPagos.behind
@@ -1826,17 +1670,17 @@ export function OrganizationDetailView({ data }: Props) {
               {billing_summary && (billing_summary.pendingCount > 0 || billing_summary.failedCount > 0 || billing_summary.refundedCount > 0) && (
                 <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
                   {billing_summary.pendingCount > 0 && (
-                    <Badge variant="outline" className="border-amber-300 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
+                    <Badge variant="outline" className="border-amber-300 text-xs font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
                       {billing_summary.pendingCount} pendiente{billing_summary.pendingCount === 1 ? '' : 's'}
                     </Badge>
                   )}
                   {billing_summary.failedCount > 0 && (
-                    <Badge variant="outline" className="border-rose-300 text-[10px] font-bold text-rose-700 dark:border-rose-900 dark:text-rose-400">
+                    <Badge variant="outline" className="border-rose-300 text-xs font-bold text-rose-700 dark:border-rose-900 dark:text-rose-400">
                       {billing_summary.failedCount} fallido{billing_summary.failedCount === 1 ? '' : 's'}
                     </Badge>
                   )}
                   {billing_summary.refundedCount > 0 && (
-                    <Badge variant="outline" className="text-[10px] font-bold text-muted-foreground">
+                    <Badge variant="outline" className="text-xs font-bold text-muted-foreground">
                       {billing_summary.refundedCount} devuelto{billing_summary.refundedCount === 1 ? '' : 's'}
                     </Badge>
                   )}
@@ -1900,7 +1744,7 @@ export function OrganizationDetailView({ data }: Props) {
             {/* Contacto real del negocio. No estaba en ninguna pestana: un
                 superadmin que necesitaba llamar al cliente no tenia donde
                 mirar, aunque el dato existe en la base. */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="org-contact" className="scroll-mt-28 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-3">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="flex items-center gap-2 text-sm font-bold">
@@ -1908,7 +1752,7 @@ export function OrganizationDetailView({ data }: Props) {
                     Cómo contactar al negocio
                   </CardTitle>
                   {contactoFaltante > 0 && (
-                    <Badge variant="outline" className="gap-1 border-amber-300 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
+                    <Badge variant="outline" className="gap-1 border-amber-300 text-xs font-bold text-amber-700 dark:border-amber-800 dark:text-amber-400">
                       <CircleDashed className="h-3 w-3" />
                       {contactoFaltante} sin cargar
                     </Badge>
@@ -1960,7 +1804,7 @@ export function OrganizationDetailView({ data }: Props) {
 
             {/* Identidad fiscal: lo que hace falta para facturarle. Vive en
                 `billing_profiles` y nunca llegaba a la pantalla. */}
-            <Card className="rounded-2xl border border-border bg-card">
+            <Card id="org-account" className="scroll-mt-28 rounded-2xl border border-border bg-card">
               <CardHeader className="border-b border-border py-3">
                 <CardTitle className="flex items-center gap-2 text-sm font-bold">
                   <Receipt className="h-4 w-4 text-cyan-500" />
@@ -2000,7 +1844,7 @@ export function OrganizationDetailView({ data }: Props) {
                   field={{ value: zonaConfig.value, source: null }}
                 />
                 {(monedaConfig.isDefault || zonaConfig.isDefault) && (
-                  <p className="pb-3 pt-1 text-[10px] text-muted-foreground">
+                  <p className="pb-3 pt-1 text-xs text-muted-foreground">
                     {monedaConfig.isDefault && zonaConfig.isDefault
                       ? 'Moneda y zona horaria son los valores por defecto: la organización nunca los eligió.'
                       : monedaConfig.isDefault
@@ -2119,7 +1963,7 @@ export function OrganizationDetailView({ data }: Props) {
                             {auditActionLabel(event.action)}
                             {event.resource && <span className="font-normal text-muted-foreground"> · {event.resource}</span>}
                           </p>
-                          <p className="truncate text-[11px] text-muted-foreground">{event.actor ?? 'Sistema'}</p>
+                          <p className="truncate text-xs text-muted-foreground">{event.actor ?? 'Sistema'}</p>
                         </div>
                         <span className="shrink-0 tabular-nums text-muted-foreground">{formatDate(event.created_at)}</span>
                       </li>
@@ -2127,7 +1971,7 @@ export function OrganizationDetailView({ data }: Props) {
                   </ul>
                 )}
                 {recent_audit && recent_audit.total > recent_audit.events.length && (
-                  <p className="border-t border-border px-5 py-2 text-[11px] text-muted-foreground">
+                  <p className="border-t border-border px-5 py-2 text-xs text-muted-foreground">
                     Los últimos {recent_audit.events.length} de {recent_audit.total.toLocaleString('es-PY')} eventos.
                   </p>
                 )}
@@ -2143,11 +1987,11 @@ export function OrganizationDetailView({ data }: Props) {
                   </div>
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-black text-sm text-foreground">
+                      <h3 className="font-bold text-sm text-foreground">
                         {verticalMeta.label}
                       </h3>
-                      <Badge variant="outline" className="text-[10px] font-bold text-muted-foreground">
-                        Modelo {org.operating_model || 'Minorista'}
+                      <Badge variant="outline" className="text-xs font-bold text-muted-foreground">
+                        {OPERATING_MODELS.find(model => model.value === org.operating_model)?.label || 'Venta minorista'}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">
@@ -2172,6 +2016,7 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 2: Dedicated Detailed Rubro & Modules Matrix */}
         <TabsContent value="modules" className="space-y-6 m-0">
+          <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Funciones y actividad</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">Diferenciá lo que incluye el plan, lo que está habilitado y lo que realmente usa la empresa.</p></div>
           
           {/* Header Dossier Card */}
           <Card className="rounded-3xl border border-border bg-card/95 shadow-2xs overflow-hidden">
@@ -2183,13 +2028,13 @@ export function OrganizationDetailView({ data }: Props) {
                   </div>
                   <div className="space-y-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-black text-foreground">
+                      <h2 className="text-lg font-bold text-foreground">
                         {verticalMeta.label}
                       </h2>
-                      <Badge variant="outline" className={cn('rounded-full text-[10px] font-extrabold px-2.5 py-0.5', verticalMeta.badge)}>
+                      <Badge variant="outline" className={cn('rounded-full text-xs font-semibold px-2.5 py-0.5', verticalMeta.badge)}>
                         Rubro Comercial Principal
                       </Badge>
-                      <Badge variant="outline" className="rounded-full text-[10px] font-bold px-2.5 py-0.5 border-border text-foreground/80">
+                      <Badge variant="outline" className="rounded-full text-xs font-bold px-2.5 py-0.5 border-border text-foreground/80">
                         Modelo: {org.operating_model === 'wholesale' ? 'Mayorista' : org.operating_model === 'repair' ? 'Taller de reparación' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}
                       </Badge>
                     </div>
@@ -2221,7 +2066,7 @@ export function OrganizationDetailView({ data }: Props) {
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     Uso del plan {planName}
                   </span>
-                  <span className="font-extrabold text-violet-600 dark:text-violet-400">
+                  <span className="font-semibold text-violet-600 dark:text-violet-400">
                     {cobertura.percent === null
                       ? 'El plan no tiene módulos cargados'
                       : `${cobertura.active} de ${cobertura.entitled} módulos que incluye (${cobertura.percent}%)`}
@@ -2235,7 +2080,7 @@ export function OrganizationDetailView({ data }: Props) {
                     />
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {org.enabled_modules === null
                     ? 'Esta organización no eligió módulos: tiene activos todos los que su plan incluye.'
                     : `Eligió ${activeCount} de los ${totalAvailableModules} módulos del catálogo.`}
@@ -2243,12 +2088,12 @@ export function OrganizationDetailView({ data }: Props) {
 
                 {modulosSinUsar.length > 0 && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/60 dark:bg-amber-950/30">
-                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                    <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
                       {modulosSinUsar.length === 1
                         ? 'Hay 1 módulo activo que nunca se usó'
                         : `Hay ${modulosSinUsar.length} módulos activos que nunca se usaron`}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                       {modulosSinUsar
                         .map((key) => MODULE_CATEGORIES.flatMap((c) => c.modules).find((m) => m.key === key)?.name ?? key)
                         .join(' · ')}
@@ -2271,12 +2116,12 @@ export function OrganizationDetailView({ data }: Props) {
                 <div key={category.id} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <span>{category.title}</span>
                       </h3>
-                      <p className="text-[11px] text-muted-foreground">{category.description}</p>
+                      <p className="text-xs text-muted-foreground">{category.description}</p>
                     </div>
-                    <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-bold">
+                    <Badge variant="outline" className="px-2 py-0.5 text-xs font-bold">
                       {activeInCategory} activos · {enPlanCategoria} en el plan
                     </Badge>
                   </div>
@@ -2305,29 +2150,29 @@ export function OrganizationDetailView({ data }: Props) {
                                   <ModIcon className="h-4 w-4" />
                                 </div>
                                 <div>
-                                  <h4 className="text-xs font-extrabold text-foreground">
+                                  <h4 className="text-xs font-semibold text-foreground">
                                     {mod.name}
                                   </h4>
-                                  <span className="font-mono text-[10px] text-muted-foreground">{mod.key}</span>
+                                  <span className="font-mono text-xs text-muted-foreground">{mod.key}</span>
                                 </div>
                               </div>
 
                               <Badge
                                 variant="outline"
-                                className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold', MODULE_STATE_STYLES[estado])}
+                                className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold', MODULE_STATE_STYLES[estado])}
                               >
                                 {MODULE_STATE_LABELS[estado]}
                               </Badge>
                             </div>
 
-                            <p className="text-[11px] leading-relaxed text-muted-foreground">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
                               {mod.summary}
                             </p>
 
                             {isEnabled && uso.label && (
                               <p
                                 className={cn(
-                                  'text-[11px] font-semibold',
+                                  'text-xs font-semibold',
                                   uso.used
                                     ? 'text-emerald-600 dark:text-emerald-400'
                                     : 'text-amber-600 dark:text-amber-400'
@@ -2338,19 +2183,19 @@ export function OrganizationDetailView({ data }: Props) {
                             )}
 
                             {estado === 'on_outside_plan' && (
-                              <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                              <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
                                 Está activo pero el plan {planName} no lo incluye: revisar.
                               </p>
                             )}
                           </div>
 
                           <div className="pt-2 border-t border-border space-y-1">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
                               Capacidades Incluidas:
                             </span>
                             <ul className="space-y-0.5">
                               {mod.capabilities.map((cap, idx) => (
-                                <li key={idx} className="text-[10px] text-foreground/80 flex items-center gap-1.5">
+                                <li key={idx} className="text-xs text-foreground/80 flex items-center gap-1.5">
                                   <Check className={cn('h-3 w-3 shrink-0', isEnabled ? 'text-emerald-500' : 'text-muted-foreground')} />
                                   <span>{cap}</span>
                                 </li>
@@ -2374,6 +2219,7 @@ export function OrganizationDetailView({ data }: Props) {
             «Colaboradores de la Empresa» y mostraba el nombre crudo de la
             columna —`owner`, `seller`, `customer`— como si fuera un rotulo. */}
         <TabsContent value="members" className="space-y-4 m-0">
+          <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Equipo y clientes</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">El equipo administra el negocio. Los clientes de la tienda pública se muestran por separado.</p></div>
           {membersFailed ? (
             <Card className="rounded-2xl border border-border bg-card">
               <CardContent className="p-8 text-center text-xs font-medium text-amber-600 dark:text-amber-400">
@@ -2396,22 +2242,22 @@ export function OrganizationDetailView({ data }: Props) {
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] font-bold">
+                      <Badge variant="outline" className="text-xs font-bold">
                         {equipo.staffActive} {equipo.staffActive === 1 ? 'butaca ocupada' : 'butacas ocupadas'}
                         {plan_limits?.users ? ` de ${Number(plan_limits.users).toLocaleString('es-PY')}` : ''}
                       </Badge>
                       {accesoEquipo && (
-                        <Badge variant="outline" className="text-[10px] font-bold">
+                        <Badge variant="outline" className="text-xs font-bold">
                           {accesoEquipo.activeLastWeek} {accesoEquipo.activeLastWeek === 1 ? 'entró' : 'entraron'} esta semana
                         </Badge>
                       )}
                       {equipo.staffInvited > 0 && (
-                        <Badge variant="outline" className="border-sky-200 text-[10px] font-bold text-sky-700 dark:border-sky-900 dark:text-sky-300">
+                        <Badge variant="outline" className="border-sky-200 text-xs font-bold text-sky-700 dark:border-sky-900 dark:text-sky-300">
                           {equipo.staffInvited} sin aceptar
                         </Badge>
                       )}
                       {equipo.staffSuspended > 0 && (
-                        <Badge variant="outline" className="border-rose-200 text-[10px] font-bold text-rose-700 dark:border-rose-900 dark:text-rose-300">
+                        <Badge variant="outline" className="border-rose-200 text-xs font-bold text-rose-700 dark:border-rose-900 dark:text-rose-300">
                           {equipo.staffSuspended} suspendido{equipo.staffSuspended === 1 ? '' : 's'}
                         </Badge>
                       )}
@@ -2432,13 +2278,13 @@ export function OrganizationDetailView({ data }: Props) {
                   )}
 
                   {equipo.staffWithoutRole > 0 && (
-                    <p className="border-t border-border px-4 py-3 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    <p className="border-t border-border px-4 py-3 text-xs font-medium text-amber-600 dark:text-amber-400">
                       {equipo.staffWithoutRole} {equipo.staffWithoutRole === 1 ? 'persona no tiene' : 'personas no tienen'} rol
                       cargado. No consumen butaca del plan —el conteo las descarta— pero sí acceden al sistema.
                     </p>
                   )}
 
-                  <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+                  <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
                     Solo las personas <strong className="font-semibold text-foreground">activas</strong> ocupan
                     butaca del plan. Las invitadas y las suspendidas no.
                   </p>
@@ -2457,7 +2303,7 @@ export function OrganizationDetailView({ data }: Props) {
                         Se registraron solos desde la web para comprar. No forman parte del equipo ni consumen butaca del plan.
                       </CardDescription>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-bold">
+                    <Badge variant="outline" className="text-xs font-bold">
                       {equipo.customers.length.toLocaleString('es-PY')} con cuenta
                     </Badge>
                   </div>
@@ -2475,7 +2321,7 @@ export function OrganizationDetailView({ data }: Props) {
                         ))}
                       </div>
                       {equipo.customers.length > MAX_CUSTOMERS_VISIBLE && (
-                        <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+                        <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
                           Se muestran {MAX_CUSTOMERS_VISIBLE} de {equipo.customers.length.toLocaleString('es-PY')}.
                           La organización tiene {counts.customers.toLocaleString('es-PY')} clientes cargados en total,
                           incluidos los que se dieron de alta por mostrador y no tienen cuenta web.
@@ -2491,6 +2337,7 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 4: Subscription */}
         <TabsContent value="subscription" className="space-y-6 m-0">
+          <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Suscripción, pagos y límites</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">Revisá la vigencia, el historial de cobros y la capacidad disponible. Tener una suscripción activa no confirma que esté pagada.</p></div>
           {sinSuscripcion && (
             <Card className="rounded-2xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/30">
               <CardContent className="flex items-start gap-3 p-4">
@@ -2499,7 +2346,7 @@ export function OrganizationDetailView({ data }: Props) {
                   <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
                     No hay una suscripción registrada
                   </p>
-                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                     El plan {effectivePlan} sale de <code className="font-mono">organizations.plan</code>, sin
                     fila en <code className="font-mono">subscriptions</code>: no hay período, ni vencimiento, ni
                     proveedor de cobro. La pantalla mostraba «activa» igual.
@@ -2520,7 +2367,7 @@ export function OrganizationDetailView({ data }: Props) {
               <CardContent className="space-y-1 px-5 py-1 text-xs">
                 <div className="flex items-center justify-between border-b border-border/60 py-2.5">
                   <span className="font-medium text-muted-foreground">Plan</span>
-                  <Badge variant="outline" className={cn('px-2.5 py-0.5 text-xs font-extrabold', PLAN_STYLES[effectivePlan])}>
+                  <Badge variant="outline" className={cn('px-2.5 py-0.5 text-xs font-semibold', PLAN_STYLES[effectivePlan])}>
                     {planName}
                   </Badge>
                 </div>
@@ -2530,7 +2377,7 @@ export function OrganizationDetailView({ data }: Props) {
                   <Badge
                     variant="outline"
                     className={cn(
-                      'px-2 py-0.5 text-[10px] font-extrabold uppercase',
+                      'px-2 py-0.5 text-xs font-semibold uppercase',
                       SUBSCRIPTION_STATUS_STYLES[effectiveStatus] ?? SUBSCRIPTION_STATUS_STYLES.sin_registro
                     )}
                   >
@@ -2628,7 +2475,7 @@ export function OrganizationDetailView({ data }: Props) {
                   warn={coberturaPagos.behind}
                 />
                 {billing_summary && (billing_summary.pendingCount > 0 || billing_summary.failedCount > 0) && (
-                  <p className="py-2.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                  <p className="py-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                     {[
                       billing_summary.pendingCount > 0 && `${billing_summary.pendingCount} pendiente(s)`,
                       billing_summary.failedCount > 0 && `${billing_summary.failedCount} fallido(s)`,
@@ -2638,7 +2485,7 @@ export function OrganizationDetailView({ data }: Props) {
                   </p>
                 )}
                 <div className="py-2.5">
-                  <Button asChild variant="outline" size="sm" className="h-7 rounded-lg text-[11px] font-bold">
+                  <Button asChild variant="outline" size="sm" className="h-7 rounded-lg text-xs font-bold">
                     <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(org.slug)}`}>
                       Ver en Facturación
                       <ExternalLink className="ml-1 h-3 w-3" />
@@ -2664,7 +2511,7 @@ export function OrganizationDetailView({ data }: Props) {
                 <Badge
                   variant="outline"
                   className={cn(
-                    'px-2 py-0.5 text-[10px] font-bold',
+                    'px-2 py-0.5 text-xs font-bold',
                     limitesEnRiesgo > 0
                       ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                       : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
@@ -2689,7 +2536,7 @@ export function OrganizationDetailView({ data }: Props) {
             </CardContent>
 
             <CardContent className="space-y-1 border-t border-border px-5 py-3">
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {plan_limits_source === 'missing'
                   ? 'El plan no tiene límites cargados: el sistema aplica los del plan Free.'
                   : plan_limits_source === 'commercial'
@@ -2697,12 +2544,12 @@ export function OrganizationDetailView({ data }: Props) {
                     : 'Salen de la tabla técnica de planes, que es la que el sistema consulta al crear un recurso.'}
               </p>
               {planSiguiente ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   El plan siguiente es <strong className="font-semibold text-foreground">{planSiguiente.name ?? planSiguiente.code}</strong>.
                   Los topes que mejora se muestran en cada recurso que esté cerca del suyo.
                 </p>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   No hay un plan superior: {effectivePlan} es el más alto.
                 </p>
               )}
@@ -2712,11 +2559,12 @@ export function OrganizationDetailView({ data }: Props) {
 
         {/* Tab 5: Branches */}
         <TabsContent value="branches" className="space-y-4 m-0">
+          <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Sucursales</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">Locales registrados, ubicación, contacto y estado de cada punto de atención.</p></div>
           <Card className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-2xs">
             <CardHeader className="border-b border-border bg-muted/40 p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-bold">Puntos de Venta & Sucursales</CardTitle>
+                  <CardTitle className="text-sm font-bold">Locales registrados</CardTitle>
                   <CardDescription className="text-xs">
                     Locales físicos y centros de distribución registrados
                   </CardDescription>
@@ -2743,25 +2591,25 @@ export function OrganizationDetailView({ data }: Props) {
                           <div className="flex items-center gap-2">
                             <p className="font-bold text-xs text-foreground">{b.name}</p>
                             {b.is_default && (
-                              <Badge variant="outline" className="text-[9px] font-black uppercase bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300">
-                                CASA CENTRAL
+                              <Badge variant="outline" className="text-xs font-bold uppercase bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300">
+                                Principal
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[11px] text-muted-foreground font-medium">
-                            {b.address || 'Sin dirección'} · {b.city || 'Paraguay'}
+                          <p className="text-xs text-muted-foreground font-medium">
+                            {b.address || 'Sin dirección'} · {b.city || 'Ciudad sin informar'}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         {b.phone && (
-                          <span className="text-[11px] font-mono text-muted-foreground">{b.phone}</span>
+                          <span className="text-xs font-mono text-muted-foreground">{b.phone}</span>
                         )}
                         <Badge
                           variant="outline"
                           className={cn(
-                            'text-[10px] font-extrabold uppercase px-2 py-0.5',
+                            'text-xs font-semibold uppercase px-2 py-0.5',
                             b.is_active
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300'
                               : 'bg-muted/40 text-foreground/80 border-border'

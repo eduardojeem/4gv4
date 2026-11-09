@@ -223,7 +223,7 @@ export async function sendSubscriptionReminders(now = Date.now()): Promise<Remin
   return result
 }
 
-/** Recibo de un pago aplicado. Se manda una sola vez aunque Pagopar reintente. */
+/** Recibo de un pago aplicado. Se manda una sola vez aunque Bancard reintente la confirmación. */
 export async function sendSubscriptionPaymentReceipt(paymentId: string) {
   try {
     const admin = createAdminSupabase()
@@ -283,7 +283,7 @@ export async function notifySubscriptionChargeback(payment: { id: string; organi
       organizationContact(payment.organization_id),
       admin.from('profiles').select('email').eq('role', 'super_admin').neq('status', 'inactive'),
     ])
-    const detail = 'Pagopar informó que el último pago de la suscripción fue revertido. La cuenta quedó con el pago pendiente: tenés 7 días para volver a pagar antes de pasar al plan Gratuito.'
+    const detail = 'Se registró la reversión del último pago de la suscripción. La cuenta quedó con el pago pendiente: tenés 7 días para volver a pagar antes de pasar al plan Gratuito.'
     await deliver({
       organizationId: payment.organization_id,
       kind: 'chargeback',
@@ -301,7 +301,7 @@ export async function notifySubscriptionChargeback(payment: { id: string; organi
         html: renderSubscriptionNoticeEmail({
           title: 'Contracargo registrado',
           preview: `Se revirtió un pago de ${contact.name}.`,
-          intro: `Pagopar informó la reversión de un pago de "${contact.name}" por ${new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(Number(payment.amount))}.`,
+          intro: `Se registró la reversión de un pago de "${contact.name}" por ${new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(Number(payment.amount))}.`,
           detail: 'El pago quedó marcado como reembolsado y la suscripción pasó a pago pendiente.',
           ctaLabel: 'Ver pagos',
           manageUrl: `${appUrl()}/superadmin/invoices`,

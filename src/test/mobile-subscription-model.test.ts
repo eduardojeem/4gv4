@@ -24,7 +24,7 @@ const RESPONSE = {
   plans: [],
   usage: { users: 4, branches: 1, cashRegisters: 2, products: 480, categories: 3, repairs: 12, services: 0 },
   billingProfile: { business_name: 'Mi Tienda', ruc: '80012345-6', billing_email: 'a@b.py', fiscal_address: '', phone: null },
-  payments: [{ id: 'p1', amount: 150000, currency: 'PYG', status: 'paid', payment_method: 'card', provider: 'pagopar', receipt_url: null, paid_at: '2026-11-01T00:00:00Z', created_at: null }],
+  payments: [{ id: 'p1', amount: 150000, currency: 'PYG', status: 'paid', payment_method: 'card', provider: 'bancard', receipt_url: null, paid_at: '2026-11-01T00:00:00Z', created_at: null }],
   promoRedemptions: [{ id: 'r1', redeemed_at: '2026-10-01T00:00:00Z', benefit_snapshot: { benefit_type: 'discount_percent', discount_percent: 20 } }],
 }
 

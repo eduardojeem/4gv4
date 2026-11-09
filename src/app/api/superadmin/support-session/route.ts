@@ -4,6 +4,7 @@ import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getClientIp } from '@/lib/rate-limiter'
+import { SUPPORT_REASON_MIN_LENGTH, SUPPORT_REASON_MAX_LENGTH } from '@/lib/superadmin/support-session-policy'
 import {
   SUPPORT_COOKIE,
   SUPPORT_SESSION_TTL_MINUTES,
@@ -17,8 +18,8 @@ import {
 export async function GET() {
   const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
-  const session = await getActiveSupportSession()
-  return NextResponse.json({ session })
+  const session = await getActiveSupportSession(me.id)
+  return NextResponse.json({ session }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 // POST — start a support session against an organization
@@ -26,13 +27,14 @@ export async function POST(request: NextRequest) {
   const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
-  const body = await request.json().catch(() => ({}))
+  const payload: unknown = await request.json().catch(() => null)
+  const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
   const organizationId = typeof body.organizationId === 'string' ? body.organizationId.trim() : ''
   const organizationSlug = typeof body.organizationSlug === 'string' ? body.organizationSlug.trim() : ''
 
-  if (reason.length < 5) {
-    return NextResponse.json({ error: 'Indicá un motivo (mínimo 5 caracteres).' }, { status: 400 })
+  if (reason.length < SUPPORT_REASON_MIN_LENGTH || reason.length > SUPPORT_REASON_MAX_LENGTH) {
+    return NextResponse.json({ error: `Indicá un motivo de entre ${SUPPORT_REASON_MIN_LENGTH} y ${SUPPORT_REASON_MAX_LENGTH} caracteres.` }, { status: 400 })
   }
   if (!organizationId && !organizationSlug) {
     return NextResponse.json({ error: 'Falta la organización.' }, { status: 400 })
@@ -92,12 +94,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof SupportSessionsTableMissingError) {
       return NextResponse.json(
-        { error: 'Falta aplicar la migración de modo soporte (20260607130000_support_sessions.sql).', code: 'support_sessions_table_missing' },
+        { error: 'El registro de soporte no está disponible. Revisá las migraciones del sistema.', code: 'support_sessions_table_missing' },
         { status: 409 }
       )
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'No se pudo iniciar el modo soporte.' },
+      { error: 'No se pudo iniciar el modo soporte. Volvé a intentar.' },
       { status: 500 }
     )
   }
@@ -110,10 +112,14 @@ export async function DELETE(request: NextRequest) {
 
   const cookieStore = await cookies()
   const sessionId = cookieStore.get(SUPPORT_COOKIE)?.value
-  const active = await getActiveSupportSession()
+  const active = await getActiveSupportSession(me.id)
 
   if (sessionId) {
-    await endSupportSession(sessionId)
+    try {
+      await endSupportSession(sessionId, me.id)
+    } catch {
+      return NextResponse.json({ error: 'No se pudo cerrar el modo soporte. La sesión se conserva para que puedas reintentar.' }, { status: 500 })
+    }
     cookieStore.delete(SUPPORT_COOKIE)
   }
 

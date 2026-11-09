@@ -7,12 +7,12 @@ const offered = (businessVertical: string, context: StorefrontStyleContext = {})
   STOREFRONT_STYLE_OPTIONS.map((option) => option.value).filter((style) => style !== 'auto' && isStorefrontStyleAvailable(style, { ...context, businessVertical }))
 
 describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
-  it('una barbería sin productos conserva Servicios y la opción universal Wholesale Pro', () => {
-    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: false })).toEqual(['wholesale-pro', 'services'])
+  it('una barbería sin productos conserva Servicios, Barbería Premium y la opción universal Wholesale Pro', () => {
+    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: false })).toEqual(['barber', 'wholesale-pro', 'services'])
   })
 
   it('una barbería que también vende productos suma Clásico y Moderno, no Supermercado ni Tecnología', () => {
-    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: true }).sort()).toEqual(['classic', 'modern', 'services', 'wholesale-pro'])
+    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: true }).sort()).toEqual(['barber', 'classic', 'modern', 'services', 'wholesale-pro'])
   })
 
   it('un salón de belleza con productos puede usar Belleza', () => {
@@ -26,7 +26,7 @@ describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
   })
 
   it('comercio general u otro rubro con agenda conserva todas las opciones', () => {
-    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(9)
+    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(11)
     expect(offered('other', { servicesAvailable: false, catalogAvailable: true })).not.toContain('services')
   })
 

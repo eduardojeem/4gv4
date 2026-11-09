@@ -24,6 +24,7 @@ interface MobileFiltersProps {
   branches?: Array<{ id: string; name: string; city: string | null }>
   fashionFacets?: { sizes: string[]; colors: string[] }
   deviceFacets?: DeviceOptions
+  isWholesale?: boolean
 }
 
 export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersProps) {

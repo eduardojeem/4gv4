@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -21,14 +21,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useUrlListState } from '@/hooks/useUrlListState'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
 
+import { buildSubscriptionUpdate, subscriptionChanges, toSubscriptionEditForm } from './subscription-edit'
 import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './types'
 import {
   csvCell,
   daysUntil, getRecommendation,
   isAttention,
   isRunningTrial,
+  subscriptionEndDate,
   periodLabel,
-  toDateTimeLocalValue
 } from './utils'
 import { normalizeText } from '@/lib/text/normalize'
 import { cn } from '@/lib/utils'
@@ -47,19 +48,6 @@ type Props = {
   loadError: string | null
 }
 
-function toEditForm(sub: SuperAdminSubscription): EditForm {
-  return {
-    plan: sub.plan.toUpperCase(),
-    status: sub.status,
-    trial_ends_at: toDateTimeLocalValue(sub.trial_ends_at),
-    current_period_starts_at: toDateTimeLocalValue(sub.current_period_starts_at),
-    current_period_ends_at: toDateTimeLocalValue(sub.current_period_ends_at),
-    cancel_at_period_end: sub.cancel_at_period_end,
-    storefront_public: Boolean(sub.storefront_public),
-    marketplace_public: Boolean(sub.marketplace_public),
-  }
-}
-
 const CSV_BOM = String.fromCharCode(0xfeff)
 const CSV_EOL = String.fromCharCode(13, 10)
 
@@ -76,6 +64,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     tab: 'all',
     page: '1',
     size: '25',
+    view: 'table',
   })
   const query = state.q
   const plan = state.plan
@@ -101,7 +90,11 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
   const [saveError, setSaveError] = useState<string | null>(null)
 
   // View mode toggle: table (default on desktop) or grid cards
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
+  const viewMode = state.view === 'grid' ? 'grid' : 'table'
+  const setViewMode = (value: 'table' | 'grid') => setValue('view', value)
+  const [refreshing, startRefresh] = useTransition()
+  const saveInFlight = useRef(false)
+  const planLabels = useMemo(() => Object.fromEntries(subscriptions.filter(sub => sub.plan_details?.name).map(sub => [sub.plan.toUpperCase(), sub.plan_details!.name])), [subscriptions])
 
   // Derived filter options
   const planOptions = useMemo(
@@ -123,7 +116,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     attention: subscriptions.filter(isAttention).length,
     canceling: subscriptions.filter((s) => s.cancel_at_period_end).length,
     renewals: subscriptions.filter((s) => {
-      const d = daysUntil(s.current_period_ends_at)
+      const d = daysUntil(subscriptionEndDate(s))
       return d !== null && d >= 0 && d <= 14
     }).length,
     // Un trial terminado hace un año que quedo en estado `trialing` no es un
@@ -137,7 +130,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
     return subscriptions
       .filter((s) => {
-        const renewalDays = daysUntil(s.current_period_ends_at)
+        const renewalDays = daysUntil(subscriptionEndDate(s))
         void (daysUntil(s.trial_ends_at));
 
         const matchesQuery =
@@ -156,7 +149,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
         const matchesPlan = plan === 'ALL' || s.plan.toUpperCase() === plan
         const matchesStatus = status === 'ALL' || s.status === status
-        const matchesProvider = provider === 'ALL' || s.provider === provider
+        const matchesProvider = provider === 'ALL' || (s.provider || 'manual') === provider
 
         const matchesTab =
           tab === 'all' ||
@@ -169,7 +162,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       })
       .sort((a, b) => {
         if (sort === 'renewal')
-          return (daysUntil(a.current_period_ends_at) ?? 99999) - (daysUntil(b.current_period_ends_at) ?? 99999)
+          return (daysUntil(subscriptionEndDate(a)) ?? 99999) - (daysUntil(subscriptionEndDate(b)) ?? 99999)
         if (sort === 'trial')
           return (daysUntil(a.trial_ends_at) ?? 99999) - (daysUntil(b.trial_ends_at) ?? 99999)
         if (sort === 'plan') return a.plan.localeCompare(b.plan)
@@ -191,6 +184,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     setStatus('ALL')
     setProvider('ALL')
     setSort('attention')
+    setTab('all')
   }
 
   function exportCsv() {
@@ -245,18 +239,20 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
   function openDetail(sub: SuperAdminSubscription) {
     setSelected(sub)
-    setEditForm(toEditForm(sub))
+    setEditForm(toSubscriptionEditForm(sub))
     setSaveError(null)
   }
 
   function closeDetail() {
+    if (saveInFlight.current) return
     setSelected(null)
     setEditForm(null)
     setSaveError(null)
   }
 
   async function saveSubscription() {
-    if (!selected || !editForm) return
+    if (!selected || !editForm || saveInFlight.current || subscriptionChanges(selected, editForm).length === 0) return
+    saveInFlight.current = true
     setIsSaving(true)
     setSaveError(null)
 
@@ -264,16 +260,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       const response = await fetch(`/api/superadmin/subscriptions/${selected.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: editForm.plan,
-          status: editForm.status,
-          trial_ends_at: editForm.trial_ends_at || null,
-          current_period_starts_at: editForm.current_period_starts_at || null,
-          current_period_ends_at: editForm.current_period_ends_at || null,
-          cancel_at_period_end: editForm.cancel_at_period_end,
-          storefront_public: editForm.storefront_public,
-          marketplace_public: editForm.marketplace_public,
-        }),
+        body: JSON.stringify(buildSubscriptionUpdate(selected, editForm)),
       })
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
 
@@ -282,13 +269,15 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       }
 
       toast.success('Suscripción actualizada correctamente')
-      router.refresh()
+      saveInFlight.current = false
       closeDetail()
+      router.refresh()
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : 'No se pudo actualizar la suscripción'
       )
     } finally {
+      saveInFlight.current = false
       setIsSaving(false)
     }
   }
@@ -297,11 +286,11 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     { value: 'all', label: 'Todas', count: tabCounts.all },
     { value: 'attention', label: 'Atención', count: tabCounts.attention, alertColor: tabCounts.attention > 0 ? 'rose' : undefined },
     { value: 'renewals', label: 'Renovaciones', count: tabCounts.renewals, alertColor: tabCounts.renewals > 0 ? 'amber' : undefined },
-    { value: 'trials', label: 'Trials', count: tabCounts.trials },
-    { value: 'canceling', label: 'Cancelan', count: tabCounts.canceling },
+    { value: 'trials', label: 'En prueba', count: tabCounts.trials },
+    { value: 'canceling', label: 'Cancelación programada', count: tabCounts.canceling },
   ]
 
-  const hasActiveFilters = query !== '' || plan !== 'ALL' || status !== 'ALL' || provider !== 'ALL' || sort !== 'attention'
+  const hasActiveFilters = query !== '' || plan !== 'ALL' || status !== 'ALL' || provider !== 'ALL' || sort !== 'attention' || tab !== 'all'
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
@@ -309,11 +298,11 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       <PageHeader
         icon={CreditCard}
         title="Suscripciones"
-        description="Cada organización con su plan, estado y próximo vencimiento. Las pestañas separan lo que necesita atención; el MRR y los ingresos están en Resumen."
+        description="Cada organización con su plan, estado y próximo vencimiento. Revisá la vigencia, consultá los datos y registrá cobros confirmados. Los indicadores de ingresos están en Resumen."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => router.refresh()}>
-              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
+            <Button variant="outline" size="sm" disabled={refreshing} onClick={() => startRefresh(() => router.refresh())}>
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} /> {refreshing ? 'Actualizando…' : 'Actualizar'}
             </Button>
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download className="h-3.5 w-3.5" /> Exportar CSV
@@ -335,13 +324,13 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
       <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
 
         {/* Card header: title + count + filters */}
-        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/40">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/60 px-5 py-5 dark:border-slate-800 dark:bg-slate-950/40">
           <div className="flex flex-col gap-3">
             {/* Title row */}
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                 <CardTitle className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                  Cartera de Suscripciones
+                  Suscripciones de empresas
                 </CardTitle>
                 <Badge
                   variant="outline"
@@ -362,15 +351,15 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
               </div>
               <div className="flex items-center gap-2">
                 <CardDescription className="hidden text-xs sm:block">
-                  Ordena por urgencia, filtra y gestiona sin salir del flujo.
+                  El estado de suscripción no confirma un cobro.
                 </CardDescription>
                 {/* View mode toggle — only visible on desktop */}
-                <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800 lg:flex">
+                <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800 xl:flex">
                   <button
                     type="button"
-                    title="Vista tabla"
+                    title="Vista tabla" aria-label="Vista tabla" aria-pressed={viewMode === 'table'}
                     onClick={() => setViewMode('table')}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-md transition-all cursor-pointer ${
                       viewMode === 'table'
                         ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-300'
                         : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -380,9 +369,9 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                   </button>
                   <button
                     type="button"
-                    title="Vista tarjetas"
+                    title="Vista tarjetas" aria-label="Vista tarjetas" aria-pressed={viewMode === 'grid'}
                     onClick={() => setViewMode('grid')}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-md transition-all cursor-pointer ${
                       viewMode === 'grid'
                         ? 'bg-white text-violet-700 shadow-sm dark:bg-slate-700 dark:text-violet-300'
                         : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -396,12 +385,14 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
             {/* Filters row */}
             <SubscriptionFilters
+              hasActiveFilters={hasActiveFilters}
               query={query}
               plan={plan}
               status={status}
               provider={provider}
               sort={sort}
               planOptions={planOptions}
+              planLabels={planLabels}
               statusOptions={statusOptions}
               providerOptions={providerOptions}
               filteredCount={filtered.length}
@@ -421,12 +412,12 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
             {/* Tab list */}
             <div className="overflow-x-auto border-b border-slate-100 bg-white px-1 dark:border-slate-800 dark:bg-slate-900">
-              <TabsList className="h-10 gap-0 rounded-none bg-transparent p-0">
+              <TabsList className="h-auto min-w-max gap-1 rounded-none bg-transparent p-2">
                 {TABS.map(({ value, label, count, alertColor }) => (
                   <TabsTrigger
                     key={value}
                     value={value}
-                    className="relative h-10 rounded-none border-b-2 border-transparent px-3.5 text-xs font-semibold text-slate-500 transition-all data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:text-violet-700 dark:text-slate-400 dark:data-[state=active]:border-violet-400 dark:data-[state=active]:text-violet-300 cursor-pointer"
+                    className="relative min-h-11 rounded-xl border-b-2 border-transparent px-3.5 text-xs font-semibold text-slate-500 transition-all data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:text-violet-700 dark:text-slate-400 dark:data-[state=active]:border-violet-400 dark:data-[state=active]:text-violet-300 cursor-pointer"
                   >
                     {label}
                     {count > 0 && (
@@ -480,7 +471,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                         />
                       ))
                     ) : (
-                      <div className="col-span-3 rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+                      <div className="col-span-full rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
                         <p className="text-sm font-semibold text-slate-400">
                           No hay suscripciones que coincidan con los filtros.
                         </p>
@@ -500,7 +491,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                       />
                     ))
                   ) : (
-                    <div className="col-span-2 rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
+                    <div className="col-span-full rounded-xl border border-dashed border-slate-200 p-10 text-center dark:border-slate-800">
                       <p className="text-sm font-semibold text-slate-400">
                         No hay suscripciones que coincidan con los filtros.
                       </p>
@@ -530,6 +521,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
 
       {/* ── Detail dialog ─────────────────────────────────────────── */}
       <SubscriptionDetailDialog
+        key={selected?.id ?? 'closed'}
         subscription={selected}
         editForm={editForm}
         isSaving={isSaving}

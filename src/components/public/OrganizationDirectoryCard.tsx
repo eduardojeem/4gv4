@@ -158,15 +158,15 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
 
         {/* Ubicación, Dirección y Botón de Mapa */}
         {(normalizedCity || organization.address) && (
-          <div className="mt-1 flex flex-col gap-2 rounded-lg border border-border/50 bg-muted/30 p-2 text-[11px] text-muted-foreground sm:mt-1.5">
-            <div className="flex min-w-0 items-start gap-1.5">
+          <div className="mt-1 flex items-center justify-between gap-1.5 rounded-lg border border-border/50 bg-muted/30 p-1.5 sm:p-2 text-[11px] text-muted-foreground sm:mt-1.5">
+            <div className="flex min-w-0 items-start gap-1.5 flex-1">
               <MapPin className="mt-0.5 h-3 w-3 text-primary shrink-0" aria-hidden="true" />
               <div className="min-w-0 text-[11px] leading-tight">
                 {normalizedCity && (
-                  <span className="block line-clamp-2 text-xs font-semibold text-foreground">{normalizedCity.display}</span>
+                  <span className="block truncate text-xs font-semibold text-foreground">{normalizedCity.display}</span>
                 )}
                 {organization.address && (
-                  <span className="mt-0.5 line-clamp-2 break-words text-muted-foreground" title={organization.address}>{organization.address}</span>
+                  <span className="mt-0.5 line-clamp-1 break-words text-muted-foreground text-[10px] sm:text-[11px]" title={organization.address}>{organization.address}</span>
                 )}
               </div>
             </div>
@@ -189,7 +189,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                 }}
                 title="Ver ubicación en Google Maps"
                 aria-label={`Ver mapa de ${organization.name}`}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs"
+                className="inline-flex min-h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs"
               >
                 <Navigation className="h-2.5 w-2.5" />
                 <span>Mapa</span>

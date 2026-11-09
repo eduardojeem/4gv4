@@ -42,10 +42,10 @@ describe('global payment receipt rows', () => {
   })
 
   it('prints the transfer and card proof that the cashier recorded', () => {
-    const transfer = buildGlobalPaymentDetailRows({ ...base, paymentMethod: 'transfer', bankName: 'Ueno Bank', referenceNumber: '998' })
+    const transfer = buildGlobalPaymentDetailRows({ ...base, paymentMethod: 'transfer', bankName: 'Banco Itaú', referenceNumber: '998' })
     expect(transfer.slice(1)).toEqual([
       { label: 'Método de Pago', value: 'Transferencia' },
-      { label: 'Banco', value: 'Ueno Bank' },
+      { label: 'Banco', value: 'Banco Itaú' },
       { label: 'Comprobante N°', value: '998' },
     ])
 

@@ -1,126 +1,20 @@
 'use client'
-
 import { RotateCcw, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SortValue } from './types'
-
-type Props = {
-  query: string
-  plan: string
-  status: string
-  provider: string
-  sort: SortValue
-  planOptions: string[]
-  statusOptions: string[]
-  providerOptions: string[]
-  filteredCount: number
-  totalCount: number
-  onQueryChange: (value: string) => void
-  onPlanChange: (value: string) => void
-  onStatusChange: (value: string) => void
-  onProviderChange: (value: string) => void
-  onSortChange: (value: SortValue) => void
-  onClear: () => void
-}
-
-export function SubscriptionFilters({
-  query,
-  plan,
-  status,
-  provider,
-  sort,
-  planOptions,
-  statusOptions,
-  providerOptions,
-  onQueryChange,
-  onPlanChange,
-  onStatusChange,
-  onProviderChange,
-  onSortChange,
-  onClear,
-}: Props) {
-  const hasActiveFilters =
-    query !== '' || plan !== 'ALL' || status !== 'ALL' || provider !== 'ALL' || sort !== 'attention'
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Search */}
-      <div className="relative min-w-[180px] flex-1">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-        <Input
-          className="h-8 pl-8 text-xs"
-          placeholder="Buscar tenant, owner, ID…"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-        />
-      </div>
-
-      {/* Plan */}
-      <Select value={plan} onValueChange={onPlanChange}>
-        <SelectTrigger className="h-8 w-[110px] text-xs">
-          <SelectValue placeholder="Plan" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="ALL">Todos los planes</SelectItem>
-          {planOptions.map((opt) => (
-            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Status */}
-      <Select value={status} onValueChange={onStatusChange}>
-        <SelectTrigger className="h-8 w-[120px] text-xs">
-          <SelectValue placeholder="Estado" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="ALL">Todos los estados</SelectItem>
-          {statusOptions.map((opt) => (
-            <SelectItem key={opt} value={opt}>{opt.replace(/_/g, ' ')}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Provider */}
-      <Select value={provider} onValueChange={onProviderChange}>
-        <SelectTrigger className="h-8 w-[110px] text-xs">
-          <SelectValue placeholder="Proveedor" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="ALL">Todos</SelectItem>
-          {providerOptions.map((opt) => (
-            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Sort */}
-      <Select value={sort} onValueChange={(v) => onSortChange(v as SortValue)}>
-        <SelectTrigger className="h-8 w-[120px] text-xs">
-          <SelectValue placeholder="Ordenar" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="attention">Prioridad</SelectItem>
-          <SelectItem value="renewal">Renovación</SelectItem>
-          <SelectItem value="trial">Trial</SelectItem>
-          <SelectItem value="plan">Plan</SelectItem>
-          <SelectItem value="name">Nombre A-Z</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* Clear */}
-      <Button
-        variant="ghost"
-        size="icon"
-        title="Limpiar filtros"
-        onClick={onClear}
-        disabled={!hasActiveFilters}
-        className="h-8 w-8 shrink-0 cursor-pointer"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  )
+import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_PROVIDER_LABELS } from './subscription-edit'
+type Props={hasActiveFilters?:boolean;query:string;plan:string;status:string;provider:string;sort:SortValue;planOptions:string[];statusOptions:string[];providerOptions:string[];planLabels?:Record<string,string>;filteredCount:number;totalCount:number;onQueryChange(value:string):void;onPlanChange(value:string):void;onStatusChange(value:string):void;onProviderChange(value:string):void;onSortChange(value:SortValue):void;onClear():void}
+export function SubscriptionFilters(props:Props){
+ const {query,plan,status,provider,sort,planOptions,statusOptions,providerOptions,planLabels={},onQueryChange,onPlanChange,onStatusChange,onProviderChange,onSortChange,onClear}=props
+ const active=props.hasActiveFilters ?? Boolean(query||plan!=='ALL'||status!=='ALL'||provider!=='ALL'||sort!=='attention')
+ const selectClass='h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-normal'
+ return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_1fr_1fr_1fr_1fr_auto]">
+  <label className="space-y-2 text-xs font-semibold text-foreground">Buscar empresa<div className="relative"><Search aria-hidden className="absolute left-3 top-3.5 size-4 text-muted-foreground"/><Input className="h-11 rounded-xl pl-10 text-sm font-normal" placeholder="Buscar tenant, owner, ID…" value={query} onChange={event=>onQueryChange(event.target.value)}/></div></label>
+  <label className="space-y-2 text-xs font-semibold">Plan<select className={selectClass} value={plan} onChange={event=>onPlanChange(event.target.value)}><option value="ALL">Todos los planes</option>{planOptions.map(value=><option key={value} value={value}>{planLabels[value]||value}</option>)}</select></label>
+  <label className="space-y-2 text-xs font-semibold">Estado<select className={selectClass} value={status} onChange={event=>onStatusChange(event.target.value)}><option value="ALL">Todos los estados</option>{statusOptions.map(value=><option key={value} value={value}>{SUBSCRIPTION_STATUS_LABELS[value]||value}</option>)}</select></label>
+  <label className="space-y-2 text-xs font-semibold">Medio de gestión<select className={selectClass} value={provider} onChange={event=>onProviderChange(event.target.value)}><option value="ALL">Todos los medios</option>{providerOptions.map(value=><option key={value} value={value}>{SUBSCRIPTION_PROVIDER_LABELS[value]||value}</option>)}</select></label>
+  <label className="space-y-2 text-xs font-semibold">Ordenar<select className={selectClass} value={sort} onChange={event=>onSortChange(event.target.value as SortValue)}><option value="attention">Requiere atención</option><option value="renewal">Próximo vencimiento</option><option value="trial">Fin de prueba</option><option value="plan">Plan</option><option value="name">Nombre: A a Z</option></select></label>
+  <Button variant="outline" className="min-h-11 self-end rounded-xl" onClick={onClear} disabled={!active} aria-label="Restablecer búsqueda y filtros" title="Restablecer búsqueda y filtros"><RotateCcw aria-hidden className="size-4"/></Button>
+ </div>
 }

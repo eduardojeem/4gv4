@@ -59,8 +59,9 @@ export async function publicSlotsFor(
     if (professionalId && !resources.length) return null
     const range = dayRangeUtc(date, config.timeZone)
     const busy = await busyIntervals(admin, organization.id, range.start, range.end, excludeAppointmentId, true)
+    const now = Date.now()
     const quotedSlots = quotedSlotsFor({ date, timeZone: config.timeZone, openingHours: config.settings.opening_hours,
-      slotMinutes: config.settings.slot_minutes, now: Date.now(), minNoticeMinutes: config.settings.min_notice_minutes,
+      slotMinutes: config.settings.slot_minutes, now, minNoticeMinutes: config.settings.min_notice_minutes,
       professionals: resources, busy })
     const byStart = new Map<string, Slot>()
     for (const quote of quotedSlots) {
@@ -68,7 +69,12 @@ export async function publicSlotsFor(
       if (existing) existing.professionalIds.push(quote.professionalId)
       else byStart.set(quote.startsAt, { startsAt: quote.startsAt, endsAt: quote.endsAt, professionalIds: [quote.professionalId] })
     }
-    return { service, slots: [...byStart.values()], quotedSlots }
+    const freeStarts = new Set(byStart.keys())
+    // Expose only candidate times. With any professional, a start stays free if at least one can attend.
+    const unavailableSlots = Array.from(new Set(quotedSlotsFor({ date, timeZone: config.timeZone, openingHours: config.settings.opening_hours,
+      slotMinutes: config.settings.slot_minutes, now, minNoticeMinutes: config.settings.min_notice_minutes,
+      professionals: resources, busy: [] }).filter(slot => !freeStarts.has(slot.startsAt)).map(slot => slot.startsAt))).map(startsAt => ({ startsAt }))
+    return { service, slots: [...byStart.values()], quotedSlots, unavailableSlots }
   }
   // Solo quien hace el servicio. Sin profesionales cargados, la agenda es una sola.
   const eligible = professionalsForService(config.professionals, serviceId)

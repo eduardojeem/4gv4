@@ -15,7 +15,7 @@ describe('SaaS landing implemented capabilities', () => {
       ...workflowSteps.flatMap((item) => [item.title, item.description]),
     ].join(' ')
 
-    expect(visibleCopy).not.toMatch(/pago|cobro|efectivo|tarjeta|Stripe|Bancard|Pagopar/i)
+    expect(visibleCopy).not.toMatch(/pago|cobro|efectivo|tarjeta|Stripe|Bancard/i)
     expect(visibleCopy).not.toMatch(/\bAPI\b|integraci(?:ón|ones)/i)
   })
 

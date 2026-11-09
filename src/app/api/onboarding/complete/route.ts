@@ -15,7 +15,7 @@ import {
   normalizeOrganizationModules,
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
-import { BusinessProfileInputSchema, defaultOperatingModelFor, getSuggestedModules } from '@/lib/organization/business-profile'
+import { BusinessProfileInputSchema, defaultOperatingModelFor, getSuggestedModules, moduleDependencyProblems } from '@/lib/organization/business-profile'
 import { ServiceBusinessDetailsSchema, serviceBusinessDetailsPatch } from '@/lib/organization/service-specialties'
 import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { applyCheckoutChoices, checkoutChoicesError } from '@/lib/onboarding/checkout-choices'
@@ -59,6 +59,7 @@ const onboardingSchema = z.object({
   whatsapp: z.string().trim().max(50).optional().or(z.literal('')),
   businessType: z.string().trim().max(50).optional().or(z.literal('')),
   businessVertical: BusinessProfileInputSchema.shape.businessVertical.default('general'),
+  enabledModules: BusinessProfileInputSchema.shape.enabledModules.unwrap().optional(),
   operatingModel: BusinessProfileInputSchema.shape.operatingModel.default('retail'),
   ...ServiceBusinessDetailsSchema.shape,
   instagram: z.string().trim().max(100).optional().or(z.literal('')),
@@ -275,6 +276,11 @@ export async function POST(request: Request) {
     ...planInfo.entitledModules,
     ...planInfo.moduleTrials.map(trial => trial.module),
   ])
+  if (input.enabledModules !== undefined && !sharedState) {
+    if (input.enabledModules.some(module=>!entitled.has(module))) return NextResponse.json({error:'Tu plan no incluye una o más herramientas seleccionadas.'},{status:403})
+    const problems=moduleDependencyProblems(input.enabledModules)
+    if(problems.length)return NextResponse.json({error:problems.join(' ')},{status:400})
+  }
   const suggestedModules = getSuggestedModules(input.businessVertical, input.operatingModel)
     .filter(module => entitled.has(module))
   const selectedModulePreferences = sharedState?.data.selectedModules
@@ -289,7 +295,8 @@ export async function POST(request: Request) {
     operating_model: input.operatingModel,
     updated_at: now,
   }
-  if (applySuggestedModules) organizationUpdate.enabled_modules = selectedFromOnboarding ?? suggestedModules
+  if (input.enabledModules !== undefined && !sharedState) organizationUpdate.enabled_modules = [...new Set(input.enabledModules)]
+  else if (applySuggestedModules) organizationUpdate.enabled_modules = selectedFromOnboarding ?? suggestedModules
 
   const verticalDefaults = getWebsiteDefaultsForVertical(
     input.businessVertical,

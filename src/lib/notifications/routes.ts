@@ -14,6 +14,8 @@ export function resolveNotificationRoute(payload: {
   // Sanitizar ID: solo caracteres seguros para rutas alfanuméricas y guiones/guion bajo
   const safeId = /^[A-Za-z0-9_-]+$/.test(resourceId) ? encodeURIComponent(resourceId) : ''
 
+  if (type === 'SYSTEM_NEWS' || resourceType === 'global_announcement') return '/panel/system-news'
+
   // 1. Reparaciones
   if (type.startsWith('REPAIR_') || resourceType === 'repair') {
     return safeId ? `/panel/repairs/${safeId}` : '/panel/repairs'

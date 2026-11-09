@@ -1,21 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CreditCard, Globe, QrCode, Wallet } from 'lucide-react'
+import { AlertTriangle, CreditCard, Globe, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BankTransferPayment } from '@/components/admin/subscriptions/BankTransferPayment'
 import {
-  PagoparPaymentMethodSelector,
+  SubscriptionPaymentMethodSelector,
   type SubscriptionPaymentMethod,
-} from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
+} from '@/components/admin/subscriptions/SubscriptionPaymentMethodSelector'
 
 type SubscriptionPaymentPanelProps = {
-  paymentAvailability?: { pagopar_card: boolean; pagopar_qr: boolean; stripe: boolean; transfer: boolean }
+  paymentAvailability?: { bancard_card: boolean; stripe: boolean; transfer: boolean }
   missingFields?: string[]
   isPaidPlan: boolean
   planName: string
   planAmount: string
-  /** Cupón de descuento aplicado al monto (solo tarjeta o QR). */
+  /** Cupón de descuento aplicado al monto (solo tarjeta). */
   discountNote?: string
   stripeEnabled?: boolean
   canPayByTransfer?: boolean
@@ -24,9 +24,9 @@ type SubscriptionPaymentPanelProps = {
 type CheckoutErrorPayload = { error?: string; correlationId?: string } | null
 
 /** Las formas que redirigen a una pasarela piden RUC o CI para facturar. */
-const CHECKOUT_METHODS: SubscriptionPaymentMethod[] = ['card', 'qr', 'stripe']
+const CHECKOUT_METHODS: SubscriptionPaymentMethod[] = ['card', 'stripe']
 
-export function getPagoparCheckoutErrorMessage(
+export function getCheckoutErrorMessage(
   payload: CheckoutErrorPayload,
   requestCorrelationId: string,
 ) {
@@ -34,8 +34,8 @@ export function getPagoparCheckoutErrorMessage(
 }
 
 /**
- * Todas las formas de pagar la suscripción en un solo lugar: tarjeta y QR por
- * Pagopar, transferencia con comprobante y, solo si se habilita, Stripe.
+ * Todas las formas de pagar la suscripción en un solo lugar: tarjeta por
+ * Bancard, transferencia con comprobante y, solo si se habilita, Stripe.
  */
 export function SubscriptionPaymentPanel({
   paymentAvailability,
@@ -49,10 +49,9 @@ export function SubscriptionPaymentPanel({
 }: SubscriptionPaymentPanelProps) {
   stripeEnabled = paymentAvailability?.stripe ?? stripeEnabled
   canPayByTransfer = paymentAvailability?.transfer ?? canPayByTransfer
-  const cardEnabled = paymentAvailability?.pagopar_card ?? true
-  const qrEnabled = paymentAvailability?.pagopar_qr ?? true
+  const cardEnabled = paymentAvailability?.bancard_card ?? true
   const availableMethods: SubscriptionPaymentMethod[] = [
-    ...(cardEnabled ? ['card' as const] : []), ...(qrEnabled ? ['qr' as const] : []),
+    ...(cardEnabled ? ['card' as const] : []),
     ...(stripeEnabled ? ['stripe' as const] : []), ...(canPayByTransfer ? ['transfer' as const] : []),
   ]
   const billingIncomplete = missingFields.length > 0
@@ -74,7 +73,7 @@ export function SubscriptionPaymentPanel({
     })
   }, [canPayByTransfer])
 
-  // En el plan gratuito no hay mes que pagar: tarjeta y QR se eligen junto con
+  // En el plan gratuito no hay mes que pagar: la tarjeta se elige junto con
   // el plan nuevo en «Cambiar de plan»; la transferencia deja elegir el plan acá.
   if (!isPaidPlan) {
     if (!canPayByTransfer) return <section id="pay" className="space-y-3">{availableMethods.length === 0 && <p role="status">No hay medios de pago disponibles. Contactá con soporte para contratar tu plan.</p>}<BankTransferPayment canPay allowCreate={false} /></section>
@@ -88,7 +87,7 @@ export function SubscriptionPaymentPanel({
     )
   }
 
-  const providerName = paymentMethod === 'stripe' ? 'Stripe' : 'Pagopar'
+  const providerName = paymentMethod === 'stripe' ? 'Stripe' : 'Bancard'
   const isCheckout = effectiveMethod !== null && effectiveMethod !== 'transfer'
   const checkoutBlocked = isCheckout && billingIncomplete
 
@@ -109,21 +108,21 @@ export function SubscriptionPaymentPanel({
       const response = await fetch(
         paymentMethod === 'stripe'
           ? '/api/admin/subscriptions/payments/stripe'
-          : '/api/admin/subscriptions/payments/pagopar',
+          : '/api/admin/subscriptions/payments/bancard',
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Correlation-ID': correlationId,
           },
-          body: JSON.stringify(paymentMethod === 'stripe' ? {} : { paymentMethod }),
+          body: JSON.stringify({}),
         },
       )
       const payload = await response.json().catch(() => null) as ({ checkoutUrl?: string } & CheckoutErrorPayload) | null
 
       if (!response.ok || !payload?.checkoutUrl) {
         setStatus('error')
-        setMessage(getPagoparCheckoutErrorMessage(payload, correlationId))
+        setMessage(getCheckoutErrorMessage(payload, correlationId))
         return
       }
 
@@ -134,7 +133,7 @@ export function SubscriptionPaymentPanel({
     }
   }
 
-  const PaymentIcon = paymentMethod === 'qr' ? QrCode : paymentMethod === 'stripe' ? Globe : CreditCard
+  const PaymentIcon = paymentMethod === 'stripe' ? Globe : CreditCard
 
   return (
     <section
@@ -156,15 +155,14 @@ export function SubscriptionPaymentPanel({
         </div>
         <p className="text-sm text-muted-foreground">
           {planName} · <strong className="font-semibold text-foreground">{planAmount}</strong>/mes
-          {discountNote && (cardEnabled || qrEnabled) && <span className="block text-xs text-emerald-700 dark:text-emerald-300">{discountNote}</span>}
+          {discountNote && cardEnabled && <span className="block text-xs text-emerald-700 dark:text-emerald-300">{discountNote}</span>}
         </p>
       </div>
 
       <div className="mt-5 space-y-4">
-        <PagoparPaymentMethodSelector
+        <SubscriptionPaymentMethodSelector
           value={effectiveMethod}
           includeCard={cardEnabled}
-          includeQr={qrEnabled}
           onChange={selectMethod}
           disabled={status === 'loading'}
           disabledMethods={billingIncomplete ? CHECKOUT_METHODS : []}
@@ -172,7 +170,7 @@ export function SubscriptionPaymentPanel({
           includeTransfer={canPayByTransfer}
         />
 
-        {billingIncomplete && (cardEnabled || qrEnabled || stripeEnabled) && (
+        {billingIncomplete && (cardEnabled || stripeEnabled) && (
           <div
             role="status"
             className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
@@ -205,11 +203,9 @@ export function SubscriptionPaymentPanel({
               <PaymentIcon className="h-4 w-4" />
               {status === 'loading'
                 ? `Conectando con ${providerName}…`
-                : paymentMethod === 'qr'
-                  ? 'Pagar con QR'
-                  : paymentMethod === 'stripe'
-                    ? 'Pagar con Stripe'
-                    : 'Pagar con tarjeta'}
+                : paymentMethod === 'stripe'
+                  ? 'Pagar con Stripe'
+                  : 'Pagar con tarjeta'}
             </Button>
             <p className="text-xs text-muted-foreground">
               Te llevamos a {providerName} para completar el pago. El plan se renueva cuando el cobro se confirma.

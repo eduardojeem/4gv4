@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -34,6 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useUrlListState } from '@/hooks/useUrlListState'
 import { cn } from '@/lib/utils'
 import type { Announcement, AnnouncementStatus, AnnouncementType } from '@/lib/superadmin/communications'
 
@@ -69,7 +70,7 @@ type FormState = {
   scheduledAt: string
 }
 
-const EMPTY_FORM: FormState = { id: null, title: '', body: '', type: 'info', target: 'all', targetOrgIds: [], mode: 'now', scheduledAt: '' }
+const EMPTY_FORM: FormState = { id: null, title: '', body: '', type: 'info', target: 'all', targetOrgIds: [], mode: 'draft', scheduledAt: '' }
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return ''
@@ -119,13 +120,19 @@ export function AnnouncementsPanel({
   organizations: Array<{ id: string; name: string }>
 }) {
   const router = useRouter()
-  const [filter, setFilter] = useState<'all' | AnnouncementStatus>('all')
-  const [query, setQuery] = useState('')
+  const {state,setValue} = useUrlListState({noticeStatus:'all',noticeQuery:''})
+  const filter = state.noticeStatus
+  const query = state.noticeQuery
+  const setFilter = (value:string)=>setValue('noticeStatus',value)
+  const setQuery = (value:string)=>setValue('noticeQuery',value)
   const [form, setForm] = useState<FormState | null>(null)
   const [orgQuery, setOrgQuery] = useState('')
   const [preview, setPreview] = useState<Announcement | null>(null)
   const [confirm, setConfirm] = useState<{ kind: 'publish' | 'delete'; item: Announcement } | null>(null)
   const [pending, startTransition] = useTransition()
+  const inFlight = useRef(false)
+  const [reviewForm,setReviewForm] = useState<FormState | null>(null)
+  const [saveError,setSaveError] = useState<string | null>(null)
 
   const orgNames = useMemo(() => new Map(organizations.map((o) => [o.id, o.name])), [organizations])
   const counts = useMemo(() => ({
@@ -162,24 +169,38 @@ export function AnnouncementsPanel({
       scheduledAt: toLocalInput(a.scheduledAt),
     })
 
-  const run = (work: () => Promise<void>, success: string) =>
+  const run = (work: () => Promise<void>, success: string) => {
+    if (inFlight.current) return
+    inFlight.current = true
+    setSaveError(null)
     startTransition(async () => {
       try {
         await work()
         toast.success(success)
         setForm(null)
         setConfirm(null)
+        setReviewForm(null)
         router.refresh()
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Error inesperado')
-      }
+        const message = error instanceof Error ? error.message : 'Error inesperado'
+        setSaveError(message)
+        toast.error(message)
+      } finally { inFlight.current = false }
     })
+  }
 
-  const save = () => {
-    if (!form) return
+  const save = (draft: FormState | null = form) => {
+    const form = draft
+    if (!form || inFlight.current) return
     if (form.mode === 'schedule' && !form.scheduledAt) {
       toast.error('Elegí la fecha y hora de publicación')
       return
+    }
+    const original = announcements.find(a=>a.id===form.id)
+    const unchangedSchedule = original?.status === 'scheduled' && toLocalInput(original.scheduledAt) === form.scheduledAt
+    if (form.mode === 'schedule') {
+      const date = new Date(form.scheduledAt)
+      if (!Number.isFinite(date.getTime()) || (date.getTime() <= Date.now() && !unchangedSchedule)) { setSaveError('Elegí una fecha futura para programar el aviso.'); return }
     }
     const payload = {
       title: form.title,
@@ -188,7 +209,7 @@ export function AnnouncementsPanel({
       target: form.target,
       target_org_ids: form.target === 'specific' ? form.targetOrgIds : null,
       status: form.mode === 'now' ? 'sent' : form.mode === 'schedule' ? 'scheduled' : 'draft',
-      scheduled_at: form.mode === 'schedule' ? new Date(form.scheduledAt).toISOString() : null,
+      scheduled_at: form.mode === 'schedule' ? (unchangedSchedule ? original!.scheduledAt : new Date(form.scheduledAt).toISOString()) : null,
     }
     run(
       () => form.id ? callApi(`/api/superadmin/notifications/${form.id}`, 'PATCH', payload) : callApi('/api/superadmin/notifications', 'POST', payload),
@@ -201,16 +222,15 @@ export function AnnouncementsPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrar por estado">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado">
           {([['all', 'Todos'], ['sent', 'Publicados'], ['scheduled', 'Programados'], ['draft', 'Borradores']] as const).map(([value, label]) => (
             <button
               key={value}
               type="button"
-              role="tab"
-              aria-selected={filter === value}
+              aria-pressed={filter === value}
               onClick={() => setFilter(value)}
               className={cn(
-                'rounded-full border px-3 py-1 text-sm font-medium transition-colors',
+                'min-h-11 rounded-full border px-3 py-2 text-sm font-medium transition-colors',
                 filter === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
               )}
             >
@@ -223,7 +243,7 @@ export function AnnouncementsPanel({
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar aviso" className="pl-8" aria-label="Buscar aviso" />
           </div>
-          <Button onClick={() => setForm({ ...EMPTY_FORM })}><Plus className="h-4 w-4" /> Nuevo aviso</Button>
+          <Button onClick={() => { setSaveError(null); setForm({ ...EMPTY_FORM }) }}><Plus className="h-4 w-4" /> Nuevo aviso</Button>
         </div>
       </div>
 
@@ -274,7 +294,7 @@ export function AnnouncementsPanel({
       )}
 
       {/* Editor */}
-      <Sheet open={form !== null} onOpenChange={(open) => { if (!open) setForm(null) }}>
+      <Sheet open={form !== null} onOpenChange={(open) => { if (!open && !inFlight.current) { setForm(null); setSaveError(null); setReviewForm(null) } }}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
           {form && (
             <>
@@ -282,7 +302,7 @@ export function AnnouncementsPanel({
                 <SheetTitle>{form.id ? 'Editar aviso' : 'Nuevo aviso'}</SheetTitle>
                 <SheetDescription>Aparece en la campana de notificaciones del panel de cada tienda.</SheetDescription>
               </SheetHeader>
-              <div className="space-y-5 px-4">
+              <div className="space-y-5 px-4" inert={pending}>
                 {!form.id && (
                   <div className="space-y-1.5">
                     <p className="text-sm font-medium">Empezar desde una plantilla</p>
@@ -362,7 +382,7 @@ export function AnnouncementsPanel({
                   {form.mode === 'schedule' && (
                     <div className="space-y-1">
                       <Input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} aria-label="Fecha y hora de publicación" />
-                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Se publica cuando llega la hora, la primera vez que una tienda abre su panel.</p>
+                      <p className="flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Se publicará al ejecutar el proceso programado o al consultar avisos desde una tienda. Revisá la hora local de tu dispositivo.</p>
                     </div>
                   )}
                 </fieldset>
@@ -371,11 +391,12 @@ export function AnnouncementsPanel({
                   <AnnouncementPreview title={form.title} body={form.body} type={form.type} />
                 </div>
               </div>
+              {saveError && <p role="alert" className="px-4 text-sm text-destructive">{saveError}</p>}
               <SheetFooter className="flex-row justify-end gap-2">
-                <Button variant="outline" onClick={() => setForm(null)} disabled={pending}>Cancelar</Button>
-                <Button onClick={save} disabled={pending || !form.title.trim() || !form.body.trim() || (form.target === 'specific' && form.targetOrgIds.length === 0)}>
+                <Button variant="outline" onClick={() => { setForm(null); setSaveError(null) }} disabled={pending}>Cancelar</Button>
+                <Button onClick={() => { if(form.mode === 'now') { setSaveError(null); setReviewForm({...form,targetOrgIds:[...form.targetOrgIds]}) } else save() }} disabled={pending || !form.title.trim() || !form.body.trim() || (form.target === 'specific' && form.targetOrgIds.length === 0)}>
                   {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {form.mode === 'now' ? 'Publicar' : form.mode === 'schedule' ? 'Programar' : 'Guardar borrador'}
+                  {form.mode === 'now' ? 'Revisar publicación' : form.mode === 'schedule' ? 'Programar' : 'Guardar borrador'}
                 </Button>
               </SheetFooter>
             </>
@@ -415,7 +436,7 @@ export function AnnouncementsPanel({
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={confirm !== null} onOpenChange={(open) => { if (!open) setConfirm(null) }}>
+      <AlertDialog open={confirm !== null} onOpenChange={(open) => { if (!open && !inFlight.current) setConfirm(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirm?.kind === 'delete' ? '¿Eliminar este aviso?' : '¿Publicar ahora?'}</AlertDialogTitle>
@@ -442,6 +463,14 @@ export function AnnouncementsPanel({
               {confirm?.kind === 'delete' ? 'Eliminar' : 'Publicar'}
             </AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={reviewForm !== null} onOpenChange={open => { if (!open && !inFlight.current) setReviewForm(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Revisá antes de publicar</AlertDialogTitle><AlertDialogDescription>El aviso se mostrará de inmediato a {reviewForm ? audience(reviewForm) : ''}. Confirmá el contenido y el destino.</AlertDialogDescription></AlertDialogHeader>
+          {reviewForm && <div className="max-h-[45dvh] space-y-3 overflow-y-auto"><p className="text-sm font-semibold">Destino: {audience(reviewForm)}</p><AnnouncementPreview title={reviewForm.title} body={reviewForm.body} type={reviewForm.type}/></div>}
+          {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+          <AlertDialogFooter><AlertDialogCancel disabled={pending}>Volver a editar</AlertDialogCancel><AlertDialogAction disabled={pending} onClick={event => { event.preventDefault(); save(reviewForm) }}>{pending ? 'Publicando…' : 'Confirmar publicación'}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

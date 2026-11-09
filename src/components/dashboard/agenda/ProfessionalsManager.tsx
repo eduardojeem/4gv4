@@ -146,6 +146,7 @@ export function ProfessionalsManager({ professionals, services, rates, currency,
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-3 text-sm"><div className="rounded-xl border bg-muted/20 p-3"><span className="block text-xs text-muted-foreground">Equipo activo</span><strong>{active.length} profesionales</strong></div><div className="rounded-xl border bg-muted/20 p-3"><span className="block text-xs text-muted-foreground">Visibles para reservar</span><strong>{active.filter(person => person.online_visible !== false).length}</strong></div><div className="rounded-xl border bg-muted/20 p-3"><span className="block text-xs text-muted-foreground">Perfiles sin foto</span><strong>{active.filter(person => !person.photo_url).length}</strong></div></div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {active.length === 0 ? 'Sin profesionales, la agenda es una sola columna.' : `${active.length} ${active.length === 1 ? 'persona atiende' : 'personas atienden'}. Cada una tiene su columna en la agenda, en este orden.`}
