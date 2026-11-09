@@ -30,6 +30,11 @@ const GLOBAL = {
   language: 'es',
   maintenance_mode: false,
   allow_registration: true,
+  require_two_factor: false,
+  features: { platform_branding: { platformName: 'MiTiendaPy' }, marketplace_announcement: { enabled: true } },
+  social_links: { instagram: 'https://instagram.com/plataforma' },
+  updated_by: 'superadmin-uuid',
+  updated_at: '2026-11-01T10:00:00+00:00',
 }
 
 function tabla(nombre: string) {
@@ -193,12 +198,47 @@ describe('guardar: el alcance decide dónde se escribe', () => {
     expect(estado.escrituras).toHaveLength(0)
   })
 
-  it('la configuración global, que no manda alcance, sigue escribiendo en la plataforma', async () => {
-    // /superadmin/settings usa este mismo endpoint sin `scope`.
+  it('la configuración global ya no se escribe por acá: responde 403 y no escribe nada', async () => {
+    // /superadmin/settings guarda en /api/superadmin/settings (lista blanca, revisión y 2FA).
     const res = await guardar({ settings: { maintenanceMode: true } })
-    expect(res.status).toBe(200)
-    expect(escrituraEn('system_settings')).toHaveLength(1)
-    expect(guardadosDeOrganizacion()).toHaveLength(0)
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('USE_SUPERADMIN_SETTINGS')
+    expect(estado.escrituras).toHaveLength(0)
+  })
+
+  it('tampoco deja reemplazar `features` (marca y anuncio) desde la rama global vieja', async () => {
+    const res = await guardar({ settings: { features: {} } })
+    expect(res.status).toBe(403)
+    expect(escrituraEn('system_settings')).toHaveLength(0)
+  })
+})
+
+/**
+ * /api/settings/shared devolvía a cualquier miembro la fila global entera,
+ * con `features` (marca, anuncio) y `updated_by` (id del superadmin).
+ */
+describe('cargar: /api/settings/shared solo devuelve columnas públicas', () => {
+  const PRIVADAS = ['features', 'social_links', 'updated_by', 'updated_at', 'id']
+  const POLITICA = ['maintenance_mode', 'allow_registration', 'require_two_factor']
+
+  it('a una tienda no le llegan ni el JSON interno, ni el autor, ni la política de la plataforma', async () => {
+    estado.usuario = { id: 'u-2', role: 'admin', email: 'a@hca.com.py' }
+    estado.contexto = { id: 'org-1' }
+    estado.miembro = { organization_id: 'org-1', role: 'owner' }
+    const body = await (await GET()).json()
+    expect(body.scope).toBe('organization')
+    for (const columna of [...PRIVADAS, ...POLITICA]) expect(body.data).not.toHaveProperty(columna)
+    // Lo que sí leen sus llamadores sigue llegando.
+    expect(body.data).toMatchObject({ company_name: 'HCA Celular', currency: 'PYG', tax_rate: 10, time_zone: 'America/Asuncion', language: 'es' })
+    expect(body.data).toHaveProperty('needs_country_confirmation')
+    expect(body.data).toHaveProperty('company_logo')
+  })
+
+  it('al superadmin sin organización tampoco le llega `features` ni `updated_by`', async () => {
+    const body = await (await GET()).json()
+    expect(body.scope).toBe('platform')
+    for (const columna of PRIVADAS) expect(body.data).not.toHaveProperty(columna)
+    expect(body.data).toMatchObject({ company_name: 'Plataforma SaaS', maintenance_mode: false })
   })
 })
 
@@ -268,7 +308,7 @@ describe('guardar un campo no pisa lo demás del comercio con la fila global', (
     estado.usuario = { id: 'u-1', role: 'super_admin', email: 'sa@plataforma.com' }
     estado.contexto = null
     const res = await guardar({ settings: { countryCode: 'PY' } })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
     expect(estado.escrituras).toHaveLength(0)
   })
 

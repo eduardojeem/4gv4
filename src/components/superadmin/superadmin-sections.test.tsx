@@ -56,13 +56,99 @@ describe('SettingsCenter', () => {
   const data: PlatformSettingsData = {
     defaults: { companyName: 'MiTiendaPy', companyEmail: '', companyPhone: '', companyRuc: '', companyAddress: '', currency: 'PYG', taxRate: 10, timeZone: 'America/Asuncion' },
     storedFlags: { maintenanceMode: true, allowRegistration: true, requireEmailVerification: false, requireTwoFactor: false, autoBackup: true, smsNotifications: false, maxLoginAttempts: 5, passwordMinLength: 8, sessionTimeout: 60, retentionDays: 90 },
-    usage: { organizationsWithSettings: 2, currencies: [['PYG', 2]], timezones: [['America/Asuncion', 2]] },
-    updatedAt: null,
+    usage: {
+      totalOrganizations: 7, withoutOwnTaxRate: 5, withoutOwnCurrency: 2, withoutOwnTimezone: 3,
+      currencies: [['PYG', 5]], timezones: [['America/Asuncion', 4]],
+    },
+    updatedAt: '2026-11-01T10:00:00+00:00',
     updatedByEmail: null,
     loadErrors: [],
   }
 
+  const ok = (defaults = data.defaults) => new Response(JSON.stringify({ success: true, data: { defaults, updatedAt: '2026-11-09T10:00:00+00:00' } }))
+  const openCompanySection = () => fireEvent.click(screen.getByRole('button', { name: /Sin efecto actualmente/ }))
+  const bodyOf = (spy: { mock: { calls: unknown[][] } }, call = 0) => JSON.parse(String((spy.mock.calls[call][1] as RequestInit | undefined)?.body))
+  const saveButton = () => screen.getAllByRole('button', { name: /Guardar/ })[0]
+
   beforeEach(() => refresh.mockReset())
+
+  it('no dice que falta la 2FA: ya hay TOTP y exigencia por tienda', () => {
+    render(<SettingsCenter data={data} />)
+    expect(screen.queryByText(/Requiere activar MFA en Supabase Auth/)).not.toBeInTheDocument()
+    expect(screen.getByText(/TOTP\) ya funciona/)).toBeInTheDocument()
+  })
+
+  it('aclara que el único valor por defecto real es el IVA y cuántas tiendas lo usan', () => {
+    render(<SettingsCenter data={data} />)
+    expect(screen.getByText(/es el único valor por defecto que se usa hoy/)).toBeInTheDocument()
+    expect(screen.getByText(/\(5 de 7\)/)).toBeInTheDocument()
+    expect(screen.getByText(/2 sin moneda y 3 sin zona horaria/)).toBeInTheDocument()
+  })
+
+  it('los selects de moneda y zona horaria tienen su label', () => {
+    render(<SettingsCenter data={data} />)
+    expect(screen.getByLabelText('Moneda')).toHaveAttribute('id', 'settings-currency')
+    expect(screen.getByLabelText('Zona horaria')).toHaveAttribute('id', 'settings-timezone')
+  })
+
+  it('los datos de empresa quedan plegados en «Sin efecto actualmente»', () => {
+    render(<SettingsCenter data={data} />)
+    expect(screen.queryByLabelText('RUC')).not.toBeInTheDocument()
+    openCompanySection()
+    expect(screen.getByLabelText('RUC')).toBeInTheDocument()
+    expect(screen.getByText(/no se usan en ninguna parte/)).toBeInTheDocument()
+  })
+
+  it('no deja guardar el IVA vacío ni fuera de 0–100', () => {
+    render(<SettingsCenter data={data} />)
+    fireEvent.change(screen.getByLabelText('IVA (%)'), { target: { value: '' } })
+    expect(screen.getAllByText('El IVA no puede quedar vacío.').length).toBeGreaterThan(0)
+    expect(saveButton()).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('IVA (%)'), { target: { value: '150' } })
+    expect(screen.getAllByText('El IVA tiene que estar entre 0 y 100.').length).toBeGreaterThan(0)
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('pide confirmación antes de cambiar el IVA global y la manda al servidor', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({ ...data.defaults, taxRate: 5 }))
+    render(<SettingsCenter data={data} />)
+    fireEvent.change(screen.getByLabelText('IVA (%)'), { target: { value: '5' } })
+    fireEvent.click(saveButton())
+    expect(fetchSpy).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/Lo usan 5 de 7 tiendas/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sí, cambiar el IVA' }))
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    expect(bodyOf(fetchSpy)).toEqual({ settings: { taxRate: 5 }, revision: '2026-11-01T10:00:00+00:00', confirmTaxRateChange: true })
+    fetchSpy.mockRestore()
+  })
+
+  it('ante un conflicto conserva el borrador y ofrece recargar', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ success: false, code: 'SETTINGS_REVISION_CONFLICT', error: 'Otra persona cambió la configuración; recargá.' }),
+      { status: 409 },
+    ))
+    render(<SettingsCenter data={data} />)
+    openCompanySection()
+    fireEvent.change(screen.getByLabelText('RUC'), { target: { value: '80000000-1' } })
+    fireEvent.click(saveButton())
+    expect(await screen.findByRole('button', { name: 'Recargar' })).toBeInTheDocument()
+    expect(screen.getAllByText(/Otra persona cambió la configuración/).length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('RUC')).toHaveValue('80000000-1')
+    fireEvent.click(screen.getByRole('button', { name: 'Recargar' }))
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled())
+    fetchSpy.mockRestore()
+  })
+
+  it('con cambios muestra la barra de guardado móvil y avisa al salir', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    render(<SettingsCenter data={data} />)
+    expect(screen.queryByRole('region', { name: 'Cambios sin guardar' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('IVA (%)'), { target: { value: '5' } })
+    expect(screen.getByRole('region', { name: 'Cambios sin guardar' })).toBeInTheDocument()
+    expect(addSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function))
+    addSpy.mockRestore()
+  })
 
   it('muestra deshabilitadas las opciones que ninguna parte de la app aplica', () => {
     render(<SettingsCenter data={data} />)
@@ -71,16 +157,21 @@ describe('SettingsCenter', () => {
     expect(screen.getAllByText('No implementado').length).toBe(10)
   })
 
-  it('solo habilita Guardar cuando hay cambios y envía únicamente lo cambiado', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true })))
+  it('solo habilita Guardar con cambios, recorta espacios y manda lo cambiado con la revisión', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok())
     render(<SettingsCenter data={data} />)
-    const save = screen.getByRole('button', { name: /Guardar/ })
+    const save = saveButton()
     expect(save).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('RUC'), { target: { value: '80000000-1' } })
+    openCompanySection()
+    // Solo espacios alrededor del mismo valor: no es un cambio.
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: '  MiTiendaPy ' } })
+    expect(save).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('RUC'), { target: { value: ' 80000000-1 ' } })
     expect(within(save).getByText(/\(1\)/)).toBeInTheDocument()
     fireEvent.click(save)
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled())
-    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({ settings: { companyRuc: '80000000-1' } })
+    expect(fetchSpy.mock.calls[0][0]).toBe('/api/superadmin/settings')
+    expect(bodyOf(fetchSpy)).toEqual({ settings: { companyRuc: '80000000-1' }, revision: '2026-11-01T10:00:00+00:00' })
     fetchSpy.mockRestore()
   })
 })

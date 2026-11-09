@@ -47,11 +47,13 @@ export const SystemSettingsSchema = z.object({
     .optional()
     .default(''),
   companyRuc: z.string()
+    .trim()
     .max(50, 'El RUC no puede exceder 50 caracteres')
     .optional()
     .default(''),
 
   companyAddress: z.string()
+    .trim()
     .max(500, 'La dirección no puede exceder 500 caracteres')
     .optional()
     .default(''),
@@ -143,6 +145,50 @@ const partialSystemSettingsShape = Object.fromEntries(
 // y el servidor los persistía como si el administrador los hubiera borrado.
 export type SystemSettingsPartial = Partial<SystemSettings>
 export const SystemSettingsPartialSchema: z.ZodType<SystemSettingsPartial> = z.object(partialSystemSettingsShape)
+
+/**
+ * Claves que edita /superadmin/settings en la fila global. La escritura global
+ * acepta solo estas: antes pasaba cualquier clave del esquema completo y, por
+ * ejemplo, `features` se reemplazaba entero y borraba la marca y el anuncio del
+ * marketplace, que viven en ese mismo JSON.
+ */
+export const PLATFORM_DEFAULTS_KEYS = [
+  'companyName',
+  'companyRuc',
+  'companyEmail',
+  'companyPhone',
+  'companyAddress',
+  'currency',
+  'taxRate',
+  'timeZone',
+] as const
+
+export type PlatformDefaultsKey = (typeof PLATFORM_DEFAULTS_KEYS)[number]
+
+/**
+ * Sin `.default(...)` a propósito: en una actualización parcial un campo
+ * ausente tiene que seguir ausente, no convertirse en un valor vacío.
+ * `.strict()` rechaza cualquier clave fuera de la lista blanca.
+ */
+export const PlatformDefaultsUpdateSchema = z.object({
+  companyName: z.string().trim().min(1, 'El nombre de la empresa es obligatorio').max(100, 'El nombre no puede exceder 100 caracteres').optional(),
+  companyRuc: z.string().trim().max(50, 'El RUC no puede exceder 50 caracteres').optional(),
+  companyEmail: z.union([
+    z.string().trim().length(0),
+    z.string().trim().email('Formato de email inválido'),
+  ]).optional(),
+  companyPhone: z.string().trim().max(50, 'El telefono no puede exceder 50 caracteres').optional(),
+  companyAddress: z.string().trim().max(500, 'La dirección no puede exceder 500 caracteres').optional(),
+  currency: SupportedCurrencySchema.optional(),
+  taxRate: z.number({ error: 'El IVA tiene que ser un número' })
+    .min(0, 'El IVA no puede ser negativo')
+    .max(100, 'El IVA no puede superar 100%')
+    .finite('El IVA tiene que ser un número válido')
+    .optional(),
+  timeZone: z.string().refine(isValidTimeZone, 'Zona horaria inválida').optional(),
+}).strict()
+
+export type PlatformDefaultsUpdate = z.infer<typeof PlatformDefaultsUpdateSchema>
 
 /**
  * Esquema para mapear de DB a frontend

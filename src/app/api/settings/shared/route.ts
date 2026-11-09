@@ -6,8 +6,8 @@ import { mapSettingsToDB } from '@/lib/validations/system-settings'
 import { resolveTenantEffectiveSettings } from '@/lib/organization/tenant-effective-settings'
 import { needsCountryConfirmation } from '@/lib/regional/settings'
 
-// Columnas de `system_settings` que son política de plataforma (super_admin) y
-// no deben viajar a los tenants en el endpoint compartido.
+// Columnas de `system_settings` que son política de plataforma (super_admin).
+// Solo viajan en la respuesta de plataforma (superadmin sin organización).
 const PLATFORM_ONLY_DB_COLUMNS = [
   'maintenance_mode',
   'allow_registration',
@@ -16,6 +16,53 @@ const PLATFORM_ONLY_DB_COLUMNS = [
   'password_min_length',
   'require_two_factor',
 ] as const
+
+/**
+ * Lista blanca de lo que este endpoint devuelve. Antes viajaba la fila global
+ * entera a cualquier miembro de cualquier tienda, incluido `features` (marca,
+ * anuncio y demás JSON interno de la plataforma) y `updated_by` (el id del
+ * superadmin que la tocó). Son exactamente las columnas que leen sus llamadores:
+ * `src/hooks/use-shared-settings.ts` (mapToAppSettings),
+ * `src/components/providers/regional-settings-boundary.tsx` y, en la app,
+ * `mobile/src/lib/settings-model.ts` (fromSharedRow) y
+ * `mobile/src/lib/regional-settings-sync.ts`.
+ */
+const SHARED_SETTINGS_PUBLIC_COLUMNS = [
+  'company_name',
+  'company_email',
+  'company_phone',
+  'company_ruc',
+  'company_address',
+  'city',
+  'company_logo',
+  'currency',
+  'country_code',
+  'locale',
+  'needs_country_confirmation',
+  'tax_rate',
+  'repair_max_discount_percent',
+  'repair_labor_tax_rate',
+  'low_stock_threshold',
+  'session_timeout',
+  'theme',
+  'primary_color',
+  'date_format',
+  'time_zone',
+  'language',
+  'items_per_page',
+  'retention_days',
+  'auto_backup',
+  'email_notifications',
+  'sms_notifications',
+] as const
+
+function pickColumns(row: Record<string, unknown>, columns: readonly string[]): Record<string, unknown> {
+  const picked: Record<string, unknown> = {}
+  for (const column of columns) {
+    if (Object.prototype.hasOwnProperty.call(row, column)) picked[column] = row[column]
+  }
+  return picked
+}
 
 export async function GET() {
   const auth = await resolveRequestAuthUser()
@@ -52,7 +99,11 @@ export async function GET() {
 
   if (!organizationId) {
     if (isSuperAdmin) {
-      return NextResponse.json({ success: true, scope: 'platform', data: globalRow })
+      return NextResponse.json({
+        success: true,
+        scope: 'platform',
+        data: pickColumns(globalRow as Record<string, unknown>, [...SHARED_SETTINGS_PUBLIC_COLUMNS, ...PLATFORM_ONLY_DB_COLUMNS]),
+      })
     }
     return NextResponse.json(
       { success: false, error: 'No active organization found' },
@@ -102,20 +153,17 @@ export async function GET() {
     defaultBranch: legacyBranchFallback,
   })
 
-  // No exponer la política de seguridad de la PLATAFORMA a los tenants: estos
-  // campos son globales (los administra el super_admin) y no tienen por qué
-  // filtrarse a cada organización vía el endpoint compartido.
-  const responseRow: Record<string, unknown> = {
+  // A una tienda solo le llegan las columnas públicas: ni la política de
+  // seguridad de la plataforma ni el JSON interno (`features`, `social_links`)
+  // ni quién tocó la fila global.
+  const responseRow = pickColumns({
     ...globalRow,
     ...mapSettingsToDB(effectiveSettings),
     company_logo: organization?.logo_url ?? null,
     country_code: orgSettings?.country_code ?? null,
     locale: orgSettings?.locale ?? null,
     needs_country_confirmation: needsCountryConfirmation(orgSettings?.country_code),
-  }
-  for (const col of PLATFORM_ONLY_DB_COLUMNS) {
-    delete responseRow[col]
-  }
+  }, SHARED_SETTINGS_PUBLIC_COLUMNS)
 
   return NextResponse.json({
     success: true,
