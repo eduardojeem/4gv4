@@ -66,6 +66,10 @@ describe('resumen financiero móvil', () => {
       upcomingDue: [],
     };
     expect(isEmptyFinanceSummary(empty)).toBe(true);
+    // El servidor siempre manda la apertura de ingresos (un objeto): no debe
+    // impedir el estado vacío de un negocio nuevo.
+    const breakdown = { merchandise: 0, services: 0, repairs: { total: 0, labor: 0, parts: 0, count: 0 }, orders: 0, refunds: 0, grossRevenue: 0 };
+    expect(isEmptyFinanceSummary({ ...empty, accrued: { ...empty.accrued, revenueBreakdown: breakdown } })).toBe(true);
     expect(isEmptyFinanceSummary({ ...empty, complete: false })).toBe(false);
     expect(
       isEmptyFinanceSummary({

@@ -127,6 +127,37 @@ describe('FinancesSystem', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
+  it('shows the empty state for a new business even with the revenue breakdown present', () => {
+    mockUseAdminFinances.mockReturnValue({
+      summary: {
+        ...summary,
+        complete: true,
+        accrued: {
+          revenue: 0,
+          directCosts: 0,
+          grossProfit: 0,
+          operatingExpenses: 0,
+          payrollCost: 0,
+          netProfit: 0,
+          revenueBreakdown: { merchandise: 0, services: 0, repairs: { total: 0, labor: 0, parts: 0, count: 0 }, orders: 0, refunds: 0, grossRevenue: 0 },
+        },
+        cash: { collected: 0, paid: 0, netCashFlow: 0 },
+        coverageWarnings: [],
+        upcomingDue: [],
+        overdue: [],
+      },
+      filters: summary.filters,
+      setFilters: vi.fn(),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    render(<FinancesSystem />)
+
+    expect(screen.getByText('Todavía no hay movimientos financieros')).toBeInTheDocument()
+  })
+
   it('keeps a cost-only period out of the empty state', () => {
     mockUseAdminFinances.mockReturnValue({
       summary: {

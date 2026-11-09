@@ -46,7 +46,9 @@ export function isEmptyFinanceSummary(data: FinanceSummaryData) {
   return (
     data.complete !== false &&
     !data.coverageWarnings?.length &&
-    Object.values(data.accrued).every((value) => value === 0) &&
+    // Solo los importes: la apertura de ingresos es un objeto y nunca es 0.
+    (['revenue', 'directCosts', 'grossProfit', 'operatingExpenses', 'payrollCost', 'netProfit'] as const)
+      .every((key) => data.accrued[key] === 0 || data.accrued[key] === null) &&
     Object.values(data.cash).every((value) => value === 0) &&
     !data.overdue.length &&
     !data.upcomingDue.length
