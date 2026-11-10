@@ -26,3 +26,27 @@ describe('versioned technician earnings', () => {
     expect(result.earnings.repairsCount).toBe(0)
   })
 })
+
+describe('pagos a técnicos alineados con la nómina', () => {
+  const versions = [{ effective_from: '2026-10-01', config: { ...DEFAULT_COMPENSATION, commission_rate: 10, commission_base: 'final' as const, fixed_per_repair: 5000 } }]
+  const period = ['2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z'] as const
+
+  it('una reparación entregada sin pagar todavía no comisiona', async () => {
+    const { computeVersionedEarnings } = await import('@/lib/technician/versioned-earnings')
+    const result = computeVersionedEarnings(versions, [{ status: 'entregado', payment_status: 'pendiente', delivered_at: '2026-10-05T12:00:00Z', final_cost: 100_000 }], ...period, 'UTC')
+    expect(result.earnings.repairsCount).toBe(0)
+    expect(result.earnings.commission).toBe(0)
+  })
+
+  it('una garantía sin cargo no paga monto fijo', async () => {
+    const { computeVersionedEarnings } = await import('@/lib/technician/versioned-earnings')
+    const result = computeVersionedEarnings(versions, [{ status: 'entregado', payment_status: 'pagado', delivered_at: '2026-10-05T12:00:00Z', final_cost: 0 }], ...period, 'UTC')
+    expect(result.earnings.fixed).toBe(0)
+  })
+
+  it('una pagada con precio comisiona porcentaje y fijo', async () => {
+    const { computeVersionedEarnings } = await import('@/lib/technician/versioned-earnings')
+    const result = computeVersionedEarnings(versions, [{ status: 'entregado', payment_status: 'pagado', delivered_at: '2026-10-05T12:00:00Z', final_cost: 100_000 }], ...period, 'UTC')
+    expect(result.earnings).toMatchObject({ commission: 10_000, fixed: 5000, repairsCount: 1 })
+  })
+})

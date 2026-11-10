@@ -1,5 +1,6 @@
 'use client'
 
+import { ProfessionalEmployeeLink } from './ProfessionalEmployeeLink'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Check, Loader2 } from 'lucide-react'
@@ -187,6 +188,8 @@ function ProfileForm({
         {serviceSpecialties.length > 0 && <div className="flex flex-wrap gap-2">{serviceSpecialties.map((item) => <Button key={item} type="button" variant="outline" size="sm" className="min-h-10" disabled={saving} aria-label={`Usar especialidad ${SERVICE_SPECIALTY_LABELS[item]}`} onClick={() => setSpecialty(SERVICE_SPECIALTY_LABELS[item])}>{SERVICE_SPECIALTY_LABELS[item]}</Button>)}</div>}
         <p className="text-xs text-muted-foreground">Se muestra en tu tienda debajo del nombre.</p>
       </div>
+
+      <ProfessionalEmployeeLink professionalId={professional.id} />
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Organización interna: color en la agenda</legend>
