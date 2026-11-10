@@ -676,7 +676,13 @@ export function useCashRegister() {
     }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Add cash out
-    const addCashOut = useCallback(async (amount: number, reason: string, userId?: string) => {
+    const addCashOut = useCallback(async (
+        amount: number,
+        reason: string,
+        userId?: string,
+        // Un egreso que es un gasto: se registra en Finanzas con su categoría.
+        options?: { expenseCategoryId?: string; idempotencyKey?: string },
+    ) => {
         if (!currentSession) {
             toast.error('No hay sesión activa')
             return false
@@ -698,6 +704,9 @@ export function useCashRegister() {
                     amount,
                     reason,
                     branchId: selectedBranchId,
+                    ...(options?.expenseCategoryId
+                        ? { expenseCategoryId: options.expenseCategoryId, idempotencyKey: options.idempotencyKey }
+                        : {}),
                 }),
             })
             const payload = await response.json() as { success?: boolean; error?: string; data?: CashMovement }
@@ -710,11 +719,12 @@ export function useCashRegister() {
                 movements: [...prev.movements, payload.data as CashMovement]
             } : null)
 
-            toast.success('Salida de efectivo registrada')
+            toast.success(options?.expenseCategoryId ? 'Gasto pagado con la caja y registrado en Finanzas' : 'Salida de efectivo registrada')
             return true
         } catch (error: unknown) {
             console.error('Error adding cash out:', error)
-            toast.error('Error al registrar salida de efectivo')
+            const message = error instanceof Error ? error.message : ''
+            toast.error(message ? `Error al registrar la salida: ${message}` : 'Error al registrar salida de efectivo')
             return false
         }
     }, [currentSession, resolveActorId, selectedBranchId, supabase])

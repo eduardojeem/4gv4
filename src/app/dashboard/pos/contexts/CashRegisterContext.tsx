@@ -9,6 +9,12 @@ import { useCashRegister, type CashRegisterSession } from '@/hooks/useCashRegist
 import { calculateExpectedCashBalance } from '../lib/cash-balance'
 
 // Extended types for advanced features
+/** Un egreso que es un gasto del negocio: se registra en Finanzas con su categoría. */
+export interface CashMovementOptions {
+  expenseCategoryId?: string
+  idempotencyKey?: string
+}
+
 export interface ZClosureRecord {
   id: string
   registerId: string
@@ -108,7 +114,7 @@ interface CashRegisterContextType {
   registerState: Record<string, CashRegisterState>
 
   // Movement operations
-  addMovement: (type: CashMovement['type'], amount: number, note?: string, paymentMethod?: string) => Promise<boolean>
+  addMovement: (type: CashMovement['type'], amount: number, note?: string, options?: CashMovementOptions) => Promise<boolean>
   registerSale: (saleId: string, amount: number, paymentMethod: string) => Promise<void>
   openRegister: (initialAmount: number, note?: string, userId?: string) => Promise<boolean>
   closeRegister: (closingBalance?: number, userId?: string) => Promise<boolean>
@@ -426,7 +432,8 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   const addMovement = useCallback(async (
     type: CashMovement['type'],
     amount: number,
-    note?: string
+    note?: string,
+    options?: CashMovementOptions
   ) => {
     if (type === 'cash_in') {
       if (!checkPermission('canAddCashIn')) {
@@ -439,7 +446,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
         toast.error('Sin permisos para registrar salidas')
         return false
       }
-      return await hookAddCashOut(amount, note || '')
+      return await hookAddCashOut(amount, note || '', undefined, options)
     }
     // Tipos 'sale', 'opening', 'closing' se manejan por sus propios métodos
     return false

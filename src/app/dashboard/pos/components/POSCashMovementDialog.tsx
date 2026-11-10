@@ -30,7 +30,12 @@ import { cn } from '@/lib/utils'
 interface POSCashMovementDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAddMovement: (type: 'cash_in' | 'cash_out', amount: number, note?: string) => Promise<boolean>
+  onAddMovement: (
+    type: 'cash_in' | 'cash_out',
+    amount: number,
+    note?: string,
+    options?: { expenseCategoryId?: string; idempotencyKey?: string },
+  ) => Promise<boolean>
   initialType?: 'in' | 'out'
   currentBalance?: number
 }
@@ -40,7 +45,24 @@ interface ReasonOption {
   label: string
   icon: string
   template?: string
+  /**
+   * Categoría de gasto que se propone en Finanzas. `null`: no es un gasto
+   * (retiro del dueño, adelanto de sueldo que se descuenta en Nómina).
+   */
+  expenseCode?: string | null
 }
+
+interface ExpenseCategory {
+  id: string
+  code: string | null
+  name: string
+  type: string
+}
+
+const newMovementKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 // Sin «Cobro de crédito» ni «Cobro de servicio / taller»: un ingreso suelto
 // sumaba a la caja pero dejaba la cuota o la reparación impaga (y se podía
@@ -54,15 +76,15 @@ const IN_REASONS: ReasonOption[] = [
 ]
 
 const OUT_REASONS: ReasonOption[] = [
-  { id: 'pago_proveedor', label: 'Pago a Proveedor', icon: '🚚', template: 'Pago a proveedor: ' },
-  { id: 'compra_repuestos', label: 'Compra de Insumos / Repuestos', icon: '🔧', template: 'Compra de repuestos / insumos: ' },
-  { id: 'pago_servicios', label: 'Servicios (Luz / Internet / Agua)', icon: '💡', template: 'Pago de servicio: ' },
-  { id: 'adelanto_sueldo', label: 'Adelanto de Sueldo / Vale', icon: '👤', template: 'Adelanto de sueldo a: ' },
-  { id: 'retiro_dueno', label: 'Retiro de Efectivo / Propietario', icon: '💵', template: 'Retiro de caja por propietario' },
-  { id: 'gastos_limpieza', label: 'Limpieza y Oficina', icon: '🧹', template: 'Gastos de limpieza y artículos de oficina' },
-  { id: 'refrigerio', label: 'Almuerzo / Refrigerio', icon: '🍕', template: 'Refrigerio de personal' },
-  { id: 'flete_delivery', label: 'Flete / Delivery', icon: '🛵', template: 'Pago de flete / envíos' },
-  { id: 'otro_egreso', label: 'Otro Egreso', icon: '🏷️', template: '' }
+  { id: 'pago_proveedor', label: 'Pago a Proveedor', icon: '🚚', template: 'Pago a proveedor: ', expenseCode: 'suppliers_purchases' },
+  { id: 'compra_repuestos', label: 'Compra de Insumos / Repuestos', icon: '🔧', template: 'Compra de repuestos / insumos: ', expenseCode: 'inventory_purchases' },
+  { id: 'pago_servicios', label: 'Servicios (Luz / Internet / Agua)', icon: '💡', template: 'Pago de servicio: ', expenseCode: 'electricity' },
+  { id: 'adelanto_sueldo', label: 'Adelanto de Sueldo / Vale', icon: '👤', template: 'Adelanto de sueldo a: ', expenseCode: null },
+  { id: 'retiro_dueno', label: 'Retiro de Efectivo / Propietario', icon: '💵', template: 'Retiro de caja por propietario', expenseCode: null },
+  { id: 'gastos_limpieza', label: 'Limpieza y Oficina', icon: '🧹', template: 'Gastos de limpieza y artículos de oficina', expenseCode: 'maintenance' },
+  { id: 'refrigerio', label: 'Almuerzo / Refrigerio', icon: '🍕', template: 'Refrigerio de personal', expenseCode: 'other' },
+  { id: 'flete_delivery', label: 'Flete / Delivery', icon: '🛵', template: 'Pago de flete / envíos', expenseCode: 'transport' },
+  { id: 'otro_egreso', label: 'Otro Egreso', icon: '🏷️', template: '', expenseCode: 'other' }
 ]
 
 const QUICK_TAGS = ['Factura', 'Recibo', 'Sin Comprobante', 'Urgente', 'Reembolso']
@@ -82,6 +104,10 @@ export function POSCashMovementDialog({
   const [isSaving, setIsSaving] = useState(false)
   const saving = useRef(false)
   const viewportStyle = useMobileDialogViewport(open)
+  // Egreso que es un gasto: categoría de Finanzas ('' = no es un gasto).
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [expenseCategoryId, setExpenseCategoryId] = useState('')
+  const [movementKey, setMovementKey] = useState(newMovementKey)
 
   useEffect(() => {
     if (open) {
@@ -90,8 +116,22 @@ export function POSCashMovementDialog({
       setSelectedReason('')
       setNote('')
       setIsSaving(false)
+      setExpenseCategoryId('')
+      setMovementKey(newMovementKey())
     }
   }, [open, initialType])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch('/api/pos/cash-movements')
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { data?: { categories?: ExpenseCategory[] } } | null) => {
+        if (!cancelled) setCategories(payload?.data?.categories ?? [])
+      })
+      .catch(() => { if (!cancelled) setCategories([]) })
+    return () => { cancelled = true }
+  }, [open])
 
   const parsedAmount = parseFloat(amount) || 0
   const isIncome = movementType === 'in'
@@ -114,6 +154,12 @@ export function POSCashMovementDialog({
     setSelectedReason(reason.label)
     if (reason.template && !note.trim()) {
       setNote(reason.template)
+    }
+    if (!isIncome && reason.expenseCode !== undefined) {
+      const match = reason.expenseCode
+        ? categories.find((category) => category.code === reason.expenseCode)
+        : undefined
+      setExpenseCategoryId(match?.id ?? '')
     }
   }
 
@@ -147,10 +193,12 @@ export function POSCashMovementDialog({
     saving.current = true
     setIsSaving(true)
     try {
+      const asExpense = !isIncome && Boolean(expenseCategoryId)
       const success = await onAddMovement(
         isIncome ? 'cash_in' : 'cash_out',
         parsedAmount,
-        fullNote
+        fullNote,
+        asExpense ? { expenseCategoryId, idempotencyKey: movementKey } : undefined,
       )
 
       if (success) {
@@ -220,7 +268,7 @@ export function POSCashMovementDialog({
           <div className="grid grid-cols-2 gap-2 bg-muted/40 p-1 rounded-xl border border-border/50">
             <button
               type="button"
-              onClick={() => { setMovementType('in'); setSelectedReason(''); setNote(''); }}
+              onClick={() => { setMovementType('in'); setSelectedReason(''); setNote(''); setExpenseCategoryId(''); }}
               className={cn(
                 "flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all",
                 isIncome
@@ -233,7 +281,7 @@ export function POSCashMovementDialog({
             </button>
             <button
               type="button"
-              onClick={() => { setMovementType('out'); setSelectedReason(''); setNote(''); }}
+              onClick={() => { setMovementType('out'); setSelectedReason(''); setNote(''); setExpenseCategoryId(''); }}
               className={cn(
                 "flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all",
                 !isIncome
@@ -382,6 +430,31 @@ export function POSCashMovementDialog({
               required
             />
           </div>
+
+          {/* Egreso como gasto del negocio: así Finanzas lo cuenta. */}
+          {!isIncome && categories.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="mov-expense-category" className="text-xs font-semibold text-foreground">
+                ¿Es un gasto del negocio?
+              </Label>
+              <select
+                id="mov-expense-category"
+                value={expenseCategoryId}
+                onChange={(e) => setExpenseCategoryId(e.target.value)}
+                className="h-11 w-full rounded-xl border border-border/80 bg-background px-3 text-sm"
+              >
+                <option value="">No es un gasto (retiro, adelanto, depósito al banco)</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                {expenseCategoryId
+                  ? 'Se registra en Finanzas como gasto pagado con la plata de la caja.'
+                  : 'Solo sale de la caja: no resta de la ganancia.'}
+              </p>
+            </div>
+          )}
 
           {/* Resumen del Balance de Caja */}
           <div className="bg-muted/30 p-3 rounded-xl border border-border/50 flex items-center justify-between text-xs">

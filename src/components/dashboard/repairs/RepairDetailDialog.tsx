@@ -79,6 +79,7 @@ import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
 import { PartPurchaseDialog } from './PartPurchaseDialog'
 import { partArrivedMessage } from '@/lib/repairs/part-purchase'
 import { branchHeaders } from '@/lib/branches/client'
+import { CancelledDepositPanel, hasPendingCancelledDeposit } from './CancelledDepositPanel'
 import { useOptionalBranch } from '@/contexts/branch-context'
 import { RepairCostSummary } from './RepairCostSummary'
 import { RepairCostsEditorDialog } from './RepairCostsEditorDialog'
@@ -1075,6 +1076,18 @@ export function RepairDetailDialog({
             </div>
           </div>
         </DialogHeader>
+
+        {/* Cancelada con seña: devolverla, pasarla a saldo a favor o retenerla. */}
+        {hasPendingCancelledDeposit(activeRepair) ? (
+          <CancelledDepositPanel
+            repair={activeRepair}
+            branchId={selectedBranchId}
+            onSettled={(updated) => {
+              setLocalRepair(updated)
+              void onCostSaved?.()
+            }}
+          />
+        ) : null}
 
         {/* Repuesto comprado que todavía no llegó. */}
         {activeRepair.waitingPart && activeRepair.status !== 'entregado' && activeRepair.status !== 'cancelado' ? (

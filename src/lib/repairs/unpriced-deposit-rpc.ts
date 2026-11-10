@@ -19,7 +19,8 @@ export type UnpricedRepairDepositInput = {
   reference?: string | null
   note?: string | null
   idempotencyKey: string
-  cashSessionId: string
+  /** Sin caja abierta solo se acepta una transferencia. */
+  cashSessionId: string | null
 }
 
 export type UnpricedRepairDepositResult = {
