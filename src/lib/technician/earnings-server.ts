@@ -8,6 +8,7 @@ import {
 
 type RepairRow = {
   status?: string | null
+  payment_status?: string | null
   labor_cost?: number | null
   final_cost?: number | null
   estimated_cost?: number | null
@@ -110,7 +111,7 @@ export async function computeTechnicianEarnings(
 
   let query = supabase
     .from('repairs')
-    .select('status, labor_cost, final_cost, estimated_cost, completed_at, delivered_at')
+    .select('status, payment_status, labor_cost, final_cost, estimated_cost, completed_at, delivered_at')
     .eq('organization_id', organizationId)
     .eq('technician_id', technicianId)
     .eq('is_deleted', false)
