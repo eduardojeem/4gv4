@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest'
  * retenida, transferencia sin caja). Estos tests cuidan que no se pierdan
  * las piezas que hacen falta para esos casos.
  */
-const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261110120000_cash_finance_block2.sql'), 'utf8')
+const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261110120000_cash_finance_block2.sql'), 'utf8').replace(/
+/g, '
+')
 
 describe('migración del bloque 2 de caja y Finanzas', () => {
   it('la anulación devuelve reparaciones, saldo a favor, puntos y turno', () => {
