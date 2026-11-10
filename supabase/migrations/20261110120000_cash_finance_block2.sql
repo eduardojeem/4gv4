@@ -701,71 +701,60 @@ begin
   end if;
 
   -- 8a. close_repair_and_register_payment: la transferencia no exige caja.
-  select p.oid, pg_get_functiondef(p.oid) as def into fn
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.proname = 'close_repair_and_register_payment';
-  if fn.def is null then raise exception 'REPAIR_PAYMENT_FUNCTION_MISSING'; end if;
-  source := fn.def;
-  if position('p_payment_method not in (''credit'', ''transfer'')' in source) = 0 then
-  needle := '  if resolved_amount > 0 and p_payment_method <> ''credit'' then' || E'\n' || '    if p_cash_session_id is null or not exists (';
-  if position(needle in source) = 0 then raise exception 'REPAIR_PAYMENT_CASH_CONTRACT_CHANGED'; end if;
-  source := replace(source, needle,
-    '  if p_payment_method = ''transfer'' and p_cash_session_id is not null and not exists (' || E'\n' ||
-    '    select 1 from public.cash_closures closure where closure.id = p_cash_session_id' || E'\n' ||
-    '      and closure.organization_id = p_organization_id and closure.branch_id = p_branch_id and closure.date is null' || E'\n' ||
-    '  ) then' || E'\n' ||
-    '    p_cash_session_id := null;' || E'\n' ||
-    '  end if;' || E'\n' ||
-    '  if resolved_amount > 0 and p_payment_method not in (''credit'', ''transfer'') then' || E'\n' ||
-    '    if p_cash_session_id is null or not exists (');
-  needle := '    if p_payment_method <> ''credit'' then' || E'\n' || '      insert into public.cash_movements (';
-  if position(needle in source) = 0 then raise exception 'REPAIR_PAYMENT_MOVEMENT_CONTRACT_CHANGED'; end if;
-  source := replace(source, needle,
-    '    if p_payment_method <> ''credit'' and p_cash_session_id is not null then' || E'\n' || '      insert into public.cash_movements (');
-  execute source;
-  end if;
+  -- Puede haber más de una versión (sobrecargas) y el texto puede variar en
+  -- espacios: se buscan con patrones flexibles y se parchea cada una que
+  -- coincida. Si una no coincide, se saltea con un aviso: es una mejora menor
+  -- y no debe cancelar el resto de la migración.
+  for fn in
+    select p.oid, pg_get_functiondef(p.oid) as def, pg_get_function_identity_arguments(p.oid) as args
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'close_repair_and_register_payment'
+  loop
+    source := fn.def;
+    continue when position('p_payment_method not in (''credit'', ''transfer'')' in source) > 0;
+    needle := 'if\s+resolved_amount\s*>\s*0\s+and\s+p_payment_method\s*<>\s*''credit''\s+then(\s+)if\s+p_cash_session_id\s+is\s+null\s+or\s+not\s+exists\s*\(';
+    replacement := 'if\s+p_payment_method\s*<>\s*''credit''\s+then(\s+)insert\s+into\s+public\.cash_movements\s*\(';
+    if source !~ needle or source !~ replacement then
+      raise notice 'REPAIR_PAYMENT_CASH_CONTRACT_CHANGED: se saltea close_repair_and_register_payment(%)', fn.args;
+      continue;
+    end if;
+    source := regexp_replace(source, needle,
+      'if p_payment_method = ''transfer'' and p_cash_session_id is not null and not exists (' ||
+      ' select 1 from public.cash_closures closure where closure.id = p_cash_session_id' ||
+      ' and closure.organization_id = p_organization_id and closure.branch_id = p_branch_id and closure.date is null' ||
+      ' ) then p_cash_session_id := null; end if;' || E'\n' ||
+      '  if resolved_amount > 0 and p_payment_method not in (''credit'', ''transfer'') then\1if p_cash_session_id is null or not exists (');
+    source := regexp_replace(source, replacement,
+      'if p_payment_method <> ''credit'' and p_cash_session_id is not null then\1insert into public.cash_movements (');
+    execute source;
+  end loop;
 
   -- 8b. register_unpriced_repair_deposit: igual para la seña sin precio.
-  select p.oid, pg_get_functiondef(p.oid) as def into fn
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.proname = 'register_unpriced_repair_deposit';
-  if fn.def is null then raise exception 'REPAIR_DEPOSIT_FUNCTION_MISSING'; end if;
-  source := fn.def;
-  if position('if p_payment_method = ''transfer'' then p_cash_session_id := null;' in source) = 0 then
-  needle := '  if p_cash_session_id is null or not exists (' || E'\n' ||
-    '    select 1' || E'\n' ||
-    '    from public.cash_closures closure' || E'\n' ||
-    '    where closure.id = p_cash_session_id' || E'\n' ||
-    '      and closure.organization_id = p_organization_id' || E'\n' ||
-    '      and closure.branch_id = p_branch_id' || E'\n' ||
-    '      and closure.date is null' || E'\n' ||
-    '  ) then' || E'\n' ||
-    '    raise exception ''REPAIR_CASH_REGISTER_NOT_OPEN'';' || E'\n' ||
-    '  end if;';
-  if position(needle in source) = 0 then raise exception 'REPAIR_DEPOSIT_CASH_CONTRACT_CHANGED'; end if;
-  source := replace(source, needle,
-    '  if p_cash_session_id is not null and not exists (' || E'\n' ||
-    '    select 1 from public.cash_closures closure where closure.id = p_cash_session_id' || E'\n' ||
-    '      and closure.organization_id = p_organization_id and closure.branch_id = p_branch_id and closure.date is null' || E'\n' ||
-    '  ) then' || E'\n' ||
-    '    if p_payment_method = ''transfer'' then p_cash_session_id := null;' || E'\n' ||
-    '    else raise exception ''REPAIR_CASH_REGISTER_NOT_OPEN''; end if;' || E'\n' ||
-    '  end if;' || E'\n' ||
-    '  if p_cash_session_id is null and p_payment_method <> ''transfer'' then' || E'\n' ||
-    '    raise exception ''REPAIR_CASH_REGISTER_NOT_OPEN'';' || E'\n' ||
-    '  end if;');
-  needle := '  insert into public.cash_movements (' || E'\n' ||
-    '    session_id, type, amount, reason, payment_method, created_by,' || E'\n' ||
-    '    created_at, organization_id, branch_id' || E'\n' ||
-    '  ) values (' || E'\n' ||
-    '    p_cash_session_id, ''cash_in'', p_payment_amount,' || E'\n' ||
-    '    ''Anticipo reparación '' || coalesce(target_repair.ticket_number, target_repair.id::text),' || E'\n' ||
-    '    p_payment_method, p_actor_id, operation_time, p_organization_id, p_branch_id' || E'\n' ||
-    '  );';
-  if position(needle in source) = 0 then raise exception 'REPAIR_DEPOSIT_MOVEMENT_CONTRACT_CHANGED'; end if;
-  source := replace(source, needle, '  if p_cash_session_id is not null then' || E'\n' || needle || E'\n' || '  end if;');
-  execute source;
-  end if;
+  for fn in
+    select p.oid, pg_get_functiondef(p.oid) as def, pg_get_function_identity_arguments(p.oid) as args
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'register_unpriced_repair_deposit'
+  loop
+    source := fn.def;
+    continue when position('p_payment_method = ''transfer'' then p_cash_session_id := null' in source) > 0;
+    -- El chequeo de caja abierta (hasta su raise) y el insert del movimiento.
+    needle := 'if\s+p_cash_session_id\s+is\s+null\s+or\s+not\s+exists\s*\((\s+select\s+1\s+from\s+public\.cash_closures\s+closure\s+where\s+closure\.id\s*=\s*p_cash_session_id\s+and\s+closure\.organization_id\s*=\s*p_organization_id\s+and\s+closure\.branch_id\s*=\s*p_branch_id\s+and\s+closure\.date\s+is\s+null\s*)\)\s*then\s+raise\s+exception\s+''REPAIR_CASH_REGISTER_NOT_OPEN''\s*;\s*end\s+if\s*;';
+    replacement := '(insert\s+into\s+public\.cash_movements\s*\([^;]*''Anticipo reparación ''[^;]*\)\s*;)';
+    if source !~ needle or source !~ replacement then
+      raise notice 'REPAIR_DEPOSIT_CASH_CONTRACT_CHANGED: se saltea register_unpriced_repair_deposit(%)', fn.args;
+      continue;
+    end if;
+    source := regexp_replace(source, needle,
+      'if p_cash_session_id is not null and not exists (\1) then' || E'\n' ||
+      '    if p_payment_method = ''transfer'' then p_cash_session_id := null;' || E'\n' ||
+      '    else raise exception ''REPAIR_CASH_REGISTER_NOT_OPEN''; end if;' || E'\n' ||
+      '  end if;' || E'\n' ||
+      '  if p_cash_session_id is null and p_payment_method <> ''transfer'' then' || E'\n' ||
+      '    raise exception ''REPAIR_CASH_REGISTER_NOT_OPEN'';' || E'\n' ||
+      '  end if;');
+    source := regexp_replace(source, replacement, 'if p_cash_session_id is not null then \1 end if;');
+    execute source;
+  end loop;
 end
 $migration$;
 
