@@ -119,7 +119,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     const needsCashSession = Boolean(resolvedInput.payment && !isCredit)
     const cashSessionId = needsCashSession ? await resolveCashSessionId(ctx) : null
-    if (needsCashSession && !cashSessionId) {
+    // Una transferencia no exige caja abierta.
+    if (needsCashSession && !cashSessionId && resolvedInput.payment?.method !== 'transfer') {
       return NextResponse.json(
         { error: 'No hay una caja abierta en esta sucursal. Abrí caja antes de cobrar la reparación.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
         { status: 409 },

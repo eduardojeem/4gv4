@@ -439,6 +439,13 @@ export const DELETE = withTenantAuth({ permission: 'pos.cash.manage', module: 'p
     data: resultado,
     message: resultado.already_voided === true
       ? 'Esta venta ya estaba anulada.'
-      : 'Venta anulada: se devolvió el stock y se cancelaron las cuotas pendientes.',
+      : [
+          'Venta anulada: se devolvió el stock',
+          Number(resultado.cash_returned) > 0 ? 'salió el efectivo de la caja' : null,
+          Number(resultado.cancelled_installments) > 0 ? 'se cancelaron las cuotas pendientes' : null,
+          Number(resultado.store_credit_returned) > 0 ? 'volvió el saldo a favor' : null,
+          Number(resultado.repairs_reopened) > 0 ? 'las reparaciones cobradas vuelven a deber' : null,
+          Number(resultado.appointments_released) > 0 ? 'el turno queda para cobrar de nuevo' : null,
+        ].filter(Boolean).join(', ') + '.',
   })
 })

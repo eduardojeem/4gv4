@@ -120,3 +120,20 @@ describe('caja de un cobro de reparación', () => {
     expect(pickCashSession([], 'beto')).toBeNull()
   })
 })
+
+describe('seña de una reparación cancelada', () => {
+  const closeout = { id: 'c1', repairId: 'r9', branchId: null, createdAt: '2026-10-20T12:00:00Z', outcome: 'cancelled', restockedPartIds: [], refundAmount: 0, refundMethod: null }
+
+  it('retenida, es ingreso de reparaciones el día que se decide', () => {
+    const result = summary({ repairCloseouts: [{ ...closeout, finalCharge: 40_000 }] })
+    expect(result.accrued.revenue).toBe(40_000)
+    expect(result.accrued.revenueBreakdown?.repairs.total).toBe(40_000)
+    expect(result.cash.collected).toBe(0)
+  })
+
+  it('devuelta en efectivo, sale de caja y no es ingreso', () => {
+    const result = summary({ repairCloseouts: [{ ...closeout, finalCharge: 0, refundAmount: 50_000, refundMethod: 'cash' }] })
+    expect(result.accrued.revenue).toBe(0)
+    expect(result.cash.paid).toBe(50_000)
+  })
+})

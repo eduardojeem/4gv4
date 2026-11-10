@@ -122,7 +122,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (!isCredit) {
       cashSessionId = await resolveRepairCashSessionId(ctx.supabase, ctx)
 
-      if (!cashSessionId) {
+      // Una transferencia no pasa por el cajón: se registra aunque no haya caja
+      // abierta (si hay, queda también en el movimiento de la caja).
+      if (!cashSessionId && input.method !== 'transfer') {
         return NextResponse.json(
           { error: 'No hay una caja abierta en esta sucursal. Abri caja antes de cobrar la reparacion.', code: 'REPAIR_CASH_REGISTER_NOT_OPEN' },
           { status: 409 },
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
           reference: input.reference,
           note: input.note,
           idempotencyKey: input.idempotencyKey,
-          cashSessionId: cashSessionId!,
+          cashSessionId,
         })
       : await closeRepairAndRegisterPayment(ctx.supabase, {
           repairId: id,

@@ -8,7 +8,18 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { useSales } from '@/hooks/useSales'
-import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert } from 'lucide-react'
+import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert, Ban, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { printReceipt, CompanyInfo } from '@/lib/receipt-utils'
 import { buildReprintReceiptData, type StoredSale } from '@/lib/after-sales/sale-receipt'
@@ -70,6 +81,8 @@ export interface SaleDetailRecord {
   change_amount?: number
   payment_method?: string
   payment_status?: string
+  /** `cancelled` cuando la venta se anuló. */
+  status?: string
   notes?: string
   sale_items?: SaleDetailItem[]
   items?: SaleDetailItem[]
@@ -148,6 +161,32 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
   const [loading, setLoading] = useState(false)
   const [sale, setSale] = useState<SaleDetailRecord | null>(null)
   const [afterSalesOpen, setAfterSalesOpen] = useState(false)
+  const [voidOpen, setVoidOpen] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voiding, setVoiding] = useState(false)
+  const isVoided = sale?.status === 'cancelled'
+
+  // Anular devuelve stock, efectivo, cuotas, saldo a favor y puntos, y deja
+  // las reparaciones cobradas otra vez con saldo (void_pos_sale).
+  const handleVoid = async () => {
+    if (!sale || voiding) return
+    setVoiding(true)
+    try {
+      const params = new URLSearchParams({ id: sale.id })
+      if (voidReason.trim()) params.set('reason', voidReason.trim())
+      const response = await fetch(`/api/sales?${params.toString()}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string; message?: string } | null
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo anular la venta.')
+      toast.success(payload.message || 'Venta anulada')
+      setVoidOpen(false)
+      setVoidReason('')
+      setSale(await getSale(sale.id))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo anular la venta.')
+    } finally {
+      setVoiding(false)
+    }
+  }
 
   const handlePrintReceipt = () => {
     if (!sale) return
@@ -195,6 +234,14 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
             </DialogDescription>
             {!loading && sale && (
                 <div className="flex items-center gap-2">
+                    {isVoided ? (
+                      <Badge variant="destructive">Anulada</Badge>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => setVoidOpen(true)} className="text-rose-600 hover:text-rose-700">
+                        <Ban className="mr-2 h-4 w-4" />
+                        Anular
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => setAfterSalesOpen(true)}>
                         <ShieldAlert className="mr-2 h-4 w-4" />
                         Posventa
@@ -363,6 +410,33 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
             </>
           )}
         </div>
+
+        <AlertDialog open={voidOpen} onOpenChange={(open) => !voiding && setVoidOpen(open)}>
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Anular esta venta?</AlertDialogTitle>
+              <AlertDialogDescription className="leading-relaxed">
+                Se devuelve el stock, sale de tu caja el efectivo cobrado, se cancelan las cuotas impagas,
+                vuelve el saldo a favor que usó el cliente y se descuentan los puntos. Si la venta cobró una
+                reparación, la reparación vuelve a deber ese monto. No se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="Motivo (opcional)"
+              maxLength={300}
+              disabled={voiding}
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={voiding}>No anular</AlertDialogCancel>
+              <Button onClick={handleVoid} disabled={voiding} className="bg-rose-600 text-white hover:bg-rose-700">
+                {voiding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
+                Sí, anular venta
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {sale && (
           <CreateAfterSalesCaseDialog

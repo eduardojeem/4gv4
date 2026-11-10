@@ -2179,7 +2179,13 @@ export interface FinanceRefundRecord {
  * volvieron al stock y si se le devolvió plata al cliente.
  */
 export interface FinanceRepairCloseoutRecord {
+  /** Para no contar dos veces un cierre que llega por las dos consultas. */
+  id?: string
   repairId: string
+  /** `cancelled`: seña de una reparación cancelada (devuelta, a favor o retenida). */
+  outcome?: string | null
+  /** Lo que el comercio cobró. En una seña retenida es el ingreso. */
+  finalCharge?: number
   branchId: string | null
   createdAt: string
   /** Repuestos que volvieron al stock: no son costo de la reparación. */
@@ -2535,6 +2541,12 @@ function buildFinancialSummary(
   const overageTotal = roundMoneyValue(periodClosures
     .filter((closure) => closure.discrepancy > 0)
     .reduce((total, closure) => total + closure.discrepancy, 0))
+  const retainedDeposits = (records.repairCloseouts ?? []).filter((closeout) =>
+    closeout.outcome === 'cancelled' &&
+    money(closeout.finalCharge) > 0 &&
+    isInBranch(closeout.branchId, filters) &&
+    isInPeriod(closeout.createdAt, filters))
+  const retainedTotal = retainedDeposits.reduce((total, closeout) => total + money(closeout.finalCharge), 0)
   const interestCollected = roundMoneyValue((records.creditPayments ?? [])
     .filter((payment) => isInBranch(payment.branchId, filters) && isInPeriod(payment.paymentDate, filters))
     .reduce((total, payment) => total + money(payment.interestAmount), 0))
@@ -2566,6 +2578,16 @@ function buildFinancialSummary(
     ...(interestCollected > 0
       ? [{ id: 'credit-interest', amount: interestCollected, cashAmount: 0, hasCost: true, label: 'Intereses de créditos' }]
       : []),
+    // Seña de una reparación cancelada que el comercio se quedó: es ingreso el
+    // día que se decidió (la reparación nunca se entrega).
+    ...retainedDeposits.map((closeout) => ({
+      id: `repair-retained:${closeout.repairId}`,
+      amount: money(closeout.finalCharge),
+      cashAmount: 0,
+      hasCost: true,
+      label: 'Seña retenida',
+      sourceType: 'repair' as const,
+    })),
     ...(overageTotal > 0
       ? [{ id: 'cash-overage', amount: overageTotal, cashAmount: 0, hasCost: true, label: 'Sobrantes de caja' }]
       : []),
@@ -2831,6 +2853,7 @@ function buildFinancialSummary(
     refunds: refunds.reduce((total, refund) => total + refund.amount, 0),
     interest: interestCollected,
     cashOverage: overageTotal,
+    retainedDeposits: retainedTotal,
   })
   const saleCodes = new Map(records.sales.map((sale) => [sale.id, sale.code ?? null]))
   const rejectedPaymentWarnings = (records.salePayments ?? [])
@@ -2883,6 +2906,8 @@ function buildRevenueBreakdown(input: {
   refunds: number
   interest?: number
   cashOverage?: number
+  /** Señas retenidas de reparaciones canceladas: cuentan como mano de obra. */
+  retainedDeposits?: number
 }): FinanceRevenueBreakdown {
   let merchandise = 0
   let services = 0
@@ -2897,8 +2922,8 @@ function buildRevenueBreakdown(input: {
     services += amount * serviceShare
     merchandise += amount * (1 - serviceShare)
   }
-  let repairTotal = 0
-  let repairLabor = 0
+  let repairTotal = Math.max(0, input.retainedDeposits ?? 0)
+  let repairLabor = repairTotal
   for (const repair of input.repairs) {
     const amount = Math.max(0, money(repair.revenueAmount))
     repairTotal += amount
@@ -3386,7 +3411,15 @@ async function loadFinanceSummaryRecords(
   }))
   const saleItems = await loadSaleItems(admin, organizationId, sales.map((sale) => sale.id))
   const repairParts = await loadRepairParts(admin, repairs.map((repair) => repair.id))
-  const repairCloseouts = await loadRepairCloseouts(admin, repairs.map((repair) => repair.id))
+  // Cierres de las reparaciones entregadas y señas de canceladas resueltas en
+  // el período (esas reparaciones no se entregan, así que no están en la lista).
+  const deliveredCloseouts = await loadRepairCloseouts(admin, repairs.map((repair) => repair.id))
+  const cancelledCloseouts = await loadCancelledRepairCloseouts(admin, organizationId, startAt, endBefore)
+  const closeoutIds = new Set(deliveredCloseouts.map((closeout) => closeout.id))
+  const repairCloseouts = [
+    ...deliveredCloseouts,
+    ...cancelledCloseouts.filter((closeout) => !closeoutIds.has(closeout.id)),
+  ]
   const salePaymentResult = await loadSalePayments(
     admin,
     organizationId,
@@ -3834,6 +3867,39 @@ async function loadOrderPayments(
   return payments
 }
 
+/** Señas de reparaciones canceladas resueltas en el período. */
+async function loadCancelledRepairCloseouts(
+  admin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  startAt: string,
+  endBefore: string,
+): Promise<FinanceRepairCloseoutRecord[]> {
+  const result = await allFinanceRows(admin
+    .from('repair_closeouts')
+    .select('id, repair_id, branch_id, created_at, outcome, final_charge, settlement_kind, settlement_amount, settlement_method', { count: 'exact' })
+    .eq('organization_id', organizationId)
+    .eq('outcome', 'cancelled')
+    .gte('created_at', startAt)
+    .lt('created_at', endBefore)
+    .order('id'))
+  if (result.error) {
+    if (isMissingTableError(result.error, 'repair_closeouts')) return []
+    throw toFinanceApiError(result.error)
+  }
+  assertBoundedFinanceRows(result.data as unknown[] | null, 'señas de reparaciones canceladas', result.count)
+  return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    repairId: String(row.repair_id),
+    branchId: (row.branch_id as string | null) ?? null,
+    createdAt: String(row.created_at),
+    outcome: 'cancelled',
+    finalCharge: money(row.final_charge as number | string | null),
+    restockedPartIds: [],
+    refundAmount: row.settlement_kind === 'refund' ? money(row.settlement_amount as number | string) : 0,
+    refundMethod: typeof row.settlement_method === 'string' ? row.settlement_method : null,
+  }))
+}
+
 async function loadRepairCloseouts(
   admin: ReturnType<typeof createAdminSupabase>,
   repairIds: string[],
@@ -3843,7 +3909,7 @@ async function loadRepairCloseouts(
     chunkQueryValues(repairIds).map((ids) =>
       allFinanceRows(admin
         .from('repair_closeouts')
-        .select('id, repair_id, branch_id, created_at, parts_resolution, settlement_kind, settlement_amount, settlement_method', { count: 'exact' })
+        .select('id, repair_id, branch_id, created_at, outcome, final_charge, parts_resolution, settlement_kind, settlement_amount, settlement_method', { count: 'exact' })
         .in('repair_id', ids)
         .order('id')),
     ),
@@ -3859,6 +3925,9 @@ async function loadRepairCloseouts(
     for (const row of (result.data ?? []) as Array<Record<string, unknown>>) {
       const parts = Array.isArray(row.parts_resolution) ? row.parts_resolution as Array<Record<string, unknown>> : []
       closeouts.push({
+        id: String(row.id),
+        outcome: typeof row.outcome === 'string' ? row.outcome : null,
+        finalCharge: money(row.final_charge as number | string | null),
         repairId: String(row.repair_id),
         branchId: (row.branch_id as string | null) ?? null,
         createdAt: String(row.created_at),
