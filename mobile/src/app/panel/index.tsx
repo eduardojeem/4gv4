@@ -141,11 +141,16 @@ export default function PanelOverview() {
   const firstName = (panel?.user.name ?? '').split(' ')[0];
   const focus = panel?.businessFocus ?? null;
   // Primero lo que se crea a diario en el rubro, después sus secciones y el resto.
-  const createLinks: QuickLink[] = focus === 'repairs'
-    ? (can('repairs.orders.create') ? [{ key: 'new-repair', label: 'Nueva reparación', icon: 'add-circle-outline', route: '/panel/repairs/new' }] : [])
-    : focus === 'agenda'
-      ? [{ key: 'new-appointment', label: 'Nuevo turno', icon: 'add-circle-outline', route: '/panel/agenda/form' }]
-      : can('products.create') ? [{ key: 'new-product', label: 'Nuevo producto', icon: 'add-circle-outline', route: '/panel/products/form' }] : [];
+  const createLinks: QuickLink[] = [
+    ...(focus === 'repairs'
+      ? (can('repairs.orders.create') ? [{ key: 'new-repair', label: 'Nueva reparación', icon: 'add-circle-outline' as const, route: '/panel/repairs/new' }] : [])
+      : focus === 'agenda'
+        ? [{ key: 'new-appointment', label: 'Nuevo turno', icon: 'add-circle-outline' as const, route: '/panel/agenda/form' }]
+        : can('products.create') ? [{ key: 'new-product', label: 'Nuevo producto', icon: 'add-circle-outline' as const, route: '/panel/products/form' }] : []),
+    ...(!focus && has('orders') && can('ecommerce.orders.manage')
+      ? [{ key: 'new-order', label: 'Nuevo pedido', icon: 'bag-add-outline' as const, route: '/panel/orders/new' }]
+      : []),
+  ];
   const order = QUICK_ORDER[focus ?? 'default'];
   const rank = (key: string) => (order.includes(key) ? order.indexOf(key) : order.length);
   const sectionLinks: QuickLink[] = (panel?.groups.flatMap((group) => group.items) ?? [])

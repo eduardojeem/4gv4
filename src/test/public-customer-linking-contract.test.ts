@@ -41,6 +41,6 @@ describe('public customer linking contract', () => {
     expect(context).not.toContain(".from('customers')")
     expect(selection).not.toContain('<CustomerProvider>')
     expect(selection).not.toContain('<CustomerSyncSection')
-    expect(customersRoute).toContain("permission: ['crm.customers.manage', 'pos.sales.create']")
+    expect(customersRoute).toContain("permission: ['crm.customers.manage', 'pos.sales.create', 'ecommerce.orders.manage']")
   })
 })

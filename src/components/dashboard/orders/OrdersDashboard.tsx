@@ -1,13 +1,16 @@
 'use client'
 
 import { useTenantScope } from '@/hooks/use-tenant-scope'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/contexts/auth-context'
+import { useBranch } from '@/contexts/branch-context'
+import { useCommercePaymentControls } from '@/hooks/use-commerce-payment-controls'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import {
-  AlertTriangle, ArrowLeft, Calendar, Check, CheckCircle2,
+  AlertTriangle, ArrowLeft, Building2, Calendar, Check, CheckCircle2,
   ChevronLeft, ChevronRight, Clock, Coins, Copy, CreditCard, Download,
   ExternalLink, Globe, Layers, Loader2, Mail, MapPin,
-  MessageSquare, Package, PackageSearch, Phone, Plus,
+  MessageSquare, Package, PackageSearch, Pencil, Phone, Plus,
   Printer, RefreshCw, Search, ShoppingBag, Store,
   Tag, Truck, User, X
 } from 'lucide-react'
@@ -27,8 +30,9 @@ import {
   ORDER_FLOW, ORDER_STATUS_META, ORDER_STATUS_OPTIONS,
   PAYMENT_METHOD_META, PAYMENT_STATUS_META, PAYMENT_STATUS_OPTIONS,
 } from '@/lib/orders/constants'
-import type { CustomerOrder, OrderStatus, PaymentMethod, PaymentStatus } from '@/lib/orders/types'
+import type { CustomerOrder, FulfillmentType, OrderChannel, OrderStatus, PaymentMethod, PaymentStatus } from '@/lib/orders/types'
 import { CreateOrderDialog } from './CreateOrderDialog'
+import { EditOrderDialog } from './EditOrderDialog'
 import { ShippingLabelDialog } from './ShippingLabelDialog'
 import { formatDate, formatMoney } from './format'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
@@ -38,6 +42,15 @@ import { ORDERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 type DatePreset = 'all' | 'today' | 'week' | 'month'
 type SortDir = 'desc' | 'asc'
 const ORDERS_REFRESH_INTERVAL_MS = 30_000
+
+const ALL_PAYMENT_METHODS: PaymentMethod[] = ['CASH', 'TRANSFER', 'CARD', 'DIGITAL_WALLET']
+
+const CANCEL_REASON_PRESETS = [
+  'Sin stock disponible',
+  'Solicitado por el cliente',
+  'Datos de contacto incompletos',
+  'Fuera de zona de cobertura',
+]
 
 type OrdersPayload = {
   orders: CustomerOrder[]
@@ -55,6 +68,50 @@ function getDateFrom(preset: DatePreset): string | null {
   return new Date(now.getTime() - 30 * 86400000).toISOString()
 }
 
+function stripDuplicateVariantSuffix(productName: string, variantName?: string | null): string {
+  if (!variantName || !variantName.trim()) return productName
+  const escaped = variantName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return productName.replace(new RegExp(`\\s*\\(${escaped}\\)$`), '').trim()
+}
+
+function formatOrderItemTitle(productName: string, variantName?: string | null): string {
+  const baseName = stripDuplicateVariantSuffix(productName, variantName)
+  if (!variantName || !variantName.trim()) return baseName
+  return `${baseName} (${variantName.trim()})`
+}
+
+function formatWaPhone(phone: string): string {
+  const d = phone.replace(/\D/g, '')
+  return d.startsWith('595') ? d : d.startsWith('0') ? `595${d.slice(1)}` : d
+}
+
+function buildWhatsAppOrderUrl(order: CustomerOrder, storeSlug?: string | null): string | null {
+  if (!order.customer_phone) return null
+  const phone = formatWaPhone(order.customer_phone)
+  if (!phone) return null
+  const statusLabel = ORDER_STATUS_META[order.status]?.label ?? order.status
+  const statusLine: Record<OrderStatus, string> = {
+    PENDING: `Recibimos tu pedido #${order.order_number} y lo estamos revisando para confirmarlo.`,
+    CONFIRMED: `Confirmamos tu pedido #${order.order_number}.`,
+    PREPARING: `Estamos preparando tu pedido #${order.order_number}.`,
+    READY: order.fulfillment_type === 'PICKUP'
+      ? `¡Tu pedido #${order.order_number} ya está listo para retirar!`
+      : `¡Tu pedido #${order.order_number} ya está listo para despacho!`,
+    SHIPPED: `Tu pedido #${order.order_number} salió en camino.`,
+    DELIVERED: `Tu pedido #${order.order_number} fue entregado. ¡Gracias por tu compra!`,
+    CANCELLED: `Te informamos que tu pedido #${order.order_number} fue cancelado (${statusLabel}).`,
+  }
+  const trackUrl = storeSlug && typeof window !== 'undefined'
+    ? `${window.location.origin}/${encodeURIComponent(storeSlug)}/track?orderNumber=${encodeURIComponent(order.order_number)}`
+    : null
+  const parts = [
+    `¡Hola ${order.customer_name}! ${statusLine[order.status] ?? `Te escribimos por tu pedido #${order.order_number}.`}`,
+    `Total: ${formatMoney(order.total)}${order.amount_due > 0 ? ` · Saldo pendiente: ${formatMoney(order.amount_due)}` : ''}.`,
+    trackUrl ? `Seguí tu pedido acá: ${trackUrl}` : null,
+  ].filter(Boolean)
+  return `https://wa.me/${phone}?text=${encodeURIComponent(parts.join('\n'))}`
+}
+
 // Escape a CSV cell: double internal quotes and neutralize spreadsheet formula
 // injection (values starting with = + - @ or a control char are treated as
 // formulas by Excel/Sheets) by prefixing a single quote.
@@ -70,15 +127,21 @@ function buildSortParam(field: 'created_at' | 'total', dir: SortDir): string {
   return dir === 'desc' ? 'newest' : 'oldest'
 }
 
-function exportOrdersCSV(orders: CustomerOrder[]) {
-  const headers = ['Número','Fecha','Cliente','Teléfono','Email','Estado','Pago','Entrega','Productos','Total']
+function exportOrdersCSV(orders: CustomerOrder[], branchNamesById: Record<string, string>) {
+  const headers = ['Número','Fecha','Origen','Sucursal','Cliente','Teléfono','Email','Estado','Pago','Entrega','Productos','Total']
   const rows = orders.map((o) => [
-    o.order_number, formatDate(o.created_at), o.customer_name,
-    o.customer_phone ?? '', o.customer_email ?? '',
+    o.order_number,
+    formatDate(o.created_at),
+    o.channel === 'PANEL' ? 'Panel' : 'Tienda Web',
+    o.branch_id ? (branchNamesById[o.branch_id] ?? '') : 'Tienda Web',
+    o.customer_name,
+    o.customer_phone ?? '',
+    o.customer_email ?? '',
     ORDER_STATUS_META[o.status]?.label ?? o.status,
     PAYMENT_STATUS_META[o.payment_status]?.label ?? o.payment_status,
     o.fulfillment_type === 'PICKUP' ? 'Retiro' : 'Delivery',
-    String(o.order_items.length), String(o.total),
+    String(o.order_items.length),
+    String(o.total),
   ])
   const csv = [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -241,12 +304,27 @@ function StatusPill({ status }: { status: OrderStatus }) {
   )
 }
 
-// ─── Source / channel badge ───────────────────────────────────────────────────
-function ChannelBadge({ channel = 'Web' }: { channel?: string }) {
+// ─── Source / channel & branch badges ─────────────────────────────────────────
+function ChannelBadge({ channel = 'WEB' }: { channel?: OrderChannel | string }) {
+  const isPanel = channel === 'PANEL'
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
-      <Globe className="h-3 w-3 text-slate-400" />
-      {channel}
+    <span className={cn(
+      'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+      isPanel
+        ? 'border-indigo-300/70 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300'
+        : 'border-slate-200/80 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400'
+    )}>
+      {isPanel ? <Store className="h-3 w-3 text-indigo-500 dark:text-indigo-400" /> : <Globe className="h-3 w-3 text-slate-400" />}
+      {isPanel ? 'Panel' : 'Tienda Web'}
+    </span>
+  )
+}
+
+function BranchBadge({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+      <Building2 className="h-3 w-3 text-slate-400" />
+      <span className="max-w-[140px] truncate">{name}</span>
     </span>
   )
 }
@@ -268,18 +346,21 @@ function FulfillmentBadge({ type }: { type: 'PICKUP' | 'DELIVERY' }) {
 
 // ─── Order row (always-expanded card, actions on right column) ────────────────
 function OrderRow({
-  order, selected, updating, onSelect,
-  onStatusChange, onPaymentRequest, onAdvanceStatus, onCancelRequest, onDetailRequest,
+  order, selected, updating, branchName, storeSlug, onSelect,
+  onStatusChange, onPaymentRequest, onAdvanceStatus, onCancelRequest, onDetailRequest, onEditRequest,
 }: {
   order: CustomerOrder
   selected: boolean
   updating: boolean
+  branchName?: string
+  storeSlug?: string | null
   onSelect: (checked: boolean) => void
   onStatusChange: (s: OrderStatus) => void
   onPaymentRequest: () => void
   onAdvanceStatus: (s: OrderStatus) => void
   onCancelRequest: () => void
   onDetailRequest: () => void
+  onEditRequest: () => void
 }) {
   const currentIdx = ORDER_FLOW.indexOf(order.status)
   const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
@@ -302,14 +383,14 @@ function OrderRow({
   )
 
   const handleWhatsApp = () => {
-    if (!order.customer_phone) return
-    const phone = order.customer_phone.replace(/\D/g, '')
-    const msg = `¡Hola ${order.customer_name}! Te contactamos sobre tu pedido ${order.order_number}.`
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+    const url = buildWhatsAppOrderUrl(order, storeSlug)
+    if (url) window.open(url, '_blank')
   }
 
   const handleCopy = () => {
-    const items = order.order_items.map((i) => `• ${i.quantity}x ${i.product_name}`).join('\n')
+    const items = order.order_items
+      .map((i) => `• ${i.quantity}x ${formatOrderItemTitle(i.product_name, i.variant_name)}`)
+      .join('\n')
     const text = `Pedido: ${order.order_number}\nCliente: ${order.customer_name}\nTel: ${order.customer_phone ?? '-'}\nTotal: ${formatMoney(order.total)}\n${items}`
     navigator.clipboard.writeText(text)
     toast.success('Copiado', { description: order.order_number })
@@ -328,7 +409,7 @@ function OrderRow({
         {/* Top row: checkbox | order# | badges | date | amount */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <Checkbox
-            checked={selected} onCheckedChange={onSelect}
+            checked={selected} onCheckedChange={(v) => onSelect(v === true)}
             className="h-4 w-4 rounded border-slate-300 dark:border-white/20 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
           />
           <button
@@ -339,8 +420,9 @@ function OrderRow({
             ORD #{order.order_number}
           </button>
           <StatusPill status={order.status} />
-          <ChannelBadge />
+          <ChannelBadge channel={order.channel} />
           <FulfillmentBadge type={order.fulfillment_type} />
+          {branchName && <BranchBadge name={branchName} />}
           {updating && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
 
           <div className="ml-auto text-right shrink-0">
@@ -458,13 +540,23 @@ function OrderRow({
 
         {/* Product chips */}
         <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {order.order_items.map((item) => (
-            <span key={item.id}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-100/70 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-white/8 dark:bg-white/[0.04] dark:text-slate-300">
-              <Package className="h-3 w-3 text-slate-400 dark:text-slate-500" />
-              <strong className="text-slate-900 dark:text-slate-100">{item.quantity}x</strong> {item.product_name}
-            </span>
-          ))}
+          {order.order_items.map((item) => {
+            const baseName = stripDuplicateVariantSuffix(item.product_name, item.variant_name)
+            return (
+              <span key={item.id}
+                className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-100/70 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-white/8 dark:bg-white/[0.04] dark:text-slate-300">
+                <Package className="h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                <strong className="text-slate-900 dark:text-slate-100">{item.quantity}x</strong>
+                <span>{baseName}</span>
+                {item.variant_name && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                    <Layers className="h-2.5 w-2.5 shrink-0" />
+                    {item.variant_name}
+                  </span>
+                )}
+              </span>
+            )
+          })}
         </div>
       </div>
 
@@ -509,13 +601,21 @@ function OrderRow({
             </span>
           )}
 
-          {/* Detail & Copy */}
+          {/* Detail, Edit & Copy */}
           <div className="grid grid-cols-2 sm:grid-cols-1 gap-1.5 pt-1">
             <Button size="sm" variant="outline"
               onClick={onDetailRequest}
               className="w-full h-8 gap-1.5 rounded-xl text-xs font-medium border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-200 justify-center">
               <PackageSearch className="h-3.5 w-3.5 text-slate-500" /> Ver detalle
             </Button>
+
+            {order.status !== 'CANCELLED' && (
+              <Button size="sm" variant="outline"
+                onClick={onEditRequest}
+                className="w-full h-8 gap-1.5 rounded-xl text-xs font-medium border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-200 justify-center">
+                <Pencil className="h-3.5 w-3.5 text-slate-500" /> Editar
+              </Button>
+            )}
 
             <Button size="sm" variant="outline"
               onClick={handleCopy}
@@ -599,15 +699,104 @@ function OrderSkeleton() {
   )
 }
 
-// ─── Cancel confirm dialog ────────────────────────────────────────────────────
-function CancelConfirmBanner({ onConfirm, onDismiss }: { onConfirm: () => void; onDismiss: () => void }) {
+// ─── Cancel confirm dialog with reason ────────────────────────────────────────
+function CancelOrderDialog(props: {
+  open: boolean
+  title: string
+  description: string
+  submitting: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: (note: string) => void
+}) {
+  if (!props.open) return null
+  return <CancelOrderDialogContent {...props} />
+}
+
+function CancelOrderDialogContent({
+  open,
+  title,
+  description,
+  submitting,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean
+  title: string
+  description: string
+  submitting: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: (note: string) => void
+}) {
+  const [note, setNote] = useState('')
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 dark:border-rose-500/30 dark:bg-rose-500/10">
-      <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-      <span className="flex-1 text-sm font-medium text-rose-800 dark:text-rose-300">¿Cancelar este pedido? Esta acción no se puede deshacer.</span>
-      <button type="button" onClick={onConfirm} className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white hover:bg-rose-500">Sí, cancelar</button>
-      <button type="button" onClick={onDismiss} className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">No</button>
-    </div>
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <span>{title}</span>
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="rounded-xl border border-rose-200/80 bg-rose-50/70 p-3 text-xs text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            Se liberará automáticamente el stock reservado y cualquier reserva de saldo a favor asociada.
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Motivo rápido <span className="font-normal">(opcional)</span></p>
+            <div className="flex flex-wrap gap-1.5">
+              {CANCEL_REASON_PRESETS.map((preset) => {
+                const active = note === preset
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setNote(active ? '' : preset)}
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                      active
+                        ? 'border-rose-500 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-semibold'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {preset}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <label className="block space-y-1.5 text-sm font-medium">
+            <span>Detalle del motivo <span className="font-normal text-muted-foreground">(opcional)</span></span>
+            <Input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={1000}
+              disabled={submitting}
+              placeholder="Ej.: Cliente solicitó cambiar el pedido…"
+            />
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Volver
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={submitting}
+            onClick={() => onConfirm(note.trim())}
+          >
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sí, cancelar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -623,16 +812,25 @@ function CollectionDialogContent({ order, open, submitting, onOpenChange, onConf
   onOpenChange: (open: boolean) => void
   onConfirm: (input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) => void
 }) {
+  const paymentControls = useCommercePaymentControls()
   const [amount, setAmount] = useState(() => order ? String(order.amount_due) : '')
   const [method, setMethod] = useState<PaymentMethod>(() => order?.payment_method ?? 'CASH')
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const idempotencyRef = useRef(crypto.randomUUID())
 
+  const allowedMethods = useMemo(
+    () => (paymentControls.ready ? ALL_PAYMENT_METHODS.filter((m) => paymentControls.allows(m)) : []),
+    [paymentControls]
+  )
+  const resolvedMethod: PaymentMethod | '' = paymentControls.ready
+    ? (allowedMethods.includes(method) ? method : (allowedMethods[0] ?? ''))
+    : ''
 
   const numericAmount = Number(amount)
-  const referenceRequired = method !== 'CASH'
-  const invalid = !order || !Number.isFinite(numericAmount) || numericAmount <= 0
+  const referenceRequired = Boolean(resolvedMethod && resolvedMethod !== 'CASH')
+  const paymentUnavailable = !paymentControls.ready || Boolean(paymentControls.error) || !resolvedMethod
+  const invalid = !order || paymentUnavailable || !Number.isFinite(numericAmount) || numericAmount <= 0
     || numericAmount > order.amount_due || (referenceRequired && !reference.trim())
 
   return (
@@ -659,15 +857,28 @@ function CollectionDialogContent({ order, open, submitting, onOpenChange, onConf
             </label>
             <label className="block space-y-1.5 text-sm font-medium">
               <span>Medio de cobro</span>
-              <Select value={method} onValueChange={(value) => setMethod(value as PaymentMethod)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={resolvedMethod}
+                onValueChange={(value) => setMethod(value as PaymentMethod)}
+                disabled={!paymentControls.ready || allowedMethods.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!paymentControls.ready ? 'Cargando medios habilitados…' : 'Sin medios habilitados'} />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CASH">Efectivo</SelectItem>
-                  <SelectItem value="TRANSFER">Transferencia</SelectItem>
-                  <SelectItem value="CARD">Tarjeta</SelectItem>
-                  <SelectItem value="DIGITAL_WALLET">Billetera digital</SelectItem>
+                  {allowedMethods.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {PAYMENT_METHOD_META[m]?.label ?? m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {paymentControls.error && (
+                <span className="block text-xs text-destructive">{paymentControls.error}</span>
+              )}
+              {paymentControls.ready && !paymentControls.error && allowedMethods.length === 0 && (
+                <span className="block text-xs text-destructive">No hay medios de cobro habilitados para este comercio.</span>
+              )}
             </label>
             {referenceRequired && (
               <label className="block space-y-1.5 text-sm font-medium">
@@ -683,7 +894,13 @@ function CollectionDialogContent({ order, open, submitting, onOpenChange, onConf
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
-          <Button disabled={invalid || submitting} onClick={() => onConfirm({ amount: numericAmount, method, reference: reference.trim(), note: note.trim(), idempotencyKey: idempotencyRef.current })}>
+          <Button
+            disabled={invalid || submitting}
+            onClick={() => {
+              if (!resolvedMethod) return
+              onConfirm({ amount: numericAmount, method: resolvedMethod, reference: reference.trim(), note: note.trim(), idempotencyKey: idempotencyRef.current })
+            }}
+          >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar cobro
           </Button>
         </DialogFooter>
@@ -709,7 +926,7 @@ function DeliveryConfirmDialog({ order, open, submitting, onOpenChange, onConfir
           </DialogDescription>
         </DialogHeader>
         {order && order.amount_due > 0 && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
             Aún quedan {formatMoney(order.amount_due)} por cobrar. La entrega no marcará ese saldo como pagado.
           </div>
         )}
@@ -722,7 +939,6 @@ function DeliveryConfirmDialog({ order, open, submitting, onOpenChange, onConfir
   )
 }
 
-// ─── Main dashboard ───────────────────────────────────────────────────────────
 // ─── Historial del pedido ─────────────────────────────────────────────────────
 type OrderHistoryEvent = {
   id: string
@@ -848,16 +1064,28 @@ function parseVariantChips(variantName: string | null | undefined): string[] {
   return [text]
 }
 
-function OrderDetailDialog({ 
-  order, 
-  open, 
+function OrderDetailDialog({
+  order,
+  open,
   onOpenChange,
   onOpenCollection,
+  onAdvanceStatus,
+  onCancelRequest,
+  onEditRequest,
+  storeName,
+  storeSlug,
+  branchNamesById,
 }: {
   order: CustomerOrder | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onOpenCollection?: (order: CustomerOrder) => void
+  onAdvanceStatus?: (order: CustomerOrder, next: OrderStatus) => void
+  onCancelRequest?: (order: CustomerOrder) => void
+  onEditRequest?: (order: CustomerOrder) => void
+  storeName?: string
+  storeSlug?: string | null
+  branchNamesById: Record<string, string>
 }) {
   const [copiedNumber, setCopiedNumber] = useState(false)
   const [copiedSummary, setCopiedSummary] = useState(false)
@@ -895,6 +1123,9 @@ function OrderDetailDialog({
   const paymentMeta = PAYMENT_STATUS_META[order.payment_status] ?? { label: order.payment_status, className: '' }
   const paymentMethodLabel = PAYMENT_METHOD_META[order.payment_method]?.label ?? order.payment_method
   const isDelivery = order.fulfillment_type === 'DELIVERY'
+  const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
+  const nextStatus = !isTerminal ? getNextOrderStatus(order.status, order.fulfillment_type) : null
+  const branchName = order.branch_id ? branchNamesById[order.branch_id] : undefined
   const StatusIcon = statusMeta.icon || Package
 
   const handleCopyOrderNumber = async () => {
@@ -910,12 +1141,13 @@ function OrderDetailDialog({
 
   const handleCopySummary = async () => {
     const itemsText = order.order_items
-      .map((item) => `  • ${item.quantity}x ${item.product_name}${item.variant_name ? ` (${item.variant_name})` : ''} - ${formatMoney(item.subtotal)}`)
+      .map((item) => `  • ${item.quantity}x ${formatOrderItemTitle(item.product_name, item.variant_name)} - ${formatMoney(item.subtotal)}`)
       .join('\n')
 
     const text = [
       `📦 *Resumen del Pedido #${order.order_number}*`,
       `📅 Fecha: ${formatDate(order.created_at)}`,
+      branchName ? `🏢 Sucursal: ${branchName}` : null,
       `👤 Cliente: ${order.customer_name}${order.customer_phone ? ` (${order.customer_phone})` : ''}`,
       `🚚 Tipo de entrega: ${isDelivery ? `Delivery a domicilio (${order.customer_address || 'Dirección a confirmar'})` : 'Retiro en tienda/local'}`,
       `💳 Estado de Pago: ${paymentMeta.label} (${paymentMethodLabel})`,
@@ -939,11 +1171,7 @@ function OrderDetailDialog({
   }
 
   const cleanPhone = order.customer_phone?.replace(/\D/g, '') || ''
-  const whatsappUrl = cleanPhone
-    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-        `Hola ${order.customer_name}, te escribimos sobre tu pedido #${order.order_number} de ${formatMoney(order.total)}.`
-      )}`
-    : null
+  const whatsappUrl = buildWhatsAppOrderUrl(order, storeSlug)
 
   const googleMapsUrl = isDelivery && order.customer_address
     ? `https://maps.google.com/?q=${encodeURIComponent(order.customer_address)}`
@@ -983,17 +1211,24 @@ function OrderDetailDialog({
                       {copiedNumber ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                     </Button>
                   </div>
-                  <DialogDescription className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                  <DialogDescription className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
                     <Clock className="h-3 w-3" />
                     <span>{formatDate(order.created_at)}</span>
                     <span className="text-border">·</span>
                     <span>{order.order_items.length} {order.order_items.length === 1 ? 'ítem' : 'ítems'}</span>
+                    {branchName && (
+                      <>
+                        <span className="text-border">·</span>
+                        <span>{branchName}</span>
+                      </>
+                    )}
                   </DialogDescription>
                 </div>
               </div>
 
               {/* Badges de estado */}
               <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                <ChannelBadge channel={order.channel} />
                 <Badge variant="outline" className={cn("px-2.5 py-1 text-[11px] font-bold border gap-1 rounded-lg", statusMeta.className)}>
                   <StatusIcon className="h-3 w-3" />
                   {statusMeta.label}
@@ -1018,29 +1253,31 @@ function OrderDetailDialog({
           </DialogHeader>
 
           {/* ── Cuerpo: layout principal + sidebar ── */}
-          {/* ── Estilos de impresión: etiqueta para pegar en el paquete ── */}
-          <style dangerouslySetInnerHTML={{ __html: `
-            @media print {
-              @page { margin: 10mm; }
-              body > * { visibility: hidden !important; }
-              .order-print-zone, .order-print-zone * { visibility: visible !important; }
-              .order-print-zone {
-                position: fixed !important;
-                top: 50% !important;
-                left: 50% !important;
-                transform: translate(-50%, -50%) !important;
-                width: 105mm !important;
-                background: white !important;
-                color: black !important;
-                font-family: system-ui, Arial, sans-serif !important;
-                border: 3px solid #000 !important;
-                border-radius: 6px !important;
-                padding: 0 !important;
-                overflow: hidden !important;
-                box-shadow: none !important;
+          {/* ── Estilos de impresión: etiqueta para pegar en el paquete (desactivado mientras ShippingLabelDialog está abierto) ── */}
+          {!showShippingLabel && (
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                @page { margin: 10mm; }
+                body > * { visibility: hidden !important; }
+                .order-print-zone, .order-print-zone * { visibility: visible !important; }
+                .order-print-zone {
+                  position: fixed !important;
+                  top: 50% !important;
+                  left: 50% !important;
+                  transform: translate(-50%, -50%) !important;
+                  width: 105mm !important;
+                  background: white !important;
+                  color: black !important;
+                  font-family: system-ui, Arial, sans-serif !important;
+                  border: 3px solid #000 !important;
+                  border-radius: 6px !important;
+                  padding: 0 !important;
+                  overflow: hidden !important;
+                  box-shadow: none !important;
+                }
               }
-            }
-          `}} />
+            `}} />
+          )}
 
           <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
 
@@ -1088,7 +1325,7 @@ function OrderDetailDialog({
                       <div style={{fontWeight:'700',fontSize:'13px',lineHeight:'1.3'}}>{order.customer_address}</div>
                     </div>
                   ) : !isDelivery ? (
-                    <div style={{marginTop:'6px',fontSize:'11px',fontStyle:'italic',color:'#555'}}>Retira en sucursal / local</div>
+                    <div style={{marginTop:'6px',fontSize:'11px',fontStyle:'italic',color:'#555'}}>{branchName ? `Retira en ${branchName}` : 'Retira en sucursal / local'}</div>
                   ) : (
                     <div style={{marginTop:'6px',fontSize:'11px',fontStyle:'italic',color:'#c00'}}>Dirección a coordinar con el cliente</div>
                   )}
@@ -1099,15 +1336,18 @@ function OrderDetailDialog({
                   <div style={{fontSize:'8px',textTransform:'uppercase',letterSpacing:'1.5px',color:'#666',marginBottom:'5px'}}>
                     CONTENIDO ({order.order_items.length} {order.order_items.length === 1 ? 'ítem' : 'ítems'})
                   </div>
-                  {order.order_items.map((item) => (
-                    <div key={item.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'2px 0',borderBottom:'1px dotted #ccc',fontSize:'11px'}}>
-                      <span style={{fontWeight:'600'}}>
-                        {item.product_name}
-                        {item.variant_name && <span style={{fontWeight:'400',color:'#555',marginLeft:'4px'}}>({item.variant_name})</span>}
-                      </span>
-                      <span style={{fontWeight:'900',marginLeft:'8px',whiteSpace:'nowrap'}}>×{item.quantity}</span>
-                    </div>
-                  ))}
+                  {order.order_items.map((item) => {
+                    const baseName = stripDuplicateVariantSuffix(item.product_name, item.variant_name)
+                    return (
+                      <div key={item.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'2px 0',borderBottom:'1px dotted #ccc',fontSize:'11px'}}>
+                        <span style={{fontWeight:'600'}}>
+                          {baseName}
+                          {item.variant_name && <span style={{fontWeight:'400',color:'#555',marginLeft:'4px'}}>({item.variant_name})</span>}
+                        </span>
+                        <span style={{fontWeight:'900',marginLeft:'8px',whiteSpace:'nowrap'}}>×{item.quantity}</span>
+                      </div>
+                    )
+                  })}
                   {order.notes && (
                     <div style={{marginTop:'6px',padding:'4px 6px',background:'#fef9c3',border:'1px solid #d97706',borderRadius:'3px',fontSize:'10px'}}>
                       <strong>Nota:</strong> {order.notes}
@@ -1185,7 +1425,7 @@ function OrderDetailDialog({
                   </div>
                   <div className="space-y-1.5 text-xs">
                     <p className="font-semibold text-foreground">
-                      {isDelivery ? 'Envío a domicilio' : 'Retiro en sucursal / local'}
+                      {isDelivery ? 'Envío a domicilio' : branchName ? `Retiro en ${branchName}` : 'Retiro en sucursal / local'}
                     </p>
                     {isDelivery && order.customer_address && (
                       <div className="flex items-start gap-1.5 text-muted-foreground">
@@ -1235,6 +1475,7 @@ function OrderDetailDialog({
                 <div className="divide-y divide-border/50">
                   {order.order_items.map((item) => {
                     const itemImg = item.product_id ? itemImages[item.product_id] : null
+                    const baseName = stripDuplicateVariantSuffix(item.product_name, item.variant_name)
                     const variantChips = parseVariantChips(item.variant_name)
                     return (
                       <div key={item.id} className="grid grid-cols-1 sm:grid-cols-[1fr_56px_100px_100px] gap-2 px-4 py-3 items-center hover:bg-muted/15 transition-colors">
@@ -1242,13 +1483,13 @@ function OrderDetailDialog({
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="relative h-10 w-10 shrink-0 rounded-xl overflow-hidden border border-border/50 bg-muted/40 flex items-center justify-center">
                             {itemImg ? (
-                              <Image src={resolveProductImageUrl(itemImg)} alt={item.product_name} fill unoptimized className="object-cover" />
+                              <Image src={resolveProductImageUrl(itemImg)} alt={baseName} fill unoptimized className="object-cover" />
                             ) : (
                               <Package className="h-4 w-4 text-muted-foreground/40" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1 space-y-1">
-                            <p className="text-sm font-semibold text-foreground leading-snug truncate">{item.product_name}</p>
+                            <p className="text-sm font-semibold text-foreground leading-snug truncate">{baseName}</p>
                             <div className="flex flex-wrap items-center gap-1">
                               {variantChips.map((chip, idx) => (
                                 <span key={idx} className="inline-flex items-center gap-0.5 rounded-md bg-primary/8 border border-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary/80">
@@ -1287,7 +1528,7 @@ function OrderDetailDialog({
               </div>
 
               {/* Historial */}
-              <OrderHistory orderId={order.id} />
+              <OrderHistory key={`${order.id}-${order.updated_at}`} orderId={order.id} />
             </div>
 
             {/* ── Sidebar: Resumen financiero ── */}
@@ -1309,7 +1550,7 @@ function OrderDetailDialog({
                     </div>
                     <p className="text-xl font-black text-rose-600 dark:text-rose-400 tabular-nums">{formatMoney(order.amount_due)}</p>
                     <p className="text-[10px] text-rose-700/80 dark:text-rose-300/70 leading-relaxed">Falta registrar el pago completo.</p>
-                    {onOpenCollection && (
+                    {onOpenCollection && order.status !== 'CANCELLED' && (
                       <Button size="sm" onClick={() => onOpenCollection(order)}
                         className="w-full h-8 rounded-xl font-bold text-[11px] bg-rose-600 hover:bg-rose-700 text-white">
                         Registrar cobro
@@ -1368,6 +1609,29 @@ function OrderDetailDialog({
 
                 {/* Acciones */}
                 <div className="space-y-2">
+                  {!isTerminal && nextStatus && onAdvanceStatus && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => onAdvanceStatus(order, nextStatus)}
+                      className="w-full h-8.5 rounded-xl text-xs font-bold gap-1.5 bg-blue-600 hover:bg-blue-500 text-white"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Pasar a {ORDER_STATUS_META[nextStatus].label}
+                    </Button>
+                  )}
+                  {order.status !== 'CANCELLED' && onEditRequest && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEditRequest(order)}
+                      className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-border/70 hover:bg-accent"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editar pedido
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" size="sm" onClick={handleCopySummary}
                     className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-border/70 hover:bg-accent">
                     {copiedSummary ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -1381,6 +1645,17 @@ function OrderDetailDialog({
                     className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-border/70 hover:bg-accent">
                     <Printer className="h-3.5 w-3.5" />Imprimir detalle
                   </Button>
+                  {!isTerminal && onCancelRequest && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onCancelRequest(order)}
+                      className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                    >
+                      <X className="h-3.5 w-3.5" />Cancelar pedido
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -1400,6 +1675,8 @@ function OrderDetailDialog({
         order={order}
         open={showShippingLabel}
         onOpenChange={setShowShippingLabel}
+        storeName={storeName}
+        branchNamesById={branchNamesById}
       />
     </>
   )
@@ -1407,13 +1684,25 @@ function OrderDetailDialog({
 
 export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOpen?: boolean } = {}) {
   const { scope, currentScope } = useTenantScope()
+  const { user } = useAuth()
+  const { branches } = useBranch()
   const abortRef = useRef<AbortController | null>(null)
   const statsLoadedRef = useRef(false)
+
+  const storeName = user?.organization?.name || 'Tienda Online'
+  const storeSlug = user?.organization?.slug ?? null
+  const branchNamesById = useMemo(
+    () => Object.fromEntries(branches.map((branch) => [branch.id, branch.name])),
+    [branches]
+  )
+  const showBranchInfo = branches.length > 1
 
   const [orders, setOrders] = useState<CustomerOrder[]>([])
   const [search, setSearch] = useState('')
   const [statusTab, setStatusTab] = useState('PENDING')
   const [paymentFilter, setPaymentFilter] = useState('ALL')
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'ALL' | FulfillmentType>('ALL')
+  const [branchFilter, setBranchFilter] = useState('ALL')
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const [sortField, setSortField] = useState<'created_at' | 'total'>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -1429,10 +1718,13 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
   const [createOpen, setCreateOpen] = useState(initialCreateOpen)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null)
+  const [bulkUpdating, setBulkUpdating] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<{ mode: 'single'; order: CustomerOrder } | { mode: 'bulk'; ids: string[] } | null>(null)
   const [detailOrder, setDetailOrder] = useState<CustomerOrder | null>(null)
+  const [editOrder, setEditOrder] = useState<CustomerOrder | null>(null)
   const [collectionOrder, setCollectionOrder] = useState<CustomerOrder | null>(null)
   const [deliveryOrder, setDeliveryOrder] = useState<CustomerOrder | null>(null)
+  const [bulkLabelOrders, setBulkLabelOrders] = useState<CustomerOrder[]>([])
   const [_showGuide, _setShowGuide] = useState(true)
 
   // Derived metrics (org-wide values come from the API `stats`/`meta`, not the page)
@@ -1455,6 +1747,8 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
         sort: buildSortParam(sortField, sortDir),
       })
       if (paymentFilter !== 'ALL') params.set('payment_status', paymentFilter)
+      if (fulfillmentFilter !== 'ALL') params.set('fulfillment_type', fulfillmentFilter)
+      if (branchFilter !== 'ALL') params.set('branch_id', branchFilter)
       if (needStats) params.set('include_stats', 'true')
       const dateFrom = getDateFrom(datePreset)
       if (dateFrom) params.set('date_from', dateFrom)
@@ -1477,7 +1771,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
-  }, [page, search, statusTab, paymentFilter, datePreset, sortField, sortDir, scope, currentScope])
+  }, [page, search, statusTab, paymentFilter, fulfillmentFilter, branchFilter, datePreset, sortField, sortDir, scope, currentScope])
 
   useEffect(() => {
     abortRef.current?.abort()
@@ -1489,13 +1783,27 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
     setTotal(0)
     setTotalPages(1)
     setPage(1)
+    setBranchFilter('ALL')
+    setFulfillmentFilter('ALL')
     setSelectedIds(new Set())
+    setCancelTarget(null)
     setDetailOrder(null)
+    setEditOrder(null)
     setCollectionOrder(null)
     setDeliveryOrder(null)
+    setBulkLabelOrders([])
     setCreateOpen(false)
     return () => abortRef.current?.abort()
   }, [scope])
+
+  // Mantener detailOrder sincronizado si la lista refresca
+  useEffect(() => {
+    setDetailOrder((cur) => {
+      if (!cur) return null
+      const match = orders.find((row) => row.id === cur.id)
+      return match ?? cur
+    })
+  }, [orders])
 
   useEffect(() => {
     const t = window.setTimeout(() => void loadOrders(), 250)
@@ -1509,26 +1817,42 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
     return () => window.clearInterval(interval)
   }, [loadOrders])
 
-  async function updateStatus(order: CustomerOrder, nextStatus: OrderStatus, confirmed = false) {
-    if (nextStatus === 'CANCELLED' && cancelConfirmId !== order.id) { setCancelConfirmId(order.id); return }
-    if (nextStatus === 'DELIVERED' && !confirmed) { setDeliveryOrder(order); return }
+  function applyUpdatedOrder(updated: CustomerOrder, removeIfTabMismatch = false) {
+    setOrders((cur) => {
+      const mapped = cur.map((r) => (r.id === updated.id ? updated : r))
+      if (removeIfTabMismatch && statusTab !== 'ALL' && updated.status !== statusTab) {
+        return mapped.filter((r) => r.id !== updated.id)
+      }
+      return mapped
+    })
+    setDetailOrder((cur) => (cur?.id === updated.id ? updated : cur))
+    setEditOrder((cur) => (cur?.id === updated.id ? updated : cur))
+  }
+
+  async function updateStatus(order: CustomerOrder, nextStatus: OrderStatus, confirmed = false, note?: string) {
+    if (nextStatus === 'CANCELLED' && !confirmed) {
+      setCancelTarget({ mode: 'single', order })
+      return
+    }
+    if (nextStatus === 'DELIVERED' && !confirmed) {
+      setDeliveryOrder(order)
+      return
+    }
     const requestScope = scope
-    setCancelConfirmId(null); setUpdatingId(order.id)
+    setUpdatingId(order.id)
     try {
       const response = await fetch(`/api/orders/${order.id}/status`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: nextStatus, ...(note ? { note } : {}) }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo actualizar.')
       if (currentScope.current !== requestScope) return
       const updated = payload.data as CustomerOrder
-      setOrders((cur) => {
-        const mapped = cur.map((r) => r.id === order.id ? updated : r)
-        return statusTab !== 'ALL' && updated.status !== statusTab ? mapped.filter((r) => r.id !== order.id) : mapped
-      })
+      applyUpdatedOrder(updated, true)
       toast.success('Estado actualizado', { description: `${order.order_number} → ${ORDER_STATUS_META[nextStatus].label}` })
       if (nextStatus === 'DELIVERED') setDeliveryOrder(null)
+      if (nextStatus === 'CANCELLED') setCancelTarget(null)
       // Los contadores se recargan del servidor en vez de ajustarse a mano: si
       // otro operador movió pedidos mientras tanto, la aritmética optimista
       // dejaba los números mal hasta la próxima recarga completa.
@@ -1536,6 +1860,71 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
     } catch (error) {
       toast.error('No se pudo actualizar', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally { setUpdatingId(null) }
+  }
+
+  async function executeBulkStatus(
+    ids: string[],
+    targetStatus: Exclude<OrderStatus, 'PENDING'>,
+    note?: string
+  ) {
+    if (ids.length === 0) return
+    const requestScope = scope
+    setBulkUpdating(true)
+    try {
+      const response = await fetch('/api/orders/bulk-status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, status: targetStatus, ...(note ? { note } : {}) }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.error ?? 'No se pudieron actualizar los pedidos seleccionados.')
+      }
+      if (currentScope.current !== requestScope) return
+
+      const updatedList = (payload.data?.updated ?? []) as CustomerOrder[]
+      const skippedList = (payload.data?.skipped ?? []) as Array<{ id: string; orderNumber: string; reason: string }>
+      const updatedMap = new Map(updatedList.map((u) => [u.id, u]))
+
+      if (updatedList.length > 0) {
+        setOrders((cur) => {
+          const mapped = cur.map((r) => updatedMap.get(r.id) ?? r)
+          return statusTab !== 'ALL'
+            ? mapped.filter((r) => !(updatedMap.has(r.id) && r.status !== statusTab))
+            : mapped
+        })
+        setDetailOrder((cur) => (cur ? updatedMap.get(cur.id) ?? cur : null))
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          updatedMap.forEach((_v, key) => next.delete(key))
+          return next
+        })
+      }
+
+      if (targetStatus === 'CANCELLED') setCancelTarget(null)
+
+      if (updatedList.length > 0 && skippedList.length === 0) {
+        toast.success(`${updatedList.length} pedido${updatedList.length === 1 ? '' : 's'} actualizado${updatedList.length === 1 ? '' : 's'}`, {
+          description: `Nuevo estado: ${ORDER_STATUS_META[targetStatus].label}`,
+        })
+      } else if (updatedList.length > 0 && skippedList.length > 0) {
+        toast.warning(`${updatedList.length} actualizados · ${skippedList.length} omitidos`, {
+          description: skippedList.slice(0, 2).map((s) => `#${s.orderNumber}: ${s.reason}`).join(' | '),
+        })
+      } else if (skippedList.length > 0) {
+        toast.info('Ningún pedido cambió de estado', {
+          description: skippedList.slice(0, 2).map((s) => `#${s.orderNumber}: ${s.reason}`).join(' | '),
+        })
+      }
+
+      void loadOrders({ forceStats: true })
+    } catch (error) {
+      toast.error('Error en acción masiva', {
+        description: error instanceof Error ? error.message : 'Intentá nuevamente.',
+      })
+    } finally {
+      setBulkUpdating(false)
+    }
   }
 
   async function recordCollection(order: CustomerOrder, input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) {
@@ -1558,15 +1947,14 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
       }
       if (currentScope.current !== requestScope) return
       const updated = payload.data as CustomerOrder
-      setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
-      setDetailOrder((cur) => cur?.id === order.id ? updated : cur)
+      applyUpdatedOrder(updated, false)
       setCollectionOrder(null)
       toast.success('Cobro registrado', { description: `${formatMoney(input.amount)} en ${order.order_number}` })
       void loadOrders({ forceStats: true })
     } catch (error) {
       toast.error('No se pudo actualizar el pago', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally {
-      setUpdatingId(null) 
+      setUpdatingId(null)
     }
   }
 
@@ -1580,6 +1968,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
   }
 
   const allPageSelected = orders.length > 0 && orders.every((o) => selectedIds.has(o.id))
+  const selectedOrders = useMemo(() => orders.filter((o) => selectedIds.has(o.id)), [orders, selectedIds])
 
   function toggleSelectPage() {
     setSelectedIds((prev) => {
@@ -1590,10 +1979,15 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
     })
   }
 
-  const hasActiveFilters = search !== '' || paymentFilter !== 'ALL' || datePreset !== 'all'
+  const hasActiveFilters = search !== '' || paymentFilter !== 'ALL' || fulfillmentFilter !== 'ALL' || branchFilter !== 'ALL' || datePreset !== 'all'
 
   function resetFilters() {
-    setSearch(''); setPaymentFilter('ALL'); setDatePreset('all'); setPage(1)
+    setSearch('')
+    setPaymentFilter('ALL')
+    setFulfillmentFilter('ALL')
+    setBranchFilter('ALL')
+    setDatePreset('all')
+    setPage(1)
   }
 
   // Export the full filtered dataset (paging through the API), not just the
@@ -1613,6 +2007,8 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
           sort: buildSortParam(sortField, sortDir),
         })
         if (paymentFilter !== 'ALL') params.set('payment_status', paymentFilter)
+        if (fulfillmentFilter !== 'ALL') params.set('fulfillment_type', fulfillmentFilter)
+        if (branchFilter !== 'ALL') params.set('branch_id', branchFilter)
         const dateFrom = getDateFrom(datePreset)
         if (dateFrom) params.set('date_from', dateFrom)
 
@@ -1631,7 +2027,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
         toast.info('Nada para exportar', { description: 'No hay pedidos que coincidan con los filtros.' })
         return
       }
-      exportOrdersCSV(collected)
+      exportOrdersCSV(collected, branchNamesById)
       toast.success('CSV exportado', { description: `${collected.length} pedido${collected.length !== 1 ? 's' : ''}.` })
     } catch (error) {
       toast.error('No se pudo exportar', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
@@ -1721,8 +2117,33 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
               )}
             </div>
 
+            {showBranchInfo && (
+              <Select value={branchFilter} onValueChange={(v) => { setBranchFilter(v); setPage(1) }}>
+                <SelectTrigger className="h-10 w-[165px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                  <SelectValue placeholder="Todas las sucursales" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas las sucursales</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={fulfillmentFilter} onValueChange={(v) => { setFulfillmentFilter(v as 'ALL' | FulfillmentType); setPage(1) }}>
+              <SelectTrigger className="h-10 w-[145px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                <SelectValue placeholder="Todos los tipos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos los tipos</SelectItem>
+                <SelectItem value="DELIVERY">Delivery</SelectItem>
+                <SelectItem value="PICKUP">Retiro en local</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={datePreset} onValueChange={(v) => { setDatePreset(v as DatePreset); setPage(1) }}>
-              <SelectTrigger className="h-10 w-[150px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+              <SelectTrigger className="h-10 w-[140px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1734,7 +2155,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
             </Select>
 
             <Select value={statusTab} onValueChange={(v) => { setStatusTab(v); setPage(1) }}>
-              <SelectTrigger className="h-10 w-[155px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+              <SelectTrigger className="h-10 w-[150px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1744,7 +2165,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
             </Select>
 
             <Select value={paymentFilter} onValueChange={(v) => { setPaymentFilter(v); setPage(1) }}>
-              <SelectTrigger className="h-10 w-[150px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+              <SelectTrigger className="h-10 w-[145px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                 <SelectValue placeholder="Todos los pagos" />
               </SelectTrigger>
               <SelectContent>
@@ -1754,7 +2175,7 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
             </Select>
 
             <Select value={sortField} onValueChange={(v) => { setSortField(v as 'created_at' | 'total'); setPage(1) }}>
-              <SelectTrigger className="h-10 w-[115px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+              <SelectTrigger className="h-10 w-[110px] rounded-xl border-slate-200/90 bg-slate-50/70 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                 <SelectValue placeholder="Fecha" />
               </SelectTrigger>
               <SelectContent>
@@ -1774,22 +2195,40 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
           {hasActiveFilters && (
             <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-slate-200/80 dark:border-white/5 pt-3">
               <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Filtros activos:</span>
+              {branchFilter !== 'ALL' && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-300">
+                  Sucursal: {branchNamesById[branchFilter] ?? branchFilter}
+                  <button type="button" onClick={() => { setBranchFilter('ALL'); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              {fulfillmentFilter !== 'ALL' && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/70 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
+                  Entrega: {fulfillmentFilter === 'DELIVERY' ? 'Delivery' : 'Retiro'}
+                  <button type="button" onClick={() => { setFulfillmentFilter('ALL'); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              {datePreset !== 'all' && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-300">
+                  Período: {datePreset === 'today' ? 'Hoy' : datePreset === 'week' ? 'Últimos 7 días' : 'Últimos 30 días'}
+                  <button type="button" onClick={() => { setDatePreset('all'); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                </span>
+              )}
               {statusTab !== 'ALL' && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
                   Estado: {ORDER_STATUS_META[statusTab as OrderStatus]?.label ?? statusTab}
-                  <button type="button" onClick={() => setStatusTab('ALL')} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                  <button type="button" onClick={() => { setStatusTab('ALL'); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
                 </span>
               )}
               {paymentFilter !== 'ALL' && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-300">
                   Pago: {PAYMENT_STATUS_META[paymentFilter as PaymentStatus]?.label ?? paymentFilter}
-                  <button type="button" onClick={() => setPaymentFilter('ALL')} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                  <button type="button" onClick={() => { setPaymentFilter('ALL'); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
                 </span>
               )}
               {search && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-300">
                   Búsqueda: &ldquo;{search}&rdquo;
-                  <button type="button" onClick={() => setSearch('')} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
+                  <button type="button" onClick={() => { setSearch(''); setPage(1) }} className="opacity-60 hover:opacity-100"><X className="h-3 w-3" /></button>
                 </span>
               )}
               <button type="button" onClick={resetFilters}
@@ -1800,16 +2239,82 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
           )}
         </div>
 
-        {/* ── Cancel confirm ── */}
-        {cancelConfirmId && (
-          <CancelConfirmBanner
-            onConfirm={() => {
-              const order = orders.find((o) => o.id === cancelConfirmId)
-              if (order) void updateStatus(order, 'CANCELLED')
-              else setCancelConfirmId(null)
-            }}
-            onDismiss={() => setCancelConfirmId(null)}
-          />
+        {/* ── Bulk actions bar ── */}
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-500/30 bg-blue-50/90 px-4 py-3 shadow-xs dark:border-blue-500/30 dark:bg-blue-500/10">
+            <div className="flex items-center gap-2.5">
+              <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-bold text-white tabular-nums">
+                {selectedIds.size}
+              </span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                pedido{selectedIds.size === 1 ? '' : 's'} seleccionado{selectedIds.size === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline underline-offset-2"
+              >
+                Limpiar selección
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value=""
+                disabled={bulkUpdating}
+                onValueChange={(value) => {
+                  const ids = Array.from(selectedIds)
+                  if (value === 'CANCELLED') {
+                    setCancelTarget({ mode: 'bulk', ids })
+                    return
+                  }
+                  void executeBulkStatus(ids, value as Exclude<OrderStatus, 'PENDING'>)
+                }}
+              >
+                <SelectTrigger className="h-8.5 w-[185px] rounded-xl border-blue-500/30 bg-white text-xs font-semibold text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                  <SelectValue placeholder={bulkUpdating ? 'Aplicando cambios…' : 'Cambiar estado masivo…'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONFIRMED">Confirmar pedidos</SelectItem>
+                  <SelectItem value="PREPARING">Pasar a Preparando</SelectItem>
+                  <SelectItem value="READY">Marcar Listos</SelectItem>
+                  <SelectItem value="SHIPPED">Marcar En camino</SelectItem>
+                  <SelectItem value="DELIVERED">Marcar Entregados</SelectItem>
+                  <SelectItem value="CANCELLED" className="text-rose-600 dark:text-rose-400 font-semibold">Cancelar seleccionados</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {selectedOrders.length > 0 && (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkUpdating}
+                    onClick={() => setBulkLabelOrders(selectedOrders)}
+                    className="h-8.5 gap-1.5 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Rótulos ({selectedOrders.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkUpdating}
+                    onClick={() => {
+                      exportOrdersCSV(selectedOrders, branchNamesById)
+                      toast.success('CSV exportado', { description: `${selectedOrders.length} seleccionados.` })
+                    }}
+                    className="h-8.5 gap-1.5 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    CSV ({selectedOrders.length})
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
         )}
 
         {/* ── Order list ── */}
@@ -1877,12 +2382,15 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
                   order={order}
                   selected={selectedIds.has(order.id)}
                   updating={updatingId === order.id}
+                  branchName={showBranchInfo && order.branch_id ? branchNamesById[order.branch_id] : undefined}
+                  storeSlug={storeSlug}
                   onSelect={(checked) => toggleSelect(order.id, checked)}
                   onStatusChange={(s) => void updateStatus(order, s)}
-                   onPaymentRequest={() => setCollectionOrder(order)}
+                  onPaymentRequest={() => setCollectionOrder(order)}
                   onAdvanceStatus={(s) => void updateStatus(order, s)}
-                  onCancelRequest={() => setCancelConfirmId(order.id)}
+                  onCancelRequest={() => setCancelTarget({ mode: 'single', order })}
                   onDetailRequest={() => setDetailOrder(order)}
+                  onEditRequest={() => setEditOrder(order)}
                 />
               ))}
             </div>
@@ -1916,6 +2424,15 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
 
       <CreateOrderDialog open={createOpen} onOpenChange={setCreateOpen}
         onCreated={() => void loadOrders({ forceStats: true })} />
+      <EditOrderDialog
+        order={editOrder}
+        open={Boolean(editOrder)}
+        onOpenChange={(open) => { if (!open) setEditOrder(null) }}
+        onUpdated={(updated) => {
+          applyUpdatedOrder(updated, false)
+          void loadOrders({ forceStats: true })
+        }}
+      />
       <OrderDetailDialog
         order={detailOrder}
         open={Boolean(detailOrder)}
@@ -1924,6 +2441,12 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
           setDetailOrder(null)
           setCollectionOrder(order)
         }}
+        onAdvanceStatus={(order, next) => void updateStatus(order, next)}
+        onCancelRequest={(order) => setCancelTarget({ mode: 'single', order })}
+        onEditRequest={(order) => setEditOrder(order)}
+        storeName={storeName}
+        storeSlug={storeSlug}
+        branchNamesById={branchNamesById}
       />
       <CollectionDialog
         order={collectionOrder}
@@ -1938,6 +2461,42 @@ export function OrdersDashboard({ initialCreateOpen = false }: { initialCreateOp
         submitting={Boolean(deliveryOrder && updatingId === deliveryOrder.id)}
         onOpenChange={(open) => { if (!open) setDeliveryOrder(null) }}
         onConfirm={() => { if (deliveryOrder) void updateStatus(deliveryOrder, 'DELIVERED', true) }}
+      />
+      <CancelOrderDialog
+        open={Boolean(cancelTarget)}
+        title={
+          cancelTarget?.mode === 'bulk'
+            ? `Cancelar ${cancelTarget.ids.length} pedido${cancelTarget.ids.length === 1 ? '' : 's'}`
+            : cancelTarget?.mode === 'single'
+              ? `Cancelar pedido #${cancelTarget.order.order_number}`
+              : 'Cancelar pedido'
+        }
+        description={
+          cancelTarget?.mode === 'bulk'
+            ? 'Esta acción pasará a cancelado cada pedido válido de la selección. Los que ya estén cerrados serán omitidos.'
+            : 'Esta acción no se puede deshacer. Puedes anotar un motivo para dejar registro en el historial.'
+        }
+        submitting={
+          cancelTarget?.mode === 'bulk'
+            ? bulkUpdating
+            : Boolean(cancelTarget?.mode === 'single' && updatingId === cancelTarget.order.id)
+        }
+        onOpenChange={(open) => { if (!open) setCancelTarget(null) }}
+        onConfirm={(note) => {
+          if (!cancelTarget) return
+          if (cancelTarget.mode === 'single') {
+            void updateStatus(cancelTarget.order, 'CANCELLED', true, note)
+          } else {
+            void executeBulkStatus(cancelTarget.ids, 'CANCELLED', note)
+          }
+        }}
+      />
+      <ShippingLabelDialog
+        orders={bulkLabelOrders}
+        open={bulkLabelOrders.length > 0}
+        onOpenChange={(open) => { if (!open) setBulkLabelOrders([]) }}
+        storeName={storeName}
+        branchNamesById={branchNamesById}
       />
     </div>
   )

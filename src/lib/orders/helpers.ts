@@ -1,4 +1,4 @@
-import type { CustomerOrder, CustomerOrderItem, OrderStatus, PaymentMethod } from './types'
+import type { CustomerOrder, CustomerOrderItem, OrderChannel, OrderStatus, PaymentMethod } from './types'
 import { ORDER_FLOW, normalizeOrderStatus } from './flow'
 import { normalizePaymentStatus } from './payment-flow'
 
@@ -47,6 +47,8 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
   return {
     id: String(order.id ?? ''),
     organization_id: String(order.organization_id ?? ''),
+    branch_id: order.branch_id ? String(order.branch_id) : null,
+    channel: (order.created_by ? 'PANEL' : 'WEB') as OrderChannel,
     customer_id: order.customer_id ? String(order.customer_id) : null,
     order_number: String(order.order_number ?? ''),
     status: normalizeOrderStatus(order.status),

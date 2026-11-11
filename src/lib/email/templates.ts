@@ -113,6 +113,77 @@ export function renderOrderConfirmationEmail(params: {
   })
 }
 
+export function renderOrderStatusUpdateEmail(params: {
+  customerName: string
+  orderCode: string
+  status: 'CONFIRMED' | 'READY' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
+  deliveryMethod: 'delivery' | 'pickup'
+  total: number
+  currency?: string
+  note?: string | null
+  trackUrl?: string
+  brand?: BrandInfo
+}) {
+  const { customerName, orderCode, status, deliveryMethod, total, currency = 'Gs.', note, trackUrl, brand } = params
+
+  const copy: Record<typeof status, { title: string; preview: string; intro: string; detail: string }> = {
+    CONFIRMED: {
+      title: `Confirmamos tu pedido #${orderCode}`,
+      preview: `Tu pedido #${orderCode} fue confirmado y pronto entrará en preparación.`,
+      intro: `Hola ${customerName}, confirmamos tu pedido #${orderCode}.`,
+      detail: 'Ya lo tenemos en cola para prepararlo lo antes posible.',
+    },
+    READY: {
+      title: deliveryMethod === 'delivery' ? `Tu pedido #${orderCode} está listo para envío` : `Tu pedido #${orderCode} está listo para retirar`,
+      preview: deliveryMethod === 'delivery' ? `Preparamos tu pedido #${orderCode} para despacharlo.` : `Ya podés pasar a retirar tu pedido #${orderCode}.`,
+      intro: `Hola ${customerName}, ¡buenas noticias! Tu pedido #${orderCode} ya está listo.`,
+      detail: deliveryMethod === 'delivery'
+        ? 'Nuestro equipo coordinará la salida para entregarlo en tu dirección.'
+        : 'Podés acercarte al local cuando quieras para retirarlo.',
+    },
+    SHIPPED: {
+      title: `Tu pedido #${orderCode} está en camino`,
+      preview: `Despachamos tu pedido #${orderCode}.`,
+      intro: `Hola ${customerName}, tu pedido #${orderCode} ya salió para entrega.`,
+      detail: 'El repartidor se encuentra en camino hacia tu domicilio.',
+    },
+    DELIVERED: {
+      title: `Entregamos tu pedido #${orderCode}`,
+      preview: `Tu pedido #${orderCode} fue marcado como entregado.`,
+      intro: `Hola ${customerName}, tu pedido #${orderCode} figura como entregado.`,
+      detail: '¡Gracias por elegirnos! Si necesitás ayuda con tu compra, respondé a este email.',
+    },
+    CANCELLED: {
+      title: `Pedido #${orderCode} cancelado`,
+      preview: `Tu pedido #${orderCode} fue cancelado.`,
+      intro: `Hola ${customerName}, te informamos que tu pedido #${orderCode} fue cancelado.`,
+      detail: note?.trim()
+        ? `Motivo informado: ${note.trim()}`
+        : 'Si no solicitaste la cancelación o tenés consultas, respondé a este email.',
+    },
+  }
+
+  const stateCopy = copy[status]
+
+  return renderBrandedEmail({
+    title: stateCopy.title,
+    preview: stateCopy.preview,
+    intro: stateCopy.intro,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:14px;color:#334155;">${escapeText(stateCopy.detail)}</p>
+      ${status !== 'CANCELLED' && note?.trim() ? `<p style="margin:0 0 12px;font-size:13px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;"><strong>Nota:</strong> ${escapeText(note.trim())}</p>` : ''}
+      <p style="margin:0;font-size:13px;color:#64748b;">Total del pedido: <strong style="color:#0f172a;">${escapeText(currency)} ${total.toLocaleString('es-PY')}</strong> · ${deliveryMethod === 'delivery' ? 'Delivery' : 'Retiro en local'}</p>
+    `,
+    cta: trackUrl ? { label: 'Ver estado de mi pedido', url: trackUrl } : undefined,
+    brand: {
+      name: brand?.name || 'Tienda',
+      color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
+      logoUrl: brand?.logoUrl,
+    },
+    footerNote: `Pedido ${orderCode} · Si tenés dudas, respondé a este email.`,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // 5. Recordatorio de pago para créditos vencidos
 // ---------------------------------------------------------------------------

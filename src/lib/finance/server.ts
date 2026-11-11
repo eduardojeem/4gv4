@@ -2710,7 +2710,7 @@ function buildFinancialSummary(
     })),
   })
   const refundedCash = refunds.reduce((total, refund) => total + refund.cashAmount, 0)
-  const saleCollected = [...(records.salePayments ?? []), ...(records.creditPayments ?? [])]
+  const collectedFrom = (payments: FinanceSalePaymentRecord[] | undefined) => (payments ?? [])
     .filter(
       (payment) =>
         isInBranch(payment.branchId, filters) &&
@@ -2718,6 +2718,11 @@ function buildFinancialSummary(
         isCompletedNonCreditSalePayment(payment),
     )
     .reduce((total, payment) => total + money(payment.amount), 0)
+  // Ventas y cuotas por separado: el total es el mismo, pero así la app puede
+  // mostrar cuánto entró por cada lado.
+  const saleOnlyCollected = collectedFrom(records.salePayments)
+  const installmentCollected = collectedFrom(records.creditPayments)
+  const saleCollected = saleOnlyCollected + installmentCollected
   // Los pedidos no tienen cobros fechados: se toma el total de los que figuran
   // pagados. Es menos preciso que un pago con fecha, pero deja de ignorar por
   // completo la plata que entro por la tienda.
@@ -2772,8 +2777,10 @@ function buildFinancialSummary(
         isInPeriod(closeout.createdAt, filters),
     )
     .reduce((total, closeout) => total + closeout.refundAmount, 0)
-  const paid = signedPayments(records.financePayments, filters) +
-    signedPayments(records.payrollPayments, filters) +
+  const expensesPaid = signedPayments(records.financePayments, filters)
+  const payrollPaid = signedPayments(records.payrollPayments, filters)
+  const paid = expensesPaid +
+    payrollPaid +
     refundedCash +
     technicianPaid +
     closeoutRefunds +
@@ -2888,6 +2895,23 @@ function buildFinancialSummary(
       collected: roundMoneyValue(saleCollected + orderCollected + repairCollected + overageTotal),
       paid: roundMoneyValue(paid),
       netCashFlow: roundMoneyValue(saleCollected + orderCollected + repairCollected + overageTotal - paid),
+      breakdown: {
+        collected: {
+          sales: roundMoneyValue(saleOnlyCollected),
+          installments: roundMoneyValue(installmentCollected),
+          repairs: roundMoneyValue(repairCollected),
+          orders: roundMoneyValue(orderCollected),
+          cashOverage: roundMoneyValue(overageTotal),
+        },
+        paid: {
+          expenses: roundMoneyValue(expensesPaid),
+          payroll: roundMoneyValue(payrollPaid),
+          technicians: roundMoneyValue(technicianPaid),
+          refunds: roundMoneyValue(refundedCash + closeoutRefunds),
+          paymentFees: roundMoneyValue(feesTotal),
+          cashShortages: roundMoneyValue(shortageTotal),
+        },
+      },
     },
   }
 }

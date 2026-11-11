@@ -3,11 +3,13 @@ import type { FulfillmentType } from '@/lib/orders/types'
 export type CatalogPriceProduct = {
   sale_price?: unknown
   offer_price?: unknown
+  has_offer?: boolean | null
 }
 
 export function getCatalogUnitPrice(product: CatalogPriceProduct) {
-  const offerPrice = Number(product.offer_price)
   const salePrice = Number(product.sale_price)
+  const offerEnabled = product.has_offer !== false
+  const offerPrice = offerEnabled ? Number(product.offer_price) : NaN
   const price = Number.isFinite(offerPrice) && offerPrice > 0 ? offerPrice : salePrice
 
   return Number.isFinite(price) && price >= 0 ? price : 0
@@ -15,6 +17,10 @@ export function getCatalogUnitPrice(product: CatalogPriceProduct) {
 
 export function hasDuplicateProductIds(items: Array<{ productId: string }>) {
   return new Set(items.map((item) => item.productId)).size !== items.length
+}
+
+export function hasDuplicateOrderItems(items: Array<{ productId: string; variantId?: string | null }>) {
+  return new Set(items.map((item) => `${item.productId}:${item.variantId || ''}`)).size !== items.length
 }
 
 export function validateOrderAmounts(params: {

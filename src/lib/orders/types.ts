@@ -2,6 +2,7 @@ export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SHI
 export type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIAL' | 'REFUNDED' | 'FAILED'
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'DIGITAL_WALLET'
 export type FulfillmentType = 'PICKUP' | 'DELIVERY'
+export type OrderChannel = 'WEB' | 'PANEL'
 
 export type CustomerOrderItem = {
   id: string
@@ -18,6 +19,8 @@ export type CustomerOrderItem = {
 export type CustomerOrder = {
   id: string
   organization_id: string
+  branch_id: string | null
+  channel: OrderChannel
   customer_id: string | null
   order_number: string
   status: OrderStatus
