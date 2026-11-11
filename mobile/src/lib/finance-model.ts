@@ -86,6 +86,17 @@ export function comparisonText(current: number | null, previous: number | null |
   return change > 0 ? `${rounded} % más que el período anterior` : `${rounded} % menos que el período anterior`;
 }
 
+/**
+ * El saldo de «Cobros y pagos» en palabras: con signo explícito y una frase,
+ * porque un número suelto («Diferencia») no decía si era bueno o malo.
+ */
+export function cashBalance(net: number) {
+  const value = Number.isFinite(net) ? net : 0;
+  if (value > 0) return { sign: '+', tone: 'good' as const, text: 'Entró más plata de la que salió.' };
+  if (value < 0) return { sign: '−', tone: 'bad' as const, text: 'Salió más plata de la que entró.' };
+  return { sign: '', tone: 'neutral' as const, text: 'Entró lo mismo que salió.' };
+}
+
 /** Cuentas a pagar en los próximos 7 días y las que vienen después. */
 export function splitDueThisWeek<T extends { dueDate: string }>(items: T[], today: string) {
   const limit = new Date(`${today}T00:00:00Z`);
@@ -125,7 +136,7 @@ export function groupFinanceWarnings(warnings: FinanceSummaryData['coverageWarni
       return { ...group, title: `${items} sin costo cargado`, hint: 'La ganancia sale más alta de lo real hasta que cargues cuánto te costaron esos productos.' };
     }
     if (group.code === 'MISSING_CASH_TIMING') {
-      return { ...group, title: `${items} con cobros sin fecha`, hint: 'No sabemos qué día entró esa plata, así que puede faltar en «Entró».' };
+      return { ...group, title: `${items} con cobros sin fecha`, hint: 'No sabemos qué día entró esa plata, así que puede faltar en «Cobraste».' };
     }
     if (group.code === 'REJECTED_PAYMENT') {
       return { ...group, title: `${plural(group.count, ['cobro rechazado', 'cobros rechazados'])} con tarjeta o transferencia`, hint: 'Esa plata no entró. Revisá si el cliente pagó de otra forma.' };

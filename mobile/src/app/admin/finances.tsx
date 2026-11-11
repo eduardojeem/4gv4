@@ -27,6 +27,7 @@ import {
   type FinanceSummaryData,
 } from '@/lib/admin';
 import {
+  cashBalance,
   financeBreakdown,
   comparisonText,
   financeHeadline,
@@ -93,6 +94,7 @@ export default function FinancesAdminScreen() {
     id: string;
   }>({ organizationId: null, id: 'all' });
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showCashHelp, setShowCashHelp] = useState(false);
   const branchId =
     branch.organizationId === scope.organizationId ? branch.id : 'all';
   const key = financeReportKey(
@@ -203,6 +205,7 @@ export default function FinancesAdminScreen() {
   const revenueComparison = data ? comparisonText(data.accrued.revenue, data.comparison?.accrued.revenue) : null;
   const due = data && shown ? splitDueThisWeek(data.upcomingDue, financePeriodDates('today', shown.timeZone).startDate) : null;
   const sources = data?.accrued.revenueBreakdown;
+  const balance = data ? cashBalance(data.cash.netCashFlow) : null;
   const branches = shown?.branches ?? [];
   const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
   const profitColor = !headline || headline.profit === 0 ? colors.text : headline.profit > 0 ? tone.good : tone.bad;
@@ -356,21 +359,14 @@ export default function FinancesAdminScreen() {
                   )}
                 </View>
 
+                {/* El saldo de cobros y pagos ya no se repite acá: vive solo en
+                    «Cobros y pagos», con su explicación. */}
                 <View style={styles.tiles}>
                   <Tile
                     icon="trending-up-outline"
                     label="Vendiste"
                     value={amount(data.accrued.revenue)}
                     hint={revenueComparison ?? 'Ventas, servicios, pedidos y reparaciones entregadas'}
-                    colors={colors}
-                    accent={accent}
-                  />
-                  <Tile
-                    icon="swap-vertical-outline"
-                    label="Entró menos salió"
-                    value={amount(data.cash.netCashFlow)}
-                    valueColor={data.cash.netCashFlow < 0 ? tone.bad : undefined}
-                    hint="No es lo que hay en caja"
                     colors={colors}
                     accent={accent}
                   />
@@ -495,20 +491,59 @@ export default function FinancesAdminScreen() {
 
                 <View style={card}>
                   <Text accessibilityRole="header" style={[styles.cardTitle, { color: colors.text }]}>
-                    Plata que se movió
+                    Cobros y pagos
                   </Text>
                   <Text style={{ color: colors.muted }}>
-                    Lo que cobraste y pagaste de verdad en el período, en efectivo, tarjeta o transferencia. No es lo que hay en la caja.
+                    La plata que de verdad entró y salió en el período, en efectivo, tarjeta o transferencia.
                   </Text>
-                  <Line icon="arrow-down-circle-outline" iconColor={tone.good} label="Entró" value={amount(data.cash.collected)} colors={colors} />
-                  <Line icon="arrow-up-circle-outline" iconColor={tone.bad} label="Salió" value={amount(data.cash.paid)} colors={colors} />
                   <Line
-                    label="Diferencia"
-                    value={amount(data.cash.netCashFlow)}
-                    valueColor={data.cash.netCashFlow < 0 ? tone.bad : undefined}
+                    icon="add-circle-outline"
+                    iconColor={tone.good}
+                    label="Cobraste"
+                    hint="Ventas, cuotas, reparaciones y pedidos pagados"
+                    value={amount(data.cash.collected)}
+                    colors={colors}
+                  />
+                  <Line
+                    icon="remove-circle-outline"
+                    iconColor={tone.bad}
+                    label="Pagaste"
+                    hint="Gastos y cuentas, sueldos, técnicos y devoluciones"
+                    value={amount(data.cash.paid)}
+                    colors={colors}
+                  />
+                  <Line
+                    label="Saldo"
+                    hint={balance?.text}
+                    value={`${balance?.sign ? `${balance.sign} ` : ''}${amount(Math.abs(data.cash.netCashFlow))}`}
+                    valueColor={balance?.tone === 'good' ? tone.good : balance?.tone === 'bad' ? tone.bad : undefined}
                     strong
                     colors={colors}
                   />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showCashHelp }}
+                    onPress={() => setShowCashHelp((value) => !value)}
+                    style={[styles.between, styles.action]}
+                  >
+                    <Text style={{ color: accent, fontWeight: '700', flexShrink: 1 }}>
+                      ¿Por qué no coincide con la ganancia?
+                    </Text>
+                    <Ionicons name={showCashHelp ? 'chevron-up' : 'chevron-down'} size={18} color={accent} />
+                  </Pressable>
+                  {showCashHelp && (
+                    <View style={{ gap: 6 }}>
+                      {[
+                        'La ganancia cuenta lo que vendiste y lo que te costó, aunque todavía no lo hayas cobrado ni pagado. Acá solo cuenta la plata que se movió.',
+                        'Una venta a crédito suma a la ganancia el día que vendés, pero acá entra recién cuando te pagan cada cuota.',
+                        'Un gasto o una cuenta que todavía no pagaste resta en la ganancia, pero acá sale recién cuando la pagás.',
+                        'Lo que le pagás al proveedor por mercadería aparece acá solo si lo cargaste en la web como gasto o cuenta a pagar.',
+                        'Los retiros y egresos de la caja del punto de venta no se cuentan acá. Tampoco es lo que tenés en la caja ahora.',
+                      ].map((line) => (
+                        <Text key={line} style={{ color: colors.text }}>• {line}</Text>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </>
             )}

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  cashBalance,
   financeBreakdown,
   financeHeadline,
   groupFinanceWarnings,
@@ -62,5 +63,18 @@ describe('finanzas en la app, en claro', () => {
     expect(screen).not.toContain('Zona horaria');
     expect(screen).toContain('branches.length > 1 &&');
     expect(screen).toContain("router.push('/panel/products' as never)");
+  });
+
+  it('el saldo de cobros y pagos sale una sola vez, con signo y en palabras', () => {
+    expect(cashBalance(1500)).toEqual({ sign: '+', tone: 'good', text: 'Entró más plata de la que salió.' });
+    expect(cashBalance(-200)).toEqual({ sign: '−', tone: 'bad', text: 'Salió más plata de la que entró.' });
+    expect(cashBalance(0).sign).toBe('');
+    expect(cashBalance(Number.NaN).tone).toBe('neutral');
+
+    const screen = readFileSync(join(__dirname, '../../mobile/src/app/admin/finances.tsx'), 'utf8');
+    expect(screen).not.toContain('Entró menos salió');
+    expect(screen).not.toContain('label="Diferencia"');
+    expect(screen).toContain('Cobros y pagos');
+    expect(screen).toContain('¿Por qué no coincide con la ganancia?');
   });
 });
