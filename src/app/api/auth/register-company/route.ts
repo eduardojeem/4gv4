@@ -20,6 +20,7 @@ import {
 import { provisionStarterKit } from '@/lib/organization/starter-kit'
 import { defaultOperatingModelFor } from '@/lib/organization/business-profile'
 import { createInitialOnboardingState } from '@/lib/onboarding/shared-setup'
+import { loadPlatformPolicies, type PlatformPolicyClient } from '@/lib/platform/policies'
 
 type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
 type RegisteredAuthUser = {
@@ -67,6 +68,23 @@ export async function POST(request: Request) {
     }
 
     const input = validation.data
+
+    // Políticas de la plataforma (Superadmin → Configuración).
+    const policies = await loadPlatformPolicies(createAdminSupabase() as unknown as PlatformPolicyClient)
+    if (!policies.allowRegistration) {
+      return NextResponse.json(
+        { success: false, code: 'REGISTRATION_CLOSED', error: 'El registro de empresas está cerrado por el momento. Escribinos para crear tu cuenta.' },
+        { status: 403 }
+      )
+    }
+    if (input.password.length < policies.passwordMinLength) {
+      const message = `La contraseña tiene que tener al menos ${policies.passwordMinLength} caracteres.`
+      return NextResponse.json(
+        { success: false, error: message, fieldErrors: [{ field: 'password', message }] },
+        { status: 400 }
+      )
+    }
+
     const selectedPlan = input.selectedPlan
     const selectedPlanTier = selectedPlan.toLowerCase()
 
