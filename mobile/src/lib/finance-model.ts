@@ -49,7 +49,8 @@ export function isEmptyFinanceSummary(data: FinanceSummaryData) {
     // Solo los importes: la apertura de ingresos es un objeto y nunca es 0.
     (['revenue', 'directCosts', 'grossProfit', 'operatingExpenses', 'payrollCost', 'netProfit'] as const)
       .every((key) => data.accrued[key] === 0 || data.accrued[key] === null) &&
-    Object.values(data.cash).every((value) => value === 0) &&
+    // Solo los totales: la apertura de cobros y pagos es un objeto.
+    (['collected', 'paid', 'netCashFlow'] as const).every((key) => data.cash[key] === 0) &&
     !data.overdue.length &&
     !data.upcomingDue.length
   );
@@ -95,6 +96,41 @@ export function cashBalance(net: number) {
   if (value > 0) return { sign: '+', tone: 'good' as const, text: 'Entró más plata de la que salió.' };
   if (value < 0) return { sign: '−', tone: 'bad' as const, text: 'Salió más plata de la que entró.' };
   return { sign: '', tone: 'neutral' as const, text: 'Entró lo mismo que salió.' };
+}
+
+type CashBreakdown = NonNullable<FinanceSummaryData['cash']['breakdown']>;
+export type CashSource = { key: string; label: string; hint?: string; amount: number };
+
+const COLLECTED_SOURCES: { key: keyof CashBreakdown['collected']; label: string; hint?: string }[] = [
+  { key: 'sales', label: 'Ventas', hint: 'En efectivo, tarjeta o transferencia. Lo vendido a crédito entra como cuota.' },
+  { key: 'installments', label: 'Cuotas de créditos', hint: 'Lo que te pagaron de ventas a crédito, de este período o de antes.' },
+  { key: 'repairs', label: 'Reparaciones', hint: 'Cobros de reparaciones hechos fuera de la caja.' },
+  { key: 'orders', label: 'Pedidos de la tienda web' },
+  { key: 'cashOverage', label: 'Sobrante al cerrar la caja' },
+];
+const PAID_SOURCES: { key: keyof CashBreakdown['paid']; label: string; hint?: string }[] = [
+  { key: 'expenses', label: 'Gastos y cuentas pagadas', hint: 'Lo que cargaste en la web como gasto o cuenta a pagar y marcaste como pagado.' },
+  { key: 'payroll', label: 'Sueldos' },
+  { key: 'technicians', label: 'Pagos a técnicos' },
+  { key: 'refunds', label: 'Devoluciones a clientes' },
+  { key: 'paymentFees', label: 'Comisiones de tarjeta y cobros' },
+  { key: 'cashShortages', label: 'Faltante al cerrar la caja' },
+];
+
+/**
+ * De dónde sale «Cobraste» y «Pagaste», en palabras del comercio. Solo lo que
+ * tuvo movimiento: una barbería no ve «Pedidos de la tienda web» en cero.
+ */
+export function cashSources(breakdown: FinanceSummaryData['cash']['breakdown']) {
+  if (!breakdown) return null;
+  const pick = <K extends string>(parts: Record<K, number>, list: { key: K; label: string; hint?: string }[]): CashSource[] =>
+    list
+      .map((item) => ({ ...item, amount: Number.isFinite(parts[item.key]) ? parts[item.key] : 0 }))
+      .filter((item) => item.amount !== 0);
+  return {
+    collected: pick(breakdown.collected, COLLECTED_SOURCES),
+    paid: pick(breakdown.paid, PAID_SOURCES),
+  };
 }
 
 /** Cuentas a pagar en los próximos 7 días y las que vienen después. */

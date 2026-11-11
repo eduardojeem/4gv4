@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   cashBalance,
+  cashSources,
+  isEmptyFinanceSummary,
   financeBreakdown,
   financeHeadline,
   groupFinanceWarnings,
@@ -63,6 +65,33 @@ describe('finanzas en la app, en claro', () => {
     expect(screen).not.toContain('Zona horaria');
     expect(screen).toContain('branches.length > 1 &&');
     expect(screen).toContain("router.push('/panel/products' as never)");
+  });
+
+  it('dice de dónde sale lo cobrado y lo pagado, solo con lo que tuvo movimiento', () => {
+    const parts = cashSources({
+      collected: { sales: 1000, installments: 150, repairs: 0, orders: 0, cashOverage: 0 },
+      paid: { expenses: 300, payroll: 0, technicians: 0, refunds: 200, paymentFees: 12, cashShortages: 0 },
+    })!;
+    expect(parts.collected.map((part) => [part.label, part.amount])).toEqual([['Ventas', 1000], ['Cuotas de créditos', 150]]);
+    expect(parts.paid.map((part) => part.label)).toEqual(['Gastos y cuentas pagadas', 'Devoluciones a clientes', 'Comisiones de tarjeta y cobros']);
+    // Un servidor viejo no manda la apertura: la pantalla queda con los totales.
+    expect(cashSources(undefined)).toBeNull();
+  });
+
+  it('la apertura de cobros no impide mostrar «Sin movimientos»', () => {
+    const empty = {
+      ...report({ revenue: 0, directCosts: 0, grossProfit: 0, operatingExpenses: 0, payrollCost: 0, netProfit: 0 }),
+      complete: true,
+      coverageWarnings: [],
+      cash: {
+        collected: 0, paid: 0, netCashFlow: 0,
+        breakdown: {
+          collected: { sales: 0, installments: 0, repairs: 0, orders: 0, cashOverage: 0 },
+          paid: { expenses: 0, payroll: 0, technicians: 0, refunds: 0, paymentFees: 0, cashShortages: 0 },
+        },
+      },
+    } as Parameters<typeof isEmptyFinanceSummary>[0];
+    expect(isEmptyFinanceSummary(empty)).toBe(true);
   });
 
   it('el saldo de cobros y pagos sale una sola vez, con signo y en palabras', () => {

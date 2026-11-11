@@ -299,6 +299,11 @@ export type FinanceSummaryData = {
     collected: number;
     paid: number;
     netCashFlow: number;
+    /** Un servidor viejo no lo manda: la pantalla muestra solo los totales. */
+    breakdown?: {
+      collected: { sales: number; installments: number; repairs: number; orders: number; cashOverage: number };
+      paid: { expenses: number; payroll: number; technicians: number; refunds: number; paymentFees: number; cashShortages: number };
+    };
   };
   upcomingDue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
   overdue: { id: string; dueDate: string; amount: number; concept?: string | null }[];

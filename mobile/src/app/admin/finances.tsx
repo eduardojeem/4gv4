@@ -28,6 +28,8 @@ import {
 } from '@/lib/admin';
 import {
   cashBalance,
+  cashSources,
+  type CashSource,
   financeBreakdown,
   comparisonText,
   financeHeadline,
@@ -206,6 +208,7 @@ export default function FinancesAdminScreen() {
   const due = data && shown ? splitDueThisWeek(data.upcomingDue, financePeriodDates('today', shown.timeZone).startDate) : null;
   const sources = data?.accrued.revenueBreakdown;
   const balance = data ? cashBalance(data.cash.netCashFlow) : null;
+  const cashParts = data ? cashSources(data.cash.breakdown) : null;
   const branches = shown?.branches ?? [];
   const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
   const profitColor = !headline || headline.profit === 0 ? colors.text : headline.profit > 0 ? tone.good : tone.bad;
@@ -500,18 +503,31 @@ export default function FinancesAdminScreen() {
                     icon="add-circle-outline"
                     iconColor={tone.good}
                     label="Cobraste"
-                    hint="Ventas, cuotas, reparaciones y pedidos pagados"
+                    hint={cashParts ? undefined : 'Ventas, cuotas, reparaciones y pedidos pagados'}
                     value={amount(data.cash.collected)}
+                    strong
                     colors={colors}
                   />
+                  {cashParts?.collected.map((part) => (
+                    <SubLine key={part.key} part={part} amount={amount} colors={colors} />
+                  ))}
                   <Line
                     icon="remove-circle-outline"
                     iconColor={tone.bad}
                     label="Pagaste"
-                    hint="Gastos y cuentas, sueldos, técnicos y devoluciones"
+                    hint={cashParts ? undefined : 'Gastos y cuentas, sueldos, técnicos y devoluciones'}
                     value={amount(data.cash.paid)}
+                    strong
                     colors={colors}
                   />
+                  {cashParts?.paid.map((part) => (
+                    <SubLine key={part.key} part={part} amount={amount} colors={colors} />
+                  ))}
+                  {cashParts && cashParts.paid.length === 0 && data.cash.paid === 0 && (
+                    <Text style={[styles.subLine, { color: colors.muted, fontSize: 12 }]}>
+                      No hay pagos cargados en el período. Los gastos y cuentas se cargan en la web.
+                    </Text>
+                  )}
                   <Line
                     label="Saldo"
                     hint={balance?.text}
@@ -538,7 +554,7 @@ export default function FinancesAdminScreen() {
                         'Una venta a crédito suma a la ganancia el día que vendés, pero acá entra recién cuando te pagan cada cuota.',
                         'Un gasto o una cuenta que todavía no pagaste resta en la ganancia, pero acá sale recién cuando la pagás.',
                         'Lo que le pagás al proveedor por mercadería aparece acá solo si lo cargaste en la web como gasto o cuenta a pagar.',
-                        'Los retiros y egresos de la caja del punto de venta no se cuentan acá. Tampoco es lo que tenés en la caja ahora.',
+                        'Los retiros y egresos manuales de la caja del punto de venta no se cuentan acá (los faltantes al cerrar la caja sí). Tampoco es lo que tenés en la caja ahora.',
                       ].map((line) => (
                         <Text key={line} style={{ color: colors.text }}>• {line}</Text>
                       ))}
@@ -752,6 +768,23 @@ function Line({
   );
 }
 
+/** Una parte de «Cobraste» o «Pagaste», sangrada bajo su total. */
+function SubLine({ part, amount, colors }: { part: CashSource; amount: (value: number) => string; colors: Colors }) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${part.label}: ${amount(part.amount)}${part.hint ? `. ${part.hint}` : ''}`}
+      style={[styles.between, styles.subLine]}
+    >
+      <View style={{ flexShrink: 1, gap: 2 }}>
+        <Text style={{ color: colors.text }}>{part.label}</Text>
+        {part.hint && <Text style={{ color: colors.muted, fontSize: 12 }}>{part.hint}</Text>}
+      </View>
+      <Text style={{ color: colors.text, fontWeight: '600' }}>{amount(part.amount)}</Text>
+    </View>
+  );
+}
+
 function DueRows({
   items,
   amount,
@@ -820,6 +853,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: { flexGrow: 1, flexShrink: 1, flexBasis: 150, gap: 2 },
   amount: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  subLine: { paddingLeft: 26 },
   amountStrong: { fontSize: 18, fontWeight: '800' },
   action: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
   empty: { alignItems: 'center', padding: 32, gap: 12 },
