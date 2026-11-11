@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger'
 import { sendEmail } from '@/lib/email/resend'
+import { storeEmailLogoUrl } from '@/lib/email/store-logo'
 import { renderOrderStatusUpdateEmail } from '@/lib/email/templates'
 import { afterResponse, notifyOrderStatusChanged } from '@/lib/notifications/server/business-events'
 
@@ -12,7 +13,7 @@ const EMAIL_STATUS_LABELS: Record<'CONFIRMED' | 'READY' | 'SHIPPED' | 'DELIVERED
 }
 
 export function emitOrderStatusSideEffects(params: {
-  organization: { id: string; name: string; slug: string }
+  organization: { id: string; name: string; slug: string; logoUrl?: string | null }
   actorUserId: string
   previousStatus: string
   order: {
@@ -71,7 +72,7 @@ export function emitOrderStatusSideEffects(params: {
         total,
         note: note ?? null,
         trackUrl,
-        brand: { name: organization.name },
+        brand: { name: organization.name, logoUrl: storeEmailLogoUrl(organization.logoUrl) },
       }),
       log: {
         organizationId: organization.id,

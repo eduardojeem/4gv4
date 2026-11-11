@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getOrderStatusDbValues, normalizeOrderStatus } from '@/lib/orders/flow'
 import { startOfDayInTimeZone } from '@/lib/date/timezone'
 import { sendEmail } from '@/lib/email/resend'
+import { storeEmailLogoUrl } from '@/lib/email/store-logo'
 import { renderOrderConfirmationEmail } from '@/lib/email/templates'
 import { generateOrderNumber, normalizeOrder, sanitizeOrderSearch } from '@/lib/orders/helpers'
 import {
@@ -677,7 +678,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage', modu
             total: Number(fullOrder.total || 0),
             deliveryMethod: fullOrder.fulfillment_type === 'PICKUP' ? 'pickup' : 'delivery',
             trackUrl,
-            brand: { name: organization.name },
+            brand: { name: organization.name, logoUrl: storeEmailLogoUrl(organization.logoUrl) },
           }),
           log: {
             organizationId: organization.id,
