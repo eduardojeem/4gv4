@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
 import { FinanceSnapshot } from '@/components/admin/finances/FinanceSnapshot'
 import { SalesChart } from '@/components/dashboard/sales-chart'
 import { RepairsChart } from '@/components/dashboard/repairs-chart'
@@ -16,104 +17,51 @@ import { useBranch } from '@/contexts/branch-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { useAdminOverviewMetrics } from '@/hooks/use-admin-overview-metrics'
 import { useAdminNavBadges } from '@/hooks/use-admin-nav-badges'
+import { adminNavCategories, filterCategoriesByPermissions, type NavItem } from '@/config/admin-navigation'
 import { formatCurrency } from '@/lib/currency'
-import {
-  adminNavCategories,
-  filterCategoriesByPermissions,
-  type NavItem,
-} from '@/config/admin-navigation'
-import { Input } from '@/components/ui/input'
 import { normalizeText } from '@/lib/text/normalize'
-import {
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  ChevronRight,
-  LayoutDashboard,
-  Monitor,
-  Package,
-  RefreshCw,
-  Search,
-  Settings,
-  TrendingUp,
-  Users,
-  WalletCards,
-  Wrench,
-  X,
-  type LucideIcon
-} from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { isRouteAvailable } from '@/lib/navigation/route-modules'
+import {
+  AlertTriangle, ArrowRight, Building2, CheckCircle2, ChevronRight, LayoutDashboard,
+  Monitor, Package, RefreshCw, Search, TrendingUp, Users, Wrench, X, type LucideIcon,
+} from 'lucide-react'
 
 type MetricTone = 'neutral' | 'urgent' | 'positive' | 'warning' | 'info'
-
-const METRIC_TONE: Record<MetricTone, { border: string; icon: string; bg: string }> = {
-  neutral: { border: 'border-l-blue-500', icon: 'text-blue-500', bg: 'bg-blue-50/50 dark:bg-blue-950/20' },
-  urgent: { border: 'border-l-destructive', icon: 'text-destructive', bg: 'bg-destructive/5' },
-  positive: { border: 'border-l-emerald-500', icon: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50/50 dark:bg-emerald-950/20' },
-  warning: { border: 'border-l-amber-500', icon: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50/50 dark:bg-amber-950/20' },
-  info: { border: 'border-l-violet-500', icon: 'text-violet-500', bg: 'bg-violet-50/50 dark:bg-violet-950/20' },
+const METRIC_TONE: Record<MetricTone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  urgent: 'bg-destructive/10 text-destructive',
+  positive: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  warning: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  info: 'bg-primary/10 text-primary',
 }
 
-function StatCard({
-  label,
-  value,
-  secondary,
-  icon: Icon,
-  tone,
-  href,
-  badgeText,
-}: {
-  label: string
-  value: string | number
-  secondary?: string
-  icon: LucideIcon
-  tone: MetricTone
-  href?: string
-  badgeText?: string
+function StatCard({ label, value, secondary, scope, icon: Icon, tone = 'neutral', href }: {
+  label: string; value: string | number | null; secondary: string; scope: string
+  icon: LucideIcon; tone?: MetricTone; href?: string
 }) {
-  const toneStyle = METRIC_TONE[tone]
   const content = (
-    <Card className={cn('border-l-4 shadow-sm transition-all duration-200 hover:shadow-md', toneStyle.border, href && 'cursor-pointer hover:border-primary/50')}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-muted-foreground truncate">{label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight text-foreground tabular-nums truncate">
-              {value}
-            </p>
-            {secondary ? (
-              <p className="mt-1 text-xs text-muted-foreground truncate">{secondary}</p>
-            ) : null}
-          </div>
-          <div className={cn('rounded-lg p-2 shrink-0', toneStyle.bg)}>
-            <Icon className={cn('h-5 w-5', toneStyle.icon)} aria-hidden="true" />
-          </div>
+    <Card className={cn('h-full gap-0 rounded-2xl border shadow-none transition-colors', href && 'group-hover:border-primary/40 group-hover:bg-muted/20')}>
+      <CardContent className="flex h-full flex-col gap-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <span className={cn('rounded-xl p-2', METRIC_TONE[value === null ? 'neutral' : tone])}>
+            <Icon className="h-4 w-4" aria-hidden="true" />
+          </span>
         </div>
-        {badgeText ? (
-          <div className="mt-2.5">
-            <Badge
-              variant={tone === 'urgent' ? 'destructive' : 'outline'}
-              className="text-[10px] font-medium"
-            >
-              {badgeText}
-            </Badge>
-          </div>
-        ) : null}
+        <div className="min-w-0 flex-1">
+          <p className={cn('break-words font-semibold tracking-tight tabular-nums', value === null ? 'text-lg text-muted-foreground' : 'text-2xl sm:text-3xl')}>
+            {value ?? 'No disponible'}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{value === null ? 'Reintentá para consultar este indicador.' : secondary}</p>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+          <span className="min-w-0 break-words">{scope}</span>
+          {href ? <ArrowRight className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /> : null}
+        </div>
       </CardContent>
     </Card>
   )
-
-  if (href) {
-    return (
-      <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl">
-        {content}
-      </Link>
-    )
-  }
-
-  return content
+  return href ? <Link href={href} className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{content}</Link> : content
 }
 
 export default function AdminHome() {
@@ -121,398 +69,135 @@ export default function AdminHome() {
   const { effectiveModules } = useSubscriptionStatus()
   const hasRepairs = effectiveModules.includes('repairs')
   const { user, hasPermission, isAdmin, isSuperAdmin } = useAuth()
-  const { selectedBranch } = useBranch()
-  const { metrics: overviewMetrics, loading: overviewLoading, refresh: refreshOverview } = useAdminOverviewMetrics()
+  const { selectedBranch, selectedBranchId } = useBranch()
   const navBadges = useAdminNavBadges()
   const [activeTab, setActiveTab] = useState('overview')
+  const [moduleFilter, setModuleFilter] = useState('')
   const [isRefreshingAll, setIsRefreshingAll] = useState(false)
-
-  // Real-time metrics from repairs data
-  const repairMetrics = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const active = repairs.filter(r => !['entregado', 'cancelado'].includes(r.status || ''))
-    const urgent = repairs.filter(r => r.urgency === 'urgent' && !['entregado', 'cancelado'].includes(r.status || ''))
-    const todayRepairs = repairs.filter(r => new Date(r.createdAt) >= today)
-    const pending = repairs.filter(r => r.status === 'recibido')
-
-    return {
-      totalActive: active.length,
-      urgent: urgent.length,
-      today: todayRepairs.length,
-      pending: pending.length,
-    }
-  }, [repairs])
-
-  // Las tarjetas de navegación salen de la misma configuración que usa el menú
-  // lateral, filtrada por permisos: así el panel no puede quedar desfasado del
-  // menú ni ofrecer secciones a las que el usuario no tiene acceso.
   const navCategories = useMemo(
     () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, effectiveModules),
     [hasPermission, isAdmin, isSuperAdmin, effectiveModules],
   )
-
-  // "Resumen" es esta misma página: no tiene sentido enlazarla desde acá.
-  const sections = useMemo(
-    () => navCategories
-      .map(category => ({
-        ...category,
-        items: category.items.filter(item => (
-          item.href
-          && item.href !== '/admin'
-          && (hasRepairs || (!item.href.startsWith('/dashboard/repairs') && !item.href.startsWith('/dashboard/technician')))
-        )),
-      }))
-      .filter(category => category.items.length > 0),
-    [hasRepairs, navCategories],
-  )
-
-  const [moduleFilter, setModuleFilter] = useState('')
-
+  const allowedRoutes = new Set(navCategories.flatMap(category => category.items.map(item => item.href)))
+  const canSeeSales = allowedRoutes.has('/admin/analytics')
+  const canSeeFinances = allowedRoutes.has('/admin/finances')
+  const canSeeInventory = allowedRoutes.has('/admin/inventory')
+  const canSeeCashMonitor = allowedRoutes.has('/admin/cash-monitor')
+  const canSeeUsers = allowedRoutes.has('/admin/users')
+  const canSeeRepairs = hasRepairs && (isAdmin || hasPermission('repairs.read'))
+  const { metrics: overviewMetrics, loading: overviewLoading, error: overviewError, updatedAt, refresh: refreshOverview } = useAdminOverviewMetrics({
+    sales: canSeeSales, cash: canSeeCashMonitor, inventory: canSeeInventory, team: canSeeUsers && !canSeeRepairs,
+  })
+  const branchScope = selectedBranch?.name ?? (selectedBranchId && selectedBranchId !== 'all' ? 'Sucursal seleccionada' : 'Todas las sucursales')
+  const cashAlertsCount = overviewMetrics.cashAlertsCount
+  const repairMetrics = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const active = repairs.filter(repair => !['entregado', 'cancelado'].includes(repair.status))
+    return { active: active.length, urgent: active.filter(repair => repair.urgency === 'urgent').length, today: repairs.filter(repair => new Date(repair.createdAt) >= today).length }
+  }, [repairs])
+  const sections = useMemo(() => navCategories.map(category => ({
+    ...category, items: category.items.filter(item => item.href && item.href !== '/admin'),
+  })).filter(category => category.items.length > 0), [navCategories])
   const filteredSections = useMemo(() => {
     const query = normalizeText(moduleFilter)
-    if (!query) return sections
-
-    return sections
-      .map(category => ({
-        ...category,
-        items: category.items.filter(item => {
-          const title = normalizeText(item.label)
-          const desc = normalizeText(item.description)
-          const cat = normalizeText(category.label)
-          return title.includes(query) || desc.includes(query) || cat.includes(query)
-        }),
-      }))
-      .filter(category => category.items.length > 0)
-  }, [moduleFilter, sections])
-
-  // El resumen financiero se consulta contra la organización activa
-  // Los accesos directos piden lo mismo que el menú: el permiso y el módulo de
-  // la sección (ROUTE_MODULES). Antes Finanzas e Inventario aparecían siempre y
-  // llevaban a una pantalla bloqueada.
-  const canSeeFinances = (isAdmin || hasPermission('finances.read')) && isRouteAvailable('/admin/finances', effectiveModules)
-  const canSeeInventory = isRouteAvailable('/admin/inventory', effectiveModules)
-  const canSeeCashMonitor = isRouteAvailable('/admin/cash-monitor', effectiveModules)
-  const branchScope = selectedBranch?.name ?? 'Todas las sucursales'
-  const cashAlertsCount = navBadges['cash-alerts'] ?? 0
-
+    return sections.map(category => ({ ...category, items: category.items.filter(item =>
+      !query || normalizeText(`${category.label} ${item.label} ${item.description} ${item.href}`).includes(query),
+    ) })).filter(category => category.items.length > 0)
+  }, [sections, moduleFilter])
+  const quickLinks = sections.flatMap(category => category.items).filter(item =>
+    ['/admin/cash-monitor', '/admin/finances', '/admin/inventory', '/admin/users', '/admin/settings'].includes(item.href ?? ''),
+  )
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true)
-    try {
-      const promises: Promise<unknown>[] = [refreshOverview()]
-      if (hasRepairs) {
-        promises.push(Promise.resolve(refreshRepairs()))
-      }
-      await Promise.allSettled(promises)
-    } finally {
-      setIsRefreshingAll(false)
-    }
+    try { await Promise.allSettled([refreshOverview(), ...(canSeeRepairs ? [refreshRepairs()] : [])]) }
+    finally { setIsRefreshingAll(false) }
   }
-
-  const isLoading = (repairsLoading && repairs.length === 0) || overviewLoading
-  const hasUrgentAttention = cashAlertsCount > 0 || (hasRepairs && repairMetrics.urgent > 0) || overviewMetrics.lowStockCount > 0
+  const isLoading = overviewLoading || (canSeeRepairs && repairsLoading)
+  const hasUrgentAttention = (canSeeCashMonitor && (cashAlertsCount ?? 0) > 0)
+    || (canSeeInventory && (overviewMetrics.lowStockCount ?? 0) > 0)
+    || (canSeeRepairs && !repairsError && repairMetrics.urgent > 0)
+  const attentionUnavailable = Boolean(overviewError || (canSeeRepairs && repairsError))
+    || (canSeeCashMonitor && cashAlertsCount === null) || (canSeeInventory && overviewMetrics.lowStockCount === null)
+  const hasOperationalChecks = canSeeCashMonitor || canSeeInventory || canSeeRepairs
 
   return (
-    <div className="space-y-6">
-      {/* Executive Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Panel de Administración
-            </h1>
-            <Badge variant="secondary" className="font-normal text-xs capitalize">
-              {user?.role || 'Admin'}
+    <div className="space-y-6 pb-4">
+      <header className="flex flex-col gap-4 rounded-2xl border bg-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Administración</p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Resumen del negocio</h1>
+          <p className="text-sm text-muted-foreground">Hola, {user?.profile?.name || 'administrador'}. Revisá la actividad y elegí qué gestionar.</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline" className="h-auto max-w-full gap-1.5 whitespace-normal py-1 font-normal">
+              <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{branchScope}
             </Badge>
+            <span>{isLoading ? 'Consultando datos…' : updatedAt ? `Última consulta: ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Esperando la organización activa'}</span>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Control central operativo y financiero · {user?.profile?.name || user?.email || 'Administrador'}
-          </p>
         </div>
+        <Button type="button" variant="outline" onClick={() => void handleRefreshAll()} disabled={isRefreshingAll || isLoading} aria-busy={isRefreshingAll} className="shrink-0 gap-2 self-start sm:self-center">
+          <RefreshCw className={cn('h-4 w-4', isRefreshingAll && 'animate-spin')} aria-hidden="true" />
+          {isRefreshingAll ? 'Actualizando…' : 'Actualizar resumen'}
+        </Button>
+      </header>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1.5 py-1 px-2.5 font-normal text-muted-foreground border-border/80">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-            <span>{branchScope}</span>
-          </Badge>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleRefreshAll()}
-            disabled={isRefreshingAll}
-            aria-busy={isRefreshingAll}
-            className="gap-1.5 shadow-sm"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshingAll && 'animate-spin')} aria-hidden="true" />
-            {isRefreshingAll ? 'Actualizando…' : 'Actualizar'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Quick Action Pills */}
-      <div className="relative">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pr-6 sm:pr-0">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1 shrink-0">
-            Accesos Rápidos:
-          </span>
-          {canSeeCashMonitor ? (
-          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-            <Link href="/admin/cash-monitor">
-              <Monitor className="h-3.5 w-3.5" />
-              Monitor de Cajas
-              {cashAlertsCount > 0 ? (
-                <span className="ml-1 rounded-full bg-destructive px-1.5 py-0.2 text-[10px] text-destructive-foreground font-bold">
-                  {cashAlertsCount}
-                </span>
-              ) : null}
-            </Link>
-          </Button>
-          ) : null}
-          {canSeeFinances ? (
-            <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-              <Link href="/admin/finances">
-                <WalletCards className="h-3.5 w-3.5" />
-                Finanzas & Gastos
-              </Link>
-            </Button>
-          ) : null}
-          {canSeeInventory ? (
-          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-            <Link href="/admin/inventory">
-              <Package className="h-3.5 w-3.5" />
-              Inventario & Stock
-              {overviewMetrics.lowStockCount > 0 ? (
-                <span className="ml-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 text-[10px] font-bold">
-                  {overviewMetrics.lowStockCount}
-                </span>
-              ) : null}
-            </Link>
-          </Button>
-          ) : null}
-          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-            <Link href="/admin/users">
-              <Users className="h-3.5 w-3.5" />
-              Usuarios
-            </Link>
-          </Button>
-          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-            <Link href="/admin/settings">
-              <Settings className="h-3.5 w-3.5" />
-              Configuración
-            </Link>
-          </Button>
-        </div>
-        <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-background to-transparent sm:hidden" />
-      </div>
-
-      {/* Actionable Attention Banner */}
-      {hasUrgentAttention ? (
-        <Card className="border-amber-400/40 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/20 shadow-sm">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400 shrink-0">
-                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Puntos operativos que requieren tu atención
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {cashAlertsCount > 0 ? (
-                    <Badge variant="destructive" className="font-normal text-xs">
-                      {cashAlertsCount} {cashAlertsCount === 1 ? 'alerta de caja' : 'alertas de caja'} sin resolver
-                    </Badge>
-                  ) : null}
-                  {hasRepairs && repairMetrics.urgent > 0 ? (
-                    <Badge variant="destructive" className="font-normal text-xs">
-                      {repairMetrics.urgent} {repairMetrics.urgent === 1 ? 'reparación urgente' : 'reparaciones urgentes'}
-                    </Badge>
-                  ) : null}
-                  {overviewMetrics.lowStockCount > 0 ? (
-                    <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300 font-normal text-xs">
-                      {overviewMetrics.lowStockCount} {overviewMetrics.lowStockCount === 1 ? 'producto con stock bajo' : 'productos con stock bajo'}
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 self-end sm:self-center">
-              {canSeeCashMonitor && cashAlertsCount > 0 ? (
-                <Button asChild size="sm" variant="default" className="gap-1">
-                  <Link href="/admin/cash-monitor">
-                    Resolver Cajas
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              ) : canSeeInventory && overviewMetrics.lowStockCount > 0 ? (
-                <Button asChild size="sm" variant="outline" className="gap-1">
-                  <Link href="/admin/inventory">
-                    Revisar Stock
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 text-xs text-emerald-800 dark:text-emerald-300">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>Operación al día: no hay alertas críticas de cajas ni stock agotado en esta sucursal.</span>
-        </div>
-      )}
-
-      {/* Error Card if repairs fail */}
-      {hasRepairs && repairsError ? (
-        <Card role="alert" className="border-destructive/50 bg-destructive/5">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  No pudimos cargar las reparaciones
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Los indicadores del taller pueden estar desactualizados. {repairsError.message}
-                </p>
-              </div>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void refreshRepairs()}>
-              Reintentar
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Balanced Executive KPI Cards */}
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true" aria-label="Cargando métricas">
-          {[0, 1, 2, 3].map((key) => (
-            <Skeleton key={key} className="h-[102px] w-full rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard
-            label="Ventas de Hoy"
-            value={formatCurrency(overviewMetrics.todaySalesTotal)}
-            secondary={`${overviewMetrics.todaySalesCount} operaciones`}
-            icon={TrendingUp}
-            tone="positive"
-            href="/admin/analytics"
-          />
-
-          {canSeeCashMonitor ? <StatCard
-            label="Monitor de Cajas"
-            value={`${overviewMetrics.openCashRegisters} abiertas`}
-            secondary={cashAlertsCount > 0 ? `${cashAlertsCount} alertas pendientes` : 'Arqueos en regla'}
-            icon={Monitor}
-            tone={cashAlertsCount > 0 ? 'urgent' : 'neutral'}
-            badgeText={cashAlertsCount > 0 ? 'Atención requerida' : undefined}
-            href="/admin/cash-monitor"
-          /> : null}
-
-          {hasRepairs ? (
-            <StatCard
-              label="Taller / Reparaciones"
-              value={`${repairMetrics.totalActive} en curso`}
-              secondary={repairMetrics.urgent > 0 ? `${repairMetrics.urgent} urgentes sin entregar` : `${repairMetrics.today} recibidas hoy`}
-              icon={Wrench}
-              tone={repairMetrics.urgent > 0 ? 'urgent' : 'info'}
-              badgeText={repairMetrics.urgent > 0 ? `${repairMetrics.urgent} urgentes` : undefined}
-              href="/dashboard/repairs"
-            />
-          ) : (
-            <StatCard
-              label="Equipo Activo"
-              value={`${overviewMetrics.activeUsersCount} usuarios`}
-              secondary="Miembros activos de esta organización"
-              icon={Users}
-              tone="info"
-              href="/admin/users"
-            />
-          )}
-
-          <StatCard
-            label="Inventario en Riesgo"
-            value={`${overviewMetrics.lowStockCount} items`}
-            secondary={overviewMetrics.lowStockCount > 0 ? 'Bajo stock mínimo' : 'Stock en niveles óptimos'}
-            icon={Package}
-            tone={overviewMetrics.lowStockCount > 0 ? 'warning' : 'positive'}
-            badgeText={overviewMetrics.lowStockCount > 0 ? 'Reposición sugerida' : undefined}
-            href="/admin/inventory"
-          />
-        </div>
-      )}
-
-      {/* Tabs: Organized Executive Sections */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="flex items-center justify-between border-b pb-2">
-          <TabsList className="bg-muted/60 p-1">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm font-medium gap-1.5">
-              <LayoutDashboard className="h-4 w-4" />
-              Panorama General
-            </TabsTrigger>
-            <TabsTrigger value="modules" className="text-xs sm:text-sm font-medium gap-1.5">
-              <Package className="h-4 w-4" />
-              Módulos y Gestión
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        {/* TAB 1: Panorama General (Finanzas y Tendencias) */}
-        <TabsContent value="overview" className="space-y-6 m-0 focus-visible:outline-none">
-          {/* Finanzas de la organización */}
-          {canSeeFinances ? <FinanceSnapshot /> : null}
-
-          {/* Tendencias y Gráficos */}
-          <section className="space-y-3" aria-labelledby="admin-trends-title">
-            <div className="flex items-center justify-between">
-              <h2 id="admin-trends-title" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Tendencias Operativas
-              </h2>
-            </div>
-            <div className={cn('grid gap-4', hasRepairs ? 'lg:grid-cols-2' : 'grid-cols-1')}>
-              <Card className="min-w-0 border shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Ventas</CardTitle>
-                  <CardDescription>Tendencia semanal</CardDescription>
-                </CardHeader>
-                <CardContent className="min-w-0">
-                  <SalesChart />
-                </CardContent>
-              </Card>
-
-              {hasRepairs ? (
-                <Card className="min-w-0 border shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Reparaciones</CardTitle>
-                    <CardDescription>Distribución por estado</CardDescription>
-                  </CardHeader>
-                  <CardContent className="min-w-0">
-                    <RepairsChart />
-                  </CardContent>
-                </Card>
-              ) : null}
-            </div>
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl bg-muted/60 p-1 sm:w-fit">
+          <TabsTrigger value="overview" className="gap-2 whitespace-normal px-3 py-2 text-xs sm:text-sm"><LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />Panorama General</TabsTrigger>
+          <TabsTrigger value="modules" className="gap-2 whitespace-normal px-3 py-2 text-xs sm:text-sm"><Package className="h-4 w-4 shrink-0" aria-hidden="true" />Módulos y Gestión</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="m-0 space-y-7">
+          <section aria-labelledby="admin-attention" className="space-y-3">
+            <h2 id="admin-attention" className="text-base font-semibold">Necesita atención</h2>
+            <Card className={cn('gap-0 rounded-2xl shadow-none', hasUrgentAttention && 'border-amber-500/30 bg-amber-500/5')}>
+              <CardContent className="space-y-3 p-4 sm:p-5">
+                {isLoading ? <p role="status" className="text-sm text-muted-foreground">Estamos comprobando los indicadores del negocio…</p> : hasUrgentAttention ? (
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                    <div className="space-y-2 text-sm">
+                      {canSeeCashMonitor && (cashAlertsCount ?? 0) > 0 ? <Link href="/admin/cash-monitor" className="flex items-center gap-2 font-medium underline-offset-4 hover:underline">{cashAlertsCount} alertas de caja pendientes <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link> : null}
+                      {canSeeInventory && (overviewMetrics.lowStockCount ?? 0) > 0 ? <Link href="/admin/inventory" className="flex items-center gap-2 font-medium underline-offset-4 hover:underline">{overviewMetrics.lowStockCount} productos en el mínimo de stock o por debajo <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link> : null}
+                      {canSeeRepairs && !repairsError && repairMetrics.urgent > 0 ? <Link href="/dashboard/repairs" className="flex items-center gap-2 font-medium underline-offset-4 hover:underline">{repairMetrics.urgent} reparaciones urgentes sin entregar <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link> : null}
+                    </div>
+                  </div>
+                ) : !attentionUnavailable && hasOperationalChecks ? (
+                  <div className="flex items-start gap-3 text-sm"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /><div><p className="font-medium">Sin alertas en los indicadores consultados</p><p className="mt-1 text-xs text-muted-foreground">Alcance: {branchScope}. Consultá cada sección para ver el detalle.</p></div></div>
+                ) : <p className="text-sm text-muted-foreground">{attentionUnavailable ? 'La comprobación está incompleta. Reintentá los indicadores que no se pudieron cargar.' : 'Las herramientas disponibles para tu cuenta están en Módulos y Gestión.'}</p>}
+                {overviewError ? <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm">{overviewError} Los datos sin confirmar figuran como “No disponible”.</p><Button type="button" variant="outline" size="sm" disabled={isRefreshingAll} onClick={() => void handleRefreshAll()} className="shrink-0">Reintentar indicadores</Button></div> : null}
+                {canSeeRepairs && repairsError ? <div role="alert" className="flex flex-col gap-3 rounded-xl border border-destructive/20 p-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm">No pudimos cargar las reparaciones. El indicador del taller no está disponible.</p><Button type="button" variant="outline" size="sm" onClick={() => void refreshRepairs()}>Reintentar reparaciones</Button></div> : null}
+              </CardContent>
+            </Card>
           </section>
-        </TabsContent>
 
-        {/* TAB 2: Módulos y Gestión del Sistema */}
+          <section aria-labelledby="admin-activity" className="space-y-3">
+            <div><h2 id="admin-activity" className="text-base font-semibold">Actividad de hoy</h2><p className="mt-1 text-xs text-muted-foreground">Ventas de hoy según la hora de tu dispositivo. Cajas, taller e inventario muestran el estado actual.</p></div>
+            {isLoading ? <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Cargando indicadores">{[0, 1, 2, 3].map(key => <Skeleton key={key} className="h-44 rounded-2xl" />)}</div> : (
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+                {canSeeSales ? <StatCard label="Ventas de hoy" value={overviewMetrics.todaySalesTotal === null ? null : formatCurrency(overviewMetrics.todaySalesTotal)} secondary={`${overviewMetrics.todaySalesCount} ventas completadas`} scope={branchScope} icon={TrendingUp} tone="positive" href="/admin/analytics" /> : null}
+                {canSeeCashMonitor ? <StatCard label="Cajas abiertas" value={overviewMetrics.openCashRegisters} secondary={cashAlertsCount === null ? 'Alertas sin confirmar' : `${cashAlertsCount} alertas pendientes de revisión`} scope={branchScope} icon={Monitor} tone={(cashAlertsCount ?? 0) > 0 ? 'warning' : 'info'} href="/admin/cash-monitor" /> : null}
+                {canSeeRepairs ? <StatCard label="Reparaciones en curso" value={repairsError ? null : repairMetrics.active} secondary={`${repairMetrics.urgent} urgentes · ${repairMetrics.today} recibidas hoy`} scope={branchScope} icon={Wrench} tone={repairMetrics.urgent > 0 ? 'warning' : 'info'} href="/dashboard/repairs" /> : canSeeUsers ? <StatCard label="Equipo activo" value={overviewMetrics.activeUsersCount} secondary="Miembros activos, sin importar la sucursal" scope="Toda la organización" icon={Users} href="/admin/users" /> : null}
+                {canSeeInventory ? <StatCard label="Productos para reponer" value={overviewMetrics.lowStockCount} secondary="En el stock mínimo o por debajo" scope={selectedBranchId && selectedBranchId !== 'all' ? branchScope : 'Stock global de la organización'} icon={Package} tone={(overviewMetrics.lowStockCount ?? 0) > 0 ? 'warning' : 'neutral'} href="/admin/inventory" /> : null}
+              </div>
+            )}
+          </section>
+
+          {quickLinks.length ? <section aria-labelledby="admin-shortcuts" className="space-y-3"><h2 id="admin-shortcuts" className="text-base font-semibold">Accesos</h2><nav aria-label="Accesos de administración" className="flex flex-wrap gap-2">{quickLinks.map(item => { const Icon = item.icon; return <Button key={item.key} asChild variant="outline" className="h-auto min-h-10 gap-2 rounded-xl px-3 py-2 text-sm"><Link href={item.href!}><Icon className="h-4 w-4" aria-hidden="true" />{item.label}</Link></Button> })}</nav></section> : null}
+          {canSeeFinances ? <section aria-label="Resumen financiero"><FinanceSnapshot /></section> : null}
+          {canSeeSales || canSeeRepairs ? <section aria-labelledby="admin-trends" className="space-y-3"><h2 id="admin-trends" className="text-base font-semibold">Tendencias</h2><div className={cn('grid gap-4', canSeeSales && canSeeRepairs && 'lg:grid-cols-2')}>
+            {canSeeSales ? <Card className="min-w-0 rounded-2xl shadow-none"><CardHeader><CardTitle className="text-base">Ventas</CardTitle><CardDescription>Tendencia semanal</CardDescription></CardHeader><CardContent><SalesChart /></CardContent></Card> : null}
+            {hasRepairs ? canSeeRepairs && !repairsError ? <Card className="min-w-0 rounded-2xl shadow-none"><CardHeader><CardTitle className="text-base">Reparaciones</CardTitle><CardDescription>Distribución por estado</CardDescription></CardHeader><CardContent><RepairsChart /></CardContent></Card> : null : null}
+          </div></section> : null}
+        </TabsContent>
         <TabsContent value="modules" className="space-y-6 m-0 focus-visible:outline-none">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">Catálogo de Módulos</p>
-              <p className="text-xs text-muted-foreground">Accede a las herramientas activas de tu organización</p>
+              <p className="text-sm font-semibold text-foreground">Todas tus herramientas</p>
+              <p className="text-xs text-muted-foreground">Buscá una sección o elegí qué querés gestionar.</p>
             </div>
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 type="search"
-                placeholder="Filtrar módulos…"
+                placeholder="Buscar una sección…" aria-label="Buscar una sección"
                 value={moduleFilter}
                 onChange={(e) => setModuleFilter(e.target.value)}
                 className="pl-8 pr-8 h-9 text-xs"
@@ -535,7 +220,7 @@ export default function AdminHome() {
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                 <Search className="h-6 w-6 text-muted-foreground" />
               </div>
-              <p className="mt-3 text-sm font-semibold text-foreground">No se encontraron módulos</p>
+              <p className="mt-3 text-sm font-semibold text-foreground">No encontramos esa sección</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 No hay coincidencias para &quot;{moduleFilter}&quot;.
               </p>
@@ -590,7 +275,7 @@ export default function AdminHome() {
                                   </Badge>
                                 ) : null}
                               </div>
-                              <p className="truncate text-xs text-muted-foreground mt-0.5">
+                              <p className="text-xs leading-relaxed text-muted-foreground mt-0.5">
                                 {item.description}
                               </p>
                             </div>

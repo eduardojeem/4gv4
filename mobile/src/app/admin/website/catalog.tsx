@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +17,7 @@ import {
   Notice,
   Section,
   StateView,
+  StatusPill,
   WebsiteScreen,
   websiteStyles,
 } from '@/components/website/website-ui';
@@ -28,10 +30,19 @@ import {
 } from '@/lib/website-admin';
 import type { PublicProduct, WebsiteSettings } from '@/lib/website-model';
 
-const MODES: Record<string, string> = {
-  cart: 'Carrito: tus clientes compran y pagan en la tienda.',
-  whatsapp: 'WhatsApp: los pedidos te llegan por mensaje.',
-  catalog: 'Catálogo: se muestran productos y precios, sin pedidos.',
+const MODES: Record<string, { label: string; desc: string }> = {
+  cart: {
+    label: 'Carrito online',
+    desc: 'Tus clientes agregan al carrito, eligen entrega y forma de pago.',
+  },
+  whatsapp: {
+    label: 'Pedidos por WhatsApp',
+    desc: 'El catálogo arma el pedido y te lo envían directo por mensaje.',
+  },
+  catalog: {
+    label: 'Solo catálogo',
+    desc: 'Se exhiben productos y precios sin botones de compra ni carrito.',
+  },
 };
 
 export default function CatalogScreen() {
@@ -46,7 +57,6 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
   const colors = usePalette();
   const [featured, setFeatured] = useState<PublicProduct[] | null>(null);
   const [query, setQuery] = useState('');
-  // Los resultados quedan atados a la búsqueda que los pidió: si cambió el texto, no se muestran.
   const [found, setFound] = useState<{
     query: string;
     items: PublicProduct[];
@@ -88,7 +98,6 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
     };
   }, [attempt]);
 
-  // Búsqueda con espera corta: solo vale la respuesta del último pedido.
   useEffect(() => {
     if (!active) return;
     const id = ++latest.current;
@@ -114,7 +123,6 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
     setBusy(product.id);
     try {
       await setProductFeatured(product.id, next);
-      // Lo confirmado por el servidor, no un reflejo optimista.
       const updated = { ...product, featured: next };
       setFeatured(null);
       setNextFeatured(null);
@@ -185,27 +193,49 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
   };
 
   const mode = settings.checkout?.commerceMode ?? 'cart';
+  const modeInfo = MODES[mode] ?? MODES.cart;
+
   return (
     <WebsiteScreen
       title="Catálogo y destacados"
-      subtitle="Lo que muestra tu tienda"
+      subtitle="Productos que sobresalen en tu tienda"
     >
       <OfflineNotice />
-      <Section title="Cómo se vende" icon="cart-outline">
+
+      <Section
+        title="Modalidad de venta"
+        icon="cart-outline"
+        right={<StatusPill label={modeInfo.label} tone="primary" />}
+      >
         <Text style={[styles.text, { color: colors.text }]}>
-          {MODES[mode] ?? MODES.cart}
+          {modeInfo.desc}
         </Text>
-        <Text style={[styles.muted, { color: colors.muted }]}>
-          La modalidad, los pagos y las entregas se configuran desde la web, en
-          «Pagos y entregas».
-        </Text>
+        <Pressable
+          onPress={() => router.push('/admin/website/checkout' as never)}
+          accessibilityRole="button"
+          style={[
+            websiteStyles.secondaryButton,
+            { borderColor: palette.primary },
+          ]}
+        >
+          <Ionicons name="card-outline" size={16} color={palette.primary} />
+          <Text style={[websiteStyles.secondaryText, { color: palette.primary }]}>
+            Configurar pagos y entregas
+          </Text>
+        </Pressable>
       </Section>
-      <Notice text="Tu tienda muestra nombre, fotos, precio de venta, ofertas y disponibilidad. Nunca muestra costos, márgenes ni datos internos del inventario." />
+
+      <Notice text="Tu tienda solo muestra nombre, fotos, precio de venta, ofertas y disponibilidad. Nunca muestra costos ni márgenes." />
 
       <Section
         title="Productos destacados"
         icon="star-outline"
-        hint="Aparecen primero en tu tienda."
+        hint="Aparecen al inicio para captar atención apenas entran."
+        right={
+          featured ? (
+            <StatusPill label={`${featured.length}`} tone="primary" />
+          ) : undefined
+        }
       >
         {error ? (
           <>
@@ -226,7 +256,7 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
           <ActivityIndicator color={palette.primary} />
         ) : !featured?.length ? (
           <Text style={[styles.muted, { color: colors.muted }]}>
-            Todavía no destacaste productos.
+            Todavía no destacaste productos. Buscá abajo para marcar tus mejores productos.
           </Text>
         ) : (
           (featured ?? []).map((product) => (
@@ -242,7 +272,10 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
           <Pressable
             disabled={loadingMore}
             accessibilityRole="button"
-            style={websiteStyles.secondaryButton}
+            style={[
+              websiteStyles.secondaryButton,
+              { borderColor: colors.border },
+            ]}
             onPress={() => void loadMore(true)}
           >
             <Text style={{ color: colors.text }}>
@@ -250,19 +283,23 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
             </Text>
           </Pressable>
         )}
-        <Text style={[styles.muted, { color: colors.muted }]}>
-          Los destacados se ordenan solos (primero las ofertas y lo más nuevo):
-          la tienda no guarda un orden propio.
-        </Text>
       </Section>
 
       <Section title="Destacar un producto" icon="search-outline">
-        <View style={[styles.search, { borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.search,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+            },
+          ]}
+        >
           <Ionicons name="search" size={16} color={colors.muted} />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Buscar producto…"
+            placeholder="Buscar producto por nombre o código…"
             placeholderTextColor={colors.muted}
             autoCorrect={false}
             returnKeyType="search"
@@ -293,7 +330,10 @@ function CatalogEditor({ settings }: { settings: WebsiteSettings }) {
           <Pressable
             disabled={loadingMore}
             accessibilityRole="button"
-            style={websiteStyles.secondaryButton}
+            style={[
+              websiteStyles.secondaryButton,
+              { borderColor: colors.border },
+            ]}
             onPress={() => void loadMore(false)}
           >
             <Text style={{ color: colors.text }}>
@@ -378,7 +418,7 @@ function ProductRow({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  text: { fontSize: 14, fontWeight: '600' },
+  text: { fontSize: 13, lineHeight: 19 },
   muted: { fontSize: 12 },
   search: {
     flexDirection: 'row',

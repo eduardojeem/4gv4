@@ -9,6 +9,23 @@ import { getMobileRuntimeConfig } from './runtime-config';
  * permisos, límites del plan y validaciones.
  */
 
+export type ProductVariant = {
+  id: string;
+  name?: string | null;
+  variant_name?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  sale_price?: number | null;
+  wholesale_price?: number | null;
+  attributes?: Record<string, string> | null;
+  stock_quantity?: number | null;
+  min_stock?: number | null;
+  is_active?: boolean | null;
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock';
+  current_stock?: number;
+  minimum_stock?: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -38,7 +55,7 @@ export type Product = {
   created_at?: string | null;
   updated_at?: string | null;
   has_variants?: boolean | null;
-  variants?: { id: string; name?: string | null; variant_name?: string | null; stock_quantity?: number | null; min_stock?: number | null; is_active?: boolean | null; stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'; current_stock?: number; minimum_stock?: number }[];
+  variants?: ProductVariant[];
   variant_stock_summary?: {
     variant_count: number;
     out_of_stock_variant_count: number;
@@ -166,7 +183,7 @@ export async function deleteProduct(id: string) {
 
 export type BarcodeLookup = {
   code: string;
-  own: { id: string; name: string } | null;
+  own: { id: string; name: string; variant?: string | null } | null;
   global: { name: string; description?: string | null; imageUrl?: string | null; brandName?: string | null; tenantBrandId?: string | null; tenantCategoryId?: string | null; source?: string | null } | null;
 };
 

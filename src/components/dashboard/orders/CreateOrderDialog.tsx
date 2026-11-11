@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
 import {
   Check,
   ChevronDown,
-  ChevronRight, Loader2, MapPin,
+  ChevronRight, Layers, Loader2, MapPin,
   Maximize2,
   Minimize2,
   Minus,
@@ -17,6 +17,7 @@ import {
   User,
   UserPlus,
   Wallet,
+  Wrench,
   X
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -31,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -39,10 +40,25 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
-import { validateDeliveryContact } from '@/lib/orders/creation-rules'
+import { useCommercePaymentControls } from '@/hooks/use-commerce-payment-controls'
+import { getCatalogUnitPrice, validateDeliveryContact } from '@/lib/orders/creation-rules'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { cn } from '@/lib/utils'
 import { formatMoney } from './format'
-import { BarcodeScanner } from '@/components/ui/barcode-scanner'
+import { BarcodeScanner, type BarcodeScanFeedback } from '@/components/ui/barcode-scanner'
+
+type VariantOption = {
+  id: string
+  product_id?: string
+  variant_name?: string | null
+  sku?: string | null
+  sale_price?: number | null
+  wholesale_price?: number | null
+  stock_quantity?: number | null
+  current_stock?: number | null
+  is_active?: boolean | null
+}
 
 type ProductOption = {
   id: string
@@ -50,7 +66,12 @@ type ProductOption = {
   sku?: string | null
   sale_price?: number | null
   offer_price?: number | null
+  has_offer?: boolean | null
+  has_variants?: boolean | null
   stock_quantity?: number | null
+  unit_measure?: string | null
+  category?: { name?: string | null } | null
+  variants?: VariantOption[] | null
   image_url?: string | null
   images?: string[] | null
 }
@@ -64,13 +85,26 @@ type CustomerOption = {
 }
 
 type DraftItem = {
+  key: string
   productId: string
+  variantId: string | null
+  variantName?: string | null
   name: string
   sku?: string | null
   quantity: number
   unitPrice: number
   stock: number | null
+  isService: boolean
   imageUrl?: string | null
+}
+
+const lineKey = (productId: string, variantId?: string | null) => `${productId}:${variantId ?? ''}`
+
+function newWebOrderIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `web-ord-${crypto.randomUUID()}`
+  }
+  return `web-ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -103,6 +137,11 @@ export function CreateOrderDialog({
 }) {
   const { selectedBranchId, selectedBranch } = useBranch()
   const { effectiveModules } = useSubscriptionStatus()
+  const paymentControls = useCommercePaymentControls()
+  const allowedPaymentOptions = useMemo(
+    () => PAYMENT_OPTIONS.filter((opt) => paymentControls.allows(opt.value)),
+    [paymentControls]
+  )
   const hasDelivery = effectiveModules.includes('delivery')
   const availableFulfillmentOptions = hasDelivery
     ? FULFILLMENT_OPTIONS
@@ -110,6 +149,7 @@ export function CreateOrderDialog({
   const [products, setProducts] = useState<ProductOption[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [productSearch, setProductSearch] = useState('')
+  const [catalogKind, setCatalogKind] = useState<'all' | 'part' | 'service'>('all')
   const [customerSearch, setCustomerSearch] = useState('')
   const [customerId, setCustomerId] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
@@ -126,6 +166,8 @@ export function CreateOrderDialog({
   const [discountAmount, setDiscountAmount] = useState(0)
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<DraftItem[]>([])
+  const [variantProduct, setVariantProduct] = useState<ProductOption | null>(null)
+  const idempotencyKeyRef = useRef(newWebOrderIdempotencyKey())
   const [loading, setLoading] = useState(false)
   const [productsLoading, setProductsLoading] = useState(false)
   const [customersLoading, setCustomersLoading] = useState(false)
@@ -160,6 +202,13 @@ export function CreateOrderDialog({
     || fulfillmentType !== 'PICKUP'
     || paymentMethod !== 'CASH'
 
+  useEffect(() => {
+    if (!open || !paymentControls.ready) return
+    if (!paymentControls.allows(paymentMethod) && allowedPaymentOptions.length > 0) {
+      setPaymentMethod(allowedPaymentOptions[0].value)
+    }
+  }, [open, paymentControls, paymentMethod, allowedPaymentOptions])
+
   // Load categories + brands once when the dialog opens (for the filters)
   useEffect(() => {
     if (!open) return
@@ -181,7 +230,7 @@ export function CreateOrderDialog({
     return () => controller.abort()
   }, [open])
 
-  // Load products (text search + category/brand filters)
+  // Load products (text search + category/brand/catalog kind filters)
   useEffect(() => {
     if (!open) return
     const controller = new AbortController()
@@ -189,18 +238,23 @@ export function CreateOrderDialog({
     const t = window.setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          per_page: '24',
-          query: productSearch,
+          per_page: '30',
+          is_active: 'true',
           strict_branch_stock: 'true',
         })
+        if (productSearch.trim()) params.set('query', productSearch.trim())
+        if (catalogKind !== 'all') params.set('catalog_kind', catalogKind)
         if (categoryFilter !== 'ALL') params.set('category_id', categoryFilter)
         if (brandFilter !== 'ALL') params.set('brand', brandFilter)
         if (selectedBranchId) params.set('branchId', selectedBranchId)
-        const res = await fetch(`/api/products?${params}`, { signal: controller.signal })
+        const res = await fetch(`/api/products?${params}`, {
+          signal: controller.signal,
+          headers: selectedBranchId ? { 'x-branch-id': selectedBranchId } : undefined,
+        })
         const payload = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(payload?.error || 'No se pudieron cargar los productos.')
         const all: ProductOption[] = Array.isArray(payload?.data?.products) ? payload.data.products : []
-        setProducts(all.filter((p) => p.stock_quantity === null || (p.stock_quantity ?? 0) > 0))
+        setProducts(all)
         setProductsError('')
       } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
@@ -212,7 +266,7 @@ export function CreateOrderDialog({
       }
     }, 250)
     return () => { window.clearTimeout(t); controller.abort() }
-  }, [open, productSearch, categoryFilter, brandFilter, selectedBranchId])
+  }, [open, productSearch, catalogKind, categoryFilter, brandFilter, selectedBranchId])
 
   // Load customers
   useEffect(() => {
@@ -242,40 +296,115 @@ export function CreateOrderDialog({
   }, [open, customerSearch])
 
   function reset() {
-    setProductSearch(''); setCustomerSearch(''); setCustomerId('')
+    setProductSearch(''); setCatalogKind('all'); setCustomerSearch(''); setCustomerId('')
     setSelectedCustomer(null); setNewCustomer(false)
     setCustomerName(''); setCustomerEmail(''); setCustomerPhone(''); setCustomerAddress('')
     setDeliveryPhone(''); setDeliveryAddress('')
-    setPaymentMethod('CASH'); setFulfillmentType('PICKUP')
-    setShippingCost(0); setDiscountAmount(0); setNotes(''); setItems([])
+    setPaymentMethod(allowedPaymentOptions[0]?.value ?? 'CASH'); setFulfillmentType('PICKUP')
+    setShippingCost(0); setDiscountAmount(0); setNotes(''); setItems([]); setVariantProduct(null)
     setCategoryFilter('ALL'); setBrandFilter('ALL')
     setCustomerCollapsed(false); setProductLimit(12)
     setProductsError(''); setCustomersError(''); setFullscreen(false)
     setConfirmCloseOpen(false); setMobileActiveTab('items')
+    idempotencyKeyRef.current = newWebOrderIdempotencyKey()
   }
 
-  function addProduct(product: ProductOption) {
-    const price = Number(product.offer_price || product.sale_price || 0)
-    const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
+  function resolveProductStock(product: ProductOption, variant?: VariantOption | null): number | null {
+    if (isServiceLikeProduct(product)) return null
+    if (variant) {
+      const vStock = variant.current_stock ?? variant.stock_quantity
+      return vStock != null ? Number(vStock) : null
+    }
+    const activeVariants = (product.variants ?? []).filter((v) => v.is_active !== false)
+    if (product.has_variants && activeVariants.length > 0) {
+      const stocks = activeVariants.map((v) => v.current_stock ?? v.stock_quantity)
+      if (stocks.some((s) => s == null)) return null
+      return stocks.reduce<number>((sum, s) => sum + Number(s ?? 0), 0)
+    }
+    return product.stock_quantity != null ? Number(product.stock_quantity) : null
+  }
+
+  function resolveUnitPrice(product: ProductOption, variant?: VariantOption | null): number {
+    if (variant) {
+      return resolvePublicVariantPrice({
+        isWholesale: false,
+        product: {
+          sale_price: Number(product.sale_price || 0),
+          offer_price: product.offer_price != null ? Number(product.offer_price) : null,
+          has_offer: typeof product.has_offer === 'boolean' ? product.has_offer : null,
+        },
+        variant: {
+          sale_price: Number(variant.sale_price || 0),
+        },
+      })
+    }
+    return getCatalogUnitPrice(product)
+  }
+
+  function addProduct(product: ProductOption, variant?: VariantOption | null) {
+    const isService = isServiceLikeProduct(product)
+    const activeVariants = (product.variants ?? []).filter((v) => v.is_active !== false)
+    if (product.has_variants && !variant) {
+      if (activeVariants.length === 0) {
+        toast.error('Producto sin variantes activas', {
+          description: `"${product.name}" requiere al menos una variante activa para venderse.`,
+        })
+        return
+      }
+      if (activeVariants.length === 1) {
+        variant = activeVariants[0]
+      } else {
+        setVariantProduct(product)
+        return
+      }
+    }
+
+    const stock = resolveProductStock(product, variant)
+    if (!isService && stock !== null && stock <= 0) {
+      toast.error('Sin stock disponible', {
+        description: `No queda stock en esta sucursal para "${product.name}"${variant?.variant_name ? ` (${variant.variant_name})` : ''}.`,
+      })
+      return
+    }
+
+    const key = lineKey(product.id, variant?.id ?? null)
+    const price = resolveUnitPrice(product, variant)
     const imageUrl = product.image_url || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null)
+    const itemSku = variant?.sku || product.sku
+
     setItems((cur) => {
-      const existing = cur.find((i) => i.productId === product.id)
+      const existing = cur.find((i) => i.key === key)
       if (existing) {
         return cur.map((i) =>
-          i.productId === product.id
+          i.key === key
             ? { ...i, quantity: stock !== null ? Math.min(i.quantity + 1, stock) : i.quantity + 1 }
             : i
         )
       }
-      return [...cur, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, unitPrice: price, stock, imageUrl }]
+      return [
+        ...cur,
+        {
+          key,
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          variantName: variant?.variant_name ?? null,
+          name: product.name,
+          sku: itemSku,
+          quantity: 1,
+          unitPrice: price,
+          stock,
+          isService,
+          imageUrl,
+        },
+      ]
     })
     setProductSearch('')
   }
 
-  function changeQty(productId: string, delta: number) {
+  function changeQty(key: string, delta: number) {
     setItems((cur) =>
       cur.map((i) => {
-        if (i.productId !== productId) return i
+        if (i.key !== key) return i
         const next = Math.max(1, i.quantity + delta)
         const capped = i.stock !== null ? Math.min(next, i.stock) : next
         return { ...i, quantity: capped }
@@ -283,8 +412,70 @@ export function CreateOrderDialog({
     )
   }
 
-  function removeItem(productId: string) {
-    setItems((cur) => cur.filter((i) => i.productId !== productId))
+  function removeItem(key: string) {
+    setItems((cur) => cur.filter((i) => i.key !== key))
+  }
+
+  async function handleBarcodeScan(code: string): Promise<BarcodeScanFeedback> {
+    const normalized = code.trim().toLowerCase()
+    if (!normalized) return null
+
+    const params = new URLSearchParams({
+      per_page: '10',
+      query: code.trim(),
+      is_active: 'true',
+      strict_branch_stock: 'true',
+    })
+    if (selectedBranchId) params.set('branchId', selectedBranchId)
+
+    const res = await fetch(`/api/products?${params}`, {
+      headers: selectedBranchId ? { 'x-branch-id': selectedBranchId } : undefined,
+    })
+    const payload = await res.json().catch(() => ({}))
+    const matches: ProductOption[] = Array.isArray(payload?.data?.products) ? payload.data.products : []
+
+    for (const product of matches) {
+      const activeVariants = (product.variants ?? []).filter((v) => v.is_active !== false)
+      const matchedVariant = activeVariants.find((v) => (v.sku || '').trim().toLowerCase() === normalized)
+      if (matchedVariant) {
+        const stock = resolveProductStock(product, matchedVariant)
+        if (!isServiceLikeProduct(product) && stock !== null && stock <= 0) {
+          return { text: `Sin stock: ${product.name} (${matchedVariant.variant_name || ''})`, ok: false }
+        }
+        addProduct(product, matchedVariant)
+        return { text: `Agregado: ${product.name} (${matchedVariant.variant_name || matchedVariant.sku || ''})` }
+      }
+      if ((product.sku || '').trim().toLowerCase() === normalized) {
+        if (product.has_variants && activeVariants.length > 1) {
+          setVariantProduct(product)
+          return { text: `Elegí una variante de ${product.name}`, close: true }
+        }
+        const stock = resolveProductStock(product, activeVariants[0] ?? null)
+        if (!isServiceLikeProduct(product) && stock !== null && stock <= 0) {
+          return { text: `Sin stock: ${product.name}`, ok: false }
+        }
+        addProduct(product)
+        return { text: `Agregado: ${product.name}` }
+      }
+    }
+
+    if (matches.length === 1) {
+      const only = matches[0]
+      const activeVariants = (only.variants ?? []).filter((v) => v.is_active !== false)
+      if (only.has_variants && activeVariants.length > 1) {
+        setVariantProduct(only)
+        return { text: `Elegí una variante de ${only.name}`, close: true }
+      }
+      const stock = resolveProductStock(only, activeVariants[0] ?? null)
+      if (!isServiceLikeProduct(only) && stock !== null && stock <= 0) {
+        return { text: `Sin stock: ${only.name}`, ok: false }
+      }
+      addProduct(only)
+      return { text: `Agregado: ${only.name}` }
+    }
+
+    setProductSearch(code.trim())
+    return null
   }
 
   function selectCustomer(c: CustomerOption) {
@@ -317,6 +508,10 @@ export function CreateOrderDialog({
     if (newCustomer && customerEmail.trim() && !EMAIL_RE.test(customerEmail.trim())) {
       return 'El email no tiene un formato válido.'
     }
+    if (!paymentControls.ready) return 'Esperá a que se carguen los medios de cobro habilitados.'
+    if (allowedPaymentOptions.length === 0 || !paymentControls.allows(paymentMethod)) {
+      return 'El medio de cobro elegido no está habilitado para este comercio.'
+    }
     const deliveryError = validateDeliveryContact({
       fulfillmentType: fulfillmentType as 'PICKUP' | 'DELIVERY',
       phone: effectiveDeliveryPhone,
@@ -325,7 +520,7 @@ export function CreateOrderDialog({
     if (deliveryError) return deliveryError
     if (discountAmount > subtotal) return 'El descuento no puede superar el subtotal.'
     for (const item of items) {
-      if (item.stock !== null && item.quantity > item.stock) {
+      if (!item.isService && item.stock !== null && item.quantity > item.stock) {
         return `Stock insuficiente para "${item.name}". Disponible: ${item.stock}.`
       }
     }
@@ -333,6 +528,7 @@ export function CreateOrderDialog({
   }
 
   async function submit() {
+    if (loading) return
     const validationError = validate()
     if (validationError) {
       toast.error('Revisa el formulario', { description: validationError })
@@ -341,16 +537,26 @@ export function CreateOrderDialog({
 
     setLoading(true)
     try {
+      const idempotencyKey = idempotencyKeyRef.current
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
+          ...(selectedBranchId ? { 'x-branch-id': selectedBranchId } : {}),
+        },
         body: JSON.stringify({
           branchId: selectedBranchId,
+          idempotencyKey,
           customerId: newCustomer ? null : customerId,
           customer: newCustomer
             ? { name: customerName.trim(), email: customerEmail.trim() || null, phone: customerPhone.trim() || null, address: customerAddress.trim() || null }
             : undefined,
-          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          items: items.map((i) => ({
+            productId: i.productId,
+            ...(i.variantId ? { variantId: i.variantId } : {}),
+            quantity: i.quantity,
+          })),
           deliveryContact: fulfillmentType === 'DELIVERY'
             ? { phone: effectiveDeliveryPhone.trim(), address: effectiveDeliveryAddress.trim() }
             : undefined,
@@ -363,7 +569,11 @@ export function CreateOrderDialog({
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo crear el pedido.')
-      toast.success('Pedido creado', { description: 'El pedido fue registrado exitosamente.' })
+      toast.success(payload?.idempotent ? 'Pedido ya registrado' : 'Pedido creado', {
+        description: payload?.idempotent
+          ? 'Se recuperó el pedido ya creado para evitar duplicados.'
+          : 'El pedido fue registrado exitosamente.',
+      })
       reset()
       onOpenChange(false)
       onCreated()
@@ -691,6 +901,31 @@ export function CreateOrderDialog({
                 )}
               </div>
 
+              {/* Tipo de catálogo */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  { value: 'all', label: 'Todos' },
+                  { value: 'part', label: 'Productos' },
+                  { value: 'service', label: 'Servicios' },
+                ] as const).map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    aria-pressed={catalogKind === tab.value}
+                    onClick={() => { setCatalogKind(tab.value); setProductLimit(12) }}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all',
+                      catalogKind === tab.value
+                        ? 'border-blue-500/50 bg-blue-500/15 text-blue-200'
+                        : 'border-white/10 bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+                    )}
+                  >
+                    {tab.value === 'service' && <Wrench className="h-3 w-3" />}
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Barra de búsqueda y filtros */}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative min-w-[200px] flex-1">
@@ -700,7 +935,7 @@ export function CreateOrderDialog({
                     className={cn('h-10 pl-10 text-sm rounded-xl', INPUT_DARK)}
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="Buscar producto por nombre, SKU o código…"
+                    placeholder="Buscar producto o servicio por nombre, SKU o código…"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && products.length === 1) {
                         e.preventDefault()
@@ -710,7 +945,8 @@ export function CreateOrderDialog({
                   />
                 </div>
                 <BarcodeScanner
-                  onScan={(code) => setProductSearch(code)}
+                  onScan={handleBarcodeScan}
+                  continuous
                   label="Escanear"
                   variant="outline"
                   size="sm"
@@ -783,12 +1019,17 @@ export function CreateOrderDialog({
                     fullscreen && 'xl:grid-cols-4 2xl:grid-cols-5'
                   )}>
                     {products.slice(0, productLimit).map((product) => {
-                      const inCart = items.find((i) => i.productId === product.id)
-                      const price = Number(product.offer_price || product.sale_price || 0)
-                      const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
-                      const outOfStock = stock !== null && stock <= 0
+                      const inCartQty = items
+                        .filter((i) => i.productId === product.id)
+                        .reduce((sum, i) => sum + i.quantity, 0)
+                      const isService = isServiceLikeProduct(product)
+                      const activeVariants = (product.variants ?? []).filter((v) => v.is_active !== false)
+                      const missingVariants = Boolean(product.has_variants && activeVariants.length === 0)
+                      const price = resolveUnitPrice(product, null)
+                      const stock = resolveProductStock(product, null)
+                      const outOfStock = missingVariants || (!isService && stock !== null && stock <= 0)
                       const imgSrc = product.image_url || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null)
-                      const lowStock = stock !== null && stock > 0 && stock <= 3
+                      const lowStock = !isService && stock !== null && stock > 0 && stock <= 3
 
                       return (
                         <button
@@ -798,22 +1039,24 @@ export function CreateOrderDialog({
                           disabled={outOfStock}
                           className={cn(
                             'group relative flex items-center gap-3 rounded-2xl border p-3 text-left transition-all',
-                            inCart
+                            inCartQty > 0
                               ? 'border-blue-500/40 bg-blue-500/[0.08] ring-1 ring-blue-500/20 shadow-md shadow-blue-950/20'
                               : 'border-white/8 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.05]',
-                            outOfStock && 'opacity-40 cursor-not-allowed hover:border-white/8 hover:bg-white/[0.02]'
+                            outOfStock && 'opacity-45 cursor-not-allowed hover:border-white/8 hover:bg-white/[0.02]'
                           )}
                         >
                           {/* Imagen */}
                           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
                             {imgSrc ? (
                               <Image src={imgSrc} alt={product.name} fill sizes="56px" className="object-cover" />
+                            ) : isService ? (
+                              <Wrench className="h-5 w-5 text-sky-400/70" />
                             ) : (
                               <Package className="h-6 w-6 text-slate-600" />
                             )}
-                            {inCart && (
+                            {inCartQty > 0 && (
                               <div className="absolute inset-0 flex items-center justify-center bg-blue-600/90 text-white font-bold text-xs backdrop-blur-[1px]">
-                                ×{inCart.quantity}
+                                ×{inCartQty}
                               </div>
                             )}
                           </div>
@@ -821,12 +1064,22 @@ export function CreateOrderDialog({
                           {/* Datos */}
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-semibold leading-tight text-slate-100">{product.name}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-slate-500">{product.sku || 'Sin SKU'}</p>
-                            <div className="mt-1 flex items-center gap-2">
+                            <p className="mt-0.5 truncate text-[11px] text-slate-500">{product.sku || (isService ? 'Servicio' : 'Sin SKU')}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <p className="text-xs font-bold tabular-nums text-white">{formatMoney(price)}</p>
-                              {lowStock && (
+                              {isService ? (
+                                <span className="rounded bg-sky-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-sky-300">Servicio</span>
+                              ) : missingVariants ? (
+                                <span className="text-[10px] font-semibold text-rose-400">Sin variantes activas</span>
+                              ) : outOfStock ? (
+                                <span className="text-[10px] font-semibold text-rose-400">Sin stock</span>
+                              ) : activeVariants.length > 1 ? (
+                                <span className="inline-flex items-center gap-0.5 rounded bg-violet-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-violet-300">
+                                  <Layers className="h-2.5 w-2.5" /> {activeVariants.length} var.
+                                </span>
+                              ) : lowStock ? (
                                 <span className="text-[10px] font-semibold text-amber-400">({stock} rest.)</span>
-                              )}
+                              ) : null}
                             </div>
                           </div>
 
@@ -834,7 +1087,7 @@ export function CreateOrderDialog({
                           <div className="shrink-0">
                             <div className={cn(
                               'flex h-7 w-7 items-center justify-center rounded-lg transition-all',
-                              inCart
+                              inCartQty > 0
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-white/5 text-slate-400 group-hover:bg-blue-600 group-hover:text-white'
                             )}>
@@ -900,24 +1153,36 @@ export function CreateOrderDialog({
                 <div className="space-y-2">
                   {items.map((item) => (
                     <div
-                      key={item.productId}
+                      key={item.key}
                       className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-3.5 transition-colors hover:bg-white/[0.04]"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
                           {item.imageUrl ? (
                             <Image src={item.imageUrl} alt={item.name} fill sizes="48px" className="object-cover" />
+                          ) : item.isService ? (
+                            <Wrench className="h-5 w-5 text-sky-400/70" />
                           ) : (
                             <Package className="h-5 w-5 text-slate-600" />
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-white">{item.name}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="truncate text-sm font-bold text-white">{item.name}</p>
+                            {item.variantName && (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-200">
+                                <Layers className="h-2.5 w-2.5" /> {item.variantName}
+                              </span>
+                            )}
+                            {item.isService && (
+                              <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">Servicio</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
                             {item.sku && <span className="font-mono">{item.sku}</span>}
-                            <span>·</span>
+                            {item.sku && <span>·</span>}
                             <span className="tabular-nums font-semibold text-slate-200">{formatMoney(item.unitPrice)} c/u</span>
-                            {item.stock !== null && item.quantity >= item.stock && (
+                            {!item.isService && item.stock !== null && item.quantity >= item.stock && (
                               <span className="text-[11px] font-bold text-amber-400">· Tope stock</span>
                             )}
                           </div>
@@ -929,7 +1194,7 @@ export function CreateOrderDialog({
                         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
                           <button
                             type="button"
-                            onClick={() => changeQty(item.productId, -1)}
+                            onClick={() => changeQty(item.key, -1)}
                             aria-label={`Reducir cantidad de ${item.name}`}
                             className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
                           >
@@ -940,8 +1205,8 @@ export function CreateOrderDialog({
                           </span>
                           <button
                             type="button"
-                            onClick={() => changeQty(item.productId, 1)}
-                            disabled={item.stock !== null && item.quantity >= item.stock}
+                            onClick={() => changeQty(item.key, 1)}
+                            disabled={!item.isService && item.stock !== null && item.quantity >= item.stock}
                             aria-label={`Aumentar cantidad de ${item.name}`}
                             className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -957,7 +1222,7 @@ export function CreateOrderDialog({
 
                         <button
                           type="button"
-                          onClick={() => removeItem(item.productId)}
+                          onClick={() => removeItem(item.key)}
                           aria-label={`Quitar ${item.name}`}
                           className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400"
                         >
@@ -1068,18 +1333,32 @@ export function CreateOrderDialog({
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Método de Cobro</p>
                 </div>
 
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className={cn('h-10 text-sm rounded-xl', INPUT_DARK)}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {paymentControls.error ? (
+                  <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                    {paymentControls.error}
+                  </p>
+                ) : !paymentControls.ready ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando medios habilitados…
+                  </div>
+                ) : allowedPaymentOptions.length === 0 ? (
+                  <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                    No hay medios de cobro habilitados para este comercio.
+                  </p>
+                ) : (
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className={cn('h-10 text-sm rounded-xl', INPUT_DARK)}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allowedPaymentOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="h-px bg-white/10" />
@@ -1203,7 +1482,15 @@ export function CreateOrderDialog({
               <Button
                 className="h-12 w-full gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold text-white shadow-xl shadow-blue-900/30 transition-all hover:from-blue-500 hover:to-blue-600 active:scale-[0.99] disabled:opacity-40"
                 onClick={submit}
-                disabled={loading || items.length === 0 || !hasCustomer || !deliveryReady || discountAmount > subtotal}
+                disabled={
+                  loading
+                  || items.length === 0
+                  || !hasCustomer
+                  || !deliveryReady
+                  || discountAmount > subtotal
+                  || !paymentControls.ready
+                  || allowedPaymentOptions.length === 0
+                }
               >
                 {loading ? (
                   <><Loader2 className="h-4 w-4 animate-spin" /> Registrando pedido…</>
@@ -1226,6 +1513,68 @@ export function CreateOrderDialog({
             </div>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={Boolean(variantProduct)} onOpenChange={(next) => { if (!next) setVariantProduct(null) }}>
+      <DialogContent className="max-w-md border-white/10 bg-[#0d1117] text-slate-100">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-bold text-white">
+            <Layers className="h-4 w-4 text-violet-400" />
+            Elegí una variante
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-400">
+            {variantProduct?.name} · Seleccioná la presentación para agregar al pedido.
+          </DialogDescription>
+        </DialogHeader>
+        {variantProduct && (
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            {(variantProduct.variants ?? [])
+              .filter((v) => v.is_active !== false)
+              .map((variant) => {
+                const isService = isServiceLikeProduct(variantProduct)
+                const vStock = resolveProductStock(variantProduct, variant)
+                const vOut = !isService && vStock !== null && vStock <= 0
+                const vPrice = resolveUnitPrice(variantProduct, variant)
+                const already = items.find((i) => i.key === lineKey(variantProduct.id, variant.id))
+                return (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    disabled={vOut}
+                    onClick={() => {
+                      addProduct(variantProduct, variant)
+                      setVariantProduct(null)
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all',
+                      already
+                        ? 'border-blue-500/50 bg-blue-500/10'
+                        : 'border-white/10 bg-white/[0.03] hover:border-blue-500/40 hover:bg-white/[0.06]',
+                      vOut && 'opacity-45 cursor-not-allowed'
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {variant.variant_name || variant.sku || 'Variante'}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {variant.sku ? `SKU ${variant.sku} · ` : ''}
+                        {isService ? 'Servicio' : vStock === null ? 'Stock sin límite' : vOut ? 'Sin stock' : `${vStock} disp.`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold tabular-nums text-white">{formatMoney(vPrice)}</span>
+                      {already && (
+                        <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                          ×{already.quantity}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>

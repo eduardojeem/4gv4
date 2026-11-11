@@ -252,6 +252,7 @@ export function MarketplaceHeader({
                     <Ionicons name="log-in-outline" size={18} color="#FFFFFF" />
                     <Text style={styles.primaryText}>Iniciar sesión</Text>
                   </Pressable>
+                  <Row icon="person-add-outline" title="Crear mi cuenta" sub="Para comprar o reservar" colors={colors} onPress={() => closeThen(() => router.push('/join' as never))} />
                   <Row icon="cube-outline" title="Ver productos" sub="Catálogo de todas las tiendas" colors={colors} onPress={() => closeThen(() => router.push('/products' as never))} />
                   <Row icon="storefront-outline" title="¿Tenés un negocio?" sub="Conocé el sistema y sus planes" colors={colors} onPress={() => closeThen(() => router.push('/saas' as never))} />
                 </>

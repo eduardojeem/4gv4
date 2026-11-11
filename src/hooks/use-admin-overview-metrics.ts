@@ -1,162 +1,143 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { startOfDay } from 'date-fns'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { startOfDay, addDays } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
+import { loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
 
 export interface AdminOverviewMetrics {
-  todaySalesTotal: number
-  todaySalesCount: number
-  openCashRegisters: number
-  lowStockCount: number
-  activeUsersCount: number
+  todaySalesTotal: number | null
+  todaySalesCount: number | null
+  openCashRegisters: number | null
+  cashAlertsCount: number | null
+  lowStockCount: number | null
+  activeUsersCount: number | null
+}
+type MetricGroup = 'sales' | 'cash' | 'inventory' | 'team'
+export type OverviewAccess = Record<MetricGroup, boolean>
+type MetricErrors = Partial<Record<MetricGroup, string>>
+const DEFAULT_ACCESS: OverviewAccess = { sales: true, cash: true, inventory: true, team: true }
+const EMPTY_METRICS: AdminOverviewMetrics = {
+  todaySalesTotal: null, todaySalesCount: null, openCashRegisters: null,
+  cashAlertsCount: null, lowStockCount: null, activeUsersCount: null,
+}
+const PAGE_SIZE = 500
+
+type QueryResult<T> = { data: T[] | null; count: number | null; error: { message: string } | null }
+async function readAll<T>(query: (from: number, to: number) => PromiseLike<QueryResult<T>>, signal: AbortSignal) {
+  const rows: T[] = []
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    signal.throwIfAborted()
+    const result = await query(offset, offset + PAGE_SIZE - 1)
+    if (result.error) throw new Error(result.error.message)
+    if (result.count === null) throw new Error('No se pudo verificar la cobertura de los datos.')
+    const batch = result.data ?? []
+    rows.push(...batch)
+    if (rows.length >= result.count) return rows
+    if (!batch.length) throw new Error('Los datos cambiaron durante la consulta. Reintentá.')
+  }
 }
 
-const INITIAL_METRICS: AdminOverviewMetrics = {
-  todaySalesTotal: 0,
-  todaySalesCount: 0,
-  openCashRegisters: 0,
-  lowStockCount: 0,
-  activeUsersCount: 0,
-}
-
-export function useAdminOverviewMetrics() {
-  const [metrics, setMetrics] = useState<AdminOverviewMetrics>(INITIAL_METRICS)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function useAdminOverviewMetrics(access: OverviewAccess = DEFAULT_ACCESS) {
   const { organization } = useActiveOrganization()
   const { selectedBranchId } = useBranch()
+  const organizationId = organization?.id
+  const { sales, cash, inventory, team } = access
+  const scope = JSON.stringify([organizationId, selectedBranchId, sales, cash, inventory, team])
+  const [state, setState] = useState<{
+    scope: string; metrics: AdminOverviewMetrics; loading: boolean; errors: MetricErrors; updatedAt: Date | null
+  }>({ scope, metrics: EMPTY_METRICS, loading: true, errors: {}, updatedAt: null })
+  const request = useRef<AbortController | null>(null)
 
   const refresh = useCallback(async () => {
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
+    setState({ scope, metrics: EMPTY_METRICS, loading: Boolean(organizationId), errors: {}, updatedAt: null })
+    if (!organizationId) return
+    const metrics = { ...EMPTY_METRICS }
+    const errors: MetricErrors = {}
+    const run = async (group: MetricGroup, enabled: boolean, work: () => Promise<void>) => {
+      if (!enabled) return
+      try { await work() } catch {
+        errors[group] = 'No disponible. Reintentá para actualizar este indicador.'
+      }
+    }
     try {
       const supabase = createClient()
       const today = startOfDay(new Date())
-
-      // 1. Ventas del día (monto y cantidad de tickets completados)
-      let salesQuery = supabase
-        .from('sales')
-        .select('total_amount, status, branch_id, created_at')
-        .gte('created_at', today.toISOString())
-
-      if (organization?.id) {
-        salesQuery = salesQuery.eq('organization_id', organization.id)
+      const countRows = async (query: PromiseLike<{ count: number | null; error: { message: string } | null }>) => {
+        const result = await query
+        if (result.error) throw new Error(result.error.message)
+        if (result.count === null) throw new Error('Conteo no disponible')
+        return result.count
       }
-      salesQuery = withBranchFilter(salesQuery, selectedBranchId)
-
-      // 2. Cajas abiertas en tiempo real (sesiones activas sin fecha de cierre)
-      let cashQuery = supabase
-        .from('cash_closures')
-        .select('id', { count: 'exact', head: true })
-        .is('date', null)
-
-      if (organization?.id) {
-        cashQuery = cashQuery.eq('organization_id', organization.id)
-      }
-      cashQuery = withBranchFilter(cashQuery, selectedBranchId)
-
-      // 3. Productos activos con stock bajo o en alerta
-      let productsQuery = supabase
-        .from('products')
-        .select('id, stock_quantity, min_stock, is_active')
-        .eq('is_active', true)
-        .limit(1000)
-
-      if (organization?.id) {
-        productsQuery = productsQuery.eq('organization_id', organization.id)
-      }
-
-      // 4. Colaboradores activos de ESTA organización (via membresías)
-      //    Antes se consultaba `profiles` sin filtrar por org_id, lo que
-      //    devolvía usuarios de toda la plataforma.
-      let usersQuery = supabase
-        .from('organization_members')
-        .select('user_id, status', { count: 'exact' })
-        .eq('status', 'active')
-
-      if (organization?.id) {
-        usersQuery = usersQuery.eq('organization_id', organization.id)
-      }
-
-      const [salesRes, cashRes, productsRes, usersRes] = await Promise.allSettled([
-        salesQuery,
-        cashQuery,
-        productsQuery,
-        usersQuery,
+      await Promise.all([
+        run('sales', sales, async () => {
+          const rows = await readAll<{ total_amount: number | null; status: string }>((from, to) =>
+            withBranchFilter(supabase.from('sales').select('id,total_amount,status', { count: 'exact' })
+              .eq('organization_id', organizationId).gte('created_at', today.toISOString())
+              .lt('created_at', addDays(today, 1).toISOString()), selectedBranchId)
+              .order('id').range(from, to).abortSignal(controller.signal), controller.signal)
+          const completed = rows.filter(row => isCompletedSaleStatus(row.status))
+          metrics.todaySalesCount = completed.length
+          metrics.todaySalesTotal = completed.reduce((sum, row) => {
+            const amount = Number(row.total_amount ?? 0)
+            return sum + (Number.isFinite(amount) ? amount : 0)
+          }, 0)
+        }),
+        run('cash', cash, async () => {
+          const [open, alerts] = await Promise.all([
+            countRows(withBranchFilter(supabase.from('cash_closures').select('id', { count: 'exact', head: true })
+              .eq('organization_id', organizationId).is('date', null), selectedBranchId).abortSignal(controller.signal)),
+            countRows(withBranchFilter(supabase.from('cash_alerts').select('id', { count: 'exact', head: true })
+              .eq('organization_id', organizationId).eq('is_resolved', false), selectedBranchId).abortSignal(controller.signal)),
+          ])
+          metrics.openCashRegisters = open; metrics.cashAlertsCount = alerts
+        }),
+        run('inventory', inventory, async () => {
+          const products = await readAll<{ id: string; stock_quantity: number | null; min_stock: number | null }>((from, to) =>
+            supabase.from('products').select('id,stock_quantity,min_stock', { count: 'exact' })
+              .eq('organization_id', organizationId).eq('is_active', true)
+              .order('id').range(from, to).abortSignal(controller.signal), controller.signal)
+          let stock = products.map(product => ({ stock: Number(product.stock_quantity ?? 0), min: Number(product.min_stock ?? 5) }))
+          if (selectedBranchId && selectedBranchId !== 'all' && products.length > 0) {
+            const branch = await loadBranchInventoryStockMap(supabase as unknown as BranchInventoryClient, selectedBranchId, products.map(product => product.id))
+            if (branch.failed) throw new Error(branch.error ?? 'Stock no disponible')
+            stock = products.map(product => ({
+              stock: branch.stockMap.get(product.id) ?? 0,
+              min: branch.thresholdMap.get(product.id)?.minStock ?? Number(product.min_stock ?? 5),
+            }))
+          }
+          metrics.lowStockCount = stock.filter(product => product.stock <= product.min).length
+        }),
+        run('team', team, async () => {
+          metrics.activeUsersCount = await countRows(supabase.from('organization_members')
+            .select('user_id', { count: 'exact', head: true })
+            .eq('organization_id', organizationId).eq('status', 'active').abortSignal(controller.signal))
+        }),
       ])
-
-      let todaySalesTotal = 0
-      let todaySalesCount = 0
-      if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
-        interface SaleRow {
-          status: string
-          total_amount?: number | null
-          total?: number | null
-          subtotal?: number | null
-        }
-        const salesData = salesRes.value.data as unknown as SaleRow[]
-        const completedSales = salesData.filter((sale) =>
-          isCompletedSaleStatus(sale.status)
-        )
-        todaySalesCount = completedSales.length
-        todaySalesTotal = completedSales.reduce((sum: number, sale) => {
-          const amount = Number(sale.total_amount ?? 0)
-          return sum + (Number.isFinite(amount) ? amount : 0)
-        }, 0)
+    } catch {
+      for (const [group, enabled] of Object.entries({ sales, cash, inventory, team })) {
+        if (enabled) errors[group as MetricGroup] = 'No se pudieron cargar los indicadores. Reintentá.'
       }
-
-      let openCashRegisters = 0
-      if (cashRes.status === 'fulfilled' && !cashRes.value.error) {
-        openCashRegisters = cashRes.value.count ?? 0
-      }
-
-      let lowStockCount = 0
-      if (productsRes.status === 'fulfilled' && !productsRes.value.error && productsRes.value.data) {
-        interface ProductRow {
-          stock_quantity?: number | null
-          min_stock?: number | null
-        }
-        const productsData = productsRes.value.data as unknown as ProductRow[]
-        lowStockCount = productsData.filter((p) => {
-          const stock = Number(p.stock_quantity ?? 0)
-          const min = Number(p.min_stock ?? 5)
-          return stock <= min
-        }).length
-      }
-
-      let activeUsersCount = 0
-      if (usersRes.status === 'fulfilled' && !usersRes.value.error) {
-        // La consulta ya filtra status='active', así que el count es directo.
-        activeUsersCount = usersRes.value.count ?? (usersRes.value.data?.length ?? 0)
-      }
-
-      setMetrics({
-        todaySalesTotal,
-        todaySalesCount,
-        openCashRegisters,
-        lowStockCount,
-        activeUsersCount,
-      })
-      setError(null)
-    } catch (err: unknown) {
-      console.warn('[useAdminOverviewMetrics] error loading metrics:', err)
-      setError(err instanceof Error ? err.message : 'Error al cargar métricas')
-    } finally {
-      setLoading(false)
     }
-  }, [organization?.id, selectedBranchId])
+    if (controller.signal.aborted || request.current !== controller) return
+    setState({ scope, metrics, loading: false, errors, updatedAt: new Date() })
+  }, [scope, organizationId, selectedBranchId, sales, cash, inventory, team])
 
   useEffect(() => {
-    void refresh()
+    let active = true
+    queueMicrotask(() => { if (active) void refresh() })
+    return () => { active = false; request.current?.abort() }
   }, [refresh])
-
-  return {
-    metrics,
-    loading,
-    error,
-    refresh,
+  // No mostrar datos de otro alcance mientras comienza la nueva consulta.
+  const current = state.scope === scope ? state : {
+    metrics: EMPTY_METRICS, loading: Boolean(organizationId), errors: {}, updatedAt: null,
   }
+  return { ...current, error: Object.keys(current.errors).length ? 'Algunos indicadores no están disponibles.' : null, refresh }
 }

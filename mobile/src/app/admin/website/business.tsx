@@ -1,8 +1,15 @@
-import { remainingWebsiteEdits } from '@/lib/website-save-state';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
 import {
@@ -10,22 +17,32 @@ import {
   Notice,
   SaveBar,
   Section,
+  StatusPill,
   WebsiteScreen,
   useUnsavedChangesGuard,
+  websiteStyles,
 } from '@/components/website/website-ui';
-import { usePalette } from '@/lib/palette';
-import { saveCompanyInfo, websiteErrorMessage } from '@/lib/website-admin';
+import { palette, usePalette } from '@/lib/palette';
+import {
+  resolveMapsShortLink,
+  saveCompanyInfo,
+  websiteErrorMessage,
+} from '@/lib/website-admin';
 import { useWebsite } from '@/lib/website-context';
 import {
   SOCIAL_BASE,
   companyIssues,
+  extractMapsCoordinates,
   isDirty,
+  isShortMapsLink,
+  isValidGoogleMapsUrl,
   mergeSetting,
   socialHandle,
   type CompanyInfo,
   type SocialPlatform,
   type WebsiteSettings,
 } from '@/lib/website-model';
+import { remainingWebsiteEdits } from '@/lib/website-save-state';
 
 const SOCIALS: readonly {
   platform: SocialPlatform;
@@ -55,7 +72,7 @@ const SOCIALS: readonly {
 
 export default function BusinessScreen() {
   return (
-    <WebsiteGate title="Negocio y redes">
+    <WebsiteGate title="Negocio, horario y mapa">
       {(settings) => <BusinessEditor settings={settings} />}
     </WebsiteGate>
   );
@@ -67,16 +84,51 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
   const saved = settings.company_info;
   const [patch, setPatch] = useState<Partial<CompanyInfo>>({});
   const [saving, setSaving] = useState(false);
+  const [resolvingMaps, setResolvingMaps] = useState(false);
+
   const company = useMemo(
     () => mergeSetting<CompanyInfo>(saved, patch),
     [saved, patch],
   );
   const dirty = isDirty(saved, company);
   const issues = companyIssues(company);
+
   const set = (next: Partial<CompanyInfo>) =>
     setPatch((current) => ({ ...current, ...next }));
   const setHours = (field: 'weekdays' | 'saturday' | 'sunday', value: string) =>
     set({ hours: { ...(company.hours ?? {}), [field]: value } });
+
+  const mapsCoords = useMemo(
+    () => extractMapsCoordinates(company.mapsUrl),
+    [company.mapsUrl],
+  );
+  const needsMapsResolve =
+    Boolean(company.mapsUrl?.trim()) && isShortMapsLink(company.mapsUrl);
+
+  const handleResolveMaps = async () => {
+    const raw = company.mapsUrl?.trim();
+    if (!raw || resolvingMaps) return;
+    setResolvingMaps(true);
+    try {
+      const res = await resolveMapsShortLink(raw);
+      if (res.resolved && res.url) {
+        set({ mapsUrl: res.url });
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert(
+          'No pudimos expandir el enlace',
+          'Podés dejar el enlace corto igual, o pegar el enlace largo desde Google Maps en el navegador.',
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error al verificar enlace',
+        websiteErrorMessage(error, 'Revisá tu conexión e intentá de nuevo.'),
+      );
+    } finally {
+      setResolvingMaps(false);
+    }
+  };
 
   const save = useCallback(async () => {
     const problems = Object.values(issues);
@@ -110,14 +162,19 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
   return (
     <WebsiteScreen
       saving={saving}
-      title="Negocio y redes"
-      subtitle="Lo que ven tus clientes"
+      title="Negocio, horario y mapa"
+      subtitle="Lo que ven tus clientes en el sitio"
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          onSave={() => void save()}
+          onDiscard={() => setPatch({})}
+        />
       }
     >
       <OfflineNotice />
-      <Notice text="Estos datos son públicos: aparecen en tu tienda. El teléfono, el email y la dirección también se actualizan en tu sucursal principal." />
+      <Notice text="Estos datos aparecen en tu tienda online y también sincronizan teléfono, email, RUC y dirección con tu sucursal." />
 
       <Section title="Identidad" icon="storefront-outline">
         <Field
@@ -126,7 +183,16 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           onChangeText={(value) => set({ name: value })}
           placeholder="Mi Tienda"
           maxLength={100}
+          showCount
           error={issues.name}
+        />
+        <Field
+          label="RUC o identificador fiscal (opcional)"
+          value={company.ruc ?? ''}
+          onChangeText={(value) => set({ ruc: value })}
+          placeholder="Ej: 80012345-6"
+          autoCapitalize="none"
+          maxLength={30}
         />
         <Field
           label="Eslogan"
@@ -134,6 +200,7 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           onChangeText={(value) => set({ slogan: value })}
           placeholder="Calidad y buen precio"
           maxLength={100}
+          showCount
         />
         <Field
           label="Descripción"
@@ -142,10 +209,11 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           placeholder="Contá quiénes son y qué ofrecen"
           multiline
           maxLength={1000}
+          showCount
         />
       </Section>
 
-      <Section title="Contacto" icon="call-outline">
+      <Section title="Contacto y ubicación" icon="location-outline">
         <Field
           label="Teléfono"
           value={company.phone ?? ''}
@@ -176,10 +244,10 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           error={issues.email}
         />
         <Field
-          label="Dirección"
+          label="Dirección física"
           value={company.address ?? ''}
           onChangeText={(value) => set({ address: value })}
-          placeholder="Calle y número, ciudad"
+          placeholder="Av. España 1234, Asunción"
           maxLength={200}
         />
         <Field
@@ -191,11 +259,68 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           autoCapitalize="none"
           maxLength={1000}
           error={issues.mapsUrl}
+          right={
+            mapsCoords ? (
+              <StatusPill label="Ubicación exacta" tone="success" />
+            ) : undefined
+          }
           help="En Google Maps: Compartir → Copiar enlace."
         />
+
+        {needsMapsResolve || (company.mapsUrl && isValidGoogleMapsUrl(company.mapsUrl)) ? (
+          <View style={styles.mapsActions}>
+            {needsMapsResolve ? (
+              <Pressable
+                onPress={() => void handleResolveMaps()}
+                disabled={resolvingMaps}
+                style={[
+                  websiteStyles.secondaryButton,
+                  styles.mapBtn,
+                  { borderColor: palette.primary },
+                ]}
+              >
+                {resolvingMaps ? (
+                  <ActivityIndicator size="small" color={palette.primary} />
+                ) : (
+                  <Ionicons
+                    name="locate-outline"
+                    size={15}
+                    color={palette.primary}
+                  />
+                )}
+                <Text style={[styles.mapBtnText, { color: palette.primary }]}>
+                  {resolvingMaps ? 'Resolviendo…' : 'Extraer pin exacto'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {company.mapsUrl && isValidGoogleMapsUrl(company.mapsUrl) ? (
+              <Pressable
+                onPress={() => void WebBrowser.openBrowserAsync(company.mapsUrl!)}
+                style={[
+                  websiteStyles.secondaryButton,
+                  styles.mapBtn,
+                  { borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="map-outline" size={15} color={colors.text} />
+                <Text style={[styles.mapBtnText, { color: colors.text }]}>
+                  Probar en Maps
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {mapsCoords ? (
+          <Text style={[styles.coordsHint, { color: colors.muted }]}>
+            Coordenadas detectadas: {mapsCoords.lat.toFixed(5)},{' '}
+            {mapsCoords.lng.toFixed(5)}
+          </Text>
+        ) : null}
       </Section>
 
-      <Section title="Horarios" icon="time-outline">
+      <Section title="Horarios de atención" icon="time-outline">
         <Field
           label="Lunes a viernes"
           value={company.hours?.weekdays ?? ''}
@@ -249,4 +374,8 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
 
 const styles = StyleSheet.create({
   link: { fontSize: 12, marginTop: 4 },
+  mapsActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  mapBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  mapBtnText: { fontSize: 12, fontWeight: '800' },
+  coordsHint: { fontSize: 11, fontWeight: '600' },
 });

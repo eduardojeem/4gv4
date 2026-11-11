@@ -7,6 +7,7 @@ import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 // ============================================================================
 // Types
@@ -109,18 +110,21 @@ const RepairsContext = createContext<RepairsContextValue | undefined>(undefined)
 // ============================================================================
 
 interface RepairsProviderProps {
+    loadOnOverview?: boolean
     children: ReactNode
 }
 
-export function RepairsProvider({ children }: RepairsProviderProps) {
+export function RepairsProvider({ children, loadOnOverview = false }: RepairsProviderProps) {
     const { scope, currentScope } = useTenantScope()
     const abortRef = useRef<AbortController | null>(null)
     const [repairs, setRepairs] = useState<Repair[]>([])
-    const [isLoading, setIsLoading] = useState(false)
+    const [isLoading, setIsLoading] = useState(loadOnOverview)
     const [error, setError] = useState<Error | null>(null)
     const { selectedBranchId } = useBranch()
     const pathname = usePathname()
+    const { effectiveModules } = useSubscriptionStatus()
     const shouldLoadRepairs = pathname.startsWith('/dashboard/repairs') || pathname.startsWith('/dashboard/technician')
+        || (loadOnOverview && pathname === '/admin' && effectiveModules.includes('repairs'))
 
 
     const fetchRepairs = useCallback(async () => {
@@ -548,6 +552,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         setRepairs([])
         setError(null)
         if (shouldLoadRepairs) void fetchRepairs()
+        else setIsLoading(false)
         return () => abortRef.current?.abort()
     }, [fetchRepairs, shouldLoadRepairs])
 

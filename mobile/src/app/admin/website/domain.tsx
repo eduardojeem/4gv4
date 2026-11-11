@@ -1,7 +1,9 @@
-import { remainingWebsiteEdits } from '@/lib/website-save-state';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
 import {
@@ -9,9 +11,11 @@ import {
   Notice,
   SaveBar,
   Section,
+  StatusPill,
   ToggleRow,
   WebsiteScreen,
   useUnsavedChangesGuard,
+  websiteStyles,
 } from '@/components/website/website-ui';
 import { SITE_URL } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
@@ -27,6 +31,7 @@ import {
   type CompanyInfo,
   type WebsiteSettings,
 } from '@/lib/website-model';
+import { remainingWebsiteEdits } from '@/lib/website-save-state';
 
 const confirm = (title: string, message: string, action: string) =>
   new Promise<boolean>((resolve) =>
@@ -55,6 +60,7 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
   const saved = settings.company_info;
   const [patch, setPatch] = useState<Partial<CompanyInfo>>({});
   const [saving, setSaving] = useState(false);
+
   const company = useMemo(
     () => mergeSetting<CompanyInfo>(saved, patch),
     [saved, patch],
@@ -66,6 +72,12 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
   const set = (next: Partial<CompanyInfo>) =>
     setPatch((current) => ({ ...current, ...next }));
   const published = company.storefrontPublic === true;
+
+  const mode = settings.checkout?.commerceMode ?? 'cart';
+  const pubIssues = useMemo(
+    () => publicationIssues(company, mode),
+    [company, mode],
+  );
 
   const save = useCallback(async () => {
     if (slugError) {
@@ -85,18 +97,14 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
 
     const activating = isActivatingPublication(saved, company);
     if (activating) {
-      const issues = publicationIssues(
-        company,
-        settings.checkout?.commerceMode ?? 'cart',
-      );
-      if (issues.length) {
-        Alert.alert('Antes de publicar', issues.join('\n'));
+      if (pubIssues.length) {
+        Alert.alert('Antes de publicar', pubIssues.join('\n'));
         return false;
       }
       if (
         !(await confirm(
           '¿Publicar tu tienda?',
-          'Cualquier persona con el enlace va a poder verla y hacer pedidos.',
+          'Cualquier persona con el enlace va a poder verla y hacer pedidos o consultas.',
           'Publicar',
         ))
       )
@@ -105,7 +113,6 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
     setSaving(true);
     try {
       const result = await saveCompanyInfo(saved, patch, activating);
-      // La publicación vive en la organización: se refleja lo que quedó.
       applySaved({
         company_info: {
           ...(result ?? company),
@@ -130,33 +137,77 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
     } finally {
       setSaving(false);
     }
-  }, [
-    slugError,
-    patch,
-    saved,
-    slug,
-    company,
-    settings.checkout?.commerceMode,
-    applySaved,
-  ]);
+  }, [slugError, patch, saved, slug, company, pubIssues, applySaved]);
 
   useUnsavedChangesGuard(dirty, save, saving);
 
   const preview = publicStoreUrl(SITE_URL, slug);
+
   return (
     <WebsiteScreen
       saving={saving}
       title="Dirección y publicación"
-      subtitle="Dónde y para quién está tu tienda"
+      subtitle="Enlace público y visibilidad"
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          onSave={() => void save()}
+          onDiscard={() => setPatch({})}
+        />
       }
     >
       <OfflineNotice />
-      <Section title="Dirección de tu tienda" icon="link-outline">
-        <Text style={[styles.url, { color: palette.primary }]}>
-          {preview ? preview.replace(/^https?:\/\//, '') : 'Sin dirección'}
-        </Text>
+
+      <Section
+        title="Enlace público de tu tienda"
+        icon="link-outline"
+        right={
+          <StatusPill
+            label={published ? 'Pública' : 'No publicada'}
+            tone={published ? 'success' : 'warning'}
+          />
+        }
+      >
+        <View
+          style={[
+            styles.urlBox,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
+          <Text
+            selectable
+            numberOfLines={1}
+            style={[styles.url, { color: palette.primary }]}
+          >
+            {preview ? preview.replace(/^https?:\/\//, '') : 'Sin dirección'}
+          </Text>
+          {preview ? (
+            <View style={styles.urlActions}>
+              <Pressable
+                onPress={() => void Share.share({ message: preview })}
+                style={[styles.iconPill, { borderColor: colors.border }]}
+              >
+                <Ionicons
+                  name="share-outline"
+                  size={15}
+                  color={palette.primary}
+                />
+                <Text style={styles.iconPillText}>Compartir</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void WebBrowser.openBrowserAsync(preview)}
+                style={[styles.iconPill, { borderColor: colors.border }]}
+              >
+                <Ionicons name="open-outline" size={15} color={colors.text} />
+                <Text style={[styles.iconPillText, { color: colors.text }]}>
+                  Abrir
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
         <Field
           label="Dirección (ruta)"
           value={slug}
@@ -165,11 +216,29 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
           autoCapitalize="none"
           maxLength={50}
           error={slugError}
-          help="Letras minúsculas, números y guiones. Algunas palabras están reservadas por la plataforma."
+          help="Usá letras minúsculas, números y guiones (por ejemplo: tienda-san-jose)."
         />
       </Section>
 
-      <Section title="Publicación" icon="eye-outline">
+      {pubIssues.length > 0 ? (
+        <Section
+          title="Requisitos para publicar"
+          icon="checkmark-circle-outline"
+          hint="Completá estos puntos antes de hacer pública tu tienda:"
+        >
+          {pubIssues.map((msg, i) => (
+            <Notice
+              key={i}
+              tone="warning"
+              text={msg}
+              actionLabel="Ir a Negocio y contacto"
+              onAction={() => router.push('/admin/website/business' as never)}
+            />
+          ))}
+        </Section>
+      ) : null}
+
+      <Section title="Visibilidad" icon="eye-outline">
         <ToggleRow
           label="Tienda publicada"
           hint="Visible para cualquier persona con el enlace"
@@ -183,7 +252,7 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
         />
         <ToggleRow
           label="Aparecer en el marketplace"
-          hint="Tu tienda en el directorio de comercios"
+          hint="Tu comercio se lista en el directorio de MiTiendaPy"
           value={published && company.marketplacePublic === true}
           disabled={!published}
           onValueChange={(value) => set({ marketplacePublic: value })}
@@ -191,22 +260,51 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
         {!published ? (
           <Notice
             tone="warning"
-            text="Con la tienda sin publicar, quien abra el enlace ve un aviso de tienda cerrada."
+            text="Mientras no esté publicada, quien abra el enlace ve un aviso de tienda cerrada."
           />
         ) : null}
       </Section>
 
       <Section title="Dominio propio" icon="globe-outline">
         <Text style={[styles.muted, { color: colors.muted }]}>
-          Usar un dominio propio (por ejemplo tutienda.com.py) todavía no está
-          disponible. Tu tienda funciona con la dirección de arriba.
+          Tu tienda ya funciona lista en nuestra dirección con HTTPS automático.
+          Dominios personalizados (.com.py / .com) estarán disponibles próximamente.
         </Text>
+        <Pressable
+          onPress={() => router.push('/admin/website/business' as never)}
+          style={[
+            websiteStyles.secondaryButton,
+            { borderColor: colors.border },
+          ]}
+        >
+          <Ionicons name="storefront-outline" size={16} color={colors.text} />
+          <Text style={[websiteStyles.secondaryText, { color: colors.text }]}>
+            Revisar datos del negocio
+          </Text>
+        </Pressable>
       </Section>
     </WebsiteScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  urlBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
   url: { fontSize: 15, fontWeight: '800' },
-  muted: { fontSize: 13 },
+  urlActions: { flexDirection: 'row', gap: 8 },
+  iconPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  iconPillText: { fontSize: 12, fontWeight: '800', color: palette.primary },
+  muted: { fontSize: 13, lineHeight: 19 },
 });

@@ -77,8 +77,10 @@ describe('dónde está puesto', () => {
 
   it('los accesos directos del admin piden lo mismo que el menú', () => {
     const portada = readFileSync(resolve(process.cwd(), 'src/app/admin/page.tsx'), 'utf8')
-    expect(portada).toContain("isRouteAvailable('/admin/finances', effectiveModules)")
-    expect(portada).toContain("isRouteAvailable('/admin/inventory', effectiveModules)")
-    expect(portada).toContain("isRouteAvailable('/admin/cash-monitor', effectiveModules)")
+    // La portada filtra con el mismo menú (permisos y módulos) y de ahí saca los accesos.
+    expect(portada).toContain('filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, effectiveModules)')
+    expect(portada).toContain("allowedRoutes.has('/admin/finances')")
+    expect(portada).toContain("allowedRoutes.has('/admin/inventory')")
+    expect(portada).toContain("allowedRoutes.has('/admin/cash-monitor')")
   })
 })

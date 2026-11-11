@@ -62,7 +62,7 @@ export async function GET() {
       capabilities: {...Object.fromEntries(([
         'products.create','products.update','products.delete','inventory.stock.manage',
         'crm.customers.manage','ecommerce.orders.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
-      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'agenda.create': groups.some(group => group.items.some(item => item.key === 'agenda')) && (role === 'super_admin' || roleHasPermission(organization.role, 'pos.sales.read')), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
+      ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'orders.delivery': planInfo.effectiveModules.includes('delivery'), 'agenda.create': groups.some(group => group.items.some(item => item.key === 'agenda')) && (role === 'super_admin' || roleHasPermission(organization.role, 'pos.sales.read')), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
       user: {
         email: auth.user.email ?? null,
         name: profileRow?.full_name || null,

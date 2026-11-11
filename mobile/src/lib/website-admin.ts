@@ -10,6 +10,9 @@ import {
   type CompanyInfo,
   type EditableSettingKey,
   type PublicProduct,
+  type TemplateAccessData,
+  type WebsiteMediaItem,
+  type WebsiteMediaSection,
   type WebsiteSettings,
 } from './website-model';
 
@@ -60,6 +63,18 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings> {
   return res.data;
 }
 
+export async function fetchTemplateAccess(): Promise<TemplateAccessData | null> {
+  try {
+    const res = await apiFetch<{
+      success?: boolean;
+      data?: TemplateAccessData;
+    }>('/api/admin/website/storefront-templates');
+    return res?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Guarda claves completas (hasta 10 por pedido). Devuelve lo que quedó guardado. */
 export async function saveWebsiteSettings(
   values: Partial<Record<EditableSettingKey, unknown>>,
@@ -105,8 +120,15 @@ export type PickedImage = {
   fileName?: string | null;
 };
 
+export type WebsiteImageKind = 'logo' | 'banner' | 'aviso' | 'gallery' | 'brand';
+
 const extensionFor = (mime: string) =>
   mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+
+const safeUploadId = (value: string | undefined, fallback: string) => {
+  const cleaned = (value ?? '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80);
+  return cleaned || fallback;
+};
 
 /**
  * El fetch de Expo no acepta el viejo { uri, name, type } de React Native: arma el
@@ -129,31 +151,57 @@ export async function formDataFile(
   } as unknown as Blob;
 }
 
-/**
- * Sube una imagen por el servidor, que la optimiza y la guarda en la carpeta de
- * la organización activa (website/<carpeta>/<organization_id>/...). La imagen
- * anterior no se borra: queda en el historial de medios del sitio.
- */
-export async function uploadWebsiteImage(
-  kind: 'logo' | 'banner',
+async function appendPickedImageToForm(
+  form: FormData,
   image: PickedImage,
-  slideId?: string,
 ): Promise<string> {
   const mime =
     image.mimeType && /^image\/(jpeg|png|webp)$/.test(image.mimeType)
       ? image.mimeType
       : 'image/jpeg';
   const name = image.fileName || `imagen.${extensionFor(mime)}`;
-  const form = new FormData();
   const file = await formDataFile(image.uri, name, mime);
   // En web el nombre va aparte (Blob); en la app ya viaja dentro de la parte.
   if (Platform.OS === 'web') form.append('file', file, name);
   else form.append('file', file);
-  if (kind === 'banner') form.append('slideId', slideId || 'mobile');
-  const path =
-    kind === 'logo'
-      ? '/api/admin/website/logo'
-      : '/api/admin/website/promotion-image';
+  return name;
+}
+
+/**
+ * Sube una imagen por el servidor, que la optimiza y la guarda en la carpeta de
+ * la organización activa (website/<carpeta>/<organization_id>/...). Las imágenes
+ * nuevas suman al historial de medios (límite 20).
+ */
+export async function uploadWebsiteImage(
+  kind: WebsiteImageKind,
+  image: PickedImage,
+  slideId?: string,
+): Promise<string> {
+  const form = new FormData();
+  await appendPickedImageToForm(form, image);
+
+  let path = '/api/admin/website/promotion-image';
+  if (kind === 'logo') {
+    path = '/api/admin/website/logo';
+  } else if (kind === 'brand') {
+    path = '/api/admin/website/brand-logo';
+    form.append(
+      'brandId',
+      (slideId ?? 'brand').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) ||
+        'brand',
+    );
+  } else if (kind === 'aviso') {
+    form.append('slideId', 'aviso');
+  } else if (kind === 'gallery') {
+    const clean = safeUploadId(slideId, 'foto');
+    form.append(
+      'slideId',
+      clean.startsWith('galeria') ? clean : `galeria-${clean}`,
+    );
+  } else {
+    form.append('slideId', safeUploadId(slideId, 'mobile'));
+  }
+
   const res = await apiFetch<{
     success?: boolean;
     url?: string;
@@ -162,6 +210,179 @@ export async function uploadWebsiteImage(
   if (!res?.url)
     throw new ApiError(res?.error || 'No se pudo subir la imagen.', 500);
   return res.url;
+}
+
+export async function uploadBrandLogo(
+  image: PickedImage,
+  brandId = 'brand',
+): Promise<string> {
+  return uploadWebsiteImage('brand', image, brandId);
+}
+
+// ─── Biblioteca de medios (límite 20) ────────────────────────────────────────
+
+export type WebsiteMediaQuota = {
+  items: WebsiteMediaItem[];
+  count: number;
+  limit: number;
+};
+
+export async function fetchWebsiteMedia(): Promise<WebsiteMediaQuota> {
+  const res = await apiFetch<{
+    success?: boolean;
+    items?: WebsiteMediaItem[];
+    count?: number;
+    limit?: number;
+  }>('/api/admin/website/media');
+  const items = Array.isArray(res?.items) ? res.items : [];
+  return {
+    items,
+    count: typeof res?.count === 'number' ? res.count : items.length,
+    limit: typeof res?.limit === 'number' ? res.limit : 20,
+  };
+}
+
+export async function uploadWebsiteMedia(
+  image: PickedImage,
+  section: WebsiteMediaSection = 'general',
+  customName?: string,
+): Promise<{ item: WebsiteMediaItem; count: number; limit: number }> {
+  const form = new FormData();
+  const name = await appendPickedImageToForm(form, image);
+  form.append('section', section);
+  form.append('name', (customName ?? name).slice(0, 120));
+  const res = await apiFetch<{
+    success?: boolean;
+    item?: WebsiteMediaItem;
+    count?: number;
+    limit?: number;
+    error?: string;
+  }>('/api/admin/website/media', { method: 'POST', body: form });
+  if (!res?.item)
+    throw new ApiError(res?.error || 'No se pudo subir la imagen.', 500);
+  return {
+    item: res.item,
+    count: typeof res.count === 'number' ? res.count : 0,
+    limit: typeof res.limit === 'number' ? res.limit : 20,
+  };
+}
+
+export async function deleteWebsiteMedia(target: {
+  id?: string;
+  path?: string;
+  url?: string;
+}): Promise<{ count: number; limit: number }> {
+  const res = await apiFetch<{
+    success?: boolean;
+    count?: number;
+    limit?: number;
+    error?: string;
+  }>('/api/admin/website/media', {
+    method: 'DELETE',
+    body: JSON.stringify(target),
+  });
+  return {
+    count: typeof res?.count === 'number' ? res.count : 0,
+    limit: typeof res?.limit === 'number' ? res.limit : 20,
+  };
+}
+
+// ─── Google Maps short link ──────────────────────────────────────────────────
+
+export async function resolveMapsShortLink(url: string): Promise<{
+  url: string;
+  resolved: boolean;
+  coordinates: { lat: number; lng: number } | null;
+}> {
+  return apiFetch<{
+    url: string;
+    resolved: boolean;
+    coordinates: { lat: number; lng: number } | null;
+  }>('/api/admin/website/maps-link', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+// ─── Marcas de la tienda (S1: solo datos públicos de marcas) ──────────────────
+
+export type StoreBrandSummary = {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  productCount: number;
+  isFromBrandsTable: boolean;
+};
+
+export async function fetchStoreBrandsSummary(): Promise<StoreBrandSummary[]> {
+  const [brandsResult, productsResult] = await Promise.allSettled([
+    apiFetch<{
+      success?: boolean;
+      data?: {
+        id?: string;
+        name?: string;
+        logo_url?: string | null;
+        stats?: { product_count?: number };
+      }[];
+    }>('/api/brands?limit=100'),
+    apiFetch<{
+      success?: boolean;
+      data?: { products?: { brand?: string | null }[] };
+    }>('/api/products?per_page=100&is_active=true'),
+  ]);
+
+  const map = new Map<string, StoreBrandSummary>();
+
+  if (
+    brandsResult.status === 'fulfilled' &&
+    Array.isArray(brandsResult.value?.data)
+  ) {
+    for (const row of brandsResult.value.data) {
+      const name = typeof row?.name === 'string' ? row.name.trim() : '';
+      if (!name) continue;
+      const key = name.toLowerCase();
+      map.set(key, {
+        id: row.id || key.replace(/\s+/g, '-'),
+        name,
+        logoUrl: row.logo_url || undefined,
+        productCount:
+          typeof row.stats?.product_count === 'number'
+            ? row.stats.product_count
+            : 0,
+        isFromBrandsTable: true,
+      });
+    }
+  }
+
+  if (
+    productsResult.status === 'fulfilled' &&
+    Array.isArray(productsResult.value?.data?.products)
+  ) {
+    const productCounts = new Map<string, number>();
+    for (const product of productsResult.value.data.products) {
+      const brandName =
+        typeof product?.brand === 'string' ? product.brand.trim() : '';
+      if (!brandName) continue;
+      const key = brandName.toLowerCase();
+      productCounts.set(key, (productCounts.get(key) ?? 0) + 1);
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key.replace(/\s+/g, '-'),
+          name: brandName,
+          productCount: 0,
+          isFromBrandsTable: false,
+        });
+      }
+    }
+    for (const [key, count] of productCounts.entries()) {
+      const entry = map.get(key);
+      if (entry) entry.productCount = Math.max(entry.productCount, count);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, 'es'),
+  );
 }
 
 export const storeUrl = (company: CompanyInfo) =>

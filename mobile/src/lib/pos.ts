@@ -1,8 +1,10 @@
 import { subscribePrivateCacheContext } from './private-cache-context';
 import { formatMobileDate, formatMobileNumber } from './regional-format';
 import { installmentAmounts, type CreditTerms } from './pos-credit';
+import { isPosService, isSellable } from './pos-catalog';
+import { getMobileRuntimeConfig } from './runtime-config';
 import { apiFetch, ApiError } from './api';
-import type { Product } from './products';
+import type { Product, ProductPage, ProductVariant } from './products';
 
 /**
  * POS de la app: la misma venta que la web (/api/pos/process-sale), con la
@@ -198,14 +200,20 @@ export function receiptText(input: { business: string; lines: CartLine[]; priceM
 
 export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
 export type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIAL' | 'REFUNDED' | string;
+export type OrderPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'DIGITAL_WALLET';
+export type OrderFulfillmentType = 'PICKUP' | 'DELIVERY';
+export type OrderChannel = 'WEB' | 'PANEL';
+export type OrderSortOption = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc';
 
 export type Order = {
   id: string;
   order_number: string;
+  branch_id?: string | null;
+  channel?: OrderChannel;
   status: OrderStatus;
   payment_status: PaymentStatus;
   payment_method: string;
-  fulfillment_type: 'PICKUP' | 'DELIVERY';
+  fulfillment_type: OrderFulfillmentType;
   customer_name: string;
   customer_email: string | null;
   customer_phone: string | null;
@@ -234,6 +242,25 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string; i
   CANCELLED: { label: 'Cancelado', color: '#DC2626', icon: 'close-circle-outline' },
 };
 
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: 'Efectivo',
+  CARD: 'Tarjeta',
+  TRANSFER: 'Transferencia',
+  DIGITAL_WALLET: 'Billetera digital',
+};
+
+export function stripDuplicateVariantSuffix(productName: string, variantName?: string | null): string {
+  if (!variantName || !variantName.trim()) return productName;
+  const escaped = variantName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return productName.replace(new RegExp(`\\s*\\(${escaped}\\)$`), '').trim();
+}
+
+export function formatOrderItemTitle(productName: string, variantName?: string | null): string {
+  const baseName = stripDuplicateVariantSuffix(productName, variantName);
+  if (!variantName || !variantName.trim()) return baseName;
+  return `${baseName} (${variantName.trim()})`;
+}
+
 export const ORDER_FLOW: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED'];
 
 /** Igual que lib/orders/flow.ts: un paso por vez; un retiro en local pasa de Listo a Entregado. */
@@ -252,10 +279,23 @@ export const PAYMENT_LABEL: Record<string, { label: string; color: string }> = {
 
 export type OrderPage = { orders: Order[]; pagination: { page: number; total: number; totalPages: number }; stats: Record<string, number> | null; meta: { todayCount: number; todayRevenue: number } | null };
 
-export async function fetchOrders(params: { status: OrderStatus | 'ALL'; search: string; page: number; withStats?: boolean }) {
+export async function fetchOrders(params: {
+  status: OrderStatus | 'ALL';
+  search: string;
+  page: number;
+  withStats?: boolean;
+  paymentStatus?: PaymentStatus | 'ALL';
+  fulfillmentType?: OrderFulfillmentType | 'ALL';
+  branchId?: string | null;
+  sort?: OrderSortOption;
+}) {
   const query = new URLSearchParams({ page: String(params.page), limit: '20', status: params.status });
   if (params.search.trim()) query.set('search', params.search.trim());
   if (params.withStats) query.set('include_stats', 'true');
+  if (params.paymentStatus && params.paymentStatus !== 'ALL') query.set('payment_status', params.paymentStatus);
+  if (params.fulfillmentType && params.fulfillmentType !== 'ALL') query.set('fulfillment_type', params.fulfillmentType);
+  if (params.branchId && params.branchId !== 'ALL') query.set('branch_id', params.branchId);
+  if (params.sort) query.set('sort', params.sort);
   const result = await apiFetch<{ data: OrderPage }>(`/api/orders?${query.toString()}`);
   return result.data;
 }
@@ -286,7 +326,7 @@ export function uuid() {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
 }
 
-export async function collectOrderPayment(id: string, input: { amount: number; method: 'CASH' | 'CARD' | 'TRANSFER'; reference?: string; note?: string }, key: string) {
+export async function collectOrderPayment(id: string, input: { amount: number; method: OrderPaymentMethod; reference?: string; note?: string }, key: string) {
   try {
     const result = await apiFetch<{ data: Order }>(`/api/orders/${id}/payment`, {
       method: 'PATCH',
@@ -296,6 +336,106 @@ export async function collectOrderPayment(id: string, input: { amount: number; m
   } catch (error) {
     throw new Error(friendly(error, 'No se pudo registrar el cobro.'));
   }
+}
+
+export type UpdateOrderPatch = {
+  customer_name?: string;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  customer_address?: string | null;
+  fulfillment_type?: OrderFulfillmentType;
+  payment_method?: OrderPaymentMethod;
+  shipping_cost?: number;
+  discount_amount?: number;
+  notes?: string | null;
+};
+
+export async function updateOrder(id: string, patch: UpdateOrderPatch) {
+  try {
+    const result = await apiFetch<{ data: Order }>(`/api/orders/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+    return result.data;
+  } catch (error) {
+    throw new Error(friendly(error, 'No se pudo actualizar el pedido.'));
+  }
+}
+
+export function formatWaPhone(phone: string) {
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (!digitsOnly) return '';
+  return digitsOnly.startsWith('595')
+    ? digitsOnly
+    : digitsOnly.startsWith('0')
+      ? `595${digitsOnly.slice(1)}`
+      : digitsOnly;
+}
+
+export function orderWhatsAppMessage(order: Order, storeSlug?: string | null) {
+  const statusLabel = ORDER_STATUS[order.status]?.label ?? order.status;
+  const gs = (value: number) => `Gs. ${formatMobileNumber(Math.round(value))}`;
+  const statusLine: Record<OrderStatus, string> = {
+    PENDING: `Recibimos tu pedido #${order.order_number} y lo estamos revisando para confirmarlo.`,
+    CONFIRMED: `Confirmamos tu pedido #${order.order_number}.`,
+    PREPARING: `Estamos preparando tu pedido #${order.order_number}.`,
+    READY: order.fulfillment_type === 'PICKUP'
+      ? `¡Tu pedido #${order.order_number} ya está listo para retirar!`
+      : `¡Tu pedido #${order.order_number} ya está listo para despacho!`,
+    SHIPPED: `Tu pedido #${order.order_number} salió en camino.`,
+    DELIVERED: `Tu pedido #${order.order_number} fue entregado. ¡Gracias por tu compra!`,
+    CANCELLED: `Te informamos que tu pedido #${order.order_number} fue cancelado (${statusLabel}).`,
+  };
+  let trackUrl: string | null = null;
+  if (storeSlug) {
+    try {
+      const siteUrl = getMobileRuntimeConfig().siteUrl;
+      trackUrl = `${siteUrl}/${encodeURIComponent(storeSlug)}/track?orderNumber=${encodeURIComponent(order.order_number)}`;
+    } catch {
+      trackUrl = null;
+    }
+  }
+  return [
+    `¡Hola ${order.customer_name || 'Cliente'}! ${statusLine[order.status] ?? `Te escribimos por tu pedido #${order.order_number}.`}`,
+    `Total: ${gs(order.total)}${order.amount_due > 0 ? ` · Saldo pendiente: ${gs(order.amount_due)}` : ''}.`,
+    trackUrl ? `Seguí tu pedido acá: ${trackUrl}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
+export function buildOrderWhatsAppUrl(order: Order, storeSlug?: string | null) {
+  if (!order.customer_phone) return null;
+  const phone = formatWaPhone(order.customer_phone);
+  if (!phone) return null;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(orderWhatsAppMessage(order, storeSlug))}`;
+}
+
+export function orderSummaryText(order: Order, branchName?: string | null) {
+  const gs = (value: number) => `Gs. ${formatMobileNumber(Math.round(value))}`;
+  const status = ORDER_STATUS[order.status]?.label ?? order.status;
+  const payment = PAYMENT_LABEL[String(order.payment_status).toUpperCase()]?.label ?? order.payment_status;
+  const method = PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method;
+  return [
+    `Pedido #${order.order_number} · ${status}`,
+    branchName ? `Sucursal: ${branchName}` : null,
+    `Cliente: ${order.customer_name || 'Cliente'}`,
+    order.customer_phone ? `Tel: ${order.customer_phone}` : null,
+    `Entrega: ${order.fulfillment_type === 'DELIVERY' ? 'Delivery' : 'Retiro en local'}`,
+    order.fulfillment_type === 'DELIVERY' && order.customer_address ? `Dirección: ${order.customer_address}` : null,
+    '',
+    ...order.order_items.map(
+      (item) => `${item.quantity} × ${formatOrderItemTitle(item.product_name, item.variant_name)} — ${gs(item.subtotal)}`
+    ),
+    '',
+    order.shipping_cost > 0 ? `Envío: ${gs(order.shipping_cost)}` : null,
+    order.discount_amount > 0 ? `Descuento: −${gs(order.discount_amount)}` : null,
+    `Total: ${gs(order.total)}`,
+    `Pago: ${payment} (${method})${order.amount_due > 0 ? ` · Falta cobrar: ${gs(order.amount_due)}` : ''}`,
+    order.notes ? `Notas: ${order.notes}` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join('\n');
 }
 
 const orderCache = new Map<string, Order>();
@@ -313,8 +453,163 @@ export function onOrderChanged(listener: (order: Order) => void) {
     orderListeners.delete(listener);
   };
 }
+const createdOrderListeners = new Set<(order: Order) => void>();
+export function notifyOrderCreated(order: Order) {
+  orderCache.set(order.id, order);
+  createdOrderListeners.forEach((listener) => listener(order));
+}
+export function onOrderCreated(listener: (order: Order) => void) {
+  createdOrderListeners.add(listener);
+  return () => {
+    createdOrderListeners.delete(listener);
+  };
+}
 
-export type PosCustomer = { id: string; name: string; phone?: string | null; ruc?: string | null; customer_type?: string | null; customer_code?: string | null };
+export type OrderBranch = {
+  id: string;
+  name: string;
+  code?: string | null;
+  is_default?: boolean | null;
+  is_primary?: boolean | null;
+};
+
+export type OrderCatalogKind = 'all' | 'part' | 'service';
+
+export type OrderCreationItemInput = {
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+};
+
+export type CreateOrderInput = {
+  branchId: string;
+  customerId: string;
+  items: OrderCreationItemInput[];
+  paymentMethod: OrderPaymentMethod;
+  fulfillmentType: OrderFulfillmentType;
+  deliveryContact?: { phone: string; address: string };
+  shippingCost: number;
+  discountAmount: number;
+  notes?: string;
+};
+
+export type CreateOrderResult = {
+  order: Order;
+  idempotent: boolean;
+};
+
+export async function fetchOrderBranches() {
+  const result = await apiFetch<{ branches: OrderBranch[] }>('/api/branches');
+  return result.branches ?? [];
+}
+
+export const isOrderService = (
+  product: Pick<Product, 'sku' | 'unit_measure'> & { category?: { name?: string | null } | null }
+) => isPosService(product);
+
+export function orderItemUnitPrice(
+  product: Pick<Product, 'sale_price' | 'offer_price' | 'has_offer'>,
+  variant?: Pick<ProductVariant, 'sale_price'> | null
+) {
+  const basePrice = Number(product.sale_price) || 0;
+  const offerEnabled = product.has_offer !== false;
+  const offerPrice = offerEnabled && product.offer_price != null ? Number(product.offer_price) : NaN;
+  const hasProductOffer = Number.isFinite(offerPrice) && offerPrice > 0 && offerPrice < basePrice;
+
+  if (variant) {
+    const variantPrice = Math.max(0, Number(variant.sale_price) || 0);
+    if (variantPrice <= 0) return 0;
+    if (!hasProductOffer || basePrice <= 0) return variantPrice;
+    const calculated = Math.round(variantPrice * (offerPrice / basePrice));
+    return calculated > 0 && calculated < variantPrice ? calculated : variantPrice;
+  }
+
+  const price = offerEnabled && Number.isFinite(offerPrice) && offerPrice > 0 ? offerPrice : basePrice;
+  return Number.isFinite(price) && price >= 0 ? price : 0;
+}
+
+export async function searchOrderCatalog(params: {
+  query?: string;
+  kind?: OrderCatalogKind;
+  branchId?: string | null;
+  page?: number;
+}) {
+  const search = new URLSearchParams({
+    page: String(params.page ?? 1),
+    per_page: '30',
+    is_active: 'true',
+    strict_branch_stock: 'true',
+    sort: 'name',
+    direction: 'asc',
+  });
+  if (params.query?.trim()) search.set('query', params.query.trim());
+  if (params.kind && params.kind !== 'all') search.set('catalog_kind', params.kind);
+  if (params.branchId) search.set('branchId', params.branchId);
+  const result = await apiFetch<{ success: boolean; data: ProductPage }>(
+    `/api/products?${search.toString()}`,
+    params.branchId ? { headers: { 'x-branch-id': params.branchId } } : undefined
+  );
+  const page = result.data;
+  return {
+    products: (page.products ?? []).filter(isSellable),
+    total: page.total ?? 0,
+    truncated: Boolean(page.truncated),
+  };
+}
+
+export async function fetchOrderProductById(productId: string, branchId?: string | null) {
+  const search = new URLSearchParams({ variant_stock_scope: 'branch' });
+  if (branchId) search.set('branchId', branchId);
+  const result = await apiFetch<{ success: boolean; data: Product }>(
+    `/api/products/${encodeURIComponent(productId)}?${search.toString()}`,
+    branchId ? { headers: { 'x-branch-id': branchId } } : undefined
+  );
+  return isSellable(result.data) ? result.data : null;
+}
+
+export function newOrderKey() {
+  return `app-ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export async function createOrder(input: CreateOrderInput, idempotencyKey: string): Promise<CreateOrderResult> {
+  try {
+    const result = await apiFetch<{ success: boolean; data: Order; idempotent?: boolean }>('/api/orders', {
+      method: 'POST',
+      headers: {
+        ...(input.branchId ? { 'x-branch-id': input.branchId } : {}),
+        'x-idempotency-key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        branchId: input.branchId,
+        idempotencyKey,
+        customerId: input.customerId,
+        items: input.items.map((item) => ({
+          productId: item.productId,
+          ...(item.variantId ? { variantId: item.variantId } : {}),
+          quantity: item.quantity,
+        })),
+        ...(input.fulfillmentType === 'DELIVERY' && input.deliveryContact
+          ? {
+              deliveryContact: {
+                phone: input.deliveryContact.phone.trim(),
+                address: input.deliveryContact.address.trim(),
+              },
+            }
+          : {}),
+        paymentMethod: input.paymentMethod,
+        fulfillmentType: input.fulfillmentType,
+        shippingCost: input.fulfillmentType === 'DELIVERY' ? input.shippingCost : 0,
+        discountAmount: input.discountAmount,
+        notes: input.notes?.trim() || null,
+      }),
+    });
+    return { order: result.data, idempotent: Boolean(result.idempotent) };
+  } catch (error) {
+    throw new Error(friendly(error, 'No se pudo crear el pedido.'));
+  }
+}
+
+export type PosCustomer = { id: string; name: string; email?: string | null; phone?: string | null; address?: string | null; ruc?: string | null; customer_type?: string | null; customer_code?: string | null };
 
 /** Clientes para la venta (la API de clientes también sirve con el módulo POS). */
 export async function searchPosCustomers(search: string) {
@@ -340,6 +635,7 @@ export type OrderEvent = {
   note: string | null;
   amount: number | null;
   paymentMethod?: string | null;
+  paymentReference?: string | null;
   actor: string | null;
   createdAt: string;
 };
@@ -385,7 +681,7 @@ export class PosDuplicateError extends Error {
   }
 }
 
-export async function createPosCustomer(input: { name: string; phone?: string; ruc?: string; email?: string; wholesale?: boolean }) {
+export async function createPosCustomer(input: { name: string; phone?: string; ruc?: string; email?: string; address?: string; wholesale?: boolean }) {
   const clean = (value?: string) => (value && value.trim() ? value.trim() : null);
   const name = input.name.trim().replace(/\s+/g, ' ');
   const [first, ...rest] = name.split(' ');
@@ -399,6 +695,7 @@ export async function createPosCustomer(input: { name: string; phone?: string; r
         phone: clean(input.phone),
         ruc: clean(input.ruc),
         email: clean(input.email) ?? '',
+        address: clean(input.address),
         customer_type: input.wholesale ? 'wholesale' : null,
       }),
     });

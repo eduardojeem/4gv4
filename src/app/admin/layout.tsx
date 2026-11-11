@@ -12,7 +12,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <SubscriptionGate>
       <ActiveOrganizationProvider>
         <AdminGuard>
-          <RepairsProvider>
+          <RepairsProvider loadOnOverview>
           <AdminLayoutProvider>
             <AdminLayout>
               <SubscriptionBanner />

@@ -1,31 +1,43 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-
-import { BottomSheet } from '@/components/bottom-sheet';
-import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
-import { WebsiteImageField } from '@/components/website/website-image-field';
 import {
-  Field,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
+
+import {
+  CarouselSlideSheet,
+  SlidePreviewCard,
+} from '@/components/website/carousel-slide-sheet';
+import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
+import {
+  ChipSelector,
   Notice,
+  ReorderRow,
   SaveBar,
   Section,
   StateView,
+  StatusPill,
   ToggleRow,
   WebsiteScreen,
   useUnsavedChangesGuard,
-  useWebsiteEditor,
   websiteStyles,
 } from '@/components/website/website-ui';
 import { palette, usePalette } from '@/lib/palette';
 import { saveWebsiteSettings, websiteErrorMessage } from '@/lib/website-admin';
 import { useWebsite } from '@/lib/website-context';
 import {
+  brandHex,
+  carouselPlacement,
   emptySlide,
   isDirty,
   moveItem,
+  newSlideId,
   slideIssues,
   type CarouselSlide,
   type PromotionalCarousel,
@@ -38,12 +50,13 @@ const DEFAULT_CAROUSEL: PromotionalCarousel = {
   enabled: false,
   autoplay: true,
   intervalSeconds: 6,
+  layoutMode: 'contained',
   slides: [],
 };
 
 export default function BannersScreen() {
   return (
-    <WebsiteGate title="Banners">
+    <WebsiteGate title="Banners promocionales">
       {(settings) => <BannersEditor settings={settings} />}
     </WebsiteGate>
   );
@@ -51,7 +64,7 @@ export default function BannersScreen() {
 
 function BannersEditor({ settings }: { settings: WebsiteSettings }) {
   const colors = usePalette();
-  const { applySaved } = useWebsite();
+  const { applySaved, resolvedStyle, capabilities } = useWebsite();
   const saved = useMemo(
     () => ({ ...DEFAULT_CAROUSEL, ...(settings.promotional_carousel ?? {}) }),
     [settings.promotional_carousel],
@@ -62,8 +75,11 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
     index: number | null;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+
   const dirty = isDirty(saved, carousel);
   const slides = useMemo(() => carousel.slides ?? [], [carousel.slides]);
+  const brandColor = brandHex(settings.company_info);
+  const placement = carouselPlacement(resolvedStyle);
 
   const update = (patch: Partial<PromotionalCarousel>) =>
     setCarousel((current) => ({ ...current, ...patch }));
@@ -76,7 +92,9 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
     if (broken >= 0) {
       Alert.alert(
         'Revisá el banner',
-        `El banner ${broken + 1} tiene datos incompletos: ${Object.values(slideIssues(slides[broken])).join(' ')}`,
+        `El banner ${broken + 1} tiene datos incompletos: ${Object.values(
+          slideIssues(slides[broken]),
+        ).join(' ')}`,
       );
       return false;
     }
@@ -113,7 +131,7 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
   const remove = (index: number) => {
     Alert.alert(
       '¿Eliminar este banner?',
-      'Se quita de la lista. Recién deja de verse en tu tienda cuando guardes.',
+      'Se quita de la lista. Dejará de verse en tu tienda cuando guardes.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -125,12 +143,26 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
     );
   };
 
-  const commitSlide = (slide: CarouselSlide, index: number | null) => {
-    const issues = slideIssues(slide);
-    if (Object.keys(issues).length) {
-      Alert.alert('Faltan datos', Object.values(issues).join('\n'));
+  const duplicate = (index: number) => {
+    if (slides.length >= MAX_SLIDES) {
+      Alert.alert(
+        'Límite alcanzado',
+        `Podés tener hasta ${MAX_SLIDES} banners en el inicio.`,
+      );
       return;
     }
+    const source = slides[index];
+    const copy: CarouselSlide = {
+      ...source,
+      id: newSlideId(),
+      title: source.title ? `${source.title} (copia)` : '',
+    };
+    const next = [...slides];
+    next.splice(index + 1, 0, copy);
+    setSlides(next);
+  };
+
+  const commitSlide = (slide: CarouselSlide, index: number | null) => {
     setSlides(
       index === null
         ? [...slides, slide]
@@ -142,25 +174,57 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
   return (
     <WebsiteScreen
       saving={saving}
-      title="Banners"
-      subtitle="Campañas del inicio"
+      title="Banners promocionales"
+      subtitle="Campañas rotativas del inicio"
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          onSave={() => void save()}
+          onDiscard={() => setCarousel(saved)}
+        />
       }
     >
       <OfflineNotice />
-      <Section title="Carrusel" icon="albums-outline">
+
+      <Notice
+        tone={placement.replacesHero ? 'warning' : 'info'}
+        text={placement.text}
+      />
+
+      <Section
+        title="Configuración del carrusel"
+        icon="albums-outline"
+        right={<StatusPill label={`${slides.length}/${MAX_SLIDES}`} />}
+      >
         <ToggleRow
           label="Mostrar banners en el inicio"
           value={carousel.enabled}
           onValueChange={(value) => update({ enabled: value })}
         />
+
+        <View style={styles.block}>
+          <Text style={[styles.blockLabel, { color: colors.text }]}>
+            Ancho de los banners
+          </Text>
+          <ChipSelector
+            options={[
+              { value: 'contained', label: 'Contenida' },
+              { value: 'full', label: 'Ancho total' },
+              { value: 'compact', label: 'Compacta' },
+            ]}
+            selected={carousel.layoutMode ?? 'contained'}
+            onSelect={(value) => update({ layoutMode: value })}
+          />
+        </View>
+
         <ToggleRow
-          label="Pasar solos"
-          hint="Cambian automáticamente"
+          label="Pasar diapositivas solas"
+          hint="Rotación automática mientras navegan"
           value={carousel.autoplay}
           onValueChange={(value) => update({ autoplay: value })}
         />
+
         {carousel.autoplay ? (
           <View style={styles.intervals}>
             {[...new Set([...INTERVALS, carousel.intervalSeconds])]
@@ -179,7 +243,7 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
                       {
                         borderColor: selected ? palette.primary : colors.border,
                         backgroundColor: selected
-                          ? `${palette.primary}12`
+                          ? `${palette.primary}14`
                           : 'transparent',
                       },
                     ]}
@@ -203,14 +267,14 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
         <StateView
           icon="images-outline"
           title="Todavía no hay banners"
-          text="Sumá una imagen con un mensaje y un botón para destacar una campaña."
+          text="Creá una diapositiva con imagen, textos, velo y botón de acción para destacar tus campañas."
         />
       ) : (
         slides.map((slide, index) => (
           <View
             key={slide.id}
             style={[
-              styles.slide,
+              styles.slideCard,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
@@ -218,19 +282,14 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
               onPress={() => setEditing({ slide, index })}
               accessibilityRole="button"
               accessibilityLabel={`Editar banner ${index + 1}`}
-              style={styles.slideMain}
             >
-              {slide.imageUrl ? (
-                <Image
-                  source={{ uri: slide.imageUrl }}
-                  style={styles.thumb}
-                  contentFit="cover"
-                />
-              ) : (
-                <View
-                  style={[styles.thumb, { backgroundColor: colors.border }]}
-                />
-              )}
+              <SlidePreviewCard
+                slide={slide}
+                brandHex={brandColor}
+                device="desktop"
+              />
+            </Pressable>
+            <View style={styles.slideFooter}>
               <View style={styles.flex}>
                 <Text
                   numberOfLines={1}
@@ -255,33 +314,32 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
                     ),
                   )
                 }
-                accessibilityLabel={`Mostrar banner ${index + 1}`}
                 trackColor={{ false: colors.border, true: palette.primary }}
               />
-            </Pressable>
-            <View style={[styles.actions, { borderColor: colors.border }]}>
-              <IconAction
-                icon="arrow-up"
-                label="Subir"
-                disabled={index === 0}
-                onPress={() => setSlides(moveItem(slides, index, -1))}
-              />
-              <IconAction
-                icon="arrow-down"
-                label="Bajar"
-                disabled={index === slides.length - 1}
-                onPress={() => setSlides(moveItem(slides, index, 1))}
-              />
-              <IconAction
-                icon="create-outline"
-                label="Editar"
+            </View>
+            <View style={[styles.actionsRow, { borderTopColor: colors.border }]}>
+              <Pressable
                 onPress={() => setEditing({ slide, index })}
-              />
-              <IconAction
-                icon="trash-outline"
-                label="Eliminar"
-                danger
-                onPress={() => remove(index)}
+                style={styles.editLinkBtn}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={15}
+                  color={palette.primary}
+                />
+                <Text style={styles.editLinkText}>Editar estilo</Text>
+              </Pressable>
+              <ReorderRow
+                disableUp={index === 0}
+                disableDown={index === slides.length - 1}
+                onUp={() => setSlides(moveItem(slides, index, -1))}
+                onDown={() => setSlides(moveItem(slides, index, 1))}
+                onDuplicate={
+                  slides.length < MAX_SLIDES
+                    ? () => duplicate(index)
+                    : undefined
+                }
+                onRemove={() => remove(index)}
               />
             </View>
           </View>
@@ -301,242 +359,49 @@ function BannersEditor({ settings }: { settings: WebsiteSettings }) {
         <Notice text={`Llegaste al máximo de ${MAX_SLIDES} banners.`} />
       )}
 
-      {editing ? (
-        <SlideSheet
-          key={editing.slide.id}
-          initial={editing.slide}
-          onClose={() => setEditing(null)}
-          onDone={(slide) => commitSlide(slide, editing.index)}
-        />
-      ) : null}
+      <CarouselSlideSheet
+        visible={Boolean(editing)}
+        slide={editing?.slide ?? null}
+        isNew={editing?.index === null}
+        brandHex={brandColor}
+        context={{
+          businessVertical: capabilities.businessVertical,
+          hasCatalog: capabilities.hasCatalog,
+          hasServices: capabilities.hasServices,
+          hasRepairs: capabilities.hasRepairs,
+        }}
+        onClose={() => setEditing(null)}
+        onSave={(slide) => commitSlide(slide, editing?.index ?? null)}
+      />
     </WebsiteScreen>
-  );
-}
-
-function IconAction({
-  icon,
-  label,
-  onPress,
-  disabled,
-  danger,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-}) {
-  const colors = usePalette();
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={6}
-      style={[styles.action, { opacity: disabled ? 0.35 : 1 }]}
-    >
-      <Ionicons
-        name={icon}
-        size={17}
-        color={danger ? palette.danger : colors.text}
-      />
-      <Text
-        style={[
-          styles.actionText,
-          { color: danger ? palette.danger : colors.text },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function SlideSheet({
-  initial,
-  onClose,
-  onDone,
-}: {
-  initial: CarouselSlide;
-  onClose: () => void;
-  onDone: (slide: CarouselSlide) => void;
-}) {
-  const colors = usePalette();
-  const [slide, setSlide] = useState<CarouselSlide>(initial);
-  const issues = slideIssues(slide);
-  const editor = useWebsiteEditor();
-  const close = () => {
-    if (editor.uploading) {
-      Alert.alert(
-        'Subiendo imagen',
-        'Esperá a que termine antes de cerrar el banner.',
-      );
-      return;
-    }
-    if (!isDirty(initial, slide)) {
-      onClose();
-      return;
-    }
-    Alert.alert(
-      '¿Descartar este banner?',
-      'Todavía no incorporaste estos cambios a la lista.',
-      [
-        { text: 'Seguir editando', style: 'cancel' },
-        { text: 'Descartar', style: 'destructive', onPress: onClose },
-      ],
-    );
-  };
-  const set = (patch: Partial<CarouselSlide>) =>
-    setSlide((current) => ({ ...current, ...patch }));
-
-  return (
-    <BottomSheet
-      visible
-      title={initial.imageUrl ? 'Editar banner' : 'Nuevo banner'}
-      subtitle="Listo incorpora el banner a la lista. Después tocá Guardar cambios para publicarlo."
-      onClose={close}
-      tall
-      footer={
-        <Pressable
-          disabled={editor.uploading}
-          onPress={() => onDone(slide)}
-          accessibilityRole="button"
-          style={websiteStyles.primaryButton}
-        >
-          <Text style={websiteStyles.primaryText}>Listo</Text>
-        </Pressable>
-      }
-    >
-      <WebsiteImageField
-        label="Imagen"
-        kind="banner"
-        slideId={slide.id}
-        aspect="wide"
-        value={slide.imageUrl}
-        onUploaded={(url) => set({ imageUrl: url })}
-        help="Horizontal (16:9). Hasta 5 MB."
-      />
-      <Field
-        label="Descripción de la imagen"
-        value={slide.imageAlt}
-        onChangeText={(value) => set({ imageAlt: value })}
-        placeholder="Ej.: Zapatillas en oferta"
-        maxLength={160}
-        error={issues.imageAlt}
-        help="La usan los lectores de pantalla y Google."
-      />
-      <ToggleRow
-        label="Solo imagen"
-        hint="Sin título ni texto encima"
-        value={slide.hideText === true}
-        onValueChange={(value) => set({ hideText: value })}
-      />
-      {!slide.hideText ? (
-        <>
-          <Field
-            label="Título"
-            value={slide.title}
-            onChangeText={(value) => set({ title: value })}
-            placeholder="Semana de ofertas"
-            maxLength={100}
-          />
-          <Field
-            label="Mensaje"
-            value={slide.message}
-            onChangeText={(value) => set({ message: value })}
-            placeholder="Hasta 30% en toda la tienda"
-            multiline
-            maxLength={240}
-          />
-          <Field
-            label="Texto del botón"
-            value={slide.ctaText ?? ''}
-            onChangeText={(value) => set({ ctaText: value })}
-            placeholder="Ver ofertas"
-            maxLength={50}
-            error={issues.ctaText}
-          />
-        </>
-      ) : null}
-      <Field
-        label="Enlace"
-        value={slide.ctaHref ?? ''}
-        onChangeText={(value) => set({ ctaHref: value.trim() })}
-        placeholder="/ofertas o https://…"
-        autoCapitalize="none"
-        keyboardType="url"
-        maxLength={500}
-        error={issues.ctaHref}
-        help="Una página de tu tienda (/ofertas, /productos) o una dirección completa."
-      />
-      {!slide.hideText ? (
-        <View style={styles.aligns}>
-          {(['left', 'center', 'right'] as const).map((align) => {
-            const selected = (slide.contentAlign ?? 'left') === align;
-            return (
-              <Pressable
-                key={align}
-                onPress={() => set({ contentAlign: align })}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                style={[
-                  websiteStyles.chip,
-                  { borderColor: selected ? palette.primary : colors.border },
-                ]}
-              >
-                <Text
-                  style={[
-                    websiteStyles.chipText,
-                    { color: selected ? palette.primary : colors.text },
-                  ]}
-                >
-                  {align === 'left'
-                    ? 'Izquierda'
-                    : align === 'center'
-                      ? 'Centro'
-                      : 'Derecha'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-      <ToggleRow
-        label="Visible"
-        value={slide.active}
-        onValueChange={(value) => set({ active: value })}
-      />
-    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  block: { gap: 7 },
+  blockLabel: { fontSize: 13, fontWeight: '700' },
   intervals: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slide: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
-  slideMain: {
+  slideCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 10,
+    gap: 10,
+  },
+  slideFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 12,
+    gap: 10,
   },
-  thumb: { width: 72, height: 44, borderRadius: 8 },
   slideTitle: { fontSize: 14, fontWeight: '800' },
   slideHint: { fontSize: 12, marginTop: 2 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-  },
-  action: {
+  actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    minHeight: 32,
-    paddingHorizontal: 6,
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
   },
-  actionText: { fontSize: 12, fontWeight: '700' },
-  aligns: { flexDirection: 'row', gap: 8 },
+  editLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  editLinkText: { color: palette.primary, fontSize: 13, fontWeight: '800' },
 });

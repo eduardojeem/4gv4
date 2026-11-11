@@ -156,6 +156,27 @@ describe('devoluciones de posventa en el resumen', () => {
     expect(summary.cash.netCashFlow).toBe(800_000)
   })
 
+  it('abre cobros y pagos por origen y cada parte suma al total', () => {
+    const summary = buildFinanceSummaryFromRecords({
+      ...baseRecords,
+      creditPayments: [{
+        saleId: 'sale-old', branchId: 'branch-1', paymentDate: '2026-08-10',
+        amount: 150_000, paymentMethod: 'cash', status: 'completed',
+      }],
+      financePayments: [{ branchId: 'branch-1', paymentDate: '2026-08-12', amount: 300_000, direction: 'payment' }],
+      refunds: [{
+        id: 'case-1', branchId: 'branch-1', resolvedAt: '2026-08-20T12:00:00.000Z',
+        amount: 200_000, recoveredCost: 0, cashAmount: 200_000,
+      }],
+    } as unknown as FinanceSummaryRecords, filters)
+    const breakdown = summary.cash.breakdown!
+    expect(breakdown.collected).toMatchObject({ sales: 1_000_000, installments: 150_000, repairs: 0, orders: 0 })
+    expect(breakdown.paid).toMatchObject({ expenses: 300_000, refunds: 200_000, payroll: 0 })
+    const sum = (parts: Record<string, number>) => Object.values(parts).reduce((total, value) => total + value, 0)
+    expect(sum(breakdown.collected)).toBe(summary.cash.collected)
+    expect(sum(breakdown.paid)).toBe(summary.cash.paid)
+  })
+
   it('deja el saldo a favor fuera del flujo de caja', () => {
     const summary = withRefund({ amount: 200_000, cashAmount: 0 })
     expect(summary.accrued.revenue).toBe(800_000)

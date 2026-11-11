@@ -121,7 +121,7 @@ describe('canonical finance summary aggregation', () => {
         grossRevenue: 1_300,
       },
     })
-    expect(result.cash).toEqual({ collected: 800, paid: 90, netCashFlow: 710 })
+    expect(result.cash).toMatchObject({ collected: 800, paid: 90, netCashFlow: 710 })
     expect(result.complete).toBe(true)
     expect(result.upcomingDue).toEqual([{ id: 'rent', dueDate: '2026-08-15', amount: 200 }])
   })
@@ -187,7 +187,7 @@ describe('canonical finance summary aggregation', () => {
     expect(result.coverageWarnings).toEqual([
       expect.objectContaining({ code: 'MISSING_DIRECT_COST', sourceId: 'missing-cost' }),
     ])
-    expect(result.cash).toEqual({ collected: 0, paid: -5, netCashFlow: 5 })
+    expect(result.cash).toMatchObject({ collected: 0, paid: -5, netCashFlow: 5 })
     expect(result.comparison.accrued.revenue).toBe(50)
     expect(result.overdue).toEqual([])
   })

@@ -3,6 +3,8 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getOrganizationPlanInfo, normalizePlanCode } from '@/lib/saas/subscription-service'
 import type { PlanCode } from '@/lib/saas/plan-features'
+import type { OperatingModel, OrganizationModule } from '@/lib/organization/business-profile'
+import type { ServiceSpecialty } from '@/lib/organization/service-specialties'
 import { STOREFRONT_STYLE_LABELS, type StorefrontStylePreference } from '@/lib/website/storefront-style'
 import {
   PLAN_CODE_ORDER,
@@ -57,6 +59,10 @@ export interface OrganizationTemplateAccess {
   businessVertical: string
   /** Tiene la agenda (módulo Servicios): cambia qué elige «Automático» en rubros de turnos. */
   servicesAvailable: boolean
+  /** Datos del perfil operativo de la cuenta (usados también por la app móvil). */
+  operatingModel?: OperatingModel
+  effectiveModules?: OrganizationModule[]
+  serviceSpecialties?: ServiceSpecialty[]
   /** Planes activos (para el aviso «Disponible en …»). */
   plans: PlanTemplateSummary[]
 }
@@ -73,6 +79,9 @@ export async function getOrganizationTemplateAccess(organizationId: string): Pro
     allowed: own?.templates ?? templatesForPlan(planInfo.code, []),
     businessVertical: planInfo.businessVertical,
     servicesAvailable: planInfo.effectiveModules.includes('services'),
+    operatingModel: planInfo.operatingModel,
+    effectiveModules: planInfo.effectiveModules,
+    serviceSpecialties: planInfo.serviceSpecialties,
     plans: catalog.filter((entry) => entry.isActive).map(({ code, name, templates }) => ({ code, name, templates })),
   }
 }
