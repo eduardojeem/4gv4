@@ -208,6 +208,7 @@ export function platformEmailLogoUrl(): string {
   return siteUrl('/branding/mitiendapy-icon-128.png')
 }
 
+
 export function renderBrandedEmail(opts: BrandedEmailOptions): string {
   const accent = opts.brand?.color || '#2563eb'
   const brandName = opts.brand?.name || 'Tienda'

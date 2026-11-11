@@ -3,7 +3,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { organizationRequiredResponse } from '@/lib/communications/mappers'
-import { sendEmail, renderBrandedEmail, isResendConfigured } from '@/lib/email/resend'
+import { isResendConfigured, renderBrandedEmail, sendEmail } from '@/lib/email/resend'
+import { storeEmailLogoUrl } from '@/lib/email/store-logo'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const MAX_RECIPIENTS = 500
@@ -105,7 +106,7 @@ export async function POST(
         bodyHtml: bodyText
           ? bodyText.split('\n').map(l => `<p style="margin:0 0 12px;">${l}</p>`).join('')
           : '',
-        brand: { name: brandName },
+        brand: { name: brandName, logoUrl: storeEmailLogoUrl((organization as { logoUrl?: string | null }).logoUrl) },
         footerNote: 'Recibís este mensaje porque sos cliente de ' + brandName + '.',
       })
 

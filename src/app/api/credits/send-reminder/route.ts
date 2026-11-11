@@ -3,6 +3,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { sendEmail } from '@/lib/email/resend'
+import { storeEmailLogoUrl } from '@/lib/email/store-logo'
 import { renderPaymentReminderEmail } from '@/lib/email/templates'
 import { z } from 'zod'
 import { readAllCreditRows } from '@/lib/credits/portfolio'
@@ -64,7 +65,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
           dueDate: formatDateOnlyDisplay(debt.dueDate),
           daysOverdue: debt.daysOverdue,
           creditCode: credit.id.slice(0, 8),
-          brand: { name: organization.name },
+          brand: { name: organization.name, logoUrl: storeEmailLogoUrl(organization.logoUrl) },
         }),
         log: {
           organizationId: organization.id,
