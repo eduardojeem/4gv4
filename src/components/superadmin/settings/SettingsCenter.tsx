@@ -25,6 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Notice, PageHeader } from '@/components/superadmin/ui/page-header'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
+import { PlatformPoliciesCard } from './PlatformPoliciesCard'
+import type { PlatformPolicies } from '@/lib/platform/policies'
 import {
   PLATFORM_SETTINGS_CODES,
   SETTINGS_TIMEZONES,
@@ -35,6 +37,8 @@ export type { PlatformDefaults } from '@/lib/superadmin/platform-settings'
 
 export type PlatformSettingsData = {
   defaults: PlatformDefaults
+  /** Las que la plataforma aplica (proxy, registro): ver `src/lib/platform/policies.ts`. */
+  policies: PlatformPolicies
   storedFlags: {
     maintenanceMode: boolean
     allowRegistration: boolean
@@ -69,22 +73,36 @@ type FieldKey = keyof PlatformDefaults
 const TEXT_KEYS = ['companyName', 'companyRuc', 'companyEmail', 'companyPhone', 'companyAddress'] as const
 
 /**
- * Opciones que existen en la base pero que ninguna parte de la app aplica
- * (auditado el 2026-09-27, revisado el 2026-11-09). Se muestran deshabilitadas
- * para no dar una falsa sensación de control; `reason` dice dónde se controla hoy.
+ * Opciones guardadas en `system_settings` que esta pantalla no aplica porque
+ * se controlan en otro lugar (revisado el 2026-11-10). Las que sí se aplican
+ * (mantenimiento, registro, 2FA de administradores, largo de contraseña) están
+ * en «Políticas de la plataforma».
  */
-const NOT_IMPLEMENTED: Array<{ key: keyof PlatformSettingsData['storedFlags']; label: string; reason: string; kind: 'bool' | 'number'; unit?: string }> = [
-  { key: 'maintenanceMode', label: 'Modo mantenimiento de la plataforma', kind: 'bool', reason: 'El sitio no lo consulta. El mantenimiento que sí funciona es el de cada tienda (Sitio web → Mantenimiento).' },
-  { key: 'allowRegistration', label: 'Registro público de empresas', kind: 'bool', reason: 'El alta en /register no lo revisa: el registro siempre está abierto.' },
-  { key: 'requireEmailVerification', label: 'Verificación de email obligatoria', kind: 'bool', reason: 'Se controla en Supabase → Authentication → Providers → Email (Confirm email).' },
-  { key: 'requireTwoFactor', label: '2FA obligatorio para toda la plataforma', kind: 'bool', reason: 'Este interruptor global no se aplica. La verificación en dos pasos (app autenticadora, TOTP) ya funciona: cada persona la activa en su perfil y cada tienda puede exigírsela a sus administradores desde Seguridad.' },
-  { key: 'maxLoginAttempts', label: 'Intentos de login', kind: 'number', reason: 'Los límites de intentos los aplica Supabase Auth (Rate Limits), no este valor.' },
-  { key: 'passwordMinLength', label: 'Longitud mínima de contraseña', kind: 'number', unit: 'caracteres', reason: 'Se configura en Supabase → Authentication → Policies.' },
-  { key: 'sessionTimeout', label: 'Tiempo de sesión', kind: 'number', unit: 'min', reason: 'La duración de sesión la define Supabase Auth (JWT expiry y refresh).' },
-  { key: 'autoBackup', label: 'Backup automático', kind: 'bool', reason: 'Los backups los hace Supabase según el plan contratado (Database → Backups).' },
-  { key: 'smsNotifications', label: 'Notificaciones por SMS', kind: 'bool', reason: 'No hay un proveedor de SMS integrado.' },
-  { key: 'retentionDays', label: 'Retención de auditoría', kind: 'number', unit: 'días', reason: 'La rotación se hace a mano desde Mantenimiento (mínimo 90 días).' },
+type ElsewhereItem = {
+  key: keyof PlatformSettingsData['storedFlags']
+  label: string
+  where: 'supabase' | 'panel' | 'unavailable'
+  reason: string
+  link?: { href: string; label: string; external?: boolean }
+  unit?: string
+}
+
+const SUPABASE_AUTH_URL = 'https://supabase.com/dashboard/project/_/auth/providers'
+
+const ELSEWHERE: ElsewhereItem[] = [
+  { key: 'requireEmailVerification', label: 'Verificación de email al registrarse', where: 'supabase', reason: 'La aplica Supabase Auth: Authentication → Sign In / Providers → Email → «Confirm email».', link: { href: SUPABASE_AUTH_URL, label: 'Abrir Supabase', external: true } },
+  { key: 'maxLoginAttempts', label: 'Límite de intentos de login', where: 'supabase', reason: 'Lo aplica Supabase Auth con sus límites de velocidad (Authentication → Rate Limits).', link: { href: SUPABASE_AUTH_URL, label: 'Abrir Supabase', external: true } },
+  { key: 'sessionTimeout', label: 'Duración de la sesión', where: 'supabase', reason: 'La define Supabase Auth (Authentication → Sessions): duración del token y del refresco.', link: { href: SUPABASE_AUTH_URL, label: 'Abrir Supabase', external: true } },
+  { key: 'autoBackup', label: 'Backup automático', where: 'supabase', reason: 'Los backups diarios los hace Supabase según tu plan (Database → Backups).', link: { href: 'https://supabase.com/dashboard/project/_/database/backups/scheduled', label: 'Ver backups', external: true } },
+  { key: 'retentionDays', label: 'Retención del registro de auditoría', where: 'panel', unit: 'días', reason: 'La limpieza se hace desde Mantenimiento, eligiendo cuántos días conservar (mínimo 90).', link: { href: '/superadmin/maintenance', label: 'Ir a Mantenimiento' } },
+  { key: 'smsNotifications', label: 'Notificaciones por SMS', where: 'unavailable', reason: 'No hay un proveedor de SMS integrado. Los avisos salen por email y por notificaciones de la app.' },
 ]
+
+const WHERE_LABEL: Record<ElsewhereItem['where'], string> = {
+  supabase: 'En Supabase',
+  panel: 'En otra sección',
+  unavailable: 'No disponible',
+}
 
 function formatDate(value: string | null) {
   if (!value) return '—'
@@ -359,31 +377,40 @@ export function SettingsCenter({ data }: { data: PlatformSettingsData }) {
         </Card>
       </Collapsible>
 
+      <PlatformPoliciesCard
+        initial={data.policies}
+        onSaved={(updatedAt) => {
+          setRevision(updatedAt)
+          setSyncedRevision(updatedAt)
+        }}
+      />
+
       <Card className="rounded-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Ban className="h-4 w-4" aria-hidden /> Opciones sin implementar</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base"><Ban className="h-4 w-4" aria-hidden /> Se configuran en otro lugar</CardTitle>
           <CardDescription>
-            Estas opciones están guardadas pero ninguna parte de la plataforma las aplica: cambiarlas no tendría efecto. Se muestran deshabilitadas con el valor guardado y dónde se controla hoy cada cosa.
+            Estas funciones existen, pero no se manejan desde acá: cada una dice dónde se configura.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="divide-y dark:divide-slate-800">
-            {NOT_IMPLEMENTED.map((item) => {
+            {ELSEWHERE.map((item) => {
               const value = data.storedFlags[item.key]
               return (
                 <li key={item.key} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       {item.label}
-                      <Badge variant="outline" className="rounded-full border-slate-300 text-[10px] uppercase tracking-wide">No implementado</Badge>
+                      <Badge variant="outline" className="rounded-full border-slate-300 text-[10px] uppercase tracking-wide">{WHERE_LABEL[item.where]}</Badge>
                     </p>
                     <p className="text-xs text-slate-500">{item.reason}</p>
+                    {item.unit && <p className="text-xs text-slate-500">Valor guardado: {String(value)} {item.unit}</p>}
                   </div>
-                  <div className="shrink-0 opacity-60">
-                    {item.kind === 'bool'
-                      ? <Switch checked={Boolean(value)} disabled aria-label={`${item.label} (no implementado)`} />
-                      : <span className="font-mono text-sm">{String(value)}{item.unit ? ` ${item.unit}` : ''}</span>}
-                  </div>
+                  {item.link && (
+                    item.link.external
+                      ? <a href={item.link.href} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline">{item.link.label}</a>
+                      : <Link href={item.link.href} className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline">{item.link.label}</Link>
+                  )}
                 </li>
               )
             })}

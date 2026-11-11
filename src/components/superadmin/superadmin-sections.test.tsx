@@ -55,6 +55,7 @@ describe('AnnouncementsPanel', () => {
 describe('SettingsCenter', () => {
   const data: PlatformSettingsData = {
     defaults: { companyName: 'MiTiendaPy', companyEmail: '', companyPhone: '', companyRuc: '', companyAddress: '', currency: 'PYG', taxRate: 10, timeZone: 'America/Asuncion' },
+    policies: { maintenanceMode: false, allowRegistration: true, requireTwoFactor: false, passwordMinLength: 8 },
     storedFlags: { maintenanceMode: true, allowRegistration: true, requireEmailVerification: false, requireTwoFactor: false, autoBackup: true, smsNotifications: false, maxLoginAttempts: 5, passwordMinLength: 8, sessionTimeout: 60, retentionDays: 90 },
     usage: {
       totalOrganizations: 7, withoutOwnTaxRate: 5, withoutOwnCurrency: 2, withoutOwnTimezone: 3,
@@ -75,7 +76,7 @@ describe('SettingsCenter', () => {
   it('no dice que falta la 2FA: ya hay TOTP y exigencia por tienda', () => {
     render(<SettingsCenter data={data} />)
     expect(screen.queryByText(/Requiere activar MFA en Supabase Auth/)).not.toBeInTheDocument()
-    expect(screen.getByText(/TOTP\) ya funciona/)).toBeInTheDocument()
+    expect(screen.getByText(/Cada tienda decide desde su Seguridad/)).toBeInTheDocument()
   })
 
   it('aclara que el único valor por defecto real es el IVA y cuántas tiendas lo usan', () => {
@@ -150,11 +151,36 @@ describe('SettingsCenter', () => {
     addSpy.mockRestore()
   })
 
-  it('muestra deshabilitadas las opciones que ninguna parte de la app aplica', () => {
+  it('ya no muestra nada como «no implementado»: dice dónde se configura cada cosa', () => {
     render(<SettingsCenter data={data} />)
-    const switchInput = screen.getByRole('switch', { name: /Modo mantenimiento de la plataforma \(no implementado\)/ })
-    expect(switchInput).toBeDisabled()
-    expect(screen.getAllByText('No implementado').length).toBe(10)
+    expect(screen.queryByText('No implementado')).not.toBeInTheDocument()
+    expect(screen.getAllByText('En Supabase').length).toBe(4)
+    expect(screen.getByText('No disponible')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ir a Mantenimiento' })).toHaveAttribute('href', '/superadmin/maintenance')
+  })
+
+  it('las políticas de la plataforma se pueden cambiar y se mandan a su ruta', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { policies: { ...data.policies, allowRegistration: false }, updatedAt: '2026-11-10T10:00:00+00:00' },
+    })))
+    render(<SettingsCenter data={data} />)
+    const save = screen.getByRole('button', { name: 'Guardar políticas' })
+    expect(save).toBeDisabled()
+    fireEvent.click(screen.getByRole('switch', { name: 'Registro público de empresas' }))
+    expect(save).toBeEnabled()
+    fireEvent.click(save)
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    expect(fetchSpy.mock.calls[0][0]).toBe('/api/superadmin/settings/policies')
+    expect(bodyOf(fetchSpy)).toEqual({ allowRegistration: false })
+    fetchSpy.mockRestore()
+  })
+
+  it('no deja guardar un largo de contraseña fuera de rango', () => {
+    render(<SettingsCenter data={data} />)
+    fireEvent.change(screen.getByLabelText('Largo mínimo de contraseña'), { target: { value: '4' } })
+    expect(screen.getByText('Entre 8 y 32 caracteres.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Guardar políticas' })).toBeDisabled()
   })
 
   it('solo habilita Guardar con cambios, recorta espacios y manda lo cambiado con la revisión', async () => {

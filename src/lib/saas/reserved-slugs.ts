@@ -25,7 +25,7 @@ import { slugifyTenantName } from './tenant'
 export const APP_ROUTE_SLUGS = [
   'admin', 'api', 'auth', 'carrito', 'cliente', 'dashboard', 'debug',
   'empresas', 'forbidden', 'inicio', 'login', 'marketplace', 'mis-reparaciones',
-  'ofertas', 'perfil', 'productos', 'products', 'register', 'reservas', 'saas', 'servicios',
+  'ofertas', 'perfil', 'productos', 'products', 'mantenimiento', 'register', 'reservas', 'saas', 'servicios',
   'setup', 'setup-access', 'superadmin', 'track', 'turnos',
   // Enlaces que se mandan al cliente: presupuesto y turno reservado.
   'presupuesto', 'turno',
