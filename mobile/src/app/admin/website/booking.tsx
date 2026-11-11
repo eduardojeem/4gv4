@@ -1,4 +1,3 @@
-import { remainingWebsiteEdits } from '@/lib/website-save-state';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useState } from 'react';
@@ -21,11 +20,13 @@ import {
   BOOKING_PRESETS,
   DEFAULT_BOOKING_SECTION,
   bookingIssues,
+  brandHex,
   isDirty,
   mergeSetting,
   type BookingSection,
   type WebsiteSettings,
 } from '@/lib/website-model';
+import { remainingWebsiteEdits } from '@/lib/website-save-state';
 
 export default function BookingScreen() {
   return (
@@ -49,6 +50,7 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
   );
   const dirty = isDirty(saved, booking);
   const issues = bookingIssues(booking);
+  const accent = brandHex(settings.company_info);
 
   const edit = (changes: Partial<BookingSection>) =>
     setPatch((current) => ({ ...current, ...changes }));
@@ -99,24 +101,37 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
     <WebsiteScreen
       saving={saving}
       title="Reservas y citas"
-      subtitle="Configuración para tu tienda"
+      subtitle="Turnos y atención programada"
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={() => void save()} />
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          onSave={() => void save()}
+          onDiscard={() => setPatch({})}
+        />
       }
     >
       <OfflineNotice />
 
       <Section
-        title="Visibilidad"
+        title="Visibilidad y equipo"
         icon="calendar-outline"
-        hint="Activá o desactivá la sección de citas en la portada."
+        hint="Activá o desactivá la agenda pública en la portada."
       >
         <ToggleRow
-          label="Mostrar citas en el inicio"
-          hint="Permite a tus clientes agendar consultas, citas o turnos desde la web"
+          label="Mostrar reservas en el inicio"
+          hint="Permite a tus clientes agendar citas, consultas o turnos desde la web"
           value={isEnabled}
           onValueChange={(value) => edit({ enabled: value })}
         />
+        {isEnabled ? (
+          <ToggleRow
+            label="Mostrar equipo disponible"
+            hint="Los visitantes ven y eligen con qué profesional atenderse"
+            value={booking.showTeam !== false}
+            onValueChange={(value) => edit({ showTeam: value })}
+          />
+        ) : null}
       </Section>
 
       {isEnabled ? (
@@ -166,8 +181,8 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
               onChangeText={(val) => edit({ badge: val })}
               placeholder="Ej: Atención personalizada, Servicio técnico"
               maxLength={60}
+              showCount
               error={issues.badge}
-              help="Aparece en un chip destacado sobre el título."
             />
             <Field
               label="Título principal"
@@ -175,8 +190,8 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
               onChangeText={(val) => edit({ title: val })}
               placeholder="Ej: Agendá tu cita técnica o diagnóstico"
               maxLength={100}
+              showCount
               error={issues.title}
-              help="Debe ser claro y conciso (mínimo 2 caracteres)."
             />
             <Field
               label="Descripción o instrucciones"
@@ -185,8 +200,8 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
               placeholder="Explicá cómo funciona la atención o cita..."
               multiline
               maxLength={300}
+              showCount
               error={issues.subtitle}
-              help="Texto secundario bajo el título (máximo 300 caracteres)."
             />
           </Section>
 
@@ -209,17 +224,12 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
                   style={[
                     styles.previewBadge,
                     {
-                      backgroundColor: `${palette.primary}18`,
-                      borderColor: `${palette.primary}33`,
+                      backgroundColor: `${accent}18`,
+                      borderColor: `${accent}33`,
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.previewBadgeText,
-                      { color: palette.primary },
-                    ]}
-                  >
+                  <Text style={[styles.previewBadgeText, { color: accent }]}>
                     {booking.badge}
                   </Text>
                 </View>
@@ -233,12 +243,7 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
                 </Text>
               ) : null}
               <View style={styles.previewAction}>
-                <View
-                  style={[
-                    styles.previewButton,
-                    { backgroundColor: palette.primary },
-                  ]}
-                >
+                <View style={[styles.previewButton, { backgroundColor: accent }]}>
                   <Ionicons name="calendar-outline" size={15} color="#fff" />
                   <Text style={styles.previewButtonText}>Agendar cita</Text>
                 </View>
@@ -246,19 +251,17 @@ function BookingEditor({ settings }: { settings: WebsiteSettings }) {
             </View>
           </Section>
 
-          <Notice text="Los horarios disponibles, servicios y personal asignado se administran desde la sección Agenda de tu negocio." />
+          <Notice text="Los horarios disponibles, días y profesionales se administran desde la sección Agenda del panel." />
         </>
       ) : (
-        <Notice text="La sección está oculta. Tu tienda no mostrará el formulario de citas en la portada." />
+        <Notice text="La sección está oculta. Tu tienda no mostrará el formulario de reservas en la portada." />
       )}
     </WebsiteScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  presetsGrid: {
-    gap: 8,
-  },
+  presetsGrid: { gap: 8 },
   presetChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -268,11 +271,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  presetText: {
-    fontSize: 13,
-    fontWeight: '700',
-    flex: 1,
-  },
+  presetText: { fontSize: 13, fontWeight: '700', flex: 1 },
   previewCard: {
     borderWidth: 1,
     borderRadius: 16,
@@ -292,19 +291,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  previewTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  previewSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  previewAction: {
-    marginTop: 6,
-    alignItems: 'flex-start',
-  },
+  previewTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  previewSubtitle: { fontSize: 13, lineHeight: 18 },
+  previewAction: { marginTop: 6, alignItems: 'flex-start' },
   previewButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,9 +302,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
-  previewButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  previewButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
