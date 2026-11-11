@@ -1,3 +1,4 @@
+import { siteUrl } from '@/lib/site-url'
 import { Resend } from 'resend'
 
 /**
@@ -196,6 +197,15 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+/**
+ * Logo de los emails de la plataforma: el ícono cuadrado de MiTiendaPy (se
+ * muestra a 40×40). No se usa el logo de la marca de la plataforma porque
+ * suele ser horizontal u oscuro y en el encabezado celeste no se ve.
+ */
+export function platformEmailLogoUrl(): string {
+  return siteUrl('/branding/mitiendapy-icon-128.png')
 }
 
 export function renderBrandedEmail(opts: BrandedEmailOptions): string {

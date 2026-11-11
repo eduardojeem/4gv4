@@ -1,9 +1,17 @@
-import { renderBrandedEmail, BRAND_COLOR_HEX } from './resend'
+import { renderBrandedEmail, BRAND_COLOR_HEX, platformEmailLogoUrl } from './resend'
 
 interface BrandInfo {
   name: string
   color?: string
   logoUrl?: string
+}
+
+/**
+ * Sin marca, el email es de la plataforma y lleva el ícono de MiTiendaPy. Con
+ * marca (una tienda), solo su propio logo si lo tiene.
+ */
+function brandLogoUrl(brand?: BrandInfo): string | undefined {
+  return brand ? brand.logoUrl : platformEmailLogoUrl()
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +52,7 @@ export function renderWelcomeEmail(params: {
     brand: {
       name: brand?.name || 'MiPOS',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Si no creaste esta cuenta, podés ignorar este email.',
   })
@@ -107,7 +115,7 @@ export function renderOrderConfirmationEmail(params: {
     brand: {
       name: brand?.name || 'Tienda',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: `Pedido ${orderCode} · Si tenés dudas, respondé a este email.`,
   })
@@ -178,7 +186,7 @@ export function renderOrderStatusUpdateEmail(params: {
     brand: {
       name: brand?.name || 'Tienda',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: `Pedido ${orderCode} · Si tenés dudas, respondé a este email.`,
   })
@@ -233,7 +241,7 @@ export function renderPaymentReminderEmail(params: {
     brand: {
       name: brand?.name || 'Tienda',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Si ya realizaste el pago, ignorá este mensaje.',
   })
@@ -275,7 +283,7 @@ export function renderPlanGraceWarningEmail(params: {
     brand: {
       name: brand?.name || 'MiPOS',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Tus ventas, reportes e historial no se ven afectados en ningún caso.',
   })
@@ -307,7 +315,7 @@ export function renderPlanDeactivatedEmail(params: {
     brand: {
       name: brand?.name || 'MiPOS',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Tu historial de ventas y tus reportes se conservan siempre.',
   })
@@ -363,7 +371,7 @@ export function renderAutopayFailedEmail(params: {
     brand: {
       name: brand?.name || 'MiPOS',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Tus datos y tu historial se conservan siempre.',
   })
@@ -433,7 +441,7 @@ export function renderTransferReviewedEmail(params: {
     brand: {
       name: brand?.name || 'MiTiendaPY',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
   })
 }
@@ -462,7 +470,7 @@ export function renderSubscriptionNoticeEmail(params: {
     brand: {
       name: brand?.name || 'MiTiendaPY',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
     footerNote: 'Tus datos y tu historial se conservan siempre.',
   })
@@ -497,7 +505,7 @@ export function renderSubscriptionReceiptEmail(params: {
     brand: {
       name: brand?.name || 'MiTiendaPY',
       color: BRAND_COLOR_HEX[brand?.color || 'blue'] || '#2563eb',
-      logoUrl: brand?.logoUrl,
+      logoUrl: brandLogoUrl(brand),
     },
   })
 }
