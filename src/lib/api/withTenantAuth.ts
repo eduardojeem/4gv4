@@ -8,6 +8,8 @@ import {
   type AssuranceLevel,
 } from '@/lib/auth/mfa'
 import { organizationRequiresAdminMfa, type AdminMfaPolicyClient } from '@/lib/auth/admin-mfa-policy'
+import { loadPlatformPolicies, type PlatformPolicyClient } from '@/lib/platform/policies'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -74,8 +76,12 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
 
       // Sólo se consulta para administradores sin `aal2`: el resto no paga la consulta.
       if (isAdminMfaRole(organization.role) && auth.user.aal !== 'aal2') {
-        // Como en el proxy: si no se puede consultar, no se exige (no deja a todos afuera).
-        const requireAdminMfa = await createClient()
+        // Como en el proxy: la exige la tienda o toda la plataforma (Superadmin →
+        // Configuración). Si no se puede consultar, no se exige (no deja a todos afuera).
+        const platformRequiresMfa = await loadPlatformPolicies(createAdminSupabase() as unknown as PlatformPolicyClient)
+          .then((policies) => policies.requireTwoFactor)
+          .catch(() => false)
+        const requireAdminMfa = platformRequiresMfa || await createClient()
           .then((client) => organizationRequiresAdminMfa(client as unknown as AdminMfaPolicyClient, organization.id))
           .catch(() => false)
         if (needsAdminMfaEnrollment({ organizationRole: organization.role, requireAdminMfa, aal: auth.user.aal })) {
@@ -83,7 +89,9 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
             {
               error: 'Forbidden',
               code: MFA_ENROLLMENT_REQUIRED_CODE,
-              message: 'Esta organización exige la verificación en dos pasos a sus administradores. Activala en tu perfil.',
+              message: platformRequiresMfa
+                ? 'La plataforma exige la verificación en dos pasos a los administradores. Activala en tu perfil.'
+                : 'Esta organización exige la verificación en dos pasos a sus administradores. Activala en tu perfil.',
             },
             { status: 403 }
           )
