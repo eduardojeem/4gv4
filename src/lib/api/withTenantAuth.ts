@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import {
+  buildMfaPath,
   isAdminMfaRole,
   MFA_ENROLLMENT_REQUIRED_CODE,
   MFA_REQUIRED_CODE,
@@ -46,6 +47,22 @@ export type TenantAuthenticatedHandler = (
   routeContext?: unknown
 ) => Promise<NextResponse>
 
+/**
+ * A dónde volver después de verificar: la página desde la que se hizo el
+ * pedido (la API no sirve como destino), o el panel.
+ */
+function requestPath(request: NextRequest): string {
+  try {
+    const referer = new URL(request.headers.get('referer') ?? '')
+    if (referer.origin === request.nextUrl.origin && !referer.pathname.startsWith('/api/')) {
+      return `${referer.pathname}${referer.search}`
+    }
+  } catch {
+    // Sin referer válido se vuelve al panel.
+  }
+  return '/dashboard'
+}
+
 export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthenticatedHandler) {
   return async (request: NextRequest, routeContext?: unknown) => {
     try {
@@ -58,7 +75,8 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
           auth.reason === 'unauthenticated'
             ? { error: 'Unauthorized' }
             : auth.reason === 'mfa_required'
-              ? { error: 'Unauthorized', code: MFA_REQUIRED_CODE }
+              // El texto va en `error` porque es lo que muestran las pantallas.
+              ? { error: 'Confirmá tu sesión con el código de tu app autenticadora para seguir.', code: MFA_REQUIRED_CODE, mfaPath: buildMfaPath(requestPath(request)) }
               : { error: 'Forbidden', code: 'ACCOUNT_INACTIVE' },
           { status: auth.reason === 'inactive' ? 403 : 401 }
         )
@@ -84,13 +102,16 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
           .then((client) => organizationRequiresAdminMfa(client as unknown as AdminMfaPolicyClient, organization.id))
           .catch(() => false)
         if (needsAdminMfaEnrollment({ organizationRole: organization.role, requireAdminMfa, aal: auth.user.aal })) {
+          const message = platformRequiresMfa
+            ? 'Se exige la verificación en dos pasos a los administradores. Activala o confirmá tu código para seguir.'
+            : 'Tu tienda exige la verificación en dos pasos a los administradores. Activala o confirmá tu código para seguir.'
           return NextResponse.json(
             {
-              error: 'Forbidden',
+              // El texto va en `error` porque es lo que muestran las pantallas (antes decían «Forbidden»).
+              error: message,
               code: MFA_ENROLLMENT_REQUIRED_CODE,
-              message: platformRequiresMfa
-                ? 'La plataforma exige la verificación en dos pasos a los administradores. Activala en tu perfil.'
-                : 'Esta organización exige la verificación en dos pasos a sus administradores. Activala en tu perfil.',
+              message,
+              mfaPath: buildMfaPath(requestPath(request), { setup: true }),
             },
             { status: 403 }
           )

@@ -50,6 +50,27 @@ async function platformPolicies(): Promise<PlatformPolicies> {
   return loadPlatformPolicies(client as unknown as PlatformPolicyClient)
 }
 
+/** `owner` o `admin` de alguna tienda activa, o `null`. Con la clave de servicio: RLS. */
+async function adminRoleInAnyOrganization(userId: string): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) return null
+  try {
+    const { createClient: createAdminClient } = await import('@supabase/supabase-js')
+    const client = createAdminClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
+    const { data } = await client
+      .from('organization_members')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin'])
+      .limit(1)
+    return (data?.[0] as { role?: string } | undefined)?.role ?? null
+  } catch {
+    return null
+  }
+}
+
 function maintenanceResponse(request: NextRequest) {
   return NextResponse.rewrite(new URL('/mantenimiento', request.url))
 }
@@ -516,22 +537,27 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // La organizacion activa exige 2FA a sus administradores y esta sesion no la
-  // tiene: primero se activa. Solo se consulta para administradores sin `aal2`.
-  if (
-    (isProtectedRoute || isAdminRoute) &&
-    sessionAal !== 'aal2' &&
-    activeOrganizationIdForAccess &&
-    isAdminMfaRole(organizationRoleFromSnapshot)
-  ) {
-    // La exige la tienda (Seguridad) o toda la plataforma (Superadmin → Configuración).
+  // 2FA exigida a los administradores (por la tienda en Seguridad, o por toda
+  // la plataforma en Superadmin → Configuración) y esta sesion no la tiene:
+  // primero se activa o se confirma el codigo. Solo se consulta para sesiones
+  // sin `aal2`. Sin esto la pagina cargaba igual y despues la API respondia
+  // «Forbidden» en cada pedido (por ejemplo, la lista de clientes vacia).
+  if ((isProtectedRoute || isAdminRoute) && user && sessionAal !== 'aal2') {
     const platformRequiresMfa = (await withTimeout(platformPolicies(), PROXY_PROFILE_TIMEOUT_MS, DEFAULT_PLATFORM_POLICIES)).requireTwoFactor
-    const requireAdminMfa = platformRequiresMfa || await withTimeout(
+    // Sin la cookie de la tienda activa la consulta unica no trae el rol; la API
+    // igual elige una tienda, asi que con la politica global se mira si es
+    // dueño o administrador de alguna.
+    const adminRole = isAdminMfaRole(organizationRoleFromSnapshot)
+      ? organizationRoleFromSnapshot
+      : platformRequiresMfa && !activeOrganizationIdForAccess
+        ? await withTimeout(adminRoleInAnyOrganization(user.id), PROXY_PROFILE_TIMEOUT_MS, null)
+        : null
+    const requireAdminMfa = adminRole !== null && (platformRequiresMfa || (activeOrganizationIdForAccess !== null && await withTimeout(
       organizationRequiresAdminMfa(supabase as unknown as AdminMfaPolicyClient, activeOrganizationIdForAccess),
       PROXY_PROFILE_TIMEOUT_MS,
       false
-    )
-    if (needsAdminMfaEnrollment({ organizationRole: organizationRoleFromSnapshot, requireAdminMfa, aal: sessionAal })) {
+    )))
+    if (adminRole && needsAdminMfaEnrollment({ organizationRole: adminRole, requireAdminMfa, aal: sessionAal })) {
       return redirectWithCookies(
         request,
         supabaseResponse,
