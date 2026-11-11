@@ -135,6 +135,39 @@ export interface FinanceRevenueBreakdown {
   grossRevenue: number
 }
 
+/**
+ * Apertura de «Cobraste» y «Pagaste»: cada parte suma exactamente al total,
+ * para que el comercio vea de dónde sale cada número.
+ */
+export interface FinanceCashBreakdown {
+  collected: {
+    /** Cobros de ventas en efectivo, tarjeta o transferencia. */
+    sales: number
+    /** Cuotas de créditos cobradas. */
+    installments: number
+    /** Cobros de reparaciones hechos fuera del punto de venta. */
+    repairs: number
+    /** Cobros de pedidos de la tienda web. */
+    orders: number
+    /** Sobrantes al cerrar la caja. */
+    cashOverage: number
+  }
+  paid: {
+    /** Gastos y cuentas a pagar que se pagaron (menos las anulaciones). */
+    expenses: number
+    /** Sueldos pagados. */
+    payroll: number
+    /** Pagos a técnicos. */
+    technicians: number
+    /** Devoluciones en plata a clientes. */
+    refunds: number
+    /** Comisiones de tarjeta y medios de pago. */
+    paymentFees: number
+    /** Faltantes al cerrar la caja. */
+    cashShortages: number
+  }
+}
+
 export interface FinanceSummary {
   accrued: {
     revenue: number
@@ -150,6 +183,8 @@ export interface FinanceSummary {
     collected: number
     paid: number
     netCashFlow: number
+    /** De dónde sale cada total. Opcional para no romper consumidores viejos. */
+    breakdown?: FinanceCashBreakdown
   }
   complete: boolean
   coverageWarnings: CoverageWarning[]
