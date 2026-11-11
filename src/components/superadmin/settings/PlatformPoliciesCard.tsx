@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { PASSWORD_MIN_LENGTH_RANGE, type PlatformPolicies } from '@/lib/platform/policies'
 import { PLATFORM_SETTINGS_CODES } from '@/lib/superadmin/platform-settings'
+import { TwoFactorExplainer } from '@/components/security/TwoFactorExplainer'
 
 type Props = {
   initial: PlatformPolicies
@@ -106,9 +107,12 @@ export function PlatformPoliciesCard({ initial, onSaved }: Props) {
                 </p>
                 <p className="text-xs text-slate-500">{values[item.key] ? item.on : item.off}</p>
                 {item.key === 'requireTwoFactor' && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Tu propia verificación se configura en <Link href="/dashboard/profile" className="font-medium text-primary underline-offset-4 hover:underline">tu perfil</Link>.
-                  </p>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-slate-500">
+                      Tu propia verificación se configura en <Link href="/dashboard/profile" className="font-medium text-primary underline-offset-4 hover:underline">tu perfil</Link>.
+                    </p>
+                    <TwoFactorExplainer scope="platform" />
+                  </div>
                 )}
               </div>
               <Switch

@@ -4,6 +4,7 @@ import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { hasVerifiedFactor, MFA_ENROLLMENT_REQUIRED_CODE } from '@/lib/auth/mfa'
+import { loadPlatformPolicies, type PlatformPolicyClient } from '@/lib/platform/policies'
 
 /**
  * Inicio de sesión de la app móvil.
@@ -52,8 +53,9 @@ async function checkStaffAccess(userId: string): Promise<StaffCheck> {
 
 /**
  * Es dueño o administrador de alguna organización que exige 2FA a sus
- * administradores. Ante un error (la columna todavía no existe) no se exige,
- * igual que en el panel.
+ * administradores, o la plataforma la exige a todos los administradores
+ * (Superadmin → Configuración). Ante un error (la columna todavía no existe)
+ * no se exige, igual que en el panel.
  */
 async function requiresAdminMfaEnrollment(userId: string): Promise<boolean> {
   const admin = createAdminSupabase()
@@ -64,6 +66,8 @@ async function requiresAdminMfaEnrollment(userId: string): Promise<boolean> {
     .eq('status', 'active')
     .in('role', ['owner', 'admin'])
   if (error || !memberships?.length) return false
+  const platform = await loadPlatformPolicies(admin as unknown as PlatformPolicyClient)
+  if (platform.requireTwoFactor) return true
   const { data: requiring, error: settingsError } = await admin
     .from('organization_settings')
     .select('organization_id')
@@ -179,7 +183,7 @@ export async function POST(request: NextRequest) {
       await revokeSession(url, serviceKey, String(body.access_token))
       return NextResponse.json(
         {
-          error: 'Tu comercio exige la verificación en dos pasos a los administradores. Activala desde la web en Perfil → Seguridad y volvé a ingresar.',
+          error: 'Se exige la verificación en dos pasos a los administradores. Activala desde la web en Perfil → Seguridad y volvé a ingresar.',
           code: MFA_ENROLLMENT_REQUIRED_CODE,
         },
         { status: 403 }
