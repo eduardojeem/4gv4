@@ -26,6 +26,8 @@ export default function RegisterScreen() {
   const { signIn } = useSession();
   const params = useLocalSearchParams<{ plan?: string }>();
   const [form, setForm] = useState<RegisterForm>(() => emptyRegisterForm(params.plan ?? ''));
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  const [registrationOptions, setRegistrationOptions] = useState<{ companyRegistrationEnabled: boolean; companyPasswordMinLength: number } | null>(null);
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [plansError, setPlansError] = useState<string | null>(null);
   const [slugState, setSlugState] = useState<{ slug: string; check: SlugCheck } | null>(null);
@@ -48,9 +50,11 @@ export default function RegisterScreen() {
   // Los planes vigentes, con sus días de prueba reales.
   useEffect(() => {
     let alive = true;
-    apiFetch<{ plans?: Plan[] }>('/api/mobile/saas', { auth: false })
-      .then((catalog) => {
+    Promise.all([apiFetch<{ plans?: Plan[] }>('/api/mobile/saas', { auth: false }), apiFetch<{ companyRegistrationEnabled: boolean; companyPasswordMinLength: number }>('/api/mobile/registration-options', { auth: false })])
+      .then(([catalog, options]) => {
         if (!alive) return;
+        setRegistrationOptions(options);
+        setPlansError(null);
         const list = catalog.plans ?? [];
         setPlans(list);
         // El plan del enlace puede venir por su slug público o por el tier.
@@ -65,7 +69,7 @@ export default function RegisterScreen() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [catalogAttempt]);
 
   // Si la dirección de la tienda está libre, mientras se escribe (solo vale la última consulta).
   const slug = storeSlugOf(form);
@@ -83,11 +87,12 @@ export default function RegisterScreen() {
   }, [slug]);
   const slugCheck = slugState?.slug === slug ? slugState.check : null;
 
-  const localIssues = registerIssues(form);
+  const localIssues = registerIssues(form, registrationOptions?.companyPasswordMinLength ?? 8);
   const issues = useMemo(() => ({ ...(submitted ? localIssues : {}), ...serverErrors }), [submitted, localIssues, serverErrors]);
   const slugTaken = slugCheck && !slugCheck.available ? slugCheck.message || 'Esa dirección ya está en uso.' : null;
 
   const submit = async () => {
+    if (busy || !registrationOptions || !plans?.length || plansError || !registrationOptions.companyRegistrationEnabled) return;
     setSubmitted(true);
     const problems = Object.values(localIssues);
     if (problems.length || slugTaken) {
@@ -98,8 +103,10 @@ export default function RegisterScreen() {
     let token: string | null = null;
     try {
       token = await requestCaptchaToken();
-    } catch {
-      token = null;
+    } catch (cause) {
+      setBusy(null);
+      Alert.alert('No pudimos verificar el registro', cause instanceof Error ? cause.message : 'Revisá tu conexión y volvé a intentar.');
+      return;
     }
     if (!token) {
       setBusy(null);
@@ -136,10 +143,11 @@ export default function RegisterScreen() {
 
   return (
     <WebsiteScreen
+      saving={Boolean(busy)}
       title="Crear mi comercio"
       subtitle="Tu cuenta y tu tienda en minutos"
       footer={
-        <Pressable onPress={() => void submit()} disabled={Boolean(busy)} accessibilityRole="button" style={[websiteStyles.primaryButton, busy ? styles.disabled : null]}>
+        <Pressable onPress={() => void submit()} disabled={Boolean(busy) || !registrationOptions?.companyRegistrationEnabled || !plans?.length || Boolean(plansError)} accessibilityRole="button" style={[websiteStyles.primaryButton, busy ? styles.disabled : null]}>
           {busy ? <ActivityIndicator color="#fff" /> : <Ionicons name="storefront-outline" size={18} color="#fff" />}
           <Text style={websiteStyles.primaryText}>{busyLabel ?? 'Crear mi comercio'}</Text>
         </Pressable>
@@ -147,9 +155,9 @@ export default function RegisterScreen() {
       <Section title="Tu cuenta" icon="person-outline">
         <Field label="Nombre completo" value={form.fullName} onChangeText={(value) => set({ fullName: value })} placeholder="Ej. María González" autoCapitalize="words" maxLength={120} error={issues.fullName} />
         <Field label="Email" value={form.email} onChangeText={(value) => set({ email: value.trim() })} placeholder="nombre@tucomercio.com" keyboardType="email-address" autoCapitalize="none" maxLength={254} error={issues.email} />
-        <Field label="Contraseña" value={form.password} onChangeText={(value) => set({ password: value })} placeholder="Mínimo 8 caracteres" autoCapitalize="none" maxLength={72} error={issues.password} secure={!showPassword} />
+        <Field label="Contraseña" value={form.password} onChangeText={(value) => set({ password: value })} placeholder={`Mínimo ${registrationOptions?.companyPasswordMinLength ?? 8} caracteres`} autoCapitalize="none" maxLength={72} error={issues.password} secure={!showPassword} />
         <View style={styles.checks}>
-          {passwordChecks(form.password).map((check) => (
+          {passwordChecks(form.password, registrationOptions?.companyPasswordMinLength ?? 8).map((check) => (
             <View key={check.label} style={styles.check}>
               <Ionicons name={check.ok ? 'checkmark-circle' : 'ellipse-outline'} size={15} color={check.ok ? palette.success : colors.muted} />
               <Text style={[styles.small, { color: check.ok ? colors.text : colors.muted }]}>{check.label}</Text>
@@ -181,7 +189,8 @@ export default function RegisterScreen() {
       </Section>
 
       <Section title="Plan" icon="pricetags-outline" hint="Podés cambiarlo más adelante.">
-        {plansError ? <Notice tone="danger" text={plansError} /> : null}
+        {plansError ? <View style={{gap:10}}><Notice tone="danger" text={plansError} /><Pressable accessibilityRole="button" onPress={() => { setPlansError(null); setCatalogAttempt(value => value + 1); }}><Text style={{color:palette.primary,fontWeight:'700'}}>Reintentar planes y requisitos</Text></Pressable></View> : null}
+        {registrationOptions && !registrationOptions.companyRegistrationEnabled ? <Notice tone="warning" text="El registro de empresas está cerrado por el momento. Podés crear una cuenta personal o volver más tarde." /> : null}
         {!plans && !plansError ? <ActivityIndicator color={palette.primary} /> : null}
         {plans?.length === 0 ? <Notice tone="warning" text="No hay planes disponibles en este momento. Probá más tarde." /> : null}
         {plans?.map((plan) => {

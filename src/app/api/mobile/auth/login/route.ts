@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { mobileLoginAccess } from '@/lib/mobile/login-access'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -18,7 +19,7 @@ import { loadPlatformPolicies, type PlatformPolicyClient } from '@/lib/platform/
  * compartido entre instancias con Upstash. La renovación del token no pasa por
  * acá: `refresh_token` está exenta de captcha y la hace la app directo.
  *
- * La app es para el personal del comercio: un cliente de la tienda o un usuario
+ * La app admite compradores y personal con permisos separados. Un usuario
  * dado de baja no recibe sesión (y la que Supabase acaba de abrir se cierra).
  */
 
@@ -29,13 +30,13 @@ const bodySchema = z.object({
 
 const WINDOW_MS = 15 * 60 * 1000
 
-type StaffCheck = 'ok' | 'inactive' | 'not_staff'
+type StaffCheck = ReturnType<typeof mobileLoginAccess>
 
 async function checkStaffAccess(userId: string): Promise<StaffCheck> {
   const admin = createAdminSupabase()
   const [profile, role, memberships] = await Promise.all([
-    admin.from('profiles').select('status').eq('id', userId).maybeSingle(),
-    admin.from('user_roles').select('is_active').eq('user_id', userId).maybeSingle(),
+    admin.from('profiles').select('status, role').eq('id', userId).maybeSingle(),
+    admin.from('user_roles').select('is_active, role').eq('user_id', userId).maybeSingle(),
     admin
       .from('organization_members')
       .select('organization_id', { count: 'exact', head: true })
@@ -44,11 +45,8 @@ async function checkStaffAccess(userId: string): Promise<StaffCheck> {
       .neq('role', 'customer'),
   ])
   if (profile.error || role.error) throw new Error('No se pudo verificar el estado del usuario')
-  const status = (profile.data as { status?: string | null } | null)?.status
-  const roleActive = (role.data as { is_active?: boolean | null } | null)?.is_active
-  if (status === 'inactive' || status === 'suspended' || roleActive === false) return 'inactive'
   if (memberships.error) throw memberships.error
-  return (memberships.count ?? 0) > 0 ? 'ok' : 'not_staff'
+  return mobileLoginAccess(profile.data, role.data, memberships.count ?? 0)
 }
 
 /**
@@ -159,12 +157,12 @@ export async function POST(request: NextRequest) {
     await revokeSession(url, serviceKey, String(body.access_token))
     return NextResponse.json({ error: 'No se pudo verificar tu acceso. Probá de nuevo.' }, { status: 503 })
   }
-  if (access !== 'ok') {
+  if (access !== 'ok' && access !== 'customer') {
     await revokeSession(url, serviceKey, String(body.access_token))
     return NextResponse.json(
       access === 'inactive'
         ? { error: 'Tu usuario está desactivado. Pedile al dueño del comercio que lo active.', code: 'inactive' }
-        : { error: 'Esta app es para el personal del comercio. Tu usuario no pertenece a ningún comercio activo.', code: 'not_staff' },
+        : { error: 'Tu cuenta todavía no tiene un perfil habilitado. Contactá con soporte.', code: 'not_staff' },
       { status: 403 }
     )
   }
