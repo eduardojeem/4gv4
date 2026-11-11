@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { renderBrandedEmail, sendEmail } from '@/lib/email/resend'
+import { platformEmailLogoUrl, renderBrandedEmail, sendEmail } from '@/lib/email/resend'
 import { getPlatformBranding } from '@/lib/platform/branding'
 import { rateLimiter } from '@/lib/rate-limiter'
 
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       preview: `La integracion de email de ${branding.platformName} funciona correctamente.`,
       intro: 'Este mensaje confirma que el proveedor Resend esta disponible.',
       bodyHtml: '<p>Los emails transaccionales de la plataforma ya pueden enviarse desde este entorno.</p>',
-      brand: { name: branding.platformName, color: '#0284c7', logoUrl: branding.logoUrl },
+      brand: { name: branding.platformName, color: '#0284c7', logoUrl: platformEmailLogoUrl() },
       footerNote: 'Prueba enviada desde Super Admin.',
     }),
     log: { customerName: `Prueba (${superAdmin.email})` },
