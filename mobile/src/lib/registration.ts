@@ -6,6 +6,7 @@ import { Alert, Platform } from 'react-native';
 
 import { ApiError, apiFetch } from './api';
 import { SITE_URL } from './marketplace';
+import { captchaEnvironmentError } from './customer-registration-model';
 import { parseCaptchaReturn, parseRegistrationReturn, registerCtaLabel, registrationUrl, type registerPayload } from './registration-model';
 
 /**
@@ -67,9 +68,12 @@ export function useRegisterLabel() {
  * se abre /auth/captcha-app, la persona la completa y el token vuelve a la app.
  * Devuelve null si la cerró sin completarla.
  */
-export async function requestCaptchaToken(): Promise<string | null> {
+export async function requestCaptchaToken(account: 'company' | 'customer' = 'company'): Promise<string | null> {
   const returnUrl = Linking.createURL('captcha');
-  const url = `${SITE_URL}/auth/captcha-app?app_return=${encodeURIComponent(returnUrl)}`;
+  const options = await apiFetch<{ expoGoCallbackSupported: boolean }>('/api/mobile/registration-options', { auth: false });
+  const problem = captchaEnvironmentError(returnUrl, SITE_URL);
+  if (problem && !options.expoGoCallbackSupported) throw new Error(problem);
+  const url = `${SITE_URL}/auth/captcha-app?account=${account}&app_return=${encodeURIComponent(returnUrl)}`;
   const result = await WebBrowser.openAuthSessionAsync(url, returnUrl);
   if (result.type !== 'success') return null;
   return parseCaptchaReturn(Linking.parse(result.url).queryParams ?? {});

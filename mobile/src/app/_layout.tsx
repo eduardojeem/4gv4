@@ -67,6 +67,9 @@ function RootNavigator() {
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />
           <Stack.Screen name="forgot-password" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="join" />
+          <Stack.Screen name="register-customer" />
+          <Stack.Screen name="captcha" />
           <Stack.Screen name="register" />
         </Stack.Protected>
       </Stack>

@@ -12,6 +12,7 @@ import { appReturnWithCaptcha, safeAppReturnUrl } from '@/lib/mobile-app-return'
  */
 function CaptchaForApp() {
   const searchParams = useSearchParams()
+  const isCustomer = searchParams.get('account') === 'customer'
   const appReturn = safeAppReturnUrl(searchParams.get('app_return'))
   const [token, setToken] = useState<string | null>(null)
 
@@ -26,9 +27,9 @@ function CaptchaForApp() {
     <div className="flex flex-col items-center gap-4">
       <h1 className="text-lg font-semibold">Verificación de seguridad</h1>
       <p className="text-center text-sm text-muted-foreground">
-        {token ? 'Listo. Volviendo a la app…' : 'Confirmá que sos una persona para crear tu comercio.'}
+        {token ? 'Listo. Volviendo a la app…' : isCustomer ? 'Confirmá que sos una persona para crear tu cuenta.' : 'Confirmá que sos una persona para crear tu comercio.'}
       </p>
-      <TurnstileChallenge action="company_register" onTokenChange={setToken} resetKey={0} />
+      <TurnstileChallenge action={isCustomer ? "customer_register" : "company_register"} onTokenChange={setToken} resetKey={0} />
     </div>
   )
 }

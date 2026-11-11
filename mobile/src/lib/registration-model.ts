@@ -24,8 +24,11 @@ export function parseRegistrationReturn(params: Record<string, string | string[]
 }
 
 /** El aviso del ingreso después de registrarse. */
-export function registrationNotice(result: RegistrationResult): string | null {
+export function registrationNotice(result: RegistrationResult, account: 'company' | 'customer' = 'company'): string | null {
   if (!result.registered) return null;
+  if (account === 'customer') return result.confirmEmail
+    ? 'Tu cuenta personal quedó creada. Confirmá tu email con el enlace que te enviamos y después volvé a ingresar a la app.'
+    : 'Tu cuenta personal quedó creada. Ingresá para comprar y consultar tus pedidos.';
   return result.confirmEmail
     ? '¡Listo, tu comercio quedó creado! Confirmá tu email con el enlace que te mandamos y después ingresá acá con tu email y contraseña.'
     : '¡Listo, tu comercio quedó creado! Ingresá con tu email y contraseña para empezar.';
@@ -58,9 +61,9 @@ export function slugifyStoreName(value: string): string {
 }
 
 /** Las mismas reglas de contraseña que la web (lib/auth/password-validation). */
-export function passwordChecks(password: string) {
+export function passwordChecks(password: string, minimum = 8) {
   return [
-    { ok: password.length >= 8, label: 'Mínimo 8 caracteres' },
+    { ok: password.length >= minimum, label: `Mínimo ${minimum} caracteres` },
     { ok: /[A-Z]/.test(password), label: 'Una letra mayúscula' },
     { ok: /[a-z]/.test(password), label: 'Una letra minúscula' },
     { ok: /[0-9]/.test(password), label: 'Un número' },
@@ -91,11 +94,11 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export type RegisterField = keyof RegisterForm;
 
 /** Lo que falta o está mal, por campo, con las mismas reglas que valida el servidor. */
-export function registerIssues(form: RegisterForm): Partial<Record<RegisterField, string>> {
+export function registerIssues(form: RegisterForm, minimum = 8): Partial<Record<RegisterField, string>> {
   const issues: Partial<Record<RegisterField, string>> = {};
   if (form.fullName.trim().length < 2) issues.fullName = 'Escribí tu nombre completo.';
   if (!EMAIL.test(form.email.trim())) issues.email = 'Revisá el email: parece incompleto.';
-  const failed = passwordChecks(form.password).find((check) => !check.ok);
+  const failed = passwordChecks(form.password, minimum).find((check) => !check.ok);
   if (failed) issues.password = `La contraseña necesita: ${failed.label.toLowerCase()}.`;
   if (!form.confirmPassword || form.confirmPassword !== form.password) issues.confirmPassword = 'Las contraseñas no coinciden.';
   if (form.companyName.trim().length < 2) issues.companyName = 'Escribí el nombre de tu comercio.';

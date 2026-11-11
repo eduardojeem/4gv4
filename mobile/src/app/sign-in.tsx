@@ -46,9 +46,10 @@ export default function SignInScreen() {
   const isDark = colorScheme === 'dark';
   const passwordRef = useRef<TextInput>(null);
   // Al volver del registro en la web: cuenta creada y, si hace falta, confirmar el email.
-  const registered = registrationNotice(parseRegistrationReturn(useLocalSearchParams()));
+  const registrationParams = useLocalSearchParams<{ registered?: string; confirmar?: string; account?: string; email?: string }>();
+  const registered = registrationNotice(parseRegistrationReturn(registrationParams), registrationParams.account === 'customer' ? 'customer' : 'company');
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(registrationParams.email ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState<'email' | 'password' | null>(null);
@@ -69,7 +70,7 @@ export default function SignInScreen() {
         ]);
 
         if (rememberFlag !== 'false' && savedEmail) {
-          setEmail(savedEmail);
+          setEmail(current => current || savedEmail);
           setRememberEmail(true);
         } else if (rememberFlag === 'false') {
           setRememberEmail(false);
@@ -250,7 +251,7 @@ export default function SignInScreen() {
                 <View style={styles.formHeader}>
                   <Text style={[styles.formTitle, { color: colors.text }]}>Iniciar sesión</Text>
                   <Text style={[styles.formSubtitle, { color: colors.muted }]}>
-                    Accedé a tus ventas, cobros y stock en tiempo real.
+                    Comprá, consultá tus pedidos o gestioná tu negocio.
                   </Text>
                 </View>
 
@@ -286,7 +287,7 @@ export default function SignInScreen() {
                       }}
                       accessibilityLabel="Correo electrónico"
                       accessibilityHint={emailProblem ?? undefined}
-                      placeholder="nombre@mitienda.com"
+                      placeholder="nombre@correo.com"
                       placeholderTextColor={colors.muted}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -457,7 +458,7 @@ export default function SignInScreen() {
                           styles.buttonText,
                           { color: canSubmit ? '#FFFFFF' : colors.muted },
                         ]}>
-                        Entrar a mi comercio
+                        Ingresar a mi cuenta
                       </Text>
                       <Ionicons
                         name="arrow-forward"
@@ -472,6 +473,7 @@ export default function SignInScreen() {
               </View>
               )}
 
+              <Pressable accessibilityRole="button" onPress={() => router.push('/join' as never)} style={{ padding: 16, alignItems: 'center' }}><Text style={{ color: palette.primary, fontWeight: '700' }}>¿No tenés cuenta? Registrate</Text></Pressable>
               {/* Pie de pantalla / Seguridad */}
               <View style={styles.footerContainer}>
                 <View style={styles.securityBadge}>
