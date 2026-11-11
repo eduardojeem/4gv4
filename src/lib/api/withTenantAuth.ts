@@ -8,8 +8,7 @@ import {
   type AssuranceLevel,
 } from '@/lib/auth/mfa'
 import { organizationRequiresAdminMfa, type AdminMfaPolicyClient } from '@/lib/auth/admin-mfa-policy'
-import { loadPlatformPolicies, type PlatformPolicyClient } from '@/lib/platform/policies'
-import { createAdminSupabase } from '@/lib/supabase/admin'
+import { readPlatformPolicies } from '@/lib/platform/policies-server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -78,7 +77,7 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
       if (isAdminMfaRole(organization.role) && auth.user.aal !== 'aal2') {
         // Como en el proxy: la exige la tienda o toda la plataforma (Superadmin →
         // Configuración). Si no se puede consultar, no se exige (no deja a todos afuera).
-        const platformRequiresMfa = await loadPlatformPolicies(createAdminSupabase() as unknown as PlatformPolicyClient)
+        const platformRequiresMfa = await readPlatformPolicies()
           .then((policies) => policies.requireTwoFactor)
           .catch(() => false)
         const requireAdminMfa = platformRequiresMfa || await createClient()
