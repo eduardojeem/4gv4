@@ -6,6 +6,7 @@ import { KeyRound, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { TwoFactorExplainer } from '@/components/security/TwoFactorExplainer'
 
 type Policy = { requireAdminMfa: boolean; canChange: boolean }
 
@@ -67,7 +68,8 @@ export function AdminMfaPolicyCard() {
 
   return (
     <Card className="rounded-2xl border border-border/80 shadow-xs">
-      <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3.5">
           <div className="mt-0.5 rounded-lg bg-purple-500/10 p-2.5 text-purple-600">
             <KeyRound className="h-5 w-5" />
@@ -97,6 +99,8 @@ export function AdminMfaPolicyCard() {
             aria-label="Exigir verificación en dos pasos a los administradores"
           />
         </div>
+        </div>
+        <TwoFactorExplainer scope="store" />
       </CardContent>
     </Card>
   )
