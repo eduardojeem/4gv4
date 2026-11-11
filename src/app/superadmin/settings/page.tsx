@@ -4,6 +4,7 @@ import { requireSuperAdmin } from '@/lib/superadmin/auth'
 import { SettingsCenter, type PlatformSettingsData } from '@/components/superadmin/settings/SettingsCenter'
 import { REGIONAL_CURRENCY_CODES } from '@/lib/regional/contract'
 import { SETTINGS_TIMEZONES, toPlatformDefaults } from '@/lib/superadmin/platform-settings'
+import { toPlatformPolicies } from '@/lib/platform/policies'
 
 export const metadata: Metadata = { title: 'Configuración | Superadmin' }
 export const dynamic = 'force-dynamic'
@@ -73,6 +74,7 @@ async function getSettingsData(): Promise<PlatformSettingsData> {
 
   return {
     defaults: toPlatformDefaults(s),
+    policies: toPlatformPolicies(s as Parameters<typeof toPlatformPolicies>[0]),
     storedFlags: {
       maintenanceMode: Boolean(s.maintenance_mode),
       allowRegistration: s.allow_registration !== false,

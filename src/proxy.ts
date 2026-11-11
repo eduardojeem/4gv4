@@ -28,6 +28,31 @@ import {
   type AssuranceLevel,
 } from '@/lib/auth/mfa'
 import { organizationRequiresAdminMfa, type AdminMfaPolicyClient } from '@/lib/auth/admin-mfa-policy'
+import {
+  DEFAULT_PLATFORM_POLICIES,
+  isMaintenanceExempt,
+  loadPlatformPolicies,
+  type PlatformPolicies,
+  type PlatformPolicyClient,
+} from '@/lib/platform/policies'
+
+/**
+ * Políticas globales (`system_settings`): se leen con la clave de servicio
+ * porque RLS solo deja leer esa fila a los administradores, y el proxy corre
+ * también para visitantes sin sesión.
+ */
+async function platformPolicies(): Promise<PlatformPolicies> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) return { ...DEFAULT_PLATFORM_POLICIES }
+  const { createClient: createAdminClient } = await import('@supabase/supabase-js')
+  const client = createAdminClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
+  return loadPlatformPolicies(client as unknown as PlatformPolicyClient)
+}
+
+function maintenanceResponse(request: NextRequest) {
+  return NextResponse.rewrite(new URL('/mantenimiento', request.url))
+}
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
 const PROXY_PROFILE_TIMEOUT_MS = 3000
@@ -269,6 +294,13 @@ export async function proxy(request: NextRequest) {
   const isInternalOpsRoute = pathname.startsWith('/debug') || pathname === '/setup' || pathname === '/setup-access'
   const isAuthRoute = pathname === '/login' || pathname === '/register'
 
+  // Plataforma en mantenimiento: las páginas públicas (y el registro) muestran
+  // /mantenimiento. El panel se resuelve más abajo, cuando se sabe si es superadmin.
+  if (!isProtectedRoute && !isAdminRoute && !isSuperAdminRoute && !isInternalOpsRoute && !isMaintenanceExempt(pathname)) {
+    const policies = await withTimeout(platformPolicies(), PROXY_PROFILE_TIMEOUT_MS, DEFAULT_PLATFORM_POLICIES)
+    if (policies.maintenanceMode) return maintenanceResponse(request)
+  }
+
   // Solo hacer auth check si la ruta lo requiere
   if (!isProtectedRoute && !isAdminRoute && !isSuperAdminRoute && !isInternalOpsRoute && !isAuthRoute) {
     return supabaseResponse
@@ -447,6 +479,13 @@ export async function proxy(request: NextRequest) {
   const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
   const isSuperAdmin = isActiveUser && effectiveRole === 'super_admin'
 
+  // Plataforma en mantenimiento: el panel de las tiendas queda cerrado salvo
+  // para el superadmin, que tiene que poder entrar a revisar y apagarlo.
+  if ((isProtectedRoute || isAdminRoute) && user && !isSuperAdmin) {
+    const policies = await withTimeout(platformPolicies(), PROXY_PROFILE_TIMEOUT_MS, DEFAULT_PLATFORM_POLICIES)
+    if (policies.maintenanceMode) return maintenanceResponse(request)
+  }
+
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
     if (!user) {
@@ -485,7 +524,9 @@ export async function proxy(request: NextRequest) {
     activeOrganizationIdForAccess &&
     isAdminMfaRole(organizationRoleFromSnapshot)
   ) {
-    const requireAdminMfa = await withTimeout(
+    // La exige la tienda (Seguridad) o toda la plataforma (Superadmin → Configuración).
+    const platformRequiresMfa = (await withTimeout(platformPolicies(), PROXY_PROFILE_TIMEOUT_MS, DEFAULT_PLATFORM_POLICIES)).requireTwoFactor
+    const requireAdminMfa = platformRequiresMfa || await withTimeout(
       organizationRequiresAdminMfa(supabase as unknown as AdminMfaPolicyClient, activeOrganizationIdForAccess),
       PROXY_PROFILE_TIMEOUT_MS,
       false
