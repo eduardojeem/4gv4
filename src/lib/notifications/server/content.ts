@@ -74,16 +74,19 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Pedido confirmado',
     defaultBody: 'Un pedido fue confirmado.',
     defaultResourceType: 'order',
+    formatBody: (data) => orderBody(data, 'Un pedido fue confirmado.'),
   },
   ORDER_READY: {
     title: 'Pedido listo',
     defaultBody: 'El pedido está listo para entrega o retiro.',
     defaultResourceType: 'order',
+    formatBody: (data) => orderBody(data, 'El pedido está listo para entrega o retiro.'),
   },
   ORDER_CANCELLED: {
     title: 'Pedido cancelado',
     defaultBody: 'Un pedido fue cancelado.',
     defaultResourceType: 'order',
+    formatBody: (data) => orderBody(data, 'Un pedido fue cancelado.'),
   },
   ORDER_OVERDUE: {
     title: 'Pedido demorado',

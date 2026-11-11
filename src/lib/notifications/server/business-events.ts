@@ -100,6 +100,41 @@ export function notifyOrderCreated(params: {
   }))
 }
 
+const ORDER_STATUS_NOTIFICATION_TYPE = {
+  CONFIRMED: 'ORDER_CONFIRMED',
+  READY: 'ORDER_READY',
+  CANCELLED: 'ORDER_CANCELLED',
+} as const
+
+export function notifyOrderStatusChanged(params: {
+  organizationId: string
+  branchId: string | null
+  orderId: string
+  status: string
+  actorUserId?: string | null
+  orderNumber?: string | null
+  customerName?: string | null
+  total?: number | null
+}) {
+  const type = ORDER_STATUS_NOTIFICATION_TYPE[params.status as keyof typeof ORDER_STATUS_NOTIFICATION_TYPE]
+  if (!type) return Promise.resolve()
+
+  return safely('el estado del pedido', () => dispatchNotificationEvent({
+    organizationId: params.organizationId,
+    branchId: params.branchId,
+    type,
+    resourceType: 'order',
+    resourceId: params.orderId,
+    data: {
+      orderNumber: params.orderNumber ?? null,
+      customerName: params.customerName ?? null,
+      totalFormatted: params.total != null ? formatNotificationAmount(params.total) : undefined,
+      status: params.status,
+    },
+    actorUserId: params.actorUserId ?? null,
+  }))
+}
+
 export function notifyRepairCreated(params: {
   organizationId: string
   branchId: string | null

@@ -16,7 +16,23 @@ const FIELD: Record<string, string> = { phone: 'teléfono', email: 'email', ruc:
  * cobro. El servidor no deja repetir teléfono, email ni CI: si choca, se ofrece
  * usar el cliente que ya existe.
  */
-export function PosCustomerSheet({ selected, onClose, onPick }: { selected: PosCustomer | null; onClose: () => void; onPick: (customer: PosCustomer | null) => void }) {
+export function PosCustomerSheet({
+  selected,
+  onClose,
+  onPick,
+  title = 'Cliente de la venta',
+  subtitle = 'Opcional. Un cliente mayorista vende a precio mayorista.',
+  showAddress = false,
+  allowClear = true,
+}: {
+  selected: PosCustomer | null;
+  onClose: () => void;
+  onPick: (customer: PosCustomer | null) => void;
+  title?: string;
+  subtitle?: string;
+  showAddress?: boolean;
+  allowClear?: boolean;
+}) {
   const colors = usePalette();
   const [mode, setMode] = useState<'search' | 'new'>('search');
   const [query, setQuery] = useState('');
@@ -37,15 +53,15 @@ export function PosCustomerSheet({ selected, onClose, onPick }: { selected: PosC
   }, [query, mode]);
 
   if (mode === 'new') {
-    return <NewCustomer initial={query} colors={colors} onBack={() => setMode('search')} onClose={onClose} onCreated={onPick} />;
+    return <NewCustomer initial={query} showAddress={showAddress} colors={colors} onBack={() => setMode('search')} onClose={onClose} onCreated={onPick} />;
   }
 
   return (
     <BottomSheet
       visible
       tall
-      title="Cliente de la venta"
-      subtitle="Opcional. Un cliente mayorista vende a precio mayorista."
+      title={title}
+      subtitle={subtitle}
       onClose={onClose}
       footer={
         <Pressable onPress={() => setMode('new')} style={[styles.newBtn, { backgroundColor: palette.primary }]}>
@@ -57,7 +73,7 @@ export function PosCustomerSheet({ selected, onClose, onPick }: { selected: PosC
         <Ionicons name="search" size={17} color={colors.muted} />
         <TextInput value={query} onChangeText={setQuery} placeholder="Nombre, CI/RUC o teléfono" placeholderTextColor={colors.muted} autoFocus autoCorrect={false} style={[styles.searchInput, { color: colors.text }]} />
       </View>
-      {selected && (
+      {selected && allowClear && (
         <Pressable onPress={() => onPick(null)} style={[styles.row, { borderColor: colors.border }]}>
           <Ionicons name="close-circle-outline" size={20} color={palette.danger} />
           <Text style={[styles.name, { color: palette.danger }]}>Vender sin cliente</Text>
@@ -88,12 +104,13 @@ export function PosCustomerSheet({ selected, onClose, onPick }: { selected: PosC
   );
 }
 
-function NewCustomer({ initial, colors, onBack, onClose, onCreated }: { initial: string; colors: Colors; onBack: () => void; onClose: () => void; onCreated: (customer: PosCustomer) => void }) {
+function NewCustomer({ initial, showAddress = false, colors, onBack, onClose, onCreated }: { initial: string; showAddress?: boolean; colors: Colors; onBack: () => void; onClose: () => void; onCreated: (customer: PosCustomer) => void }) {
   const numeric = /^[\d\s.\-+()]+$/.test(initial.trim()) && initial.trim() !== '';
   const [name, setName] = useState(numeric ? '' : initial.trim());
   const [phone, setPhone] = useState(numeric && initial.replace(/\D/g, '').startsWith('0') ? initial.trim() : '');
   const [ruc, setRuc] = useState(numeric && !initial.replace(/\D/g, '').startsWith('0') ? initial.trim() : '');
   const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
   const [wholesale, setWholesale] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +125,7 @@ function NewCustomer({ initial, colors, onBack, onClose, onCreated }: { initial:
     setError(null);
     setDuplicates([]);
     try {
-      const created = await createPosCustomer({ name, phone, ruc, email, wholesale });
+      const created = await createPosCustomer({ name, phone, ruc, email, ...(showAddress ? { address } : {}), wholesale });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onCreated(created);
     } catch (err) {
@@ -155,6 +172,9 @@ function NewCustomer({ initial, colors, onBack, onClose, onCreated }: { initial:
         </View>
       </View>
       <Input label="Email (opcional)" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" colors={colors} />
+      {showAddress ? (
+        <Input label="Dirección (opcional, para envíos)" value={address} onChangeText={setAddress} autoCapitalize="sentences" colors={colors} />
+      ) : null}
       <View style={styles.switchRow}>
         <View style={styles.flex}>
           <Text style={[styles.name, { color: colors.text }]}>Cliente mayorista</Text>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getCatalogUnitPrice,
+  hasDuplicateOrderItems,
   hasDuplicateProductIds,
   validateDeliveryContact,
   validateOrderAmounts,
@@ -9,12 +10,35 @@ import {
 describe('order creation rules', () => {
   it('uses the active catalog offer instead of a client-provided price', () => {
     expect(getCatalogUnitPrice({ sale_price: 150000, offer_price: 120000 })).toBe(120000)
+    expect(getCatalogUnitPrice({ sale_price: 150000, offer_price: 120000, has_offer: true })).toBe(120000)
+    expect(getCatalogUnitPrice({ sale_price: 150000, offer_price: 120000, has_offer: false })).toBe(150000)
     expect(getCatalogUnitPrice({ sale_price: 150000, offer_price: 0 })).toBe(150000)
   })
 
   it('rejects duplicate products', () => {
     expect(hasDuplicateProductIds([{ productId: 'a' }, { productId: 'a' }])).toBe(true)
     expect(hasDuplicateProductIds([{ productId: 'a' }, { productId: 'b' }])).toBe(false)
+  })
+
+  it('allows distinct variants of the same product while rejecting duplicate (product, variant) pairs', () => {
+    expect(
+      hasDuplicateOrderItems([
+        { productId: 'a', variantId: 'v1' },
+        { productId: 'a', variantId: 'v2' },
+      ])
+    ).toBe(false)
+    expect(
+      hasDuplicateOrderItems([
+        { productId: 'a', variantId: 'v1' },
+        { productId: 'a', variantId: 'v1' },
+      ])
+    ).toBe(true)
+    expect(
+      hasDuplicateOrderItems([
+        { productId: 'a' },
+        { productId: 'a', variantId: null },
+      ])
+    ).toBe(true)
   })
 
   it('rejects pickup shipping and discounts above the subtotal', () => {

@@ -44,10 +44,10 @@ describe('las API del dashboard declaran su módulo', () => {
     expect(faltan).toEqual([])
   })
 
-  it('buscar y crear clientes funciona con CRM o con POS (opción b); editar y borrar es de CRM', () => {
+  it('buscar y crear clientes funciona con CRM, POS u Orders (opción b); editar y borrar es de CRM', () => {
     const clientes = readFileSync(join(API, 'customers/route.ts'), 'utf8')
-    expect(clientes).toContain("permission: 'crm.customers.read', module: ['crm', 'pos']")
-    expect(clientes).toContain("permission: ['crm.customers.manage', 'pos.sales.create'], module: ['crm', 'pos']")
+    expect(clientes).toContain("permission: 'crm.customers.read', module: ['crm', 'pos', 'orders']")
+    expect(clientes).toContain("permission: ['crm.customers.manage', 'pos.sales.create', 'ecommerce.orders.manage'], module: ['crm', 'pos', 'orders']")
     expect(clientes).toContain("withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }")
   })
 })

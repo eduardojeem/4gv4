@@ -6,6 +6,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { canTransitionOrderStatus, normalizeOrderStatus } from '@/lib/orders/flow'
 import { normalizeOrder } from '@/lib/orders/helpers'
+import { emitOrderStatusSideEffects } from '@/lib/orders/status-side-effects'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 const statusSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
@@ -33,7 +35,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('status, fulfillment_type, order_number, store_credit_reserved, total, stock_reserved')
+      .select('status, fulfillment_type, order_number, branch_id, store_credit_reserved, total, stock_reserved')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -74,7 +76,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
           .eq('order_id', id)
           .eq('status', 'reserved')
 
-        // Release inventory stock if reserved
+        // Release inventory stock if reserved (skipping service-like items)
         if (current.stock_reserved) {
           const { data: items } = await adminSupabase
             .from('customer_order_items')
@@ -82,18 +84,73 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
             .eq('order_id', id)
 
           if (items && items.length > 0) {
+            const productIds = [...new Set(items.map((item) => item.product_id).filter((pid): pid is string => Boolean(pid)))]
+            const { data: productsMeta } = productIds.length > 0
+              ? await adminSupabase
+                  .from('products')
+                  .select('id, sku, unit_measure, stock_quantity, category:categories(name)')
+                  .eq('organization_id', organization.id)
+                  .in('id', productIds)
+              : { data: [] }
+            const productMetaMap = new Map(
+              ((productsMeta ?? []) as Array<{
+                id: string
+                sku?: string | null
+                unit_measure?: string | null
+                stock_quantity?: number | null
+                category?: { name?: string | null } | null
+              }>).map((row) => [String(row.id), row])
+            )
+
             for (const item of items) {
+              const qty = Number(item.quantity || 0)
+              if (qty <= 0) continue
+              const productMeta = item.product_id ? productMetaMap.get(String(item.product_id)) : undefined
+              if (productMeta && isServiceLikeProduct(productMeta)) continue
               if (item.variant_id) {
+                if (current.branch_id) {
+                  const { data: branchVariant } = await adminSupabase
+                    .from('branch_variant_inventory')
+                    .select('stock_quantity')
+                    .eq('organization_id', organization.id)
+                    .eq('branch_id', current.branch_id)
+                    .eq('variant_id', item.variant_id)
+                    .maybeSingle()
+                  if (branchVariant) {
+                    await adminSupabase
+                      .from('branch_variant_inventory')
+                      .update({ stock_quantity: Number(branchVariant.stock_quantity || 0) + qty, updated_at: new Date().toISOString() })
+                      .eq('organization_id', organization.id)
+                      .eq('branch_id', current.branch_id)
+                      .eq('variant_id', item.variant_id)
+                    continue
+                  }
+                }
                 const { data: variant } = await adminSupabase
                   .from('product_variants')
                   .select('stock_quantity')
                   .eq('id', item.variant_id)
-                  .single()
+                  .eq('organization_id', organization.id)
+                  .maybeSingle()
                 if (variant) {
                   await adminSupabase
                     .from('product_variants')
-                    .update({ stock_quantity: (variant.stock_quantity || 0) + Number(item.quantity) })
+                    .update({ stock_quantity: (variant.stock_quantity || 0) + qty })
                     .eq('id', item.variant_id)
+                }
+              } else if (item.product_id && current.branch_id && (!productMeta || productMeta.stock_quantity != null)) {
+                const { data: inv } = await adminSupabase
+                  .from('branch_inventory')
+                  .select('stock_quantity')
+                  .eq('branch_id', current.branch_id)
+                  .eq('product_id', item.product_id)
+                  .maybeSingle()
+                if (inv) {
+                  await adminSupabase
+                    .from('branch_inventory')
+                    .update({ stock_quantity: Number(inv.stock_quantity || 0) + qty, updated_at: new Date().toISOString() })
+                    .eq('branch_id', current.branch_id)
+                    .eq('product_id', item.product_id)
                 }
               }
             }
@@ -132,6 +189,14 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
         .single()
 
       if (cancelledOrderError) throw cancelledOrderError
+      emitOrderStatusSideEffects({
+        organization,
+        actorUserId: user.id,
+        previousStatus: currentStatus,
+        order: cancelledOrder,
+        targetStatus: status,
+        note: validation.data.note || null,
+      })
       return NextResponse.json({ success: true, data: normalizeOrder(cancelledOrder) })
     }
 
@@ -218,6 +283,14 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
         .single()
 
       if (confirmedOrderError) throw confirmedOrderError
+      emitOrderStatusSideEffects({
+        organization,
+        actorUserId: user.id,
+        previousStatus: currentStatus,
+        order: confirmedOrder,
+        targetStatus: status,
+        note: validation.data.note || null,
+      })
       return NextResponse.json({ success: true, data: normalizeOrder(confirmedOrder) })
     }
 
@@ -258,6 +331,15 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       .select('*, order_items:customer_order_items(*)')
       .eq('id', id).eq('organization_id', organization.id).single()
     if (error) throw error
+
+    emitOrderStatusSideEffects({
+      organization,
+      actorUserId: user.id,
+      previousStatus: currentStatus,
+      order: data,
+      targetStatus: status,
+      note: validation.data.note || null,
+    })
 
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {
