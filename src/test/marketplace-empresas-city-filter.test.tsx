@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { EmpresasClient } from '@/components/public/EmpresasClient'
+import { cityFacets } from '@/lib/public/empresas-filters'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
@@ -10,11 +11,12 @@ afterAll(() => {
   else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
 })
 
-// Mock next/navigation
+// Mock next/navigation: la ciudad llega en la URL desde la barra de ubicación
+const nav = vi.hoisted(() => ({ url: '' }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/marketplace/empresas',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.url),
 }))
 
 const mockOrganizations: MarketplaceOrganization[] = [
@@ -111,27 +113,21 @@ const mockOrganizations: MarketplaceOrganization[] = [
 ]
 
 describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
+  afterEach(() => { nav.url = '' })
   it('consolida variantes de una misma ciudad en una única opción con formato correcto', () => {
-    render(<EmpresasClient organizations={mockOrganizations} />)
-
-    const citySelect = screen.getByRole('combobox', { name: 'Filtrar por ciudad' })
-    expect(citySelect).toBeInTheDocument()
-    fireEvent.click(citySelect)
-
     // Las 4 variantes de Encarnación ("Encarnación", "encarnacion", "encarnacion, paraguay", "Encarnacion - Itapua")
-    // se agrupan en una única opción: "Encarnación (4)"
-    expect(screen.getByText('Encarnación (4)')).toBeInTheDocument()
-    expect(screen.getByText('Asunción (1)')).toBeInTheDocument()
-    expect(screen.getByText('Ciudad del Este (1)')).toBeInTheDocument()
-    expect(screen.getByText('Todas las ciudades (6)')).toBeInTheDocument()
+    // se agrupan en una única ciudad.
+    const facets = cityFacets(mockOrganizations, { query: '', rubro: 'all', city: 'all' })
+    const label = (display: string) => facets.find((facet) => facet.display === display)?.count
+    expect(label('Encarnación')).toBe(4)
+    expect(label('Asunción')).toBe(1)
+    expect(label('Ciudad del Este')).toBe(1)
   })
 
   it('filtra y muestra todas las tiendas de Encarnación sin importar cómo fue escrita la ciudad', () => {
-    render(<EmpresasClient organizations={mockOrganizations} />)
-
-    // Seleccionar Encarnación
-    fireEvent.click(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Encarnación (4)' }))
+    // Encarnación elegida en la barra de ubicación del marketplace
+    nav.url = 'city=encarnacion'
+    render(<EmpresasClient organizations={mockOrganizations} initialCity="encarnacion" />)
 
     // Las 4 tiendas de Encarnación deben estar presentes
     expect(screen.getByText('Moda Encarnacion 1')).toBeInTheDocument()
@@ -159,15 +155,15 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
   })
 
   it('restablece el filtro de ciudad al hacer clic en Restablecer filtros', () => {
-    render(<EmpresasClient organizations={mockOrganizations} />)
-
-    fireEvent.click(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Asunción (1)' }))
+    nav.url = 'city=asuncion'
+    const { rerender } = render(<EmpresasClient organizations={mockOrganizations} initialCity="asuncion" />)
 
     expect(screen.queryByText('CDE Celulares')).not.toBeInTheDocument()
 
-    // Clic en restablecer
+    // Clic en restablecer: la barra de ubicación queda en «todas»
     fireEvent.click(screen.getByText('Restablecer filtros'))
+    nav.url = 'city=all'
+    rerender(<EmpresasClient organizations={mockOrganizations} initialCity="asuncion" />)
 
     expect(screen.getByText('Tech Store Asuncion')).toBeInTheDocument()
     expect(screen.getByText('CDE Celulares')).toBeInTheDocument()

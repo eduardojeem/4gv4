@@ -4,7 +4,7 @@ import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsS
 import { CategoriesClient } from '@/components/public/CategoriesClient'
 
 export const metadata: Metadata = {
-  title: 'Categorías | Marketplace MiPOS',
+  title: 'Categorías | Marketplace MiTiendaPy',
   description: 'Explora todos los productos del marketplace por categoría y rubro comercial.',
 }
 

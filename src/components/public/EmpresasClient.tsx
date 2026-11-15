@@ -24,7 +24,6 @@ import { Input } from '@/components/ui/input'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { OrganizationDetailModal } from '@/components/public/OrganizationDetailModal'
 import { HorizontalScroller } from '@/components/public/HorizontalScroller'
-import { CompanyCityFilter } from '@/components/public/CompanyCityFilter'
 import { normalizeCity } from '@/lib/public/city-normalizer'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import {
@@ -142,9 +141,15 @@ export function EmpresasClient({
     setParam('rubro', rubroId, 'all')
   }
 
+  // La ciudad es la de la barra de ubicación del marketplace (`city`). Se
+  // escribe siempre, también «all»: sin el parámetro, la barra vuelve a poner
+  // la ciudad que tenía guardada.
   const handleCityChange = (cityKey: string) => {
-    setSelectedCity(cityKey)
-    setParam('ciudad', cityKey, 'all')
+    setSelectedCity(cityKey || 'all')
+    const params = new URLSearchParams(urlKey)
+    params.delete('ciudad')
+    params.set('city', cityKey || 'all')
+    navigate(params)
   }
 
   const handleSortChange = (value: string) => {
@@ -159,6 +164,9 @@ export function EmpresasClient({
     setSelectedCity('all')
     lastWrittenQuery.current = ''
     const params = new URLSearchParams()
+    const country = new URLSearchParams(urlKey).get('country')
+    if (country) params.set('country', country)
+    params.set('city', 'all')
     if (sort !== 'destacadas') params.set('orden', sort)
     navigate(params)
   }
@@ -201,7 +209,7 @@ export function EmpresasClient({
       <div className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
         <div className="grid gap-3 sm:grid-cols-12 items-end">
           {/* Buscador */}
-          <div className="relative sm:col-span-6 lg:col-span-5">
+          <div className="relative sm:col-span-8 lg:col-span-7">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
@@ -223,14 +231,8 @@ export function EmpresasClient({
             )}
           </div>
 
-          <div className="sm:col-span-3">
-            <CompanyCityFilter cities={cities} value={activeCityMeta?.key || selectedCity}
-              selectedLabel={activeCityDisplay} total={filterOrganizations(organizations, filters, 'city').length}
-              onChange={handleCityChange} />
-          </div>
-
           {/* Orden */}
-          <div className="sm:col-span-3 lg:col-span-2 relative">
+          <div className="sm:col-span-4 lg:col-span-3 relative">
             <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
             <select
               aria-label="Ordenar tiendas"

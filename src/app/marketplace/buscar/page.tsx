@@ -11,8 +11,8 @@ import { getMarketplaceOrganizations, getMarketplaceProductsPage } from '@/lib/p
 import { SiteSearchTracker } from '@/components/analytics/SiteSearchTracker'
 
 export const metadata: Metadata = {
-  title: 'Buscar | Marketplace MiPOS',
-  description: 'Busqueda global de productos y empresas del marketplace MiPOS.',
+  title: 'Buscar | Marketplace MiTiendaPy',
+  description: 'Búsqueda de productos y empresas del marketplace MiTiendaPy.',
 }
 
 export const dynamic = 'force-dynamic'

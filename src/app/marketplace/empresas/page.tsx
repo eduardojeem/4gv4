@@ -9,7 +9,7 @@ import { TopRatedCarousel } from '@/components/public/TopRatedCarousel'
 import { MarketplaceStoresProductsCarousel } from '@/components/public/MarketplaceStoresProductsCarousel'
 
 export const metadata: Metadata = {
-  title: 'Tiendas y Empresas | Marketplace MiPOS',
+  title: 'Tiendas y Empresas | Marketplace MiTiendaPy',
   description: 'Directorio comercial de tiendas y empresas con catálogo público activo.',
 }
 
@@ -69,19 +69,11 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
         </div>
       </section>
 
-      {/* ── Carrusel Superior de Tiendas y Productos ── */}
-      {organizations.length > 0 && (
-        <MarketplaceStoresProductsCarousel
-          organizations={organizations}
-          exploreAllHref="#directorio"
-          exploreAllLabel="Ver directorio completo"
-        />
-      )}
-
-      {/* ── Directorio con Filtro por Rubros y Ciudades ── */}
-      {/* Las mejor calificadas van después de la grilla: arriba empujaban los
-          filtros y las tiendas fuera de la primera pantalla. */}
-      <section className="mx-auto max-w-7xl px-4 py-5 sm:py-10 sm:px-6 lg:px-8 space-y-10">
+      {/* ── Directorio con Filtro por Rubros ── */}
+      {/* Va primero: el carrusel arriba dejaba el buscador a más de una
+          pantalla y media de scroll en el celular. La ciudad se elige en la
+          barra de ubicación del marketplace, no acá. */}
+      <section className="mx-auto max-w-7xl px-4 py-5 sm:py-10 sm:px-6 lg:px-8">
         <EmpresasClient
           organizations={organizations}
           initialQuery={q ?? ''}
@@ -89,6 +81,18 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
           initialCity={ciudad ?? city ?? 'all'}
           initialSort={orden}
         />
+      </section>
+
+      {/* ── Tiendas destacadas con sus productos, como vidriera debajo del directorio ── */}
+      {organizations.length > 0 && (
+        <MarketplaceStoresProductsCarousel
+          organizations={organizations}
+          exploreAllHref="#directorio"
+          exploreAllLabel="Volver al directorio"
+        />
+      )}
+
+      <section className="mx-auto max-w-7xl px-4 py-5 sm:py-10 sm:px-6 lg:px-8">
         <TopRatedCarousel organizations={organizations} />
       </section>
     </div>
