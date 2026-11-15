@@ -61,23 +61,14 @@ export function usePromotionEngine(config: Partial<PromotionEngineConfig> = {}) 
       return { valid: false, reason: `Compra mínima requerida: ${promotion.min_purchase.toLocaleString()}` }
     }
     
-    // Check applicable products
-    if (promotion.applicable_products && promotion.applicable_products.length > 0) {
-      const hasApplicableProduct = cart.some(item => 
-        promotion.applicable_products!.includes(item.product_id)
+    // Productos y categorías elegidos suman: alcanza con un ítem de cualquiera de los dos
+    if (promotion.applicable_products?.length || promotion.applicable_categories?.length) {
+      const hasApplicableItem = cart.some(item =>
+        Boolean(promotion.applicable_products?.includes(item.product_id))
+        || Boolean(item.category_id && promotion.applicable_categories?.includes(item.category_id))
       )
-      if (!hasApplicableProduct) {
-        return { valid: false, reason: 'No hay productos aplicables en el carrito' }
-      }
-    }
-    
-    // Check applicable categories
-    if (promotion.applicable_categories && promotion.applicable_categories.length > 0) {
-      const hasApplicableCategory = cart.some(item => 
-        item.category_id && promotion.applicable_categories!.includes(item.category_id)
-      )
-      if (!hasApplicableCategory) {
-        return { valid: false, reason: 'No hay categorías aplicables en el carrito' }
+      if (!hasApplicableItem) {
+        return { valid: false, reason: 'No hay productos ni servicios aplicables en el carrito' }
       }
     }
     
@@ -92,11 +83,11 @@ export function usePromotionEngine(config: Partial<PromotionEngineConfig> = {}) 
     if (promotion.applicable_products?.length || promotion.applicable_categories?.length) {
       applicableAmount = cart
         .filter(item => {
-          const matchesProduct = !promotion.applicable_products?.length || 
-            promotion.applicable_products.includes(item.product_id)
-          const matchesCategory = !promotion.applicable_categories?.length || 
-            (item.category_id && promotion.applicable_categories.includes(item.category_id))
-          return matchesProduct && matchesCategory
+          // Un ítem aplica si está entre los productos elegidos O en una categoría elegida
+          // (p. ej. "Aplicar a reparaciones" + productos sueltos).
+          const matchesProduct = Boolean(promotion.applicable_products?.includes(item.product_id))
+          const matchesCategory = Boolean(item.category_id && promotion.applicable_categories?.includes(item.category_id))
+          return matchesProduct || matchesCategory
         })
         .reduce((sum, item) => sum + item.total_price, 0)
     } else {
