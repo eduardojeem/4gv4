@@ -340,6 +340,24 @@ describe('Plantilla Barbería Premium (Club Varsovia Style)', () => {
   })
 
   describe('BarberHome (Página Principal de la Barbería)', () => {
+    it('muestra los banners de inicio activos arriba de la portada del club', () => {
+      const slide = { id: 's1', title: 'Combo corte + barba', message: '20% OFF este mes', imageUrl: '/images/promotional-carousel/hero-barberia-combo.jpg', imageAlt: 'Combo club', active: true, textTone: 'light' as const, contentAlign: 'left' as const }
+      const settings = { ...mockSettings, promotional_carousel: { enabled: true, autoplay: false, intervalSeconds: 6, slides: [slide, { ...slide, id: 's2', title: 'Banner pausado', active: false }] } } as WebsiteSettings
+      render(<BarberHome settings={settings} capabilities={capabilities} />)
+
+      const banners = screen.getByRole('region', { name: 'Promociones destacadas' })
+      expect(banners).toBeInTheDocument()
+      expect(screen.getByText('Combo corte + barba')).toBeInTheDocument()
+      expect(screen.queryByText('Banner pausado')).not.toBeInTheDocument()
+      // El h1 sigue siendo el de la portada del club.
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    })
+
+    it('sin banners activos no agrega el carrusel', () => {
+      render(<BarberHome settings={{ ...mockSettings, promotional_carousel: { enabled: false, autoplay: false, intervalSeconds: 6, slides: [] } } as WebsiteSettings} capabilities={capabilities} />)
+      expect(screen.queryByRole('region', { name: 'Promociones destacadas' })).not.toBeInTheDocument()
+    })
+
     it('renderiza la portada con título, subtítulo y distintivo de tradición', () => {
       render(<BarberHome settings={mockSettings} capabilities={capabilities} />)
 
