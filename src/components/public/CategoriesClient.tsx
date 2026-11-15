@@ -1,15 +1,12 @@
 'use client'
 
-import { createElement, useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { createElement, useState, useMemo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   ArrowRight,
   ArrowUpRight,
-  BedDouble,
   Briefcase,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Cpu,
   FolderTree,
@@ -21,7 +18,6 @@ import {
   Plug,
   Search,
   Shirt,
-  ShoppingBag,
   ShoppingBasket,
   SlidersHorizontal,
   Smartphone,
@@ -30,7 +26,6 @@ import {
   Store,
   Trophy,
   UtensilsCrossed,
-  Watch,
   Wrench,
   X,
 } from 'lucide-react'
@@ -39,9 +34,12 @@ import type { MarketplaceCategory } from '@/lib/public/marketplace'
 import { cn } from '@/lib/utils'
 import { categoryVisual, type CategoryBranchId } from '@/lib/public/category-taxonomy'
 import { displayCategoryName } from '@/lib/public/display-names'
+import { rubroForCategory, type ShowcaseRubroId, type ShowcaseRubroStats } from '@/lib/public/category-showcase'
 
 type Props = {
   categories: MarketplaceCategory[]
+  /** Productos por rubro del catálogo (ver buildCategoryShowcase). */
+  rubroStats?: Partial<Record<ShowcaseRubroId, ShowcaseRubroStats>> | null
 }
 
 type FilterType = 'all' | 'popular' | 'multi-org'
@@ -164,104 +162,9 @@ function classifyCategoryIntoBranch(categoryName: string): CategoryBranchId {
   return categoryVisual(categoryName).branch
 }
 
-// ─── Slides Destacados del Showcase Hero (Rubros Reales de la Plataforma) ──────
-type ShowcaseSlide = {
-  id: string
-  eyebrow: string
-  title: string
-  description: string
-  image: string
-  searchTerm: string
-  ambientGradient: string
-  accentPill: string
-}
-
-const SHOWCASE_SLIDES: ShowcaseSlide[] = [
-  {
-    id: 'belleza',
-    eyebrow: 'BRILLA CON CONFIANZA',
-    title: 'Belleza',
-    description: 'Esenciales de piel, cabello y belleza hechos para ti.',
-    image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80&auto=format',
-    searchTerm: 'belleza',
-    ambientGradient: 'from-emerald-700/85 via-teal-800/60 to-emerald-950/20',
-    accentPill: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-  },
-  {
-    id: 'servicios',
-    eyebrow: 'PROFESIONALES DE CONFIANZA',
-    title: 'Servicios',
-    description: 'Descubre expertos locales listos para ayudarte.',
-    image: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80&auto=format',
-    searchTerm: 'servicios',
-    ambientGradient: 'from-sky-700/85 via-blue-800/60 to-slate-950/20',
-    accentPill: 'bg-sky-50 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
-  },
-  {
-    id: 'electronica',
-    eyebrow: 'MÁS CONECTADO CADA DÍA',
-    title: 'Electrónica',
-    description: 'Dispositivos y tecnología para una vida conectada.',
-    image: 'https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=800&q=80&auto=format',
-    searchTerm: 'electronica',
-    ambientGradient: 'from-purple-700/85 via-violet-800/60 to-indigo-950/20',
-    accentPill: 'bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
-  },
-  {
-    id: 'electrodomesticos',
-    eyebrow: 'CONFORT & TECNOLOGÍA EN CASA',
-    title: 'Electrodomésticos',
-    description: 'Heladeras, lavarropas, climatización y cocina para tu día a día.',
-    image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&q=80&auto=format',
-    searchTerm: 'electrodomesticos',
-    ambientGradient: 'from-blue-700/85 via-indigo-800/60 to-slate-950/20',
-    accentPill: 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
-  },
-  {
-    id: 'muebles',
-    eyebrow: 'CONFORT & DISEÑO',
-    title: 'Muebles & Hogar',
-    description: 'Muebles de diseño y confort para transformar tus ambientes.',
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80&auto=format',
-    searchTerm: 'muebles',
-    ambientGradient: 'from-amber-800/85 via-stone-800/60 to-neutral-950/20',
-    accentPill: 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
-  },
-  {
-    id: 'computacion',
-    eyebrow: 'PRODUCTIVIDAD & EQUIPAMIENTO',
-    title: 'Computación',
-    description: 'Pantallas, teclados, mouse, impresoras y conectividad.',
-    image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800&q=80&auto=format',
-    searchTerm: 'computacion',
-    ambientGradient: 'from-indigo-700/85 via-cyan-800/60 to-slate-950/20',
-    accentPill: 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300',
-  },
-  {
-    id: 'audio',
-    eyebrow: 'SONIDO DE ALTA FIDELIDAD',
-    title: 'Audio & Video',
-    description: 'Auriculares, parlantes y sonido envolvente.',
-    image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=800&q=80&auto=format',
-    searchTerm: 'audio',
-    ambientGradient: 'from-cyan-700/85 via-blue-800/60 to-slate-950/20',
-    accentPill: 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300',
-  },
-  {
-    id: 'moda',
-    eyebrow: 'TU PROPIO ESTILO',
-    title: 'Moda & Relojería',
-    description: 'Remeras básicas, indumentaria corporativa y relojes.',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80&auto=format',
-    searchTerm: 'reloj',
-    ambientGradient: 'from-rose-700/85 via-pink-800/60 to-stone-950/20',
-    accentPill: 'bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
-  },
-]
-
 // ─── Rubros Comerciales Reales (Eliminados rubros no existentes) ───────────────
 type CanonicalRubro = {
-  key: string
+  key: ShowcaseRubroId
   name: string
   subtitle: string
   icon: React.ElementType
@@ -273,17 +176,8 @@ type CanonicalRubro = {
 const CANONICAL_RUBROS: CanonicalRubro[] = [
   {
     key: 'muebles',
-    name: 'Muebles',
-    subtitle: 'Muebles y decoración para ca...',
-    icon: BedDouble,
-    iconBg: 'bg-[#f8ede5] text-[#b36b3b] dark:bg-[#78350f]/30 dark:text-[#fde68a]',
-    branch: 'hogar',
-    defaultSearch: 'mueble',
-  },
-  {
-    key: 'hogar',
-    name: 'Hogar',
-    subtitle: 'Esenciales para un hogar hermoso.',
+    name: 'Muebles & Hogar',
+    subtitle: 'Muebles, limpieza, jardín y pileta.',
     icon: House,
     iconBg: 'bg-[#ede9fe] text-[#7c3aed] dark:bg-[#5b21b6]/30 dark:text-[#ddd6fe]',
     branch: 'hogar',
@@ -291,7 +185,7 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   },
   {
     key: 'alimentos',
-    name: 'Alimentos y b...',
+    name: 'Alimentos y bebidas',
     subtitle: 'Alimentos, bebidas y productos diarios.',
     icon: UtensilsCrossed,
     iconBg: 'bg-[#fef3c7] text-[#d97706] dark:bg-[#78350f]/30 dark:text-[#fde68a]',
@@ -300,7 +194,7 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   },
   {
     key: 'salud',
-    name: 'Salud y biene...',
+    name: 'Salud y bienestar',
     subtitle: 'Bienestar, ejercicio y vida saludable.',
     icon: Leaf,
     iconBg: 'bg-[#dcfce7] text-[#16a34a] dark:bg-[#14532d]/30 dark:text-[#86efac]',
@@ -319,7 +213,7 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   {
     key: 'electronica',
     name: 'Electrónica',
-    subtitle: 'Celulares, cargadores y accesorios.',
+    subtitle: 'Celulares, pantallas, cámaras y cargadores.',
     icon: Smartphone,
     iconBg: 'bg-[#e0f2fe] text-[#0284c7] dark:bg-[#0c4a6e]/30 dark:text-[#bae6fd]',
     branch: 'tecnologia',
@@ -337,7 +231,7 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   {
     key: 'computacion',
     name: 'Computación',
-    subtitle: 'Pantallas, teclados, mouse e impresoras.',
+    subtitle: 'Tintas, teclados, mouse, almacenamiento y redes.',
     icon: Cpu,
     iconBg: 'bg-[#f1f5f9] text-[#0284c7] dark:bg-[#0c4a6e]/30 dark:text-[#bae6fd]',
     branch: 'tecnologia',
@@ -345,7 +239,7 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   },
   {
     key: 'audio',
-    name: 'Audio y Video',
+    name: 'Audio & Video',
     subtitle: 'Auriculares, parlantes y sonido.',
     icon: Speaker,
     iconBg: 'bg-[#ccfbf1] text-[#0d9488] dark:bg-[#134e4a]/30 dark:text-[#99f6e4]',
@@ -363,25 +257,16 @@ const CANONICAL_RUBROS: CanonicalRubro[] = [
   },
   {
     key: 'moda',
-    name: 'Moda y Ropa',
-    subtitle: 'Remeras básicas e indumentaria.',
+    name: 'Moda & Relojería',
+    subtitle: 'Indumentaria, remeras y relojes.',
     icon: Shirt,
     iconBg: 'bg-[#f3e8ff] text-[#9333ea] dark:bg-[#701a75]/30 dark:text-[#f5d0fe]',
     branch: 'moda',
     defaultSearch: 'ropa',
   },
-  {
-    key: 'relojeria',
-    name: 'Relojería',
-    subtitle: 'Relojes de pulsera y smartwatches.',
-    icon: Watch,
-    iconBg: 'bg-[#fdf4ff] text-[#a21caf] dark:bg-[#701a75]/30 dark:text-[#f5d0fe]',
-    branch: 'moda',
-    defaultSearch: 'reloj',
-  },
 ]
 
-export function CategoriesClient({ categories: rawCategories }: Props) {
+export function CategoriesClient({ categories: rawCategories, rubroStats = null }: Props) {
   // Los nombres como se muestran en todo el marketplace: «HOGAR» → «Hogar».
   const categories = useMemo(
     () => rawCategories.map((category) => ({ ...category, name: displayCategoryName(category.name) })),
@@ -393,41 +278,13 @@ export function CategoriesClient({ categories: rawCategories }: Props) {
   // sin tener que abrir rama por rama.
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [collapsedBranches, setCollapsedBranches] = useState<Record<string, boolean>>({})
-  const [activeSlideIndex, setActiveSlideIndex] = useState(0)
   const [showFiltersPanel, setShowFiltersPanel] = useState(false)
-  const carouselTrackRef = useRef<HTMLDivElement>(null)
 
   const toggleBranch = (branchId: string) => {
     setCollapsedBranches((prev) => ({
       ...prev,
       [branchId]: !prev[branchId],
     }))
-  }
-
-  // Sincronización del slide activo en scroll
-  const handleCarouselScroll = useCallback(() => {
-    const el = carouselTrackRef.current
-    if (!el) return
-    const cardWidth = el.firstElementChild ? (el.firstElementChild as HTMLElement).offsetWidth + 16 : 300
-    const scrollIndex = Math.round(el.scrollLeft / cardWidth)
-    const clamped = Math.max(0, Math.min(SHOWCASE_SLIDES.length - 1, scrollIndex))
-    setActiveSlideIndex(clamped)
-  }, [])
-
-  useEffect(() => {
-    const el = carouselTrackRef.current
-    if (!el) return
-    el.addEventListener('scroll', handleCarouselScroll, { passive: true })
-    return () => el.removeEventListener('scroll', handleCarouselScroll)
-  }, [handleCarouselScroll])
-
-  const scrollCarousel = (direction: 'left' | 'right') => {
-    const el = carouselTrackRef.current
-    if (!el) return
-    const cardWidth = el.firstElementChild ? (el.firstElementChild as HTMLElement).offsetWidth + 16 : 320
-    const nextIndex = direction === 'right' ? Math.min(SHOWCASE_SLIDES.length - 1, activeSlideIndex + 1) : Math.max(0, activeSlideIndex - 1)
-    el.scrollTo({ left: nextIndex * cardWidth, behavior: 'smooth' })
-    setActiveSlideIndex(nextIndex)
   }
 
   // Filtrado de categorías existentes en base de datos
@@ -448,46 +305,45 @@ export function CategoriesClient({ categories: rawCategories }: Props) {
     return result
   }, [categories, searchQuery, activeFilter])
 
-  // Unión con rubros canónicos reales de la plataforma
+  // Cada rubro junta las categorías de todas las tiendas («Electrónica»,
+  // «Electronica», «Celulares», «Pantallas»…) y lleva a todas juntas. Antes
+  // tomaba la primera que se parecía por nombre: Electrónica llevaba a 1 de 156
+  // productos y «Moda y Ropa» terminaba en Lavarropas.
   const displayRubros = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
+    // Una categoría padre ya cuenta los productos de sus hijas.
+    const parentIds = new Set(categories.map((category) => category.parent_id).filter(Boolean) as string[])
+    const totals = new Map<ShowcaseRubroId, { ids: string[]; products: number }>()
+    // Con el conteo por producto del catálogo (el mismo de la portada) las
+    // cifras coinciden en todo el marketplace; si no está, se suman categorías.
+    if (rubroStats) {
+      for (const [rubro, stats] of Object.entries(rubroStats) as [ShowcaseRubroId, ShowcaseRubroStats | undefined][]) {
+        if (stats) totals.set(rubro, { ids: stats.categoryIds, products: stats.count })
+      }
+    } else for (const category of categories) {
+      const rubro = rubroForCategory(category.name)
+      if (!rubro) continue
+      const entry = totals.get(rubro) ?? { ids: [], products: 0 }
+      entry.ids.push(category.id)
+      if (!parentIds.has(category.id)) entry.products += category.product_count
+      totals.set(rubro, entry)
+    }
 
-    return CANONICAL_RUBROS.filter((rubro) => {
-      if (activeFilter === 'popular') return true
-      if (activeFilter === 'multi-org') return true
-      if (!query) return true
-      return (
+    return CANONICAL_RUBROS.flatMap((rubro) => {
+      const total = totals.get(rubro.key)
+      if (!total || total.products === 0) return []
+      if (query && activeFilter === 'all' && !(
         rubro.name.toLowerCase().includes(query) ||
         rubro.subtitle.toLowerCase().includes(query) ||
         rubro.defaultSearch.toLowerCase().includes(query)
-      )
-    }).map((rubro) => {
-      // Buscar si existe una categoría real en Supabase que coincida
-      const matchedCat = categories.find((c) => {
-        const cName = c.name.toLowerCase()
-        return (
-          cName === rubro.name.toLowerCase() ||
-          cName.includes(rubro.defaultSearch) ||
-          rubro.name.toLowerCase().includes(cName)
-        )
-      })
-
-      const href = matchedCat
-        ? `/marketplace/productos?categoria=${matchedCat.id}`
-        : `/marketplace/productos?q=${encodeURIComponent(rubro.defaultSearch)}`
-
-      const productCount = matchedCat ? matchedCat.product_count : undefined
-      const orgCount = matchedCat ? matchedCat.organization_count : undefined
-
-      return {
+      )) return []
+      return [{
         ...rubro,
-        href,
-        productCount,
-        orgCount,
-        matchedCatId: matchedCat?.id,
-      }
-    })
-  }, [categories, searchQuery, activeFilter])
+        href: `/marketplace/productos?categoria=${[...total.ids].sort().join(',')}`,
+        productCount: total.products,
+      }]
+    }).sort((a, b) => b.productCount - a.productCount)
+  }, [categories, rubroStats, searchQuery, activeFilter])
 
   // Agrupación de categorías por Ramas (Hierarchy Tree)
   const branchGroups = useMemo(() => {
@@ -514,288 +370,121 @@ export function CategoriesClient({ categories: rawCategories }: Props) {
     return Array.from(map.values()).filter((g) => g.categories.length > 0)
   }, [filteredCategories])
 
-  const activeSlide = SHOWCASE_SLIDES[activeSlideIndex] ?? SHOWCASE_SLIDES[0]
-
   return (
     <div className="space-y-8">
-      {/* ── SHOWCASE HERO SECTION CON FONDO DINÁMICO & CARRUSEL (EXACTO FOTOS) ── */}
-      <section className={cn(
-        'relative -mx-4 -mt-10 overflow-hidden sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-6 pb-8 transition-all duration-700',
-        'bg-gradient-to-b',
-        activeSlide.ambientGradient
-      )}>
-        {/* Glows ambientales sutiles */}
-        <div className="pointer-events-none absolute -left-16 -top-16 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
-        <div className="pointer-events-none absolute right-0 top-1/4 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
-
-        <div className="relative mx-auto max-w-7xl">
-          {/* Top Bar: < SHOWCASE y Botones de Acción */}
-          <div className="mb-4 flex items-center justify-between">
-            <Link
-              href="/marketplace"
-              className="group inline-flex items-center gap-1.5 text-white/95 hover:text-white transition-colors"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-xs group-hover:bg-white/25 transition-all">
-                <ChevronLeft className="h-5 w-5 stroke-[2.5]" />
-              </div>
-              <span className="text-lg sm:text-xl font-black tracking-wider uppercase drop-shadow-xs">
-                SHOWCASE
-              </span>
-            </Link>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href="/marketplace/productos"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-white shadow-xs hover:bg-white/25 transition-all"
-                title="Ver productos"
-              >
-                <ShoppingBag className="h-4 w-4" />
-              </Link>
+      {/* ── Buscador de categorías, filtros y vista ── */}
+      <section aria-label="Buscar y filtrar categorías" className="relative">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar categorías..."
+              aria-label="Buscar categorías"
+              className="h-12 w-full rounded-full border-border/80 bg-card pl-11 pr-10 text-sm shadow-xs"
+            />
+            {searchQuery && (
               <button
                 type="button"
                 suppressHydrationWarning
-                onClick={() => setShowFiltersPanel((prev) => !prev)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-white shadow-xs hover:bg-white/25 transition-all"
-                title="Filtros"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground"
+                aria-label="Limpiar búsqueda"
               >
-                <SlidersHorizontal className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
-            </div>
-          </div>
-
-          {/* Barra de Búsqueda Flotante tipo Cápsula Blanca (Foto) */}
-          <div className="relative mb-6">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar categorías..."
-                  className="h-12 w-full rounded-full border-0 bg-white/95 dark:bg-card/95 text-slate-900 dark:text-foreground pl-11 pr-10 text-sm shadow-md backdrop-blur-md placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-white"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:text-slate-700"
-                    aria-label="Limpiar búsqueda"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Botón Circular Filtros al lado del buscador */}
-              <button
-                type="button"
-                suppressHydrationWarning
-                onClick={() => setShowFiltersPanel((prev) => !prev)}
-                aria-label="Alternar filtros"
-                className={cn(
-                  'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/95 dark:bg-card/95 shadow-md backdrop-blur-md transition-all',
-                  showFiltersPanel
-                    ? 'bg-purple-600 text-white ring-2 ring-white/50'
-                    : 'text-purple-600 hover:bg-white'
-                )}
-              >
-                <SlidersHorizontal className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Panel de Filtros Desplegable */}
-            {showFiltersPanel && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white/95 dark:bg-card/95 p-3.5 shadow-xl backdrop-blur-md border border-white/20">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setActiveFilter('all')}
-                    className={cn(
-                      'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
-                      activeFilter === 'all'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
-                    )}
-                  >
-                    Todas ({categories.length || displayRubros.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveFilter('popular')}
-                    className={cn(
-                      'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
-                      activeFilter === 'popular'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
-                    )}
-                  >
-                    Más populares
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveFilter('multi-org')}
-                    className={cn(
-                      'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
-                      activeFilter === 'multi-org'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
-                    )}
-                  >
-                    Multi-tienda
-                  </button>
-                </div>
-
-                {/* Switch de Modo de Vista */}
-                <div className="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-muted p-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('grid')}
-                    className={cn(
-                      'flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
-                      viewMode === 'grid'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-muted-foreground'
-                    )}
-                    title="Vista en cuadrícula"
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    <span>Cuadrícula</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('branches')}
-                    className={cn(
-                      'flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
-                      viewMode === 'branches'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-muted-foreground'
-                    )}
-                    title="Vista jerárquica por ramas"
-                  >
-                    <FolderTree className="h-3.5 w-3.5" />
-                    <span>Por Ramas</span>
-                  </button>
-                </div>
-              </div>
             )}
           </div>
+          <button
+            type="button"
+            suppressHydrationWarning
+            onClick={() => setShowFiltersPanel((prev) => !prev)}
+            aria-label="Alternar filtros"
+            className={cn(
+              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card shadow-xs transition-all',
+              showFiltersPanel ? 'bg-purple-600 text-white' : 'text-purple-600 hover:bg-muted'
+            )}
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+          </button>
+        </div>
 
-          {/* Carrusel de Tarjetas Gigantes Destacadas (Swipeable Cards) */}
-          <div className="relative">
-            {/* Controles de flecha desktop */}
-            <button
-              type="button"
-              suppressHydrationWarning
-              onClick={() => scrollCarousel('left')}
-              disabled={activeSlideIndex === 0}
-              aria-label="Slide anterior"
-              className="hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-xl backdrop-blur-md hover:bg-white disabled:opacity-0 transition-all"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              suppressHydrationWarning
-              onClick={() => scrollCarousel('right')}
-              disabled={activeSlideIndex === SHOWCASE_SLIDES.length - 1}
-              aria-label="Siguiente slide"
-              className="hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-xl backdrop-blur-md hover:bg-white disabled:opacity-0 transition-all"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-
-            {/* Pista de tarjetas */}
-            <div
-              ref={carouselTrackRef}
-              className="flex gap-4 overflow-x-auto pb-4 pt-1 scroll-smooth scrollbar-hide"
-              style={{ scrollSnapType: 'x mandatory' }}
-            >
-              {SHOWCASE_SLIDES.map((slide, idx) => {
-                const isActive = idx === activeSlideIndex
-
-                return (
-                  <div
-                    key={slide.id}
-                    className={cn(
-                      'relative shrink-0 overflow-hidden rounded-[28px] sm:rounded-[32px] shadow-2xl transition-all duration-300',
-                      'w-[82vw] max-w-[340px] sm:w-[360px] md:w-[390px]',
-                      'h-[380px] sm:h-[420px]',
-                      isActive ? 'scale-100 ring-2 ring-white/40' : 'scale-[0.97] opacity-90'
-                    )}
-                    style={{ scrollSnapAlign: 'center' }}
-                  >
-                    {/* Imagen de Fondo de Alta Calidad */}
-                    <Image
-                      src={slide.image}
-                      alt={slide.title}
-                      fill
-                      sizes="(max-width: 768px) 85vw, 420px"
-                      className="object-cover transition-transform duration-700 hover:scale-105"
-                      priority={idx < 2}
-                    />
-
-                    {/* Gradientes Oscuros Superior e Inferior para Legibilidad Cristalina */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/75 via-transparent to-black/85" />
-
-                    {/* Contenido Superior: Eyebrow + Título + Descripción */}
-                    <div className="absolute left-0 right-0 top-0 p-5 sm:p-6 text-white">
-                      <span className="text-[10px] sm:text-xs font-black tracking-widest uppercase text-white/90 drop-shadow-sm">
-                        {slide.eyebrow}
-                      </span>
-                      <h2 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-md">
-                        {slide.title}
-                      </h2>
-                      <p className="mt-1.5 text-xs sm:text-sm text-white/90 font-medium leading-relaxed max-w-[270px] drop-shadow-sm">
-                        {slide.description}
-                      </p>
-                    </div>
-
-                    {/* Botón Cápsula "Explorar ahora" con Flecha Circular (Foto) */}
-                    <div className="absolute bottom-4 left-4 right-4 sm:bottom-5 sm:left-5 sm:right-5">
-                      <Link
-                        href={`/marketplace/productos?q=${encodeURIComponent(slide.searchTerm)}`}
-                        className="group/btn flex items-center justify-between rounded-full bg-white/95 dark:bg-card/95 py-2.5 px-4 sm:py-3 sm:px-5 text-slate-900 dark:text-foreground shadow-lg backdrop-blur-md transition-all hover:bg-white"
-                      >
-                        <span className="text-xs sm:text-sm font-extrabold tracking-tight">
-                          Explorar ahora
-                        </span>
-                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 transition-transform group-hover/btn:translate-x-1 shadow-sm">
-                          <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
-                        </div>
-                      </Link>
-                    </div>
-                  </div>
-                )
-              })}
+        {/* Panel de Filtros Desplegable */}
+        {showFiltersPanel && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white/95 dark:bg-card/95 p-3.5 shadow-xl backdrop-blur-md border border-white/20">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className={cn(
+                  'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
+                  activeFilter === 'all'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
+                )}
+              >
+                Todas ({categories.length || displayRubros.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('popular')}
+                className={cn(
+                  'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
+                  activeFilter === 'popular'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
+                )}
+              >
+                Más populares
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('multi-org')}
+                className={cn(
+                  'rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
+                  activeFilter === 'multi-org'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-muted dark:text-muted-foreground'
+                )}
+              >
+                Multi-tienda
+              </button>
             </div>
 
-            {/* Indicador de Bolitas de Slides */}
-            <div className="mt-2 flex items-center justify-center gap-1.5">
-              {SHOWCASE_SLIDES.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  suppressHydrationWarning
-                  onClick={() => {
-                    const el = carouselTrackRef.current
-                    if (!el) return
-                    const cardWidth = el.firstElementChild ? (el.firstElementChild as HTMLElement).offsetWidth + 16 : 320
-                    el.scrollTo({ left: i * cardWidth, behavior: 'smooth' })
-                    setActiveSlideIndex(i)
-                  }}
-                  className={cn(
-                    'h-1.5 rounded-full transition-all duration-300',
-                    i === activeSlideIndex
-                      ? 'w-6 bg-white shadow-xs'
-                      : 'w-1.5 bg-white/40 hover:bg-white/70'
-                  )}
-                  aria-label={`Slide ${i + 1}`}
-                />
-              ))}
+            {/* Switch de Modo de Vista */}
+            <div className="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-muted p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                  viewMode === 'grid'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 dark:text-muted-foreground'
+                )}
+                title="Vista en cuadrícula"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Cuadrícula</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('branches')}
+                className={cn(
+                  'flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                  viewMode === 'branches'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 dark:text-muted-foreground'
+                )}
+                title="Vista jerárquica por ramas"
+              >
+                <FolderTree className="h-3.5 w-3.5" />
+                <span>Por Ramas</span>
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* ── SECCIÓN "VER TODO" CON BADGE "12 CATEGORÍAS" (EXACTO FOTO) ── */}
@@ -837,9 +526,12 @@ export function CategoriesClient({ categories: rawCategories }: Props) {
 
                   {/* Nombre y Subtítulo */}
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-xs sm:text-sm font-bold tracking-tight text-foreground group-hover:text-purple-600 transition-colors">
+                    <h3 className="line-clamp-2 text-xs sm:text-sm font-bold tracking-tight text-foreground group-hover:text-purple-600 transition-colors">
                       {rubro.name}
                     </h3>
+                    <p className="mt-0.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300 sm:text-xs">
+                      {rubro.productCount} productos
+                    </p>
                     <p className="mt-0.5 line-clamp-1 text-[10px] sm:text-xs text-muted-foreground">
                       {rubro.subtitle}
                     </p>
