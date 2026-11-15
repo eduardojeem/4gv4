@@ -194,29 +194,31 @@ export function MarketplaceCategoriesShowcase({
       suppressHydrationWarning
       aria-label="Carrusel de categorías destacadas"
       className={cn(
-        // Fondo oscuro neutro: antes cada rubro teñía toda la franja de un color fuerte.
-        'relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 py-8 sm:py-14',
+        // Modo claro: fondo claro neutro; modo oscuro: pizarra. Antes cada rubro
+        // teñía toda la franja de un color fuerte.
+        'relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-slate-100 via-slate-50 to-white py-8 sm:py-14',
+        'dark:from-slate-900 dark:via-slate-950 dark:to-slate-900',
         className,
       )}
     >
       {/* Un resplandor suave con el color del rubro activo */}
       <div className={cn('pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full blur-3xl transition-colors duration-700', activeSlide.glow)} />
-      <div className="pointer-events-none absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-white/5 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl dark:bg-white/5" />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Encabezado */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl space-y-2">
-            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white backdrop-blur-md">
-              <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-bold text-slate-700 shadow-xs backdrop-blur-md dark:border-white/15 dark:bg-white/10 dark:text-white dark:shadow-none">
+              <Sparkles className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-300" />
               <span>EXPLORÁ POR CATEGORÍAS</span>
-              <span className="h-1 w-1 rounded-full bg-white/60" />
-              <span className="text-[11px] font-semibold text-white/80">
+              <span className="h-1 w-1 rounded-full bg-slate-400 dark:bg-white/60" />
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-white/80">
                 {cards.length} rubros{totalProducts > 0 ? ` · ${totalProducts} productos` : ''}
               </span>
             </div>
-            <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl">{title}</h2>
-            <p className="text-xs font-medium leading-relaxed text-white/75 sm:text-sm">{subtitle}</p>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl md:text-4xl dark:text-white">{title}</h2>
+            <p className="text-xs font-medium leading-relaxed text-slate-600 sm:text-sm dark:text-white/75">{subtitle}</p>
           </div>
 
           <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
@@ -224,7 +226,7 @@ export function MarketplaceCategoriesShowcase({
               asChild
               variant="outline"
               size="sm"
-              className="gap-1.5 rounded-full border-white/20 bg-white/10 text-xs font-bold text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
+              className="gap-1.5 rounded-full border-slate-300 bg-white text-xs font-bold text-slate-800 hover:bg-slate-100 dark:border-white/20 dark:bg-white/10 dark:text-white dark:backdrop-blur-md dark:hover:bg-white/20 dark:hover:text-white"
             >
               <Link href={exploreAllHref}>
                 <span>{exploreAllLabel}</span>
@@ -237,7 +239,7 @@ export function MarketplaceCategoriesShowcase({
                 variant="outline"
                 size="icon"
                 onClick={() => setAutoplayEnabled((prev) => !prev)}
-                className="h-9 w-9 rounded-full border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white active:scale-95"
+                className="h-9 w-9 rounded-full border-slate-300 bg-white text-slate-800 hover:bg-slate-100 active:scale-95 dark:border-white/20 dark:bg-white/10 dark:text-white dark:backdrop-blur-md dark:hover:bg-white/20 dark:hover:text-white"
                 aria-label={autoplayEnabled ? 'Pausar avance automático' : 'Activar avance automático'}
                 title={autoplayEnabled ? 'Pausar avance automático' : 'Activar avance automático'}
               >
@@ -254,7 +256,7 @@ export function MarketplaceCategoriesShowcase({
             onClick={() => scrollCarousel('left')}
             disabled={activeSlideIndex === 0}
             aria-label="Slide anterior"
-            className="absolute -left-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-xl backdrop-blur-md transition-all hover:bg-white active:scale-95 disabled:opacity-0 sm:flex"
+            className="absolute -left-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-900 shadow-xl backdrop-blur-md transition-all hover:bg-white active:scale-95 disabled:opacity-0 sm:flex dark:border-transparent"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -264,7 +266,7 @@ export function MarketplaceCategoriesShowcase({
             onClick={() => scrollCarousel('right')}
             disabled={activeSlideIndex === cards.length - 1}
             aria-label="Siguiente slide"
-            className="absolute -right-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-xl backdrop-blur-md transition-all hover:bg-white active:scale-95 disabled:opacity-0 sm:flex"
+            className="absolute -right-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-900 shadow-xl backdrop-blur-md transition-all hover:bg-white active:scale-95 disabled:opacity-0 sm:flex dark:border-transparent"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -289,7 +291,7 @@ export function MarketplaceCategoriesShowcase({
                     'relative shrink-0 overflow-hidden rounded-[28px] shadow-2xl transition-all duration-300 sm:rounded-[32px]',
                     'w-[82vw] max-w-[340px] sm:w-[360px] md:w-[390px]',
                     products.length > 0 ? 'h-[420px] sm:h-[440px]' : 'h-[380px] sm:h-[420px]',
-                    isActive ? 'scale-100 ring-2 ring-white/40' : 'scale-[0.97] opacity-90',
+                    isActive ? 'scale-100 ring-2 ring-slate-900/15 dark:ring-white/40' : 'scale-[0.97] opacity-90',
                   )}
                   style={{ scrollSnapAlign: 'center' }}
                 >
@@ -363,7 +365,12 @@ export function MarketplaceCategoriesShowcase({
                   carouselTrackRef.current?.scrollTo({ left: i * cardStep(), behavior: 'smooth' })
                   setActiveSlideIndex(i)
                 }}
-                className={cn('h-1.5 rounded-full transition-all duration-300', i === activeSlideIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70')}
+                className={cn(
+                  'h-1.5 rounded-full transition-all duration-300',
+                  i === activeSlideIndex
+                    ? 'w-6 bg-slate-800 dark:bg-white'
+                    : 'w-1.5 bg-slate-300 hover:bg-slate-400 dark:bg-white/40 dark:hover:bg-white/70',
+                )}
                 aria-label={`Slide ${i + 1}`}
               />
             ))}
