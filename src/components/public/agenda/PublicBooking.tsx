@@ -66,8 +66,11 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
   const [website, setWebsite] = useState('')
-  const accountName = user?.profile?.name?.trim() || ''
-  const accountPhone = user?.profile?.phone?.trim() || user?.phone?.trim() || ''
+  // El perfil puede no tener todo: se completa con lo que guardó al registrarse.
+  const metadata = (user?.user_metadata ?? {}) as { full_name?: unknown; name?: unknown; phone?: unknown }
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const accountName = text(user?.profile?.name) || text(metadata.full_name) || text(metadata.name)
+  const accountPhone = text(user?.profile?.phone) || text(metadata.phone) || text(user?.phone)
   useEffect(() => {
     if (authLoading || !accountContactOwner.current || accountContactOwner.current === user?.id) return
     accountContactOwner.current = null
@@ -203,12 +206,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
     <div className="space-y-4">
       {error && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
       <fieldset disabled={sending} className="min-w-0 space-y-4 border-0 p-0">
-      {!authLoading && user && <section aria-label="Reservar con mi cuenta" className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-        <div><p className="font-semibold">{usingAccount ? 'Estás reservando para vos' : '¿Querés reservar para vos?'}</p><p className="text-sm text-muted-foreground">Sesión iniciada como {accountName || user.email || 'usuario'}. Podés usar los datos de tu cuenta y revisarlos antes de confirmar.</p></div>
-        <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={useAccountContact}>{usingAccount ? 'Volver a usar mis datos' : 'Reservar para mí'}</Button>{usingAccount && <Button type="button" variant="ghost" onClick={() => { accountContactOwner.current=null; setUsingAccount(false); setName(''); setPhone('') }}>Reservar para otra persona</Button>}</div>
-        {usingAccount && <p className="text-sm text-muted-foreground">Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</p>}
-        {usingAccount && (!accountName || !accountPhone) && <p role="status" className="text-sm text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes en el paso final.</p>}
-      </section>}
+
       {info.message && <p className="rounded-xl bg-primary/5 p-3 text-sm">{info.message}</p>}
 
       <Step number={1} title="¿Qué servicio?" done={Boolean(serviceId)}>
@@ -302,11 +300,25 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       {startsAt && service && (
         <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos">
           {service.promotions?.[0] && <ServicePromotionNote promotion={service.promotions[0]} price={quoted.quote?.price ?? service.price} currency={info.currency} />}
-          {selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
+          {/* Con «Cualquiera» se avisa quiénes pueden atender; si eligió a alguien, ya está decidido. */}
+          {professionalId === ANY && selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
+          {professionalId !== ANY && selectedProfessional && !info.professionalBookingAvailable && <p className="text-sm text-muted-foreground">Te atiende {selectedProfessional.name}.</p>}
           {info.professionalBookingAvailable && (quoted.loading ? <p role="status">Confirmando tarifa y disponibilidad…</p> : quoted.quote ?
             <BookingQuoteSummary serviceName={service.name} timeZone={info.timeZone} quote={quoted.quote} currency={info.currency} accepted={quoted.accepted} onAccept={quoted.accept} expired={quoted.expired} /> : <p role="alert">{quoted.error}</p>)}
           {quoted.unavailable && <div className="space-y-2 rounded-xl border border-amber-300 p-3 text-sm"><p>No hay disponibilidad para esta selección. El profesional puede tener otro turno o una pausa. Elegí otro horario o cambiá de profesional. Tus datos se conservan.</p><Button variant="outline" onClick={() => { setStartsAt(null); setSlots(null); setRefresh(value=>value+1) }}>Ver horarios disponibles</Button></div>}
           {info.professionalBookingAvailable && !quoted.unavailable && (quoted.error || quoted.expired) && <Button variant="outline" onClick={()=>setRefresh(value=>value+1)}>Actualizar cotización</Button>}
+          {/* Para quién es el turno: al lado de los datos que completa. */}
+          {!authLoading && user && <section aria-label="Reservar con mi cuenta" className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">¿Para quién es el turno?</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant={usingAccount ? 'default' : 'outline'} aria-pressed={usingAccount} onClick={useAccountContact}>Reservar para mí</Button>
+              <Button type="button" size="sm" variant={usingAccount ? 'outline' : 'ghost'} aria-pressed={!usingAccount} onClick={() => { accountContactOwner.current=null; setUsingAccount(false); setName(''); setPhone('') }}>Para otra persona</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{usingAccount
+              ? <>Usamos los datos de tu cuenta ({accountName || user.email || 'usuario'}). Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</>
+              : <>Sesión iniciada como {accountName || user.email || 'usuario'}. Si el turno es para vos, completamos tus datos.</>}</p>
+            {usingAccount && (!accountName || !accountPhone) && <p role="status" className="text-xs text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes abajo.</p>}
+          </section>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="booking-name">Nombre</Label>
