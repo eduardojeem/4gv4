@@ -154,7 +154,9 @@ describe('lo que ve el cliente en la tienda', () => {
 
   it('la ficha del producto hace lo mismo', () => {
     expect(FICHA).toContain('const precioOculto = hidesPublicPrice(product)')
-    expect(FICHA).toContain('Preguntar el precio por WhatsApp')
+    // La consulta sale por el botón de WhatsApp único de la ficha.
+    expect(FICHA).toContain('Preguntanos el precio por WhatsApp')
+    expect(FICHA).toContain('<ProductWhatsAppButton href={inquiryHref}')
     expect(FICHA).toContain("{!precioOculto && commerceMode === 'cart' && (")
   })
 
