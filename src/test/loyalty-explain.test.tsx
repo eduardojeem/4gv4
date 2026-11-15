@@ -82,7 +82,7 @@ describe('la tarjeta de puntos por compra', () => {
 
   it('abre con una sola pregunta y la regla escrita al lado', () => {
     montar()
-    expect(screen.getByLabelText(/¿Cada cuánto gasto das un punto\?/)).toHaveValue(10000)
+    expect(screen.getByLabelText(/¿Cuánto debe pagar para sumar puntos\?/)).toHaveValue(10000)
     expect(screen.getByText('Cada Gs. 10.000 de compra suma 1 punto')).toBeInTheDocument()
   })
 
@@ -95,7 +95,7 @@ describe('la tarjeta de puntos por compra', () => {
   /** Cambiar la tasa tiene que verse en la frase, no en la próxima pantalla. */
   it('la regla se rearma mientras se escribe', async () => {
     montar()
-    const campo = screen.getByLabelText(/¿Cada cuánto gasto das un punto\?/)
+    const campo = screen.getByLabelText(/¿Cuánto debe pagar para sumar puntos\?/)
 
     await userEvent.clear(campo)
     await userEvent.type(campo, '5000')
@@ -121,14 +121,14 @@ describe('la tarjeta de puntos por compra', () => {
 
   it('guarda lo que se configuró', async () => {
     const { onSave } = montar()
-    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar programa' }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, currency_per_point: 10000 }))
   })
 
   it('sin permiso de gestionar, no se puede tocar ni guardar', () => {
     montar({ canManage: false })
-    expect(screen.getByLabelText(/¿Cada cuánto gasto das un punto\?/)).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/¿Cuánto debe pagar para sumar puntos\?/)).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Guardar programa' })).not.toBeInTheDocument()
   })
 })
 

@@ -419,7 +419,7 @@ export default function PromotionsPage() {
             </TabsTrigger>
             <TabsTrigger value="puntos" className="gap-1.5 text-xs font-semibold sm:text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs">
               <Coins className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              Puntos y sorteos
+              Fidelización
             </TabsTrigger>
           </TabsList>
 

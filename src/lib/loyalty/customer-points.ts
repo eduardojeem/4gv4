@@ -12,7 +12,7 @@ export type CustomerPoints = {
   /** Cuánto vale el saldo si la tienda ofrece canje; null si no. */
   redemption: { value: number; min: number | null; balanceValue: number } | null
   /** Cómo se ganan: «1 punto cada Gs. 10.000». */
-  earning: { currencyPerPoint: number; pointsPerUnit: number }
+  earning: { currencyPerPoint: number; pointsPerUnit: number; mode?: 'amount' | 'visits' | 'both'; pointsPerVisit?: number }
   movements: CustomerPointsMovement[]
 }
 
@@ -25,21 +25,23 @@ export type CustomerPoints = {
  */
 export async function loadCustomerPoints(admin: SupabaseClient, organizationId: string, userId: string): Promise<CustomerPoints | null> {
   try {
-    const [{ data: customer }, { data: settings }] = await Promise.all([
+    const [{ data: customer, error: customerError }, { data: settings, error: settingsError }] = await Promise.all([
       admin.from('customers').select('id').eq('organization_id', organizationId).eq('profile_id', userId).maybeSingle(),
       admin.from('loyalty_settings').select('*').eq('organization_id', organizationId).maybeSingle(),
     ])
     const config = settings as {
       enabled?: boolean
+      earning_mode?: 'amount' | 'visits' | 'both'
+      points_per_visit?: number
       currency_per_point?: number | string
       points_per_unit?: number | string
       redemption_value?: number | string | null
       min_redemption_points?: number | null
     } | null
-    if (!customer || !config?.enabled) return null
+    if (customerError || settingsError || !customer || !config?.enabled) return null
     const customerId = (customer as { id: string }).id
 
-    const [{ data: account }, { data: ledger }] = await Promise.all([
+    const [{ data: account, error: accountError }, { data: ledger, error: ledgerError }] = await Promise.all([
       admin.from('loyalty_accounts').select('balance').eq('organization_id', organizationId).eq('customer_id', customerId).maybeSingle(),
       admin
         .from('loyalty_ledger')
@@ -50,6 +52,7 @@ export async function loadCustomerPoints(admin: SupabaseClient, organizationId: 
         .limit(8),
     ])
 
+    if (accountError || ledgerError) return null
     const balance = Number((account as { balance?: number } | null)?.balance ?? 0)
     const value = Number(config.redemption_value)
     return {

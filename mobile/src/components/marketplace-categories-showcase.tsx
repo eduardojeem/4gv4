@@ -250,7 +250,7 @@ export function MarketplaceCategoriesShowcase({
       {filteredCategories.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="search-outline" size={32} color="#94A3B8" />
-          <Text style={styles.emptyTitle}>No encontramos categorías para "{searchQuery}"</Text>
+          <Text style={styles.emptyTitle}>No encontramos categorías para «{searchQuery}»</Text>
           <Pressable
             onPress={() => setSearchQuery('')}
             style={[styles.emptyResetBtn, { backgroundColor: palette.primary }]}>

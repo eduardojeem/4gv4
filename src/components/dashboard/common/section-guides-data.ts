@@ -325,14 +325,14 @@ export const PROMOTIONS_GUIDE: SectionGuideData = {
 
 export const LOYALTY_GUIDE: SectionGuideData = {
   title: '¿Cómo funcionan los Puntos y los Sorteos?',
-  subtitle: 'El cliente acumula puntos comprando y los canjea por números de sorteo. El saldo lo lleva la base de datos, no el mostrador.',
+  subtitle: 'Premiá el monto pagado, los turnos atendidos y cobrados, o ambos. Canjeá los puntos por saldo a favor; los sorteos son opcionales.',
   badgeText: 'Fidelización & Sorteos',
   icon: Coins,
   gradient: 'from-amber-600 via-orange-600 to-slate-900',
   steps: [
     {
-      title: '1. Definí cuánto vale una compra',
-      description: 'En "Acumulación de puntos" elegís cuánta moneda hace falta por punto. Con 10.000 Gs por punto, una compra de 150.000 deja 15 puntos. Podés truncar o redondear las fracciones, ponerle un techo diario por cliente y hacer que los puntos venzan a los X meses.',
+      title: '1. Elegí qué querés premiar',
+      description: 'En Programa elegís el modo por monto, por turnos atendidos y cobrados, o ambos. Un turno cuenta una sola vez; cancelar, reprogramar o pagar cuotas no crea visitas. Los turnos financiados cuentan una sola vez al terminar de pagarse. En el modo por monto, elegís cuánta moneda hace falta por punto. Con 10.000 Gs por punto, una compra de 150.000 deja 15 puntos. Podés truncar o redondear las fracciones, ponerle un techo diario por cliente y hacer que los puntos venzan a los X meses.',
       icon: Coins
     },
     {
@@ -346,8 +346,8 @@ export const LOYALTY_GUIDE: SectionGuideData = {
       icon: CalendarClock
     },
     {
-      title: '4. Sorteos: el cliente canjea puntos por números',
-      description: 'Creás el sorteo con premios, fechas, cuánto cuesta cada número y cuántos puede llevar cada persona. Nace como borrador; recién cuando lo publicás el mostrador puede vender números. Una persona puede llevar varios números del mismo sorteo.',
+      title: '4. Canje por saldo a favor y sorteos opcionales',
+      description: 'Definí cuánto vale cada punto y el mínimo para cambiarlo por saldo a favor, que se usa para pagar una próxima compra o servicio. No es un cupón restringido a un servicio específico. Opcionalmente, creás el sorteo con premios, fechas, cuánto cuesta cada número y cuántos puede llevar cada persona. Nace como borrador; recién cuando lo publicás el mostrador puede vender números. Una persona puede llevar varios números del mismo sorteo.',
       icon: Gift
     },
     {
@@ -376,7 +376,7 @@ export const LOYALTY_GUIDE: SectionGuideData = {
       goal: 'Quiero que cada 10.000 Gs de compra den 1 punto',
       icon: Coins,
       setup: [
-        'Pestaña Puntos y sorteos → Acumulación de puntos',
+        'Pestaña Puntos y sorteos → Programa',
         'Moneda necesaria por punto: 10000 · Puntos que otorga: 1',
         'Fracciones: Truncar (una compra de 19.999 da 1 punto, no 2)',
         'Prendé el interruptor y guardá'

@@ -23,11 +23,12 @@ export function ProfilePoints({ points }: { points: CustomerPoints }) {
             <Star className="h-4 w-4 text-amber-500" aria-hidden="true" />
             Mis puntos
           </h2>
-          {earning.currencyPerPoint > 0 && (
+          {earning.mode !== 'visits' && earning.currencyPerPoint > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               Sumás {earning.pointsPerUnit === 1 ? '1 punto' : `${earning.pointsPerUnit} puntos`} cada {formatCurrency(earning.currencyPerPoint)} de compra.
             </p>
           )}
+          {(earning.mode === 'visits' || earning.mode === 'both') && <p className="mt-1 text-xs text-muted-foreground">Sumás {earning.pointsPerVisit ?? 1} puntos por turno atendido y pagado por completo. Reservar o pagar una cuota no suma otra visita.</p>}
         </div>
         <p className="text-right">
           <span className="block text-3xl font-black tabular-nums text-primary">{balance.toLocaleString('es-PY')}</span>
@@ -61,7 +62,7 @@ export function ProfilePoints({ points }: { points: CustomerPoints }) {
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-sm text-muted-foreground">Todavía no sumaste puntos. Se suman solos con cada compra.</p>
+        <p className="mt-4 text-sm text-muted-foreground">Todavía no sumaste puntos. Se acreditan al pagar, según las reglas del programa.</p>
       )}
     </section>
   )
