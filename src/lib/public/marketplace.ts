@@ -198,6 +198,7 @@ export type MarketplaceOrganization = {
    * usa el sistema puertas adentro.
    */
   products_total?: number
+  productWhatsappEnabled?: boolean
   featured_products: PublicProduct[]
   review_rating_avg?: number | null
   review_count?: number | null
@@ -205,6 +206,7 @@ export type MarketplaceOrganization = {
 
 /** Redes y WhatsApp de la tienda, tal como los cargó en «Sitio Web». */
 export type MarketplaceOrganizationContact = {
+  productWhatsappEnabled?: boolean
   instagram: string | null
   facebook: string | null
   tiktok: string | null
@@ -232,6 +234,7 @@ export function pickOrganizationContact(
   companyInfo: Record<string, unknown> | null | undefined
 ): MarketplaceOrganizationContact | null {
   const contact = {
+    ...(typeof companyInfo?.productWhatsappEnabled==='boolean'?{productWhatsappEnabled:companyInfo.productWhatsappEnabled}:{}),
     instagram: contactText(companyInfo?.instagram),
     facebook: contactText(companyInfo?.facebook),
     tiktok: contactText(companyInfo?.tiktok),
@@ -588,6 +591,7 @@ async function getMarketplaceOrganizationsUncached(
       custom_brand_color: customBrandColor,
       phone,
       email,
+      ...(typeof companyInfo?.productWhatsappEnabled==='boolean'?{productWhatsappEnabled:companyInfo.productWhatsappEnabled}:{}),
       whatsapp,
       instagram,
       facebook,

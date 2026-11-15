@@ -2,13 +2,11 @@ import { usePanel } from '@/lib/panel';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CollectSheet } from '@/components/collect-sheet';
 import {
-  CREDIT_STATUS,
-  creditCode,
   dateOnly,
   deleteCustomer,
   fetchCustomer,
@@ -17,20 +15,20 @@ import {
   fetchCustomerHistory,
   fetchCustomerMetrics,
   isWholesale,
-  type CreditRow,
   type Customer,
   type CustomerMetrics,
   type DebtSummary,
   type HistoryItem,
-  type InstallmentRow,
-  type PaymentRow,
 } from '@/lib/customers';
-import { formatGs } from '@/lib/marketplace';
+import {formatCreditMoney} from '@/lib/credit-model';
+import {fetchOrgSettings} from '@/lib/settings-admin';
+import {getPrivateCacheContext,subscribePrivateCacheContext} from '@/lib/private-cache-context';
+import {CustomerCreditPanel} from '@/components/customer-credit-panel';
 import { palette, usePalette } from '@/lib/palette';
 
 type Colors = ReturnType<typeof usePalette>;
 type Tab = 'summary' | 'credits' | 'history';
-type Credits = { credits: CreditRow[]; installments: InstallmentRow[]; payments: PaymentRow[] };
+type Credits = Awaited<ReturnType<typeof fetchCustomerCredits>>;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'summary', label: 'Resumen' },
@@ -47,7 +45,6 @@ const PAYMENT: Record<HistoryItem['payment'], { label: string; color: string }> 
   no_charge: { label: 'Sin cargo', color: '#64748B' },
 };
 
-const METHOD: Record<string, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia' };
 
 const waNumber = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
@@ -70,19 +67,27 @@ export default function CustomerDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [collect, setCollect] = useState<{ focus?: string } | null>(null);
-  const [openCredit, setOpenCredit] = useState<string | null>(null);
+  const privateContext=useSyncExternalStore(subscribePrivateCacheContext,getPrivateCacheContext);
+  const screenKey=JSON.stringify([id,privateContext.epoch]);
+  const [loadedKey,setLoadedKey]=useState<string|null>(null);
+  const [creditError,setCreditError]=useState<string|null>(null);
+  const [historyError,setHistoryError]=useState<string|null>(null);
+  const [regional,setRegional]=useState<{currency:string}|null>(null);
+  const money=(value:number)=>formatCreditMoney(value,credits?.currency??regional?.currency??'');
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
+    queueMicrotask(()=>{if(active){setCustomer(null);setCredits(null);setMetrics(null);setDebts(null);setHistory(null);setError(null);setCreditError(null);setHistoryError(null);setRegional(null)}});
     fetchCustomer(id)
       .then((row) => {
         if (!active) return;
+        setLoadedKey(screenKey);
         setCustomer(row);
         setError(null);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar el cliente.');
+        if(active){setLoadedKey(screenKey);setCustomer(null);setError(err instanceof Error?err.message:'No se pudo cargar el cliente.')}
       })
       .finally(() => {
         if (active) setRefreshing(false);
@@ -90,18 +95,19 @@ export default function CustomerDetail() {
     const when = <T,>(set: (value: T) => void) => (value: T) => {
       if (active) set(value);
     };
+    fetchOrgSettings().then(when(setRegional)).catch(()=>undefined);
     fetchCustomerMetrics(id).then(when(setMetrics)).catch(() => undefined);
     fetchCustomerDebts(id).then(when(setDebts)).catch(() => undefined);
     fetchCustomerCredits(id)
       .then(when(setCredits))
-      .catch(() => when(setCredits)({ credits: [], installments: [], payments: [] }));
+      .catch(err=>{if(active){setCredits(null);setCreditError(err instanceof Error?err.message:'No pudimos consultar los créditos.')}});
     fetchCustomerHistory(id)
       .then(when(setHistory))
-      .catch(() => when(setHistory)({ items: [] }));
+      .catch(err=>{if(active){setHistory(null);setHistoryError(err instanceof Error?err.message:'No pudimos consultar el historial.')}});
     return () => {
       active = false;
     };
-  }, [id, attempt]);
+  }, [id, attempt, screenKey]);
 
   const reload = useCallback(() => {
     setRefreshing(true);
@@ -131,6 +137,7 @@ export default function CustomerDetail() {
     ]);
   };
 
+  if(loadedKey!==screenKey)return <View style={[styles.center,{backgroundColor:colors.background}]}><ActivityIndicator color={palette.primary}/><Text style={{color:colors.muted}}>Consultando cliente…</Text><Pressable onPress={back}><Text style={{color:colors.text}}>Volver</Text></Pressable></View>;
   const topBar = (
     <View style={[styles.topBar, { borderColor: colors.border }]}>
       <Pressable onPress={back} hitSlop={10} style={styles.iconBtn} accessibilityLabel="Volver">
@@ -195,22 +202,22 @@ export default function CustomerDetail() {
         {tab === 'summary' && (
           <>
             <View style={styles.kpis}>
-              <Kpi label="Debe" value={debts ? formatGs(debts.totalDebt) : '…'} tone={debts?.totalDebt ? palette.danger : undefined} colors={colors} />
-              <Kpi label="Vencido" value={debts ? formatGs(debts.overdueDebt) : '…'} tone={debts?.overdueDebt ? palette.danger : undefined} colors={colors} />
-              <Kpi label="Saldo a favor" value={debts ? formatGs(debts.storeBalance) : '…'} tone={debts?.storeBalance ? palette.success : undefined} colors={colors} />
-              <Kpi label="Facturado" value={metrics ? formatGs(metrics.billed) : '…'} colors={colors} />
+              <Kpi label="Debe" value={debts ? money(debts.totalDebt) : '…'} tone={debts?.totalDebt ? palette.danger : undefined} colors={colors} />
+              <Kpi label="Vencido" value={debts ? money(debts.overdueDebt) : '…'} tone={debts?.overdueDebt ? palette.danger : undefined} colors={colors} />
+              <Kpi label="Saldo a favor" value={debts ? money(debts.storeBalance) : '…'} tone={debts?.storeBalance ? palette.success : undefined} colors={colors} />
+              <Kpi label="Facturado" value={metrics ? money(metrics.billed) : '…'} colors={colors} />
               <Kpi label="Compras" value={metrics ? String(metrics.purchases) : '…'} colors={colors} />
               <Kpi label="Reparaciones" value={metrics ? String(metrics.repairs) : '…'} colors={colors} />
             </View>
 
-            <Card title="Deudas pendientes" colors={colors} right={debts && debts.collectableDebt > 0 ? <CollectButton onPress={() => setCollect({})} /> : null}>
+            <Card title="Deudas pendientes" colors={colors} right={debts && debts.collectableDebt > 0 &&can('crm.customers.manage') ? <CollectButton onPress={() => setCollect({})} /> : null}>
               {!debts ? (
                 <ActivityIndicator color={palette.primary} />
               ) : pendingDebts.length === 0 ? (
                 <Text style={[styles.muted, { color: colors.muted }]}>No debe nada. 🎉</Text>
               ) : (
                 pendingDebts.map((debt) => (
-                  <Pressable key={debt.id} disabled={!debt.collectable} onPress={() => setCollect({ focus: debt.id })} style={[styles.line, { borderColor: colors.border }]}>
+                  <Pressable key={debt.id} disabled={!debt.collectable||!can('crm.customers.manage')} onPress={() => setCollect({ focus: debt.id })} style={[styles.line, { borderColor: colors.border }]}>
                     <Ionicons name={debt.type === 'repair' ? 'construct-outline' : debt.type === 'sale' ? 'cart-outline' : 'calendar-outline'} size={18} color={debt.isOverdue ? palette.danger : colors.muted} />
                     <View style={styles.flex}>
                       <Text numberOfLines={1} style={[styles.bold, { color: colors.text }]}>{debt.title}</Text>
@@ -218,11 +225,11 @@ export default function CustomerDetail() {
                         {[debt.subtitle, debt.dueDate ? `${debt.isOverdue ? 'Venció' : 'Vence'} ${dateOnly(debt.dueDate)}` : null].filter(Boolean).join(' · ')}
                       </Text>
                     </View>
-                    <Text style={[styles.bold, { color: debt.isOverdue ? palette.danger : colors.text }]}>{formatGs(debt.pendingAmount)}</Text>
+                    <Text style={[styles.bold, { color: debt.isOverdue ? palette.danger : colors.text }]}>{money(debt.pendingAmount)}</Text>
                   </Pressable>
                 ))
               )}
-              {debts && debts.creditLimit > 0 && <Text style={[styles.small, { color: colors.muted }]}>Límite de crédito: {formatGs(debts.creditLimit)}</Text>}
+              {debts && debts.creditLimit > 0 && <Text style={[styles.small, { color: colors.muted }]}>Límite de crédito: {money(debts.creditLimit)}</Text>}
             </Card>
 
             <Card title="Datos" colors={colors}>
@@ -239,16 +246,11 @@ export default function CustomerDetail() {
         )}
 
         {tab === 'credits' && (
-          <CreditsTab
-            credits={credits}
-            openCredit={openCredit}
-            onToggle={(creditId) => setOpenCredit((current) => (current === creditId ? null : creditId))}
-            onCollect={(installmentId) => setCollect({ focus: installmentId })}
-            colors={colors}
-          />
+          <CustomerCreditPanel data={credits} error={creditError} customerId={id} customerName={customer.name} onRetry={reload} onCollect={installmentId=>setCollect({focus:installmentId})} canCollect={can('crm.customers.manage')}/>
         )}
 
-        {tab === 'history' && <HistoryTab history={history} colors={colors} />}
+        {tab === 'history' && historyError&&<Text accessibilityRole="alert" style={{color:palette.danger}}>{historyError}</Text>}
+        {tab === 'history' && !historyError&& <HistoryTab history={history} colors={colors} money={money} />}
       </ScrollView>
 
       {collect && (
@@ -302,115 +304,7 @@ function Header({ customer, colors }: { customer: Customer; colors: Colors }) {
   );
 }
 
-function CreditsTab({
-  credits,
-  openCredit,
-  onToggle,
-  onCollect,
-  colors,
-}: {
-  credits: Credits | null;
-  openCredit: string | null;
-  onToggle: (id: string) => void;
-  onCollect: (installmentId: string) => void;
-  colors: Colors;
-}) {
-  if (!credits) return <ActivityIndicator style={styles.loading} color={palette.primary} />;
-  if (credits.credits.length === 0) {
-    return (
-      <View style={styles.empty}>
-        <Ionicons name="wallet-outline" size={34} color={colors.muted} />
-        <Text style={[styles.bold, { color: colors.text }]}>No tiene créditos</Text>
-        <Text style={[styles.small, { color: colors.muted }]}>Las ventas a crédito del POS aparecen acá con sus cuotas.</Text>
-      </View>
-    );
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  return (
-    <>
-      {credits.credits.map((credit) => {
-        const installments = credits.installments.filter((row) => row.credit_id === credit.id).sort((a, b) => a.installment_number - b.installment_number);
-        const payments = credits.payments.filter((row) => row.credit_id === credit.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
-        const total = installments.reduce((sum, row) => sum + Number(row.amount), 0);
-        const paid = installments.reduce((sum, row) => sum + Number(row.amount_paid ?? (row.status === 'paid' ? row.amount : 0)), 0);
-        const pending = Math.max(0, total - paid);
-        const progress = total > 0 ? Math.min(1, paid / total) : 0;
-        const status = CREDIT_STATUS[credit.status] ?? CREDIT_STATUS.active;
-        const open = openCredit === credit.id;
-        const next = installments.find((row) => row.status !== 'paid');
-        return (
-          <View key={credit.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Pressable onPress={() => onToggle(credit.id)} style={styles.creditHead}>
-              <View style={styles.flex}>
-                <View style={styles.tags}>
-                  <Text style={[styles.bold, { color: colors.text }]}>{creditCode(credit)}</Text>
-                  <Tag label={status.label} color={status.color} />
-                </View>
-                <Text style={[styles.small, { color: colors.muted }]}>
-                  {formatGs(Number(credit.principal))} · {credit.term_months} cuotas · desde {dateOnly(credit.start_date)}
-                </Text>
-              </View>
-              <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
-            </Pressable>
-            <View style={[styles.bar, { backgroundColor: colors.background }]}>
-              <View style={[styles.barFill, { width: `${Math.round(progress * 100)}%` }]} />
-            </View>
-            <View style={styles.creditTotals}>
-              <Text style={[styles.small, { color: colors.muted }]}>Pagado {formatGs(paid)}</Text>
-              <Text style={[styles.small, { color: pending ? palette.danger : palette.success, fontWeight: '800' }]}>{pending ? `Debe ${formatGs(pending)}` : 'Saldado'}</Text>
-            </View>
-            {!open && next && (
-              <Text style={[styles.small, { color: next.due_date < today ? palette.danger : colors.muted }]}>
-                Próxima: cuota {next.installment_number} · {dateOnly(next.due_date)} · {formatGs(Number(next.amount) - Number(next.amount_paid ?? 0))}
-              </Text>
-            )}
-            {open && (
-              <View style={styles.installments}>
-                {installments.map((row) => {
-                  const rest = Math.max(0, Number(row.amount) - Number(row.amount_paid ?? 0));
-                  const late = row.status !== 'paid' && row.due_date < today;
-                  const color = row.status === 'paid' ? palette.success : late ? palette.danger : colors.muted;
-                  return (
-                    <View key={row.id} style={[styles.line, { borderColor: colors.border }]}>
-                      <Ionicons name={row.status === 'paid' ? 'checkmark-circle' : late ? 'alert-circle' : 'ellipse-outline'} size={18} color={color} />
-                      <View style={styles.flex}>
-                        <Text style={[styles.bold, { color: colors.text }]}>Cuota {row.installment_number}</Text>
-                        <Text style={[styles.small, { color }]}>
-                          {row.status === 'paid' ? `Pagada${row.paid_at ? ` ${dateOnly(row.paid_at)}` : ''}` : `${late ? 'Venció' : 'Vence'} ${dateOnly(row.due_date)}`}
-                        </Text>
-                      </View>
-                      <Text style={[styles.bold, { color: colors.text }]}>{formatGs(row.status === 'paid' ? Number(row.amount) : rest)}</Text>
-                      {row.status !== 'paid' && (
-                        <Pressable onPress={() => onCollect(row.id)} style={styles.miniCollect}>
-                          <Text style={styles.miniCollectText}>Cobrar</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                  );
-                })}
-                {payments.length > 0 && (
-                  <>
-                    <Text style={[styles.subTitle, { color: colors.text }]}>Pagos</Text>
-                    {payments.map((payment) => (
-                      <View key={payment.id} style={styles.payment}>
-                        <Text style={[styles.small, { color: colors.muted }]}>
-                          {dateOnly(payment.created_at)} · {METHOD[payment.payment_method ?? ''] ?? payment.payment_method ?? '—'}
-                        </Text>
-                        <Text style={[styles.small, { color: palette.success, fontWeight: '800' }]}>{formatGs(Number(payment.amount))}</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            )}
-          </View>
-        );
-      })}
-    </>
-  );
-}
-
-function HistoryTab({ history, colors }: { history: { items: HistoryItem[] } | null; colors: Colors }) {
+function HistoryTab({ history, colors,money }: { money:(value:number)=>string;history: { items: HistoryItem[] } | null; colors: Colors }) {
   if (!history) return <ActivityIndicator style={styles.loading} color={palette.primary} />;
   if (history.items.length === 0) {
     return (
@@ -438,10 +332,10 @@ function HistoryTab({ history, colors }: { history: { items: HistoryItem[] } | n
               </Text>
             </View>
             <View style={styles.historyRight}>
-              <Text style={[styles.bold, { color: colors.text }]}>{formatGs(item.total)}</Text>
+              <Text style={[styles.bold, { color: colors.text }]}>{money(item.total)}</Text>
               <Text style={[styles.tiny, { color: item.overdue ? palette.danger : payment.color }]}>
                 {item.overdue ? 'Vencido' : payment.label}
-                {item.balance ? ` · ${formatGs(item.balance)}` : ''}
+                {item.balance ? ` · ${money(item.balance)}` : ''}
               </Text>
             </View>
           </Pressable>

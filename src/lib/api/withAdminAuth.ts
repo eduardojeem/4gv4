@@ -1,3 +1,4 @@
+import {subscriptionOperationResponse} from '@/lib/saas/subscription-operation-access'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -182,6 +183,8 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
           )
         }
       }
+
+      if(organizationId){const blocked=await subscriptionOperationResponse(request,organizationId);if(blocked)return blocked}
 
       // El módulo de la sección, según la URL (ADMIN_API_MODULES): una tienda que
       // lo apagó o cuyo plan no lo incluye no puede leer ni guardar por la API.

@@ -1,5 +1,8 @@
 'use client'
 
+import type { ControlMetric } from '@/lib/finance/control-model'
+import { isFinanceSummaryEmpty } from '@/lib/finance/summary-integrity'
+
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CircleDollarSign, ReceiptText, UsersRound, ChartNoAxesCombined, Settings2, Plus, BookOpenCheck } from 'lucide-react'
@@ -14,6 +17,7 @@ import { FinanceSectionHelp } from './FinanceSectionHelp'
 import { FinanceSettingsPanel } from './FinanceSettingsPanel'
 import { FinanceEmptyState, FinanceErrorState, FinanceLoadingState, FinanceStaleDataAlert } from './FinanceStates'
 import { FinanceSummary } from './FinanceSummary'
+import { FinanceControlPanel } from './FinanceControlPanel'
 import { PayrollPanel } from './PayrollPanel'
 import { ProfitabilityPanel } from './ProfitabilityPanel'
 import { TechnicianPaymentHelp } from '@/components/dashboard/technicians/detail/TechnicianPaymentHelp'
@@ -24,23 +28,18 @@ const sections = [
   { value: 'Gastos', icon: ReceiptText },
   { value: 'Nómina', icon: UsersRound },
   { value: 'Rentabilidad', icon: ChartNoAxesCombined },
+  { value: 'Control', icon: BookOpenCheck },
   { value: 'Configuración', icon: Settings2 },
 ] as const
 type FinanceSection = (typeof sections)[number]['value']
 export type ExpenseAction = 'new' | 'overdue' | 'upcoming' | 'all'
 
-function isEmptySummary(summary: NonNullable<ReturnType<typeof useAdminFinances>['summary']>) {
-  // Solo los importes: `revenueBreakdown` es un objeto (la apertura de ingresos)
-  // y con él adentro un negocio nuevo nunca veía la pantalla de bienvenida.
-  const { revenueBreakdown: _breakdown, ...amounts } = summary.accrued
-  return Object.values(amounts).every((value) => value === null || value === 0)
-    && Object.values(summary.cash).every((value) => value === 0)
-    && !summary.upcomingDue.length && !summary.overdue.length && !summary.coverageWarnings.length && summary.complete
-}
+const isEmptySummary = isFinanceSummaryEmpty
 
 export function FinancesSystem() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<FinanceSection>(() => searchParams.get('section') === 'payroll' ? 'Nómina' : 'Resumen')
+  const [controlMetric,setControlMetric]=useState<ControlMetric>('revenue')
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [businessGuideOpen, setBusinessGuideOpen] = useState(false)
   const [businessGuideTab, setBusinessGuideTab] = useState<string>('resumen')
@@ -84,7 +83,7 @@ export function FinancesSystem() {
         <Button size="sm" onClick={() => viewExpenses('new')} disabled={!organizationId} className="gap-2"><Plus className="h-4 w-4" />Nuevo gasto</Button>
       </div>
     </header>
-    <FinanceFilters filters={finances.filters} isRefreshing={finances.isRefreshing ?? false} onDateRangeChange={finances.setDateRange} onRefresh={refreshAll} />
+    <FinanceFilters timeZone={finances.timeZone} filters={finances.filters} isRefreshing={finances.isRefreshing ?? false} onDateRangeChange={finances.setDateRange} onRefresh={refreshAll} />
     <FinanceWorkflowHelp />
     <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FinanceSection)} className="space-y-4">
       <h2 className="sr-only">Qué querés administrar</h2>
@@ -102,11 +101,12 @@ export function FinancesSystem() {
         {!finances.isLoading && finances.error && !summary ? <FinanceErrorState error={finances.error} onRetry={refreshAll} /> : null}
         {finances.error && summary ? <FinanceStaleDataAlert error={finances.error} generatedAt={summary.generatedAt} onRetry={refreshAll} /> : null}
         {summary && isEmptySummary(summary) && !finances.isLoading ? <FinanceEmptyState /> : null}
-        {summary && !isEmptySummary(summary) ? <FinanceSummary summary={summary} onViewExpenses={viewExpenses} onViewProfitability={() => setActiveTab('Rentabilidad')} onViewPayroll={() => setActiveTab('Nómina')} onOpenBusinessGuide={() => openBusinessGuide('resumen')} /> : null}
+        {summary && !isEmptySummary(summary) ? <FinanceSummary onViewControl={metric=>{setControlMetric(metric);setActiveTab('Control')}} summary={summary} onViewExpenses={viewExpenses} onViewProfitability={() => setActiveTab('Rentabilidad')} onViewPayroll={() => setActiveTab('Nómina')} onOpenBusinessGuide={() => openBusinessGuide('resumen')} /> : null}
       </TabsContent>
       <TabsContent value="Gastos" className="mt-0">{organizationId ? <ExpensesPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} action={expenseAction} onActionHandled={consumeNewExpense} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
       <TabsContent value="Nómina" className="mt-0">{organizationId ? <PayrollPanel key={scopeKey} organizationId={organizationId} branchId={branchId} filters={finances.filters} onChanged={finances.refresh} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
       <TabsContent value="Rentabilidad" className="mt-0">{organizationId ? <ProfitabilityPanel key={scopeKey} organizationId={organizationId} filters={finances.filters} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
+      <TabsContent value="Control" className="mt-0">{organizationId ? <FinanceControlPanel initialMetric={controlMetric} key={scopeKey+finances.filters.startDate+finances.filters.endDate+controlMetric} organizationId={organizationId} filters={finances.filters}/> : <FinanceLoadingState/>}</TabsContent>
       <TabsContent value="Configuración" className="mt-0">{organizationId ? <FinanceSettingsPanel key={scopeKey} organizationId={organizationId} branchId={branchId} refreshVersion={refreshVersion} onOpenGuide={openBusinessGuide} /> : <FinanceLoadingState />}</TabsContent>
     </Tabs>
     <FinanceBusinessGuideModal open={businessGuideOpen} onOpenChange={setBusinessGuideOpen} initialTab={businessGuideTab} />

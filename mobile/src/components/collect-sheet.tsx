@@ -1,4 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { usePaymentControls } from '@/lib/payment-controls';
+import { apiFetch } from '@/lib/api';
+import { sharePaymentReceiptPdf } from '@/lib/payment-receipt';
+import { collectionPreview } from '@/lib/collection-preview';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
@@ -7,17 +12,15 @@ import { BottomSheet } from '@/components/bottom-sheet';
 import { collectPayment, dateOnly, fetchCustomerDebts, type CollectResult, type Debt, type DebtSummary } from '@/lib/customers';
 import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { secureStorage } from '@/lib/secure-storage';
-import { getPendingMobileCollection, MobileCollectionAttemptError, retryMobileCollection, submitMobileCollection, type CollectionAttemptContext, type PendingMobileCollection } from '@/lib/credit-collection-attempt';
-import { formatGs } from '@/lib/marketplace';
+import { collectionWireInput, getPendingMobileCollection, MobileCollectionAttemptError, retryMobileCollection, submitMobileCollection, type CollectionAttemptContext, type PendingMobileCollection } from '@/lib/credit-collection-attempt';
+import {fetchOrgSettings} from '@/lib/settings-admin';
+import {parseCreditAmount,formatCreditAmountInput,formatCreditMoney,roundCreditMoney} from '@/lib/credit-model';
 import { palette, usePalette } from '@/lib/palette';
 
 type Colors = ReturnType<typeof usePalette>;
 
-const digits = (value: string) => Number(value.replace(/\D/g, '')) || 0;
-const pretty = (value: string | number) => {
-  const only = String(value).replace(/\D/g, '');
-  return only ? Number(only).toLocaleString('es-PY') : '';
-};
+const digits=(value:string)=>{if(!value.trim())return 0;try{return parseCreditAmount(value)}catch{return 0}};
+const pretty=formatCreditAmountInput;
 
 const METHODS = [
   { key: 'cash', label: 'Efectivo', icon: 'cash-outline' },
@@ -46,6 +49,16 @@ export function CollectSheet({
   onDone: (result: CollectResult) => void;
 }) {
   const colors = usePalette();
+  const controls = usePaymentControls();
+  const [cashState, setCashState] = useState<{ branchId: string; cashOpen: boolean } | null>(null);
+  const [cashError, setCashError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ branchId: string; cashOpen: boolean }>(`/api/customers/${customerId}/collection-context`).then(value => { if (active) setCashState(value); }).catch(() => { if (active) setCashError("No se pudo comprobar la caja. Se volverá a validar al confirmar."); });
+    return () => { active = false; };
+  }, [customerId]);
+  const [currency,setCurrency]=useState<string|null>(null);
+  const money=(value:number)=>formatCreditMoney(value,currency??'');
   const [data, setData] = useState<DebtSummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string> | null>(focusDebtId ? new Set([focusDebtId]) : null);
@@ -60,12 +73,14 @@ export function CollectSheet({
   const [pendingBlocked, setPendingBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharingPdf, setSharingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [result, setResult] = useState<CollectResult | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetchCustomerDebts(customerId)
-      .then((summary) => {
+    Promise.all([fetchCustomerDebts(customerId),fetchOrgSettings()])
+      .then(([summary,settings]) => {
         if (!active) return;
         const cacheContext = getPrivateCacheContext();
         if (!cacheContext.userId || !cacheContext.organizationId) throw new Error('Esperá a que se confirme tu usuario y organización antes de cobrar.');
@@ -75,6 +90,7 @@ export function CollectSheet({
           branchId: summary.branchId ?? cacheContext.branchId,
           customerId,
         };
+        setCurrency(settings.currency);
         setData(summary);
         setAttemptContext(scopedContext);
         setPendingBlocked(false);
@@ -103,10 +119,13 @@ export function CollectSheet({
 
   const collectable = (data?.debts ?? []).filter((debt) => debt.collectable && debt.pendingAmount > 0);
   const chosen = selected ? collectable.filter((debt) => selected.has(debt.id)) : collectable;
-  const chosenTotal = chosen.reduce((sum, debt) => sum + debt.pendingAmount, 0);
+  const chosenTotal = roundCreditMoney(chosen.reduce((sum, debt) => sum + debt.pendingAmount, 0));
   const value = digits(amount);
-  const overflow = Math.max(0, value - chosenTotal);
+  const overflow = roundCreditMoney(Math.max(0, value - chosenTotal));
 
+  const preview = collectionPreview(value, chosenTotal, method);
+  const cashRequired = method === 'cash' || chosen.some(debt => debt.type === 'repair');
+  const cashClosed = Boolean(cashRequired && cashState && cashState.branchId === data?.branchId && !cashState.cashOpen);
   const toggle = (debt: Debt) => {
     const next = new Set(selected ?? collectable.map((row) => row.id));
     if (next.has(debt.id)) next.delete(debt.id);
@@ -117,12 +136,16 @@ export function CollectSheet({
   };
 
   const problem =
-    value <= 0
-      ? 'Escribí el monto.'
+    !controls.ready
+      ? controls.error ?? 'Validando medios de cobro…'
+      : !controls.allows(method)
+        ? 'Elegí un medio de cobro habilitado.'
+        : value <= 0
+      ? 'Ingresá un monto válido, sin separadores de miles y con hasta dos decimales.'
       : chosen.length === 0
         ? 'Elegí qué cobrar.'
         : overflow > 0 && !excess
-          ? `Sobran ${formatGs(overflow)}: confirmá pasarlo a saldo a favor o bajá el monto.`
+          ? `Sobran ${money(overflow)}: confirmá pasarlo a saldo a favor o bajá el monto.`
           : method === 'transfer' && !reference.trim()
             ? 'Anotá el comprobante de la transferencia.'
             : method === 'card' && !voucher.trim()
@@ -140,13 +163,21 @@ export function CollectSheet({
     setSaving(true);
     setError(null);
     try {
+      // Replays must reach the original atomic endpoint even after a method is disabled.
+      if (!pendingAttempt && cashRequired) {
+        const latestCash = await apiFetch<{ branchId: string; cashOpen: boolean }>(`/api/customers/${customerId}/collection-context`);
+        setCashState(latestCash);
+        setCashError(null);
+        if (latestCash.branchId !== attemptContext.branchId) throw new Error('La caja corresponde a otra sucursal. Volvé a abrir el cobro.');
+        if (!latestCash.cashOpen) throw new Error('Abrí la caja de esta sucursal antes de cobrar.');
+      }
       // Con todo elegido va en automático (más vieja primero); con selección, a lo elegido en orden.
       let remaining = Math.min(value, chosenTotal);
       const allocations = selected
         ? chosen
             .map((debt) => {
-              const applied = Math.min(remaining, debt.pendingAmount);
-              remaining -= applied;
+              const applied = roundCreditMoney(Math.min(remaining, debt.pendingAmount));
+              remaining = roundCreditMoney(remaining-applied);
               return { id: debt.id, type: debt.type === 'repair' ? ('repair' as const) : ('installment' as const), amount: applied };
             })
             .filter((row) => row.amount > 0)
@@ -183,13 +214,23 @@ export function CollectSheet({
     }
   };
 
+  const sharePdf = async () => {
+    if (!result || sharingPdf) return;
+    const epoch = getPrivateCacheContext().epoch;
+    setSharingPdf(true);
+    setPdfError(null);
+    try { await sharePaymentReceiptPdf(result.collection?.receipt, epoch); }
+    catch (error) { if (getPrivateCacheContext().epoch === epoch) setPdfError(error instanceof Error ? error.message : 'No se pudo compartir el PDF. El pago sigue registrado.'); }
+    finally { if (getPrivateCacheContext().epoch === epoch) setSharingPdf(false); }
+  };
+
   if (result) {
     const text = [
       `Comprobante de pago N.º ${result.receiptNumber}`,
       `Cliente: ${customerName}`,
-      ...result.appliedAllocations.map((row) => `${row.title}: ${formatGs(row.allocatedAmount)}${row.fullyPaid ? ' (saldada)' : ` · queda ${formatGs(row.newPending)}`}`),
-      `Total cobrado: ${formatGs(result.totalApplied + result.excessToStoreCredit)}`,
-      result.excessToStoreCredit > 0 ? `A saldo a favor: ${formatGs(result.excessToStoreCredit)}` : null,
+      ...result.appliedAllocations.map((row) => `${row.title}: ${money(row.allocatedAmount)}${row.fullyPaid ? ' (saldada)' : ` · queda ${money(row.newPending)}`}`),
+      `Total cobrado: ${money(result.totalApplied + result.excessToStoreCredit)}`,
+      result.excessToStoreCredit > 0 ? `A saldo a favor: ${money(result.excessToStoreCredit)}` : null,
     ]
       .filter(Boolean)
       .join('\n');
@@ -202,16 +243,21 @@ export function CollectSheet({
           <View style={styles.footer}>
             <Pressable onPress={() => Share.share({ message: text })} style={[styles.ghost, { borderColor: colors.border }]}>
               <Ionicons name="share-outline" size={18} color={colors.text} />
-              <Text style={[styles.bold, { color: colors.text }]}>Enviar</Text>
+              <Text style={[styles.bold, { color: colors.text }]}>Texto</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Compartir comprobante PDF" disabled={sharingPdf} onPress={() => { void sharePdf(); }} style={[styles.ghost, { borderColor: colors.border, opacity: sharingPdf ? 0.5 : 1 }]}>
+              {sharingPdf ? <ActivityIndicator color={palette.primary} /> : <Ionicons name="document-text-outline" size={18} color={colors.text} />}
+              <Text style={[styles.bold, { color: colors.text }]}>PDF</Text>
             </Pressable>
             <Pressable onPress={() => onDone(result)} style={[styles.solid, { backgroundColor: palette.primary }]}>
               <Text style={styles.solidText}>Listo</Text>
             </Pressable>
           </View>
         }>
+        {pdfError && <Text accessibilityRole="alert" style={styles.error}>{pdfError} El cobro ya está registrado; no lo repitas.</Text>}
         <View style={styles.doneHead}>
           <Ionicons name="checkmark-circle" size={56} color="#16A34A" />
-          <Text style={[styles.doneTotal, { color: colors.text }]}>{formatGs(result.totalApplied + result.excessToStoreCredit)}</Text>
+          <Text style={[styles.doneTotal, { color: colors.text }]}>{money(result.totalApplied + result.excessToStoreCredit)}</Text>
           <Text style={[styles.small, { color: colors.muted }]}>Comprobante N.º {result.receiptNumber}</Text>
         </View>
         {result.appliedAllocations.map((row) => (
@@ -219,12 +265,12 @@ export function CollectSheet({
             <Ionicons name={row.fullyPaid ? 'checkmark-done' : 'remove-circle-outline'} size={18} color={row.fullyPaid ? '#16A34A' : '#D97706'} />
             <Text style={[styles.bold, styles.flex, { color: colors.text }]}>{row.title}</Text>
             <View style={styles.alignEnd}>
-              <Text style={[styles.bold, { color: colors.text }]}>{formatGs(row.allocatedAmount)}</Text>
-              <Text style={[styles.small, { color: row.fullyPaid ? '#16A34A' : colors.muted }]}>{row.fullyPaid ? 'Saldada' : `Queda ${formatGs(row.newPending)}`}</Text>
+              <Text style={[styles.bold, { color: colors.text }]}>{money(row.allocatedAmount)}</Text>
+              <Text style={[styles.small, { color: row.fullyPaid ? '#16A34A' : colors.muted }]}>{row.fullyPaid ? 'Saldada' : `Queda ${money(row.newPending)}`}</Text>
             </View>
           </View>
         ))}
-        {result.excessToStoreCredit > 0 && <Text style={[styles.small, { color: '#2563EB' }]}>{formatGs(result.excessToStoreCredit)} quedaron como saldo a favor.</Text>}
+        {result.excessToStoreCredit > 0 && <Text style={[styles.small, { color: '#2563EB' }]}>{money(result.excessToStoreCredit)} quedaron como saldo a favor.</Text>}
       </BottomSheet>
     );
   }
@@ -234,7 +280,7 @@ export function CollectSheet({
       visible
       tall
       title={`Cobrar a ${customerName}`}
-      subtitle={data ? `Deuda total ${formatGs(data.totalDebt)}${data.overdueDebt > 0 ? ` · vencido ${formatGs(data.overdueDebt)}` : ''}` : undefined}
+      subtitle={data ? `Deuda total ${money(data.totalDebt)}${data.overdueDebt > 0 ? ` · vencido ${money(data.overdueDebt)}` : ''}` : undefined}
       onClose={() => !saving && onClose()}
       footer={
         pendingBlocked ? (
@@ -252,8 +298,8 @@ export function CollectSheet({
         ) : data && collectable.length > 0 ? (
           <View style={styles.footerCol}>
             {problem ? <Text style={[styles.small, styles.center, { color: colors.muted }]}>{problem}</Text> : null}
-            <Pressable onPress={save} disabled={saving} style={[styles.solid, { backgroundColor: '#16A34A', opacity: saving || problem ? 0.55 : 1 }]}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.solidText}>Cobrar {formatGs(value)}</Text>}
+            <Pressable onPress={() => { if (cashClosed) { onClose(); router.push('/panel/cash-register'); } else { void save(); } }} disabled={saving||Boolean(problem)} style={[styles.solid, { backgroundColor: '#16A34A', opacity: saving || problem ? 0.55 : 1 }]}>
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.solidText}>{cashClosed ? 'Abrir caja para continuar' : `Cobrar ${money(value)}`}</Text>}
             </Pressable>
           </View>
         ) : null
@@ -264,7 +310,7 @@ export function CollectSheet({
         <View style={styles.doneHead}>
           <Ionicons name="time-outline" size={42} color="#D97706" />
           <Text style={[styles.bold, { color: colors.text }]}>{pendingBlocked ? 'Cobro pendiente en otro contexto' : 'Cobro pendiente de confirmar'}</Text>
-          <Text style={[styles.small, { color: colors.muted }]}>{pendingBlocked ? 'Volvé a la sucursal original para recuperar el resultado. No se enviará un cobro nuevo desde esta sucursal.' : `Monto: ${formatGs(pendingAttempt!.input.amount)}. Se recuperará con la misma clave de seguridad.`}</Text>
+          <Text style={[styles.small, { color: colors.muted }]}>{pendingBlocked ? 'Volvé a la sucursal original para recuperar el resultado. No se enviará un cobro nuevo desde esta sucursal.' : `Monto: ${money(collectionWireInput(pendingAttempt!).amount)}. Se recuperará con la misma clave de seguridad.`}</Text>
         </View>
       )}
       {data && !pendingAttempt && !pendingBlocked && collectable.length === 0 && (
@@ -288,25 +334,25 @@ export function CollectSheet({
                     {[debt.subtitle, debt.dueDate ? `vence ${dateOnly(debt.dueDate)}` : null, debt.isOverdue ? 'vencida' : null].filter(Boolean).join(' · ')}
                   </Text>
                 </View>
-                <Text style={[styles.bold, { color: colors.text }]}>{formatGs(debt.pendingAmount)}</Text>
+                <Text style={[styles.bold, { color: colors.text }]}>{money(debt.pendingAmount)}</Text>
               </Pressable>
             );
           })}
 
           <View style={[styles.moneyWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
-            <Text style={[styles.bold, { color: colors.muted }]}>Gs.</Text>
-            <TextInput value={amount} onChangeText={(next) => setAmount(pretty(next))} keyboardType="number-pad" style={[styles.moneyInput, { color: colors.text }]} accessibilityLabel="Monto a cobrar" />
+            <Text style={[styles.bold, { color: colors.muted }]}>{currency??'—'}</Text>
+            <TextInput value={amount} onChangeText={setAmount} maxLength={14} keyboardType="decimal-pad" style={[styles.moneyInput, { color: colors.text }]} accessibilityLabel="Monto a cobrar" />
             {value !== chosenTotal && (
               <Pressable onPress={() => setAmount(pretty(chosenTotal))} hitSlop={8}>
                 <Text style={[styles.link, { color: palette.primary }]}>Todo</Text>
               </Pressable>
             )}
           </View>
-          {value > 0 && value < chosenTotal && <Text style={[styles.small, { color: colors.muted }]}>Pago parcial: se aplica a lo más viejo primero; queda {formatGs(chosenTotal - value)}.</Text>}
+          {value > 0 && value < chosenTotal && <Text style={[styles.small, { color: colors.muted }]}>Pago parcial: se aplica a lo más viejo primero; queda {money(chosenTotal - value)}.</Text>}
           {overflow > 0 && (
             <View style={styles.switchRow}>
               <View style={styles.flex}>
-                <Text style={[styles.bold, { color: colors.text }]}>Pasar {formatGs(overflow)} a saldo a favor</Text>
+                <Text style={[styles.bold, { color: colors.text }]}>Pasar {money(overflow)} a saldo a favor</Text>
                 <Text style={[styles.small, { color: colors.muted }]}>Lo puede usar en próximas compras</Text>
               </View>
               <Switch value={excess} onValueChange={setExcess} trackColor={{ true: palette.primary }} />
@@ -314,13 +360,25 @@ export function CollectSheet({
           )}
 
           <View style={styles.methods}>
-            {METHODS.map((item) => (
+            {METHODS.filter(item => controls.allows(item.key)).map((item) => (
               <Pressable key={item.key} onPress={() => setMethod(item.key)} style={[styles.method, { borderColor: method === item.key ? palette.primary : colors.border, backgroundColor: method === item.key ? 'rgba(37,99,235,0.08)' : colors.background }]}>
                 <Ionicons name={item.icon} size={20} color={method === item.key ? palette.primary : colors.muted} />
                 <Text style={[styles.small, styles.bold, { color: method === item.key ? palette.primary : colors.text }]}>{item.label}</Text>
               </Pressable>
             ))}
           </View>
+          {controls.error && <Pressable onPress={controls.retry} accessibilityRole="button"><Text style={[styles.link, { color: palette.primary }]}>Reintentar cargar medios de cobro</Text></Pressable>}
+          {controls.ready && !METHODS.some(item => controls.allows(item.key)) && <Text style={styles.error}>No hay medios de cobro habilitados. Pedile al administrador que revise la configuración.</Text>}
+          <View style={[styles.preview, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.bold, { color: colors.text }]}>Antes de confirmar</Text>
+            <Text style={[styles.small, { color: colors.text }]}>A la deuda seleccionada: {money(preview.applied)}</Text>
+            <Text style={[styles.small, { color: colors.text }]}>Queda de lo seleccionado: {money(preview.remaining)}</Text>
+            <Text style={[styles.small, { color: colors.text }]}>Deuda total restante: {money(roundCreditMoney(Math.max(0, (data?.totalDebt ?? 0) - preview.applied)))}</Text>
+            <Text style={[styles.small, { color: colors.muted }]}>{method === 'cash' ? `El efectivo esperado de la caja aumenta ${money(preview.drawerIncrease)}.` : 'Este cobro no aumenta el efectivo esperado del cajón. El comprobante no confirma la acreditación bancaria.'}</Text>
+            {preview.storeCredit > 0 && <Text style={[styles.small, { color: colors.muted }]}>Saldo a favor a confirmar: {money(preview.storeCredit)}</Text>}
+          </View>
+          {cashError && cashRequired && <Text style={[styles.small, { color: colors.muted }]}>{cashError}</Text>}
+          {cashClosed && <Text style={[styles.small, { color: palette.danger }]}>La caja de esta sucursal está cerrada.{method !== 'cash' ? ' Los cobros de reparaciones también requieren una caja abierta.' : ''}</Text>}
           {method === 'transfer' && <Field placeholder="N.º de comprobante" value={reference} onChange={setReference} colors={colors} />}
           {method === 'card' && (
             <View style={styles.pair}>
@@ -332,7 +390,7 @@ export function CollectSheet({
               </View>
             </View>
           )}
-          {data?.storeBalance ? <Text style={[styles.small, { color: '#2563EB' }]}>Tiene {formatGs(data.storeBalance)} de saldo a favor (se usa desde la web).</Text> : null}
+          {data?.storeBalance ? <Text style={[styles.small, { color: '#2563EB' }]}>Tiene {money(data.storeBalance)} de saldo a favor (se usa desde la web).</Text> : null}
           {error && <Text style={styles.error}>{error}</Text>}
         </>
       )}
@@ -376,6 +434,7 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   methods: { flexDirection: 'row', gap: 8 },
   method: { flex: 1, alignItems: 'center', gap: 4, borderWidth: 1.5, borderRadius: 12, paddingVertical: 10 },
+  preview: { gap: 8, borderWidth: 1, borderRadius: 14, padding: 14 },
   pair: { flexDirection: 'row', gap: 10 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15 },
 });

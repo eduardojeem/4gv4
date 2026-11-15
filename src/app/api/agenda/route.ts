@@ -1,3 +1,4 @@
+import { HOME_APPOINTMENT_COLUMNS } from '@/lib/agenda/home-visit'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
@@ -30,7 +31,7 @@ export const GET = withTenantAuth(guard, async (request, { organization }) => {
 
   const { data, error } = await supabase
     .from('appointments')
-    .select(config.capabilities.professionalBooking ? `${APPOINTMENT_COLUMNS}, buffer_minutes, occupied_until` : APPOINTMENT_COLUMNS)
+    .select((config.capabilities.professionalBooking ? `${APPOINTMENT_COLUMNS}, buffer_minutes, occupied_until` : APPOINTMENT_COLUMNS)+(config.capabilities.homeAppointments ? `,${HOME_APPOINTMENT_COLUMNS}` : ''))
     .eq('organization_id', organization.id)
     .gte('starts_at', new Date(from).toISOString())
     .lt('starts_at', new Date(to).toISOString())
@@ -42,13 +43,14 @@ export const GET = withTenantAuth(guard, async (request, { organization }) => {
   }
 
   // Lo que espera respuesta, aunque sea de otro día.
-  const { count: pendingCount } = await supabase
+  const { count: pendingCount,error:pendingError } = await supabase
     .from('appointments')
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organization.id)
     .eq('status', 'pending')
     .gte('starts_at', new Date().toISOString())
 
+  if(pendingError||pendingCount===null)return NextResponse.json({error:'No se pudieron consultar los turnos pendientes. Reintentá la consulta.'},{status:503})
   return NextResponse.json({
     available: true,
     date,
@@ -58,6 +60,7 @@ export const GET = withTenantAuth(guard, async (request, { organization }) => {
     ...config,
     storeName: organization.name,
     storeSlug: organization.slug,
+    attentionMode: organization.attentionMode ?? 'local',
     canConfigure: roleHasPermission(organization.role as OrganizationRole, 'settings.manage'),
   })
 })
@@ -69,7 +72,8 @@ export const POST = withTenantAuth(guard, async (request, { organization, user }
 
   const config = await loadAgendaConfigForBooking(supabase, organization.id, createAdminSupabase)
   if (config?.capabilities.professionalBooking) {
-    const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
+    if(parsed.data.attention_mode && !config.capabilities.homeAppointments)return NextResponse.json({error:'Falta aplicar la migración de atención a domicilio.'},{status:503})
+    const { data, error } = await createAdminSupabase().rpc(config.capabilities.homeAppointments ? 'save_agenda_home_appointment' : 'save_agenda_appointment', {
       p_org: organization.id, p_id: null, p_input: parsed.data, p_actor: user.id,
     })
     if (error || !data) {
@@ -79,6 +83,7 @@ export const POST = withTenantAuth(guard, async (request, { organization, user }
     return NextResponse.json({ appointment: data }, { status: 201 })
   }
 
+  if(parsed.data.attention_mode === 'home')return NextResponse.json({error:'La atención a domicilio requiere la agenda por profesional y su migración.'},{status:503})
   const refError = await assertAppointmentRefs(supabase, organization.id, parsed.data)
   if (refError) return NextResponse.json({ error: refError }, { status: 400 })
 

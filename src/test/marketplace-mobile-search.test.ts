@@ -16,10 +16,9 @@ const BARRA_INFERIOR = leer('src/components/public/MarketplaceMobileBottomNav.ts
  * sola al cambiar de ruta. A 1280px el botón no se muestra.
  */
 describe('hay un buscador en el encabezado del teléfono', () => {
-  it('la barra inferior no lo tenía', () => {
-    // Si algún día se agrega ahí, conviene revisar si este botón sigue haciendo
-    // falta o queda duplicado.
-    expect(BARRA_INFERIOR).not.toMatch(/buscar/i)
+  it('la barra inferior expone búsqueda rápida dentro del menú Bento + sin reemplazar la lupa fija del encabezado', () => {
+    expect(BARRA_INFERIOR).toContain('id="marketplace-quick-menu"')
+    expect(BARRA_INFERIOR).toContain('/marketplace/buscar')
   })
 
   it('el botón solo aparece donde el buscador no está en la fila', () => {

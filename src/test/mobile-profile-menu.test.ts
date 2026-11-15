@@ -68,9 +68,10 @@ describe('menú de perfil del panel móvil', () => {
   })
 
   it('el menú lateral de Administración también espera para abrir la web', () => {
-    const chrome = read('components/admin-chrome.tsx')
-    expect(chrome).toMatch(/onDismiss=\{onDismiss\}/)
-    expect(chrome).toMatch(/if \(item\.web\) schedule\(\(\) => go\(item\)\)/)
+    // El menú ahora vive en admin-command-menu: abre la web recién cuando el modal se cerró.
+    const menu = read('components/admin-command-menu.tsx')
+    expect(menu).toMatch(/onDismiss=\{onDismiss\}/)
+    expect(menu).toMatch(/if\s*\(item\.web\)\s*\{\s*schedule\(action\);\s*close\(\);/)
   })
 
   it('el cajón abre Administración directo, sin pasar por la redirección', () => {

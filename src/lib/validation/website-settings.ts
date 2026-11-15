@@ -102,6 +102,7 @@ export const CompanyInfoSchema = z.object({
   serviceSpecialties: ServiceBusinessDetailsSchema.shape.serviceSpecialties,
   headerColor: z.string().max(50).optional().or(z.literal('')),
   showTopBar: z.boolean().optional(),
+  productWhatsappEnabled: z.boolean().optional(),
   whatsapp: z.string().max(50).optional().or(z.literal('')),
   ruc: z.string().max(50).optional().or(z.literal('')),
   businessType: z.string().max(50).optional().or(z.literal('')),

@@ -474,7 +474,7 @@ export default function ChangePlanPage() {
         <Alert>
           <CreditCard className="h-4 w-4" />
           <AlertDescription>
-            Ya tenés programado el paso al plan Gratuito al vencimiento. Si elegís un plan pago, se activa al confirmarse el pago.
+            Ya tenés programada la cancelación de la renovación al vencimiento. Si elegís un plan pago, se activa al confirmarse el pago.
           </AlertDescription>
         </Alert>
       )}

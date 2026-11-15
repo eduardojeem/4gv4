@@ -1,10 +1,8 @@
 import { bottomNavigation, navigationColor, navigationRouteActive } from '@/lib/bottom-nav-model';
 import { PremiumBottomNav, type NavigationItem } from './premium-bottom-nav';
-import { BottomSheet } from './bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -86,27 +84,52 @@ export function PanelHeader() {
 export function PanelTabBar() {
   const pathname = usePathname();
   const { data, findItem } = usePanel();
-  const { openSections } = usePanelMenus();
-  const [creating, setCreating] = useState<string | null>(null);
+  const { openQuickMenu, openSections, activeMenu } = usePanelMenus();
   const model = bottomNavigation(data);
   const active = (route: string) => navigationRouteActive(pathname, route);
-  const items: NavigationItem[] = model.tabs.flatMap(key => {
+  const tabItems: NavigationItem[] = model.tabs.slice(0, 3).flatMap((key) => {
     const item = findItem(key);
-    return item ? [{ key, label: key === 'overview' ? 'Inicio' : key === 'cash-register' ? 'Caja' : item.mobileLabel ?? item.label, icon: iconFor(key), active: active(panelRoute(key)), onPress: () => router.navigate(panelRoute(key) as never) }] : [];
+    return item
+      ? [
+          {
+            key,
+            label: key === 'overview' ? 'Inicio' : key === 'cash-register' ? 'Caja' : item.mobileLabel ?? item.label,
+            icon: iconFor(key),
+            active: activeMenu === null && active(panelRoute(key)),
+            onPress: () => router.navigate(panelRoute(key) as never),
+          },
+        ]
+      : [];
   });
-  const moreActive = !items.some(item => item.active) && !model.actions.some(action => active(action.route));
-  if (model.actions.length) {
-    items.splice(Math.min(2, items.length), 0, { key: 'create', label: 'Crear', accessibilityLabel: 'Crear: ver acciones disponibles', icon: 'add', action: true, active: model.actions.some(action => active(action.route)), onPress: () => setCreating(data?.organization.id ?? null) });
-  }
-  items.push({ key: 'more', label: 'Más', icon: 'grid-outline', active: moreActive, onPress: openSections });
+  const centerActive =
+    activeMenu === 'quick' || (activeMenu === null && !tabItems.some((item) => item.active));
+  const leftItems = tabItems.slice(0, 2);
+  const rightItems: NavigationItem[] = [
+    ...tabItems.slice(2, 3),
+    {
+      key: 'more-sections',
+      label: 'Más',
+      accessibilityLabel: 'Más: abrir menú lateral de secciones',
+      icon: 'menu-outline',
+      active: activeMenu === 'sections',
+      onPress: openSections,
+    },
+  ];
+  const items: NavigationItem[] = [
+    ...leftItems,
+    {
+      key: 'quick-menu',
+      label: 'Menú',
+      accessibilityLabel: 'Abrir menú de secciones',
+      icon: 'grid-outline',
+      action: true,
+      active: centerActive,
+      onPress: openQuickMenu,
+    },
+    ...rightItems,
+  ];
   const brand = navigationColor(data?.organization.brandColor, data?.organization.customBrandColor);
-  const colors = usePalette();
-  return <>
-    <PremiumBottomNav items={items} brand={brand} />
-    <BottomSheet visible={Boolean(creating && creating === data?.organization.id && model.actions.length > 0)} title="¿Qué querés crear?" onClose={() => setCreating(null)}>
-      {model.actions.map(action => <Pressable key={action.key} accessibilityRole="button" onPress={() => { setCreating(null); router.push(action.route as never); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}><Ionicons name={action.icon} size={24} color={colors.text} /><Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{action.label}</Text></Pressable>)}
-    </BottomSheet>
-  </>;
+  return <PremiumBottomNav items={items} brand={brand} />;
 }
 
 const styles = StyleSheet.create({

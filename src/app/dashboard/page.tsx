@@ -1,5 +1,8 @@
 "use client"
 
+import {BusinessAgendaSummary} from '@/components/dashboard/BusinessAgendaSummary'
+import {businessExperience} from '@/lib/organization/business-experience'
+
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -202,7 +205,9 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const { effectiveModules } = useSubscriptionStatus()
+  const profile = useSubscriptionStatus()
+  const {effectiveModules}=profile
+  const experience=businessExperience(profile)
   const hasRepairs = effectiveModules.includes('repairs')
   const hasOrders = effectiveModules.includes('orders')
   const hasServices = effectiveModules.includes('services')
@@ -362,7 +367,7 @@ export default function DashboardPage() {
           trend: customerTrend,
         },
         ...(hasCatalog ? [{
-          title: hasInventory ? 'Catálogo / Inventario' : 'Servicios',
+          title: experience.catalogLabel,
           value: String(totalCatalogCount),
           subtitle: hasServices
             ? `${physicalProductsCount} productos · ${servicesCount} servicios`
@@ -401,7 +406,7 @@ export default function DashboardPage() {
     } finally {
       if (isCurrent()) setLoadingStats(false)
     }
-  }, [scope, currentScope, scopeOrganizationId, statsDataKey, moduleFingerprint, user?.id, organization?.role, hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
+  }, [scope, currentScope, scopeOrganizationId, statsDataKey, moduleFingerprint, user?.id, organization?.role, hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase,experience.catalogLabel])
 
   useEffect(() => {
     if (config.supabase.isConfigured && organization?.id) {
@@ -465,13 +470,13 @@ export default function DashboardPage() {
         <div className="relative -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&>*]:shrink-0">
           {/* La caja ya no es un botón más acá arriba: es el primer bloque de
               la pantalla, con su estado y lo que pasa si está cerrada. */}
-          {hasPos ? <Button asChild size="sm" className="gap-2">
+          {hasPos ? <Button asChild size="sm" variant={experience.serviceFocused?'outline':'default'} className="gap-2">
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
               Nueva venta
             </Link>
           </Button> : null}
-          {hasServices ? <Button asChild size="sm" variant={hasPos ? 'outline' : 'default'} className="gap-2">
+          {hasServices ? <Button asChild size="sm" variant={experience.serviceFocused?'default':hasPos?'outline':'default'} className="gap-2">
             <Link href="/dashboard/agenda">
               <CalendarClock className="h-3.5 w-3.5" />
               Nuevo turno
@@ -505,6 +510,7 @@ export default function DashboardPage() {
               if (!canRefresh) return
               startTransition(() => {
                 fetchDashboardStats(true)
+                window.dispatchEvent(new Event('agenda:changed'))
                 if (activeRegisterId) {
                   checkOpenSession(activeRegisterId).catch(() => {})
                 }
@@ -519,6 +525,8 @@ export default function DashboardPage() {
           <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2 [&>span]:sr-only sm:[&>span]:not-sr-only" showLabel />
         </div>
       </header>
+
+      {hasServices&&experience.focus==='agenda'&&<BusinessAgendaSummary/>}
 
       {/* Estado de la caja: es el primer paso del día y va antes que todo lo
           demás. Sin caja abierta el POS no confirma ventas. */}

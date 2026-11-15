@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { FeedbackButton } from '@/components/feedback/FeedbackButton'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronDown, ChevronRight, Crown, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, User } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Crown, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, Store, User } from 'lucide-react'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -317,10 +317,15 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
               )}
 
               {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                <Button asChild size="sm" className="h-9 gap-1.5 shadow-sm">
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-full border border-cyan-400/60 bg-indigo-600 px-3 text-white shadow-sm ring-1 ring-indigo-500/30 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                >
                   <Link href="/dashboard" className="flex items-center gap-1.5" aria-label="Volver al panel de inicio" title="Volver al panel de inicio">
-                    <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="hidden font-semibold sm:inline">Volver al panel</span>
+                    <Store className="h-3.5 w-3.5 shrink-0 text-cyan-200" />
+                    <span className="text-xs font-bold sm:hidden">Ir al Panel</span>
+                    <span className="hidden font-bold sm:inline">Volver al panel</span>
                   </Link>
                 </Button>
               )}
@@ -441,7 +446,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 scroll-smooth md:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 scroll-smooth md:p-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6">
           <div className="mx-auto max-w-7xl space-y-4 md:space-y-6">{children}</div>
         </main>
       </div>

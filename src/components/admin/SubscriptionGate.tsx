@@ -37,6 +37,7 @@ export async function SubscriptionGate({ children }: { children: React.ReactNode
           effectiveModules: planInfo.effectiveModules,
           businessVertical: planInfo.businessVertical,
           serviceSpecialties: planInfo.serviceSpecialties,
+          primaryActivity: planInfo.primaryActivity,
           attentionMode: planInfo.attentionMode,
           appointmentMode: planInfo.appointmentMode,
           operatingModel: planInfo.operatingModel,

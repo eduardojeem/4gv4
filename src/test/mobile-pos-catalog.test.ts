@@ -83,7 +83,7 @@ describe('catálogo del POS móvil', () => {
 
   it('la pantalla del POS usa el catálogo nuevo y la misma regla de servicio', () => {
     const screen = readFileSync(join(__dirname, '../../mobile/src/app/panel/pos/index.tsx'), 'utf8')
-    expect(screen).toMatch(/useState<PosShelf>\(DEFAULT_POS_SHELF\)/)
+    expect(screen).toContain('mobileBusinessPresentation(panel?.organization).defaultCatalogView')
     expect(screen).toMatch(/label="Servicios"/)
     expect(screen).not.toMatch(/\bisService\(/)
   })

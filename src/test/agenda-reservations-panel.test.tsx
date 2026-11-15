@@ -1,3 +1,4 @@
+vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => ({ scope: 'test:org' }) }))
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/contexts/SubscriptionStatusContext', () => ({ useSubscriptionStatus: () => ({ businessVertical: 'barbershop', serviceSpecialties: [] }) }))

@@ -41,8 +41,8 @@ export function BiometricSettingCard() {
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.row}>
-        <View style={[styles.icon, { backgroundColor: `${palette.primary}18` }]}>
-          <Ionicons name={biometric.label === 'Face ID' ? 'scan-outline' : 'finger-print-outline'} size={20} color={palette.primary} />
+        <View style={[styles.icon, { backgroundColor: colors.accentSoft }]}>
+          <Ionicons name={biometric.label === 'Face ID' ? 'scan-outline' : 'finger-print-outline'} size={20} color={colors.accent} />
         </View>
         <View style={styles.flex}>
           <Text style={[styles.title, { color: colors.text }]}>Entrar con {biometric.label}</Text>
@@ -57,7 +57,7 @@ export function BiometricSettingCard() {
           accessibilityHint="Se aplica solo en este teléfono"
         />
       </View>
-      {error ? <Text accessibilityRole="alert" style={[styles.hint, { color: palette.danger }]}>{error}</Text> : null}
+      {error ? <Text accessibilityRole="alert" style={[styles.hint, { color: colors.dangerText }]}>{error}</Text> : null}
       <Text style={[styles.foot, { color: colors.muted }]}>Solo para este teléfono. Se desactiva si cerrás sesión.</Text>
     </View>
   );

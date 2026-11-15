@@ -27,33 +27,39 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
   const [filters, setFilters] = useState<SearchFilters>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
   const [resultsCount, setResultsCount] = useState(0)
-  const [_isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [searchError,setSearchError]=useState<string|null>(null)
 
   useEffect(() => {
     if (!open) return
+    let active=true
     const timer = setTimeout(async () => {
       const normalized = query.trim()
       if (onSearch) {
         setIsLoading(true)
+        setSearchError(null)
         try {
           const r = await onSearch({ query: normalized, filters })
+          if(!active)return
           setResults(r)
           setResultsCount(r.length)
         } catch (_e) {
+          if(active)setSearchError('No se pudo completar la búsqueda. Intentá nuevamente.')
+          if(!active)return
           setResults([])
           setResultsCount(0)
         } finally {
-          setIsLoading(false)
+          if(active)setIsLoading(false)
         }
       } else {
         setResults([])
         setResultsCount(0)
       }
     }, 250)
-    return () => clearTimeout(timer)
+    return () => {active=false;clearTimeout(timer)}
   }, [query, open, onSearch, filters])
 
-  const activeFilters = useMemo(() => Object.entries(filters).filter(([, v]) => !!v), [filters])
+  const activeFilters = useMemo(() => Object.entries(filters).filter(([, v]) => !!v&&v!=='todos'), [filters])
   const showsType = (type: DashboardSearchType) => !availableTypes || availableTypes.includes(type)
 
   return (
@@ -66,12 +72,12 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
           </DialogTitle>
         </DialogHeader>
         <div id="global-search-desc" className="sr-only">
-          Busca en usuarios, inventario, seguridad y configuraciones. Usa filtros para refinar.
+          {availableTypes?'Buscá en las secciones habilitadas para tu empresa.':'Busca en usuarios, inventario, seguridad y configuraciones. Usa filtros para refinar.'}
         </div>
         <div className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar sección, ajuste o reporte..."
+              placeholder={availableTypes?'Buscar en tu negocio…':'Buscar sección, ajuste o reporte…'}
               value={query}
               onChange={e => setQuery(e.target.value)}
               aria-label="Buscar"
@@ -115,13 +121,15 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
               >
                 <option value="todos">Todos</option>
                 {showsType('productos') && <option value="productos">Productos</option>}
+                {availableTypes?.includes('servicios') && <option value="servicios">Servicios</option>}
+                {availableTypes?.includes('turnos') && <option value="turnos">Turnos</option>}
                 {showsType('clientes') && <option value="clientes">Clientes</option>}
                 {showsType('reparaciones') && <option value="reparaciones">Reparaciones</option>}
-                <option value="usuarios">Usuarios</option>
-                <option value="seguridad">Seguridad</option>
+                {!availableTypes&&<option value="usuarios">Usuarios</option>}
+                {!availableTypes&&<option value="seguridad">Seguridad</option>}
               </select>
             </label>
-            <label className="text-xs text-muted-foreground flex flex-col gap-1">
+            {!availableTypes&&<label className="text-xs text-muted-foreground flex flex-col gap-1">
               Estado (usuarios)
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
@@ -134,8 +142,8 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
                 <option value="inactive">Inactivo</option>
                 <option value="suspended">Suspendido</option>
               </select>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+            </label>}
+            {!availableTypes&&<div className="grid grid-cols-2 gap-2">
               <label className="text-xs text-muted-foreground flex flex-col gap-1">
                 Desde
                 <Input type="date" value={filters.from ?? ''} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} aria-label="Fecha desde" />
@@ -144,12 +152,12 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
                 Hasta
                 <Input type="date" value={filters.to ?? ''} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} aria-label="Fecha hasta" />
               </label>
-            </div>
+            </div>}
           </div>
-          <div aria-live="polite" className="text-xs text-muted-foreground">{resultsCount} resultados</div>
+          <div aria-live="polite" className="text-xs text-muted-foreground">{isLoading?'Buscando…':searchError?'No se completó la búsqueda':`${resultsCount} resultados`}</div>
           <div role="list" aria-label="Resultados de búsqueda" className="max-h-64 overflow-auto border rounded-md p-2">
             {results.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Sin resultados</div>
+              <div className="text-sm text-muted-foreground">{isLoading?'Buscando…':searchError??'Sin resultados'}</div>
             ) : (
               results.map((r, idx) => (
                 <a

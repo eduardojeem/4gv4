@@ -29,6 +29,6 @@ export function ServiceBusinessFields({ value, onChange, disabled = false, speci
           <option value="booking">Con reserva</option><option value="walk_in">Sin turno</option><option value="both">Con reserva y sin turno</option>
         </select></div>
     </div>}
-    {!specialtiesOnly && <p className="text-xs text-muted-foreground">Son datos de atención. Las reservas online requieren agenda, servicios y disponibilidad configurados; domicilio no agrega logística.</p>}
+    {!specialtiesOnly && <p className="text-xs text-muted-foreground">Son datos de atención. Las reservas online requieren agenda, servicios y disponibilidad configurados; la dirección y los traslados se cargan al agendar cada visita a domicilio.</p>}
   </fieldset>
 }

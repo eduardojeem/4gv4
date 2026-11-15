@@ -13,7 +13,7 @@ import { openingHoursSchema } from '@/lib/agenda/booking-config'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'services' }, async (_request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'settings.manage', module: 'services' }, async (_request, { organization }) => {
   const supabase = (await createClient()) as unknown as SupabaseClient
   const config = await loadAgendaConfig(supabase, organization.id)
   if (!config) return NextResponse.json({ available: false })
@@ -49,6 +49,7 @@ const settingsSchema = z.object({
 export const PUT = withTenantAuth({ permission: 'settings.manage', module: 'services' }, async (request, { organization, user }) => {
   const parsed = settingsSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Revisá la configuración de la agenda' }, { status: 400 })
+  if(parsed.data.online_booking&&organization.appointmentMode==='walk_in')return NextResponse.json({error:'Tu negocio está configurado para atención sin turno. Cambiá la modalidad en Rubro y herramientas antes de activar reservas online.',code:'APPOINTMENT_MODE_CONFLICT'},{status:400})
   const supabase = (await createClient()) as unknown as SupabaseClient
   const { services, expected_revision, ...settings } = parsed.data
   const config = await loadAgendaConfig(supabase, organization.id)

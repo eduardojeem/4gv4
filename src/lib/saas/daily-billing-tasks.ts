@@ -1,4 +1,6 @@
 import 'server-only'
+import {runApprovedOrganizationErasures} from '@/lib/saas/organization-erasure'
+import {runNonrenewalRetention} from '@/lib/saas/nonrenewal-retention'
 import { completeDueAccountDeletions } from '@/lib/account/account-deletion'
 import { generateRecurringObligationsForAllOrganizations } from '@/lib/finance/server'
 import { reconcilePendingBancardPayments } from '@/lib/saas/bancard-subscription-status'
@@ -19,6 +21,8 @@ export const DAILY_BILLING_TASKS: Record<string, () => Promise<unknown>> = {
   subscriptionAutopay: () => runSubscriptionAutopay(),
   planGraceNotifications: () => sendPlanGraceNotifications(),
   subscriptionReminders: () => sendSubscriptionReminders(),
+  organizationErasures: () => runApprovedOrganizationErasures(),
+  nonrenewalRetention: () => runNonrenewalRetention(),
   accountDeletions: () => completeDueAccountDeletions(),
   // Gastos fijos (alquiler, servicios) del período, aunque nadie abra Finanzas.
   financeRecurringExpenses: () => generateRecurringObligationsForAllOrganizations(),

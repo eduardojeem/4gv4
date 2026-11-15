@@ -1,3 +1,4 @@
+import {businessExperience} from '@/lib/organization/business-experience'
 import type { LucideIcon } from 'lucide-react'
 import {
   BadgePercent,
@@ -138,17 +139,20 @@ export function filterDashboardNavGroups({
   effectiveModules,
   hasPermission,
   businessVertical,
+  operatingModel,
 }: {
   role: UserRole | undefined
   effectiveModules: readonly string[]
   hasPermission: (permission: string) => boolean
   /** Sin rubro conocido todavía, se muestra todo. */
   businessVertical?: string | null
+  operatingModel?: string | null
 }): DashboardNavGroup[] {
   return dashboardNavGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
+      label:group.id==='inventory'?(effectiveModules.includes('services')?(effectiveModules.includes('inventory')?'Catálogo':'Servicios'):group.label):group.label,
+      items: group.items.map(item=>item.key==='products'?{...item,label:businessExperience({businessVertical,operatingModel,effectiveModules}).catalogLabel}:item).filter((item) => {
         if (!isNavigationModuleAvailable(item.module, effectiveModules)) return false
         if (item.verticals?.length && businessVertical && !item.verticals.includes(businessVertical)) return false
         if (!canRoleAccessSection(role, item.href, hasPermission)) return false
@@ -168,9 +172,13 @@ const SERVICE_VERTICALS = new Set(['barbershop', 'beauty_services'])
 export function getBusinessFocusSection(
   groups: DashboardNavGroup[],
   businessVertical?: string | null,
+  operatingModel?: string | null,
+  primaryActivity?: string | null,
 ): 'repairs' | 'agenda' | null {
   const keys = new Set(groups.flatMap((group) => group.items.map((item) => item.key)))
-  const preferred = businessVertical && SERVICE_VERTICALS.has(businessVertical)
+  if(primaryActivity==='pos' && keys.has('pos'))return null
+  if((primaryActivity==='agenda'||primaryActivity==='repairs')&&keys.has(primaryActivity))return primaryActivity
+  const preferred = (businessVertical && SERVICE_VERTICALS.has(businessVertical)) || operatingModel==='service'
     ? (['agenda', 'repairs'] as const)
     : (['repairs', 'agenda'] as const)
   return preferred.find((key) => keys.has(key)) ?? null
@@ -180,10 +188,12 @@ export function getMobileDashboardItems(
   groups: DashboardNavGroup[],
   limit = 5,
   businessVertical?: string | null,
+  operatingModel?: string | null,
+  primaryActivity?: string | null,
 ): DashboardNavItem[] {
   // La sección del rubro entra a la barra en lugar de Productos; la otra
   // (Agenda en un taller, por ejemplo) queda después de Productos.
-  const focus = getBusinessFocusSection(groups, businessVertical)
+  const focus = getBusinessFocusSection(groups, businessVertical, operatingModel, primaryActivity)
   const priority = (item: DashboardNavItem) => {
     if (item.key === focus) return 25
     if (item.key === 'agenda') return 45

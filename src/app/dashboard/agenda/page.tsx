@@ -10,7 +10,7 @@ export default function AgendaPage() {
   return (
     <OrganizationModuleGate module="services" title="Agenda no incluida" description="Turnos por profesional, reservas online y recordatorios por WhatsApp.">
       <Suspense fallback={null}><FirstOperationEntryGuide kind="reservation" /></Suspense>
-      <AgendaBoard />
+      <Suspense fallback={<p>Cargando agenda…</p>}><AgendaBoard /></Suspense>
     </OrganizationModuleGate>
   )
 }

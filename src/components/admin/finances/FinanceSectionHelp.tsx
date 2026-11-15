@@ -25,6 +25,7 @@ const guides = {
     example: 'Una venta de Gs. 250.000 con un costo directo de Gs. 150.000 deja Gs. 100.000 de ganancia bruta: un margen del 40% sobre la venta.',
     note: 'La ganancia bruta todavía no descuenta gastos generales ni nómina. Las filas sin costo no permiten calcular un margen definitivo; revisá las advertencias de cobertura.',
   },
+  Control: {purpose:'Revisá el origen de los importes, los compromisos y las versiones de cierre.',steps:['Elegí las mismas fechas y sucursal para comparar.','Revisá proyección y conciliación sin ajustar importes por suposición.','Guardá límites, preferencias y cierres cuando el historial esté habilitado.'],example:'Un cobro previsto de 100.000 y un pago de 70.000 dan una variación prevista de 30.000; no un saldo bancario de 30.000.',note:'Los cierres son informativos: conservan versiones y permiten seguir operando. Las alertas se muestran dentro de Finanzas.'},
   Configuración: {
     purpose: 'Definí la remuneración base del personal y las reglas para calcular comisiones.',
     steps: ['En Personal y Sueldos Base, asigná o modificá el sueldo y su vigencia.', 'En Reglas de Comisión, elegí alcance, origen, tipo de cálculo, valor y fechas.', 'Revisá y aprobá la regla para utilizarla; retirala cuando deje de corresponder, conservando su historial.'],

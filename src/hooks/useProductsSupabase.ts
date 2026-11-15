@@ -1,5 +1,6 @@
 'use client'
 
+import {useSubscriptionStatus} from '@/contexts/SubscriptionStatusContext'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useOrganizationScopedState } from '@/hooks/use-organization-scoped-state'
 
@@ -133,6 +134,8 @@ function avisarSiFaltoElCelular(payload: unknown) {
 }
 
 export function useProductsSupabase(options?: { enabled?: boolean; loadAllProducts?: boolean }) {
+  const {effectiveModules}=useSubscriptionStatus()
+  const servicesOnly=effectiveModules.includes('services')&&!effectiveModules.includes('inventory')
   const { organization } = useActiveOrganization()
   const organizationId = organization?.id
   const { selectedBranchId } = useBranch()
@@ -220,7 +223,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
 
       // Calcular estadísticas
       // El costo llega aparte y solo con permiso de costos (sin permiso: null).
-      const withCosts = await attachProductCosts(asCostRpcClient(supabase), products || [], { organizationId })
+      const withCosts = await attachProductCosts(asCostRpcClient(supabase), servicesOnly?(products||[]).filter(product=>product.unit_measure==='servicio'):products||[], { organizationId })
       const productList = await applySelectedBranchStock(withCosts as unknown as Product[])
       const totalProducts = productList?.length || 0
       const servicesCount = productList?.filter(isServiceLikeProduct)?.length || 0
@@ -252,7 +255,7 @@ export function useProductsSupabase(options?: { enabled?: boolean; loadAllProduc
       console.error('Error fetching dashboard stats:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     }
-  }, [applySelectedBranchStock, supabase, enabled, organizationId, setDashboardStats])
+  }, [applySelectedBranchStock, supabase, enabled, organizationId, setDashboardStats,servicesOnly])
 
   // Función para obtener productos con filtros y paginación
   const fetchProducts = useCallback(async (

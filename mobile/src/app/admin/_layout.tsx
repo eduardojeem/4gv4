@@ -1,3 +1,4 @@
+import {SubscriptionRenewalBanner} from '@/components/subscription-renewal-banner';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +16,7 @@ export default function AdminLayout() {
   return (
     <PanelProvider>
       <AdminMenuProvider>
-        <StatusBar style="light" />
+        <StatusBar style="auto" />
         <AdminArea />
       </AdminMenuProvider>
     </PanelProvider>
@@ -30,6 +31,7 @@ function AdminArea() {
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
       {allowed && <AdminHeader />}
+      <SubscriptionRenewalBanner />
       <View style={styles.flex}>
         {loading && !data ? (
           <View style={styles.center}>

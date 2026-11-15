@@ -12,25 +12,53 @@ import { ApiError } from '../../mobile/src/lib/api'
 import { setPrivateCacheOrganization, setPrivateCacheUser } from '../../mobile/src/lib/private-cache-context'
 import {
   deleteExchangeRate,
+  fetchAdminMfaPolicy,
+  fetchBusinessProfileDetails,
   fetchExchangeRates,
   fetchOrgSettings,
+  fetchSetupStatus,
   needsCurrencyConfirmation,
+  saveBusinessProfile,
   saveExchangeRate,
   saveOrgSettings,
   settingsErrorMessage,
+  updateAdminMfaPolicy,
 } from '../../mobile/src/lib/settings-admin'
 import {
+  BUSINESS_VERTICALS as MOBILE_VERTICALS,
+  OPERATING_MODELS as MOBILE_MODELS,
+  ORGANIZATION_MODULES as MOBILE_MODULES,
+  SERVICE_SPECIALTIES as MOBILE_SPECIALTIES,
+  TIME_ZONES,
   addableCurrencies,
+  buildMobileSetupItems,
   changedSettings,
+  convertSampleAmount,
   describeRate,
+  fiscalIdLabel,
   formatNumber,
+  formatPricePreview,
+  formatRateNumber,
   fromSharedRow,
+  getSuggestedModules as getMobileSuggestedModules,
+  moduleDependencyProblems as mobileModuleDependencyProblems,
   parseDecimal,
   rateIssue,
   settingsIssues,
+  timeZoneName,
   toBusinessProfile,
+  toBusinessProfileDetails,
   type OrgSettings,
 } from '../../mobile/src/lib/settings-model'
+import { getAdminSettingsText } from '../lib/i18n/admin-settings'
+import {
+  BUSINESS_VERTICALS,
+  OPERATING_MODELS,
+  ORGANIZATION_MODULES,
+  getSuggestedModules,
+  moduleDependencyProblems,
+} from '../lib/organization/business-profile'
+import { SERVICE_SPECIALTIES } from '../lib/organization/service-specialties'
 import { normalizeCountryCode, normalizeLocaleCode } from '../lib/regional/contract'
 
 const row = {
@@ -98,7 +126,7 @@ describe('guardado parcial: solo viaja lo que cambió', () => {
   })
 
   it('el país y locale confirmados viajan como cambios para que el servidor los persista', () => {
-    expect(changedSettings(saved, { ...saved, countryCode: 'PY' as any, locale: 'es-PY' as any })).toEqual({ countryCode: 'PY', locale: 'es-PY' })
+    expect(changedSettings(saved, { ...saved, countryCode: 'PY', locale: 'es-PY' })).toEqual({ countryCode: 'PY', locale: 'es-PY' })
   })
 })
 
@@ -136,9 +164,24 @@ describe('validación: las mismas reglas que el servidor, con mensajes claros', 
     expect(settingsIssues({ ...saved, taxRate: 0 }).taxRate).toBeUndefined()
   })
 
-  it('la zona horaria tiene que ser una de la lista', () => {
+  it('la zona horaria tiene que ser válida y acepta las 16 de la web', () => {
     expect(settingsIssues({ ...saved, timeZone: 'Marte/Base' }).timeZone).toBeDefined()
+    expect(settingsIssues({ ...saved, timeZone: 'America/Chicago' }).timeZone).toBeUndefined()
+    expect(settingsIssues({ ...saved, timeZone: 'Europe/Madrid' }).timeZone).toBeUndefined()
     expect(settingsIssues(saved)).toEqual({})
+    expect(TIME_ZONES.map((z) => z.code)).toEqual(
+      expect.arrayContaining(Object.keys(getAdminSettingsText('es').regional.timeZones)),
+    )
+    expect(timeZoneName('Europe/Madrid')).toBe('Europe/Madrid')
+  })
+
+  it('adapta etiqueta fiscal y vista previa de precios por región', () => {
+    expect(fiscalIdLabel('PY')).toBe('RUC')
+    expect(fiscalIdLabel('AR')).toBe('CUIT / CUIL')
+    expect(fiscalIdLabel('BR')).toBe('CNPJ / CPF')
+    expect(fiscalIdLabel('US')).toBe('EIN / Tax ID')
+    expect(fiscalIdLabel(null)).toMatch(/identificación fiscal/)
+    expect(formatPricePreview({ currency: 'PYG', countryCode: 'PY', language: 'es', locale: 'es-PY' })).toContain('1.234.568')
   })
 })
 
@@ -161,8 +204,11 @@ describe('números como se escriben en Paraguay', () => {
 })
 
 describe('tipos de cambio', () => {
-  it('muestra el tipo de cambio en la moneda local', () => {
+  it('muestra el tipo de cambio en la moneda local sin truncar tasas sub-unitarias', () => {
     expect(describeRate({ currency: 'USD', rate: 7300 }, 'PYG')).toBe('1 USD = ₲ 7.300')
+    expect(formatRateNumber(0.000137)).toBe('0,000137')
+    expect(describeRate({ currency: 'PYG', rate: 0.000137 }, 'USD')).toMatch(/0,000137$/)
+    expect(convertSampleAmount(100, 7300, 1000, 'PYG')).toBe('₲ 730.000')
   })
 
   it('no ofrece la moneda local ni las ya cargadas', () => {
@@ -179,11 +225,57 @@ describe('tipos de cambio', () => {
   })
 })
 
-describe('perfil del negocio (solo lectura)', () => {
+describe('perfil del negocio y estado de configuración', () => {
   it('toma rubro, forma de trabajo y herramientas, descartando basura', () => {
     expect(toBusinessProfile({ businessVertical: 'hardware', operatingModel: 'mixed', effectiveModules: ['pos', 3, null, 'crm'] }))
       .toEqual({ businessVertical: 'hardware', operatingModel: 'mixed', effectiveModules: ['pos', 'crm'] })
     expect(toBusinessProfile(null)).toEqual({ businessVertical: 'general', operatingModel: 'retail', effectiveModules: [] })
+  })
+
+  it('mantiene paridad exacta con el contrato del servidor para perfil y dependencias', () => {
+    expect([...MOBILE_VERTICALS]).toEqual([...BUSINESS_VERTICALS])
+    expect([...MOBILE_MODELS]).toEqual([...OPERATING_MODELS])
+    expect([...MOBILE_MODULES]).toEqual([...ORGANIZATION_MODULES])
+    expect([...MOBILE_SPECIALTIES]).toEqual([...SERVICE_SPECIALTIES])
+    expect(getMobileSuggestedModules('barbershop', 'service')).toEqual(getSuggestedModules('barbershop', 'service'))
+    expect(mobileModuleDependencyProblems(['delivery'])).toEqual(moduleDependencyProblems(['delivery']))
+    expect(toBusinessProfileDetails({
+      businessVertical: 'barbershop',
+      operatingModel: 'service',
+      enabledModules: ['services', 'pos'],
+      entitledModules: ['services', 'pos', 'crm'],
+      effectiveModules: ['services', 'pos'],
+      serviceSpecialties: ['barbering', 'hair', 'invalid'],
+      attentionMode: 'both',
+      appointmentMode: 'walk_in',
+    })).toEqual({
+      primaryActivity: 'auto',
+      businessVertical: 'barbershop',
+      operatingModel: 'service',
+      enabledModules: ['services', 'pos'],
+      entitledModules: ['services', 'pos', 'crm'],
+      effectiveModules: ['services', 'pos'],
+      serviceSpecialties: ['barbering', 'hair'],
+      attentionMode: 'both',
+      appointmentMode: 'walk_in',
+    })
+  })
+
+  it('construye los pasos pendientes hacia rutas móviles válidas', () => {
+    const items = buildMobileSetupItems(saved, {
+      onboardingStatus: 'in_progress',
+      branch: { name: 'Casa Central', city: 'Asunción' },
+      storefront: { public: false, slug: 'mi-tienda' },
+      logo: false,
+      payments: true,
+      products: false,
+      hasBusinessData: false,
+    })
+    expect(items.find((i) => i.key === 'country')).toMatchObject({ done: false, route: '/admin/settings/regional' })
+    expect(items.find((i) => i.key === 'logo')).toMatchObject({ done: false, route: '/admin/website/appearance' })
+    expect(items.find((i) => i.key === 'product')).toMatchObject({ done: false, route: '/panel/products/form' })
+    expect(items.find((i) => i.key === 'payments')).toMatchObject({ done: true, route: '/admin/website/checkout' })
+    expect(items.find((i) => i.key === 'storefront')).toMatchObject({ done: false, route: '/admin/website/domain' })
   })
 })
 
@@ -263,8 +355,55 @@ describe('APIs de la app: las mismas rutas que la web, comercio resuelto por el 
 
   it('errores en palabras de la persona', () => {
     expect(settingsErrorMessage(new ApiError('Forbidden', 403), 'x')).toMatch(/dueño o un administrador/)
+    expect(settingsErrorMessage(new ApiError('Activá la verificación en dos pasos', 403, { code: 'MFA_REQUIRED' }), 'x')).toMatch(/verificación en dos pasos/)
     expect(settingsErrorMessage(new ApiError('x', 0), 'x')).toMatch(/Sin conexión/)
     expect(settingsErrorMessage(new ApiError('boom', 500), 'x')).toMatch(/servidor/)
+  })
+
+  it('consulta estado de setup, política de 2FA admin y actualiza el perfil sin tenant id en el cuerpo', async () => {
+    reply = (url, init) => {
+      if (url.includes('/api/admin/settings/setup-status')) {
+        return new Response(JSON.stringify({ success: true, data: { onboardingStatus: 'completed', branch: null, storefront: { public: true, slug: 'tienda' }, logo: true, payments: true, products: true, hasBusinessData: true } }))
+      }
+      if (url.includes('/api/admin/security/mfa-policy')) {
+        return new Response(JSON.stringify({ requireAdminMfa: init.method === 'PUT', canChange: true }))
+      }
+      if (url.includes('/api/admin/organization-profile')) {
+        return new Response(JSON.stringify({
+          success: true,
+          data: {
+            businessVertical: 'clothing',
+            operatingModel: 'retail',
+            enabledModules: ['pos', 'inventory'],
+            entitledModules: ['pos', 'inventory', 'crm'],
+            effectiveModules: ['pos', 'inventory'],
+          },
+        }))
+      }
+      return new Response(JSON.stringify({ success: true, data: row }))
+    }
+
+    const setup = await fetchSetupStatus()
+    expect(setup?.hasBusinessData).toBe(true)
+
+    const policy = await fetchAdminMfaPolicy()
+    expect(policy).toEqual({ requireAdminMfa: false, canChange: true })
+
+    const updatedPolicy = await updateAdminMfaPolicy(true)
+    expect(updatedPolicy).toEqual({ requireAdminMfa: true, canChange: true })
+
+    const profile = await fetchBusinessProfileDetails()
+    expect(profile.entitledModules).toEqual(['pos', 'inventory', 'crm'])
+
+    const savedProfile = await saveBusinessProfile({
+      businessVertical: 'clothing',
+      operatingModel: 'retail',
+      enabledModules: ['pos', 'inventory'],
+    })
+    expect(savedProfile.businessVertical).toBe('clothing')
+    const patchCall = calls.find((c) => c.url.includes('/api/admin/organization-profile') && c.init.method === 'PATCH')
+    expect(patchCall).toBeDefined()
+    expect(String(patchCall?.init.body)).not.toMatch(/organization_id|organizationId/)
   })
 })
 

@@ -1,0 +1,4 @@
+import {it,expect} from 'vitest';
+import {appendNonrenewalTerms,NONRENEWAL_TERMS_MARKER} from '@/lib/legal/nonrenewal-terms';
+it('replaces the old 90 day clause while preserving unrelated sections',()=>{const text='## Cuenta\nConservar este contenido.\n\n'+NONRENEWAL_TERMS_MARKER+'\nEliminar en 90 días.\n\n## Contacto\nsoporte';const updated=appendNonrenewalTerms(text);expect(updated).toContain('**180 días**');expect(updated).not.toContain('Eliminar en 90 días.');expect(updated).toContain('## Contacto\nsoporte');expect(updated).toContain('Conservar este contenido.');expect(appendNonrenewalTerms(updated)).toBe(updated);});
+it('does not delete personal accounts or promise restoration of removed data',()=>{const text=appendNonrenewalTerms('Términos existentes');expect(text).toContain('no elimina la cuenta personal');expect(text).toContain('no podrán recuperarse');});

@@ -19,13 +19,14 @@ export interface CompanyInfo {
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
-  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro' | 'catalog-basic' | 'informatica-electronica' | 'barber'
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro' | 'catalog-basic' | 'informatica-electronica' | 'barber' | 'especial-para-barbero'
   /** Variante específica dentro de la plantilla elegida */
   storefrontVariant?: string
   serviceWebsiteVariant?: 'barber' | 'salon' | 'studio' | 'professional'
   serviceSpecialties?: import('@/lib/organization/service-specialties').ServiceSpecialty[]
   headerColor?: string
   showTopBar?: boolean
+  productWhatsappEnabled?: boolean
   whatsapp?: string
   ruc?: string
   businessType?: string

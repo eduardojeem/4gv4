@@ -4,6 +4,7 @@ import { WholesaleHeader } from '@/components/public/wholesale/WholesaleHeader'
 import { CatalogBasicHeader } from '@/components/public/catalog-basic/CatalogBasicHeader'
 import { InformaticaElectronicaHeader } from '@/components/public/informatica-electronica/InformaticaElectronicaHeader'
 import { BarberHeader } from '@/components/public/barber/BarberHeader'
+import { EspecialBarberoHeader } from '@/components/public/especial-para-barbero/EspecialBarberoHeader'
 
 import { WhatsAppIcon, InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/public/SocialIcons'
 
@@ -262,6 +263,15 @@ export function PublicHeader({
   if (storefrontStyle === 'catalog-basic') return <CatalogBasicHeader settings={effectiveSettings ?? null} />
   if (storefrontStyle === 'informatica-electronica') return <InformaticaElectronicaHeader settings={effectiveSettings ?? null} />
   if (storefrontStyle === 'barber') return <BarberHeader settings={effectiveSettings ?? null} />
+  if (storefrontStyle === 'especial-para-barbero') {
+    return (
+      <EspecialBarberoHeader
+        settings={effectiveSettings ?? null}
+        repairsModuleEnabled={repairsModuleEnabled}
+        servicesModuleEnabled={servicesModuleEnabled}
+      />
+    )
+  }
 
   return (
     <header

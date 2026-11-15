@@ -1,5 +1,7 @@
 'use client'
 
+import {NONRENEWAL_WARNING} from '@/lib/saas/nonrenewal-policy'
+
 import Link from 'next/link'
 import { Clock, CreditCard, Gift, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -53,13 +55,14 @@ export function SubscriptionBanner() {
         <XCircle className="h-4 w-4 flex-none text-red-600 dark:text-red-400" />
         <p className="flex-1 text-sm font-medium text-red-800 dark:text-red-300">
           {status === 'suspended'
-            ? 'Tu cuenta está suspendida.'
-            : 'Tu suscripción venció. Para seguir usando todas las funciones, activá un plan.'}
+            ? 'Tu plan está suspendido. Renovalo para volver a operar.'
+            : 'Tu suscripción venció. Podés consultar tu cuenta, pero no registrar operaciones hasta renovar.'}
+          <span className="mt-1 block text-xs">{NONRENEWAL_WARNING}</span>
         </p>
         <Button asChild size="sm" className="flex-none gap-1.5 bg-red-600 hover:bg-red-700 text-white">
           <Link href="/admin/subscriptions">
             <CreditCard className="h-3.5 w-3.5" />
-            Activar plan
+            Renovar plan
           </Link>
         </Button>
       </div>

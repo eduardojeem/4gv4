@@ -1,19 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '@/components/bottom-sheet';
 import { SettingsGate, SettingsOfflineNotice } from '@/components/settings/settings-gate';
 import { Field, Notice, Section, StateView, WebsiteScreen, websiteStyles } from '@/components/website/website-ui';
-import { palette, usePalette } from '@/lib/palette';
+import { usePalette } from '@/lib/palette';
+import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { deleteExchangeRate, fetchExchangeRates, saveExchangeRate, settingsErrorMessage } from '@/lib/settings-admin';
 import {
   ROUNDINGS,
   addableCurrencies,
+  convertSampleAmount,
   currencyName,
   describeRate,
-  formatNumber,
+  formatRateNumber,
   parseDecimal,
   rateIssue,
   type ExchangeRate,
@@ -23,46 +26,79 @@ import {
 type Editing = { currency: string; rateText: string; rounding: number; isNew: boolean };
 
 export default function ExchangeRatesScreen() {
-  return <SettingsGate title="Tipos de cambio">{() => <ExchangeRatesEditor />}</SettingsGate>;
+  const scope = useSyncExternalStore(subscribePrivateCacheContext, getPrivateCacheContext);
+  return (
+    <SettingsGate title="Tipos de cambio">
+      {() => <ExchangeRatesEditor key={scope.epoch} />}
+    </SettingsGate>
+  );
 }
 
 function ExchangeRatesEditor() {
   const colors = usePalette();
   const [state, setState] = useState<ExchangeRatesState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
+  const requestSeq = useRef(0);
 
-  useEffect(() => {
-    let alive = true;
-    fetchExchangeRates()
-      .then((next) => {
-        if (!alive) return;
-        setState(next);
-        setError(null);
-      })
-      .catch((cause) => {
-        if (alive) setError(settingsErrorMessage(cause, 'No pudimos cargar los tipos de cambio.'));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [attempt]);
+  const load = useCallback(async (showSpinner = false) => {
+    const seq = ++requestSeq.current;
+    const scope = getPrivateCacheContext();
+    if (showSpinner) setRefreshing(true);
+    try {
+      const next = await fetchExchangeRates();
+      if (seq !== requestSeq.current || scope.epoch !== getPrivateCacheContext().epoch) return;
+      setState(next);
+      setError(null);
+    } catch (cause) {
+      if (seq === requestSeq.current && scope.epoch === getPrivateCacheContext().epoch) {
+        setError(settingsErrorMessage(cause, 'No pudimos cargar los tipos de cambio.'));
+      }
+    } finally {
+      if (seq === requestSeq.current) setRefreshing(false);
+    }
+  }, []);
 
-  const reload = useCallback(() => setAttempt((value) => value + 1), []);
+  useFocusEffect(
+    useCallback(() => {
+      void load(false);
+      return () => {
+        requestSeq.current++;
+      };
+    }, [load]),
+  );
+
+  const reload = useCallback(() => {
+    void load(true);
+  }, [load]);
 
   if (!state) {
     return (
       <WebsiteScreen title="Tipos de cambio">
-        {error ? <StateView icon="alert-circle-outline" title="No pudimos cargar los tipos de cambio" text={error} action="Reintentar" onAction={reload} /> : <StateView loading title="Cargando tipos de cambio…" />}
+        {error ? (
+          <StateView
+            icon="alert-circle-outline"
+            title="No pudimos cargar los tipos de cambio"
+            text={error}
+            action="Reintentar"
+            onAction={() => void load(false)}
+          />
+        ) : (
+          <StateView loading title="Cargando tipos de cambio…" />
+        )}
       </WebsiteScreen>
     );
   }
   if (!state.available) {
     return (
-      <WebsiteScreen title="Tipos de cambio">
-        <StateView icon="construct-outline" title="Todavía no disponible" text="Tu comercio todavía no tiene activados los tipos de cambio. Consultá con soporte." />
+      <WebsiteScreen title="Tipos de cambio" refreshing={refreshing} onRefresh={reload}>
+        <StateView
+          icon="construct-outline"
+          title="Todavía no disponible"
+          text="Tu comercio todavía no tiene activados los tipos de cambio. Consultá con soporte."
+        />
       </WebsiteScreen>
     );
   }
@@ -72,22 +108,32 @@ function ExchangeRatesEditor() {
   const productsIn = (currency: string) => state.usage[currency] ?? 0;
 
   const persist = async (target: Editing, rate: number) => {
+    const scope = getPrivateCacheContext();
     setBusy(true);
     try {
       const { productsUpdated } = await saveExchangeRate(target.currency, rate, target.rounding);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (scope.epoch !== getPrivateCacheContext().epoch) return;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       setEditing(null);
-      Alert.alert('Tipo de cambio guardado', productsUpdated ? `Se recalculó el precio de ${productsUpdated} ${productsUpdated === 1 ? 'producto' : 'productos'} en ${target.currency}.` : `Ningún producto tiene el precio en ${target.currency} todavía.`);
-      reload();
+      Alert.alert(
+        'Tipo de cambio guardado',
+        productsUpdated
+          ? `Se recalculó el precio de ${productsUpdated} ${productsUpdated === 1 ? 'producto' : 'productos'} en ${target.currency}.`
+          : `Ningún producto tiene el precio en ${target.currency} todavía.`,
+      );
+      void load(true);
     } catch (cause) {
-      Alert.alert('No pudimos guardar', settingsErrorMessage(cause, 'No pudimos guardar el tipo de cambio. Intentá nuevamente.'));
+      Alert.alert(
+        'No pudimos guardar',
+        settingsErrorMessage(cause, 'No pudimos guardar el tipo de cambio. Intentá nuevamente.'),
+      );
     } finally {
       setBusy(false);
     }
   };
 
   const submit = () => {
-    if (!editing) return;
+    if (!editing || busy) return;
     const rate = parseDecimal(editing.rateText);
     const problem = rateIssue(rate);
     if (problem) {
@@ -108,62 +154,118 @@ function ExchangeRatesEditor() {
   };
 
   const remove = (rate: ExchangeRate) => {
-    if (productsIn(rate.currency) > 0) {
-      Alert.alert('No se puede quitar', `${productsIn(rate.currency)} productos tienen el precio en ${rate.currency}. Cambialos a ${local} antes de quitar la moneda.`);
+    const affected = productsIn(rate.currency);
+    if (affected > 0) {
+      Alert.alert(
+        'No se puede quitar',
+        `${affected} ${affected === 1 ? 'producto tiene' : 'productos tienen'} el precio en ${rate.currency}. Cambialos a ${local} antes de quitar la moneda.`,
+      );
       return;
     }
-    Alert.alert(`¿Quitar ${rate.currency}?`, 'Ya no vas a poder cargar precios en esta moneda hasta volver a agregarla.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Quitar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteExchangeRate(rate.currency);
-            reload();
-          } catch (cause) {
-            Alert.alert('No pudimos quitarla', settingsErrorMessage(cause, 'Intentá nuevamente.'));
-          }
+    Alert.alert(
+      `¿Quitar ${rate.currency}?`,
+      'Ya no vas a poder cargar precios en esta moneda hasta volver a agregarla.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitar',
+          style: 'destructive',
+          onPress: async () => {
+            const scope = getPrivateCacheContext();
+            try {
+              await deleteExchangeRate(rate.currency);
+              if (scope.epoch === getPrivateCacheContext().epoch) void load(true);
+            } catch (cause) {
+              Alert.alert('No pudimos quitarla', settingsErrorMessage(cause, 'Intentá nuevamente.'));
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const preview = editing ? parseDecimal(editing.rateText) : Number.NaN;
+  const previewValid = Boolean(editing && Number.isFinite(preview) && !rateIssue(preview));
+  const sampleAmount = editing && (editing.currency === 'PYG' || editing.currency === 'CLP' || (Number.isFinite(preview) && preview < 0.05))
+    ? 100000
+    : 100;
 
   return (
-    <WebsiteScreen title="Tipos de cambio" subtitle={`Moneda del comercio: ${local}`}>
+    <WebsiteScreen
+      title="Tipos de cambio"
+      subtitle={`Moneda del comercio: ${local}`}
+      refreshing={refreshing}
+      onRefresh={reload}
+    >
       <SettingsOfflineNotice />
-      <Notice text={`Si cargás el precio de un producto en otra moneda (por ejemplo USD), su precio en ${local} se calcula con este tipo de cambio. Al cambiarlo se recalculan esos productos.`} />
-      {!state.canEdit ? <Notice tone="warning" text="Solo el dueño o un administrador pueden cambiar los tipos de cambio." /> : null}
+      {error ? (
+        <Notice
+          tone="danger"
+          text={error}
+          actionLabel="Reintentar"
+          onAction={reload}
+        />
+      ) : null}
+      <Notice
+        text={`Si cargás el precio de un producto en otra moneda (por ejemplo USD), su precio en ${local} se calcula con este tipo de cambio. Al cambiarlo se recalculan esos productos.`}
+      />
+      {!state.canEdit ? (
+        <Notice tone="warning" text="Solo el dueño o un administrador pueden cambiar los tipos de cambio." />
+      ) : null}
 
       <Section title="Monedas cargadas" icon="swap-horizontal-outline">
         {state.rates.length === 0 ? (
           <Text style={[styles.muted, { color: colors.muted }]}>Todavía no cargaste ninguna moneda.</Text>
         ) : (
-          state.rates.map((rate) => (
-            <View key={rate.currency} style={[styles.row, { borderColor: colors.border }]}>
-              <View style={styles.flex}>
-                <Text style={[styles.title, { color: colors.text }]}>{describeRate(rate, local)}</Text>
-                <Text style={[styles.muted, { color: colors.muted }]}>
-                  {currencyName(rate.currency)} · {productsIn(rate.currency)} {productsIn(rate.currency) === 1 ? 'producto' : 'productos'} · {ROUNDINGS.find((item) => item.value === rate.rounding)?.label ?? `Redondeo ${rate.rounding}`}
-                </Text>
+          state.rates.map((rate) => {
+            const count = productsIn(rate.currency);
+            return (
+              <View key={rate.currency} style={[styles.row, { borderColor: colors.border }]}>
+                <View style={styles.flex}>
+                  <Text style={[styles.title, { color: colors.text }]}>{describeRate(rate, local)}</Text>
+                  <Text style={[styles.muted, { color: colors.muted }]}>
+                    {currencyName(rate.currency)} · {count} {count === 1 ? 'producto' : 'productos'} · {ROUNDINGS.find((item) => item.value === rate.rounding)?.label ?? `Redondeo ${rate.rounding}`}
+                  </Text>
+                </View>
+                {state.canEdit ? (
+                  <>
+                    <Pressable
+                      onPress={() =>
+                        setEditing({
+                          currency: rate.currency,
+                          rateText: formatRateNumber(rate.rate),
+                          rounding: rate.rounding,
+                          isNew: false,
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar ${rate.currency}`}
+                      hitSlop={8}
+                      style={styles.icon}
+                    >
+                      <Ionicons name="create-outline" size={20} color={colors.accent} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => remove(rate)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Quitar ${rate.currency}`}
+                      hitSlop={8}
+                      style={styles.icon}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={colors.dangerText} />
+                    </Pressable>
+                  </>
+                ) : null}
               </View>
-              {state.canEdit ? (
-                <>
-                  <Pressable onPress={() => setEditing({ currency: rate.currency, rateText: formatNumber(rate.rate, 2), rounding: rate.rounding, isNew: false })} accessibilityRole="button" accessibilityLabel={`Editar ${rate.currency}`} hitSlop={8} style={styles.icon}>
-                    <Ionicons name="create-outline" size={20} color={palette.primary} />
-                  </Pressable>
-                  <Pressable onPress={() => remove(rate)} accessibilityRole="button" accessibilityLabel={`Quitar ${rate.currency}`} hitSlop={8} style={styles.icon}>
-                    <Ionicons name="trash-outline" size={20} color={palette.danger} />
-                  </Pressable>
-                </>
-              ) : null}
-            </View>
-          ))
+            );
+          })
         )}
         {state.canEdit && addable.length ? (
-          <Pressable onPress={() => setEditing({ currency: addable[0], rateText: '', rounding: 1, isNew: true })} accessibilityRole="button" style={[websiteStyles.secondaryButton, { borderColor: colors.border }]}>
+          <Pressable
+            onPress={() => setEditing({ currency: addable[0], rateText: '', rounding: 1, isNew: true })}
+            accessibilityRole="button"
+            style={[websiteStyles.secondaryButton, { borderColor: colors.border }]}
+          >
             <Ionicons name="add" size={18} color={colors.text} />
             <Text style={[websiteStyles.secondaryText, { color: colors.text }]}>Agregar moneda</Text>
           </Pressable>
@@ -176,7 +278,7 @@ function ExchangeRatesEditor() {
             <View key={item.id} style={[styles.row, { borderColor: colors.border }]}>
               <View style={styles.flex}>
                 <Text style={[styles.text, { color: colors.text }]}>
-                  {item.currency}: {item.previous_rate === null ? 'nuevo' : formatNumber(Number(item.previous_rate), 2)} → {formatNumber(Number(item.rate), 2)}
+                  {item.currency}: {item.previous_rate === null ? 'nuevo' : formatRateNumber(Number(item.previous_rate))} → {formatRateNumber(Number(item.rate))}
                 </Text>
                 <Text style={[styles.muted, { color: colors.muted }]}>
                   {new Date(item.created_at).toLocaleDateString('es-PY')} · {item.products_updated} {item.products_updated === 1 ? 'producto recalculado' : 'productos recalculados'}
@@ -193,29 +295,69 @@ function ExchangeRatesEditor() {
         subtitle={`Cuántos ${local} vale 1 unidad de la otra moneda`}
         onClose={() => (busy ? undefined : setEditing(null))}
         footer={
-          <Pressable onPress={submit} disabled={busy} accessibilityRole="button" style={[websiteStyles.primaryButton, busy && styles.disabled]}>
+          <Pressable
+            onPress={submit}
+            disabled={busy}
+            accessibilityRole="button"
+            style={[websiteStyles.primaryButton, busy && styles.disabled]}
+          >
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={websiteStyles.primaryText}>Guardar</Text>}
           </Pressable>
-        }>
+        }
+      >
         {editing ? (
           <View style={styles.sheet}>
             {editing.isNew ? (
               <View style={styles.chips}>
                 {addable.map((code) => (
-                  <Chip key={code} label={code} selected={editing.currency === code} onPress={() => setEditing({ ...editing, currency: code })} />
+                  <Chip
+                    key={code}
+                    label={code}
+                    selected={editing.currency === code}
+                    onPress={() => setEditing({ ...editing, currency: code })}
+                  />
                 ))}
               </View>
             ) : null}
-            <Field label={`1 ${editing.currency} =`} value={editing.rateText} onChangeText={(rateText) => setEditing({ ...editing, rateText })} placeholder="7.300" keyboardType="decimal-pad" maxLength={16}
+            <Field
+              label={`1 ${editing.currency} =`}
+              value={editing.rateText}
+              onChangeText={(rateText) => setEditing({ ...editing, rateText })}
+              placeholder={local === 'PYG' ? '7.300' : '0,000137'}
+              keyboardType="decimal-pad"
+              maxLength={16}
               error={editing.rateText && rateIssue(preview) ? rateIssue(preview) ?? undefined : undefined}
-              help={Number.isFinite(preview) && !rateIssue(preview) ? describeRate({ currency: editing.currency, rate: preview }, local) : `Escribilo como en el banco, por ejemplo 7.300 o 7.300,50.`} />
+              help={
+                previewValid
+                  ? describeRate({ currency: editing.currency, rate: preview }, local)
+                  : 'Escribilo como en el banco, por ejemplo 7.300 o 7.300,50.'
+              }
+            />
             <Text style={[styles.label, { color: colors.text }]}>Redondeo del precio en {local}</Text>
             <View style={styles.chips}>
               {ROUNDINGS.map((item) => (
-                <Chip key={item.value} label={item.label} selected={editing.rounding === item.value} onPress={() => setEditing({ ...editing, rounding: item.value })} />
+                <Chip
+                  key={item.value}
+                  label={item.label}
+                  selected={editing.rounding === item.value}
+                  onPress={() => setEditing({ ...editing, rounding: item.value })}
+                />
               ))}
             </View>
-            {productsIn(editing.currency) ? <Notice tone="warning" text={`Al guardar se recalcula el precio de ${productsIn(editing.currency)} productos en ${editing.currency}.`} /> : null}
+            {previewValid ? (
+              <View style={[styles.previewBox, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}>
+                <Text style={[styles.previewLabel, { color: colors.muted }]}>Ejemplo con redondeo</Text>
+                <Text style={[styles.previewValue, { color: colors.text }]}>
+                  {editing.currency} {formatRateNumber(sampleAmount)} → {convertSampleAmount(sampleAmount, preview, editing.rounding, local)}
+                </Text>
+              </View>
+            ) : null}
+            {productsIn(editing.currency) ? (
+              <Notice
+                tone="warning"
+                text={`Al guardar se recalcula el precio de ${productsIn(editing.currency)} ${productsIn(editing.currency) === 1 ? 'producto' : 'productos'} en ${editing.currency}.`}
+              />
+            ) : null}
           </View>
         ) : null}
       </BottomSheet>
@@ -226,9 +368,21 @@ function ExchangeRatesEditor() {
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const colors = usePalette();
   return (
-    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }}
-      style={[websiteStyles.chip, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? `${palette.primary}12` : 'transparent' }]}>
-      <Text style={[websiteStyles.chipText, { color: selected ? palette.primary : colors.text }]}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      style={[
+        websiteStyles.chip,
+        {
+          borderColor: selected ? colors.accent : colors.border,
+          backgroundColor: selected ? colors.accentSoft : 'transparent',
+        },
+      ]}
+    >
+      <Text style={[websiteStyles.chipText, { color: selected ? colors.accent : colors.text }]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -243,5 +397,8 @@ const styles = StyleSheet.create({
   sheet: { gap: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   label: { fontSize: 13, fontWeight: '700' },
+  previewBox: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 2 },
+  previewLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  previewValue: { fontSize: 14, fontWeight: '800' },
   disabled: { opacity: 0.6 },
 });

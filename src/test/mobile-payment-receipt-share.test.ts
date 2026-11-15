@@ -1,0 +1,10 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+import {shareStoredPaymentPdf} from '../../mobile/src/lib/payment-receipt-share';
+const state=vi.hoisted(()=>({print:vi.fn(),share:vi.fn(),available:vi.fn(),remove:vi.fn(),epoch:1}));
+const sharePaymentReceiptPdf=(snapshot:unknown,epoch:number)=>shareStoredPaymentPdf(snapshot,{platform:'ios',assertContext:()=>{if(state.epoch!==epoch)throw new Error('Cambió el contexto');},available:state.available,print:state.print,share:state.share,remove:state.remove});
+const receipt={kind:'credit',input:{receiptNumber:'COL-123',customerName:'Ana',paymentDate:'2026-11-12T12:00:00Z',paymentAmount:50,paymentMethod:'cash',currency:'USD',timeZone:'America/Asuncion'}};
+beforeEach(()=>{vi.clearAllMocks();state.epoch=1;state.available.mockResolvedValue(true);state.print.mockResolvedValue({uri:'file:///cache/receipt.pdf'});state.share.mockResolvedValue(undefined);});
+it('shares a PDF with the OS and removes the temporary file afterward',async()=>{await sharePaymentReceiptPdf(receipt,1);expect(state.share).toHaveBeenCalledWith('file:///cache/receipt.pdf');expect(state.remove).toHaveBeenCalledOnce();});
+it('never shares a receipt after the private account changes during printing',async()=>{state.print.mockImplementationOnce(async()=>{state.epoch=2;return {uri:'file:///cache/receipt.pdf'};});await expect(sharePaymentReceiptPdf(receipt,1)).rejects.toThrow();expect(state.share).not.toHaveBeenCalled();expect(state.remove).toHaveBeenCalledOnce();});
+it('fails without printing when file sharing is unavailable',async()=>{state.available.mockResolvedValue(false);await expect(sharePaymentReceiptPdf(receipt,1)).rejects.toThrow();expect(state.print).not.toHaveBeenCalled();});
+it('cleans up a PDF even when the share operation fails',async()=>{state.share.mockRejectedValueOnce(new Error('No disponible'));await expect(sharePaymentReceiptPdf(receipt,1)).rejects.toThrow('No disponible');expect(state.remove).toHaveBeenCalledOnce();});

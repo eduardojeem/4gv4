@@ -1,5 +1,7 @@
 'use client'
 
+import {appendNonrenewalTerms} from '@/lib/legal/nonrenewal-terms'
+
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -55,7 +57,7 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
   const base = draft ?? published ?? DEFAULT_LEGAL_DOCUMENTS[documentType]
 
   const [title, setTitle] = useState(base.title)
-  const [content, setContent] = useState(base.content)
+  const [content, setContent] = useState(documentType === 'terms' ? appendNonrenewalTerms(base.content) : base.content)
   const [changeSummary, setChangeSummary] = useState(draft?.changeSummary ?? '')
   const [preview, setPreview] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)

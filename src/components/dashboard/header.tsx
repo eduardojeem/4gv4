@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
+import {businessExperience} from '@/lib/organization/business-experience'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
@@ -50,8 +51,10 @@ export const Header = memo(function Header() {
   const [isMacPlatform, setIsMacPlatform] = useState(false)
   const router = useRouter()
   const { toggleSidebar } = useDashboardLayout()
-  const { search, availableTypes } = useDashboardSearch()
-  const { effectiveModules } = useSubscriptionStatus()
+  const { search, availableTypes, scopeKey } = useDashboardSearch()
+  const businessProfile = useSubscriptionStatus()
+  const {effectiveModules}=businessProfile
+  const catalogLabel=businessExperience(businessProfile).catalogLabel
   const { user, signOut } = useAuth()
 
   // Notifications logic
@@ -209,7 +212,7 @@ export const Header = memo(function Header() {
   const pathname = usePathname()
   const breadcrumb = useMemo(() => {
     const navigationItem = getDashboardNavItemByPath(pathname)
-    if (navigationItem) return navigationItem.label
+    if (navigationItem) return navigationItem.key==='products'?catalogLabel:navigationItem.label
 
     const secondarySections: Array<{ prefix: string; label: string }> = [
       { prefix: '/dashboard/reports', label: 'Reportes' },
@@ -225,7 +228,7 @@ export const Header = memo(function Header() {
     const lastSegment = pathname.split('/').filter(Boolean).pop()
     if (!lastSegment) return 'Resumen'
     return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1).replace(/-/g, ' ')
-  }, [pathname])
+  }, [pathname,catalogLabel])
 
   // Get user initials for avatar fallback
   const userInitials = useMemo(() => {
@@ -286,8 +289,8 @@ export const Header = memo(function Header() {
             <Search className="mr-2 h-4 w-4" />
             <span className="truncate">
               {effectiveModules.includes('repairs')
-                ? 'Buscar productos, clientes, reparaciones...'
-                : 'Buscar productos y clientes...'}
+                ? 'Buscar en tu negocio…'
+                : 'Buscar en tu negocio…'}
             </span>
             <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 shadow-sm">
               {isMacPlatform ? <><span className="text-xs">⌘</span>K</> : 'Ctrl+K'}
@@ -296,7 +299,7 @@ export const Header = memo(function Header() {
         </div>
 
         {/* GlobalSearch Modal */}
-        <GlobalSearch
+        <GlobalSearch key={scopeKey}
           open={searchOpen}
           onOpenChange={setSearchOpen}
           onSearch={search}

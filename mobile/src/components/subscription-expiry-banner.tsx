@@ -9,8 +9,8 @@ export function SubscriptionExpiryBanner() {
   const colors = usePalette();
   const notice = data?.subscriptionNotice;
   const allowed = data?.user.isSuperAdmin || ['owner', 'admin'].includes(data?.organization.role ?? '');
-  if (!notice || !allowed) return null;
-  const accent = notice.tone === 'danger' ? '#DC2626' : '#D97706';
+  if (!notice || !allowed || notice.tone === 'danger') return null;
+  const accent = '#D97706';
   return <Pressable accessibilityRole="button" accessibilityLabel={notice.title + '. Fecha: ' + notice.dateLabel + '. Ver suscripción'} onPress={() => router.push('/admin/subscriptions' as never)} style={({ pressed }) => ({ backgroundColor: colors.card, borderColor: accent, borderWidth: 1, borderRadius: 18, padding: 16, gap: 10, opacity: pressed ? .7 : 1 })}>
     <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
       <Ionicons name="time-outline" size={23} color={accent} />

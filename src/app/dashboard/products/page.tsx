@@ -17,6 +17,9 @@ import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext';
 import { findProductSku, normalizeSku } from '@/lib/products/sku';
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
+import {NewServiceDialog} from '@/components/dashboard/agenda/NewServiceDialog';
+import {businessExperience} from '@/lib/organization/business-experience';
+import {useSharedSettings} from '@/hooks/use-shared-settings';
 import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -107,8 +110,15 @@ export default function ProductsPage() {
   // Servicios: se ofrecen si la organizacion tiene el modulo o ya cargo
   // servicios. Sin ninguna de las dos, «Solo Servicios», «Por tipo» y
   // «0 servicios» eran ruido en un catalogo que no los usa.
-  const { effectiveModules } = useSubscriptionStatus();
+  const profile=useSubscriptionStatus();
+  const {effectiveModules}=profile;
+  const experience=businessExperience(profile);
+  const hasInventoryModule=effectiveModules.includes('inventory');
+  const {settings:businessSettings}=useSharedSettings();
+  const [serviceCreateScope,setServiceCreateScope]=useState<string|null>(null);
   const hasServicesModule = effectiveModules.includes("services");
+  const canConfigureServices=hasPermission('settings.manage')&&(organization?.role==='owner'||organization?.role==='admin');
+  const createServiceFirst=hasServicesModule&&(!hasInventoryModule||canConfigureServices&&experience.serviceFocused);
   // Resumen del Catálogo: activable / expandible a demanda desde la barra
   const [showSummary, setShowSummary] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
@@ -1065,16 +1075,16 @@ export default function ProductsPage() {
                 funcional» no decian nada: ahora la bajada cuenta con que
                 abre la pantalla, que es lo que hay que saber. */}
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl dark:text-gray-50">
-              Productos
+              {experience.catalogLabel}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Catálogo e inventario completo. Podés filtrar por productos,
-              servicios o alertas con los controles de arriba.
+              {hasInventoryModule?'Administrá productos, servicios y existencias con los filtros del catálogo.':'Administrá tus servicios y precios. Configurá duración y disponibilidad desde Agenda.'}
             </p>
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
             {/* Acceso directo a los predeterminados de productos a credito */}
+            {effectiveModules.includes('credits')&&(
             <Button
               asChild
               type="button"
@@ -1088,17 +1098,19 @@ export default function ProductsPage() {
                 <span>Configuración de cuotas</span>
               </Link>
             </Button>
+            )}
 
             <SectionGuideButton guide={PRODUCTS_GUIDE} />
 
+            {canCreateProducts&&hasInventoryModule&&hasServicesModule&&canConfigureServices&&<Button variant="outline" onClick={()=>createServiceFirst?setCreateModalOpen(true):setServiceCreateScope(organization?.id??null)}>{createServiceFirst?'Nuevo producto':'Nuevo servicio'}</Button>}
             {canCreateProducts && (
               <Button
                 size="lg"
-                onClick={() => setCreateModalOpen(true)}
+                onClick={() => createServiceFirst&&canConfigureServices?setServiceCreateScope(organization?.id??null):setCreateModalOpen(true)}
                 className="h-11 w-full cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700 sm:w-auto"
               >
                 <Plus className="h-5 w-5 mr-2" />
-                Nuevo Producto
+                {createServiceFirst?'Nuevo servicio':'Nuevo producto'}
               </Button>
             )}
           </div>
@@ -1134,11 +1146,11 @@ export default function ProductsPage() {
             </div>
           )}
 
-          <PlanLimitBanner resource="products" reloadSignal={totalProducts} variant="compact" />
+          {hasInventoryModule&&<PlanLimitBanner resource="products" reloadSignal={totalProducts} variant="compact" />}
         </div>
 
         {/* Resumen del Catálogo e Inventario (Activable / Desactivable desde la barra) */}
-        {showSummary && (
+        {showSummary && hasInventoryModule && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-200">
             <ProductSummaryOverview
               metrics={globalMetrics}
@@ -1408,6 +1420,7 @@ export default function ProductsPage() {
         />
       </div>
 
+      {serviceCreateScope&&serviceCreateScope===organization?.id&&<NewServiceDialog key={organization.id} open onOpenChange={open=>setServiceCreateScope(open?organization.id:null)} existingNames={products.map(product=>product.name)} currency={businessSettings.currency} onCreated={()=>refreshData()}/>}
       {/* Product Modal */}
       {(editingProduct || createModalOpen) && (
         <ProductModal

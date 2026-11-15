@@ -1,9 +1,37 @@
 'use client'
 
 import Link from 'next/link'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, CalendarOff, Clock, Copy, ExternalLink, Globe, Loader2, Plus, Save, Scissors, Trash2, Undo2, Users } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  CalendarCheck2,
+  CalendarOff,
+  CheckCircle2,
+  Clock,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Globe,
+  ImageIcon,
+  Loader2,
+  Mail,
+  MessageSquare,
+  Plus,
+  Save,
+  Scissors,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  Undo2,
+  UserCheck,
+  Users,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,6 +70,7 @@ type Config = {
 }
 
 export type AgendaSection = 'horario' | 'equipo' | 'servicios' | 'reservas' | 'ausencias'
+type ServiceFilter = 'all' | 'online' | 'web' | 'no-cover' | 'hidden'
 
 /** Lo que se guarda con «Guardar cambios». El equipo se guarda solo, al editar cada profesional. */
 export function agendaDraftSnapshot(config: Pick<Config, 'settings' | 'services'>, advanced: boolean) {
@@ -65,6 +94,11 @@ export function openingSummary(settings: AgendaSettings) {
 }
 
 export function AgendaSettingsPanel() {
+  const { scope } = useTenantScope()
+  return <AgendaSettingsContent key={scope} />
+}
+
+function AgendaSettingsContent() {
   const [config, setConfig] = useState<Config | null>(null)
   const [available, setAvailable] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -75,9 +109,10 @@ export function AgendaSettingsPanel() {
   const [daysText, setDaysText] = useState('30')
   const saveLock = useRef(false)
   const [serviceSearch, setServiceSearch] = useState('')
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>('all')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
-  const { businessVertical, serviceSpecialties } = useSubscriptionStatus()
+  const { businessVertical, serviceSpecialties,appointmentMode } = useSubscriptionStatus()
   // Snapshot del servidor; las altas no reenvían configuración global.
   const savedSettingsRef = useRef<AgendaSettings | null>(null)
   const savedConfigRef = useRef<Config | null>(null)
@@ -309,56 +344,170 @@ export function AgendaSettingsPanel() {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/40 px-4 py-3 text-xs text-muted-foreground"><span>{section === 'equipo' || section === 'ausencias' ? 'Cada profesional o ausencia se guarda con su propio botón; no necesita Guardar cambios.' : 'Los ajustes de esta sección se aplican con Guardar cambios.'}</span><span className="font-medium">{sections.find(item => item.id === section)?.label}</span></div>
           {section === 'horario' && (
             <SectionCard title="Horario de atención" description="Fuera de este horario no se ofrecen turnos online. Un administrador puede agendar fuera de horario con una advertencia; nunca sobre otro turno o ausencia.">
-              <p className="mb-4 rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">Ejemplo: 09:00–12:00 y 14:00–18:00 deja el almuerzo sin turnos. Los tramos no deben superponerse.</p>
-              <div className="divide-y">
-                {DAY_ORDER.map((day) => {
-                  const ranges = settings.opening_hours[day] ?? []
-                  return (
-                    <div key={day} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
-                      <label className="flex w-32 items-center gap-2 text-sm font-medium">
-                        <Switch checked={ranges.length > 0} onCheckedChange={(on) => setRanges(day, on ? [['08:00', '18:00']] : [])} aria-label={`Atiende el ${WEEKDAY_LABELS[day]}`} />
-                        {WEEKDAY_LABELS[day]}
-                      </label>
-                      {ranges.length === 0 ? <span className="text-sm text-muted-foreground">Cerrado</span> : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {ranges.map(([from, to], index) => (
-                            <span key={index} className={cn('flex items-center gap-1 rounded-lg border bg-background px-1.5 py-1', from >= to && 'border-destructive')}>
-                              <Input type="time" className="h-8 w-[104px] border-0 shadow-none" value={from} onChange={(event) => setRanges(day, ranges.map((range, i) => (i === index ? [event.target.value, range[1]] : range)))} aria-label={`${WEEKDAY_LABELS[day]}: desde`} />
-                              <span className="text-xs text-muted-foreground">a</span>
-                              <Input type="time" className="h-8 w-[104px] border-0 shadow-none" value={to} onChange={(event) => setRanges(day, ranges.map((range, i) => (i === index ? [range[0], event.target.value] : range)))} aria-label={`${WEEKDAY_LABELS[day]}: hasta`} />
-                              {ranges.length > 1 && <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Quitar tramo" onClick={() => setRanges(day, ranges.filter((_, i) => i !== index))}><Trash2 className="h-3.5 w-3.5" /></Button>}
-                            </span>
-                          ))}
-                          {ranges.length < 3 && <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setRanges(day, [...ranges, ['14:00', '18:00']])}><Plus className="h-3 w-3" /> Otro tramo</Button>}
-                        </div>
+              {(() => {
+                const openDaysCount = DAY_ORDER.filter((day) => (settings.opening_hours[day] ?? []).length > 0).length
+                return (
+                  <div className="space-y-4">
+                    {/* Barra informativa superior */}
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                      <div className="rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Días de atención</p>
+                        <p className="mt-0.5 text-base font-bold tabular-nums">
+                          {openDaysCount === 7 ? 'Todos los días' : `${openDaysCount} de 7 días`}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Frecuencia de turnos</p>
+                        <p className="mt-0.5 text-base font-bold tabular-nums">
+                          Cada {settings.slot_minutes} min
+                        </p>
+                      </div>
+                      <div className="col-span-2 rounded-xl border bg-muted/20 px-3.5 py-2.5 sm:col-span-1">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Zona horaria</p>
+                        <p className="mt-0.5 truncate text-base font-bold">
+                          {config.timeZone}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/15 px-3.5 py-2.5 text-xs text-muted-foreground">
+                      <span>💡 <strong>Consejo:</strong> Podés definir múltiples tramos por día (ej.: 09:00–12:00 y 14:00–18:00) para dejar el almuerzo libre sin turnos.</span>
+                    </div>
+
+                    {/* Lista estilizada de días */}
+                    <div className="divide-y overflow-hidden rounded-2xl border bg-card">
+                      {DAY_ORDER.map((day) => {
+                        const ranges = settings.opening_hours[day] ?? []
+                        const isOpen = ranges.length > 0
+                        return (
+                          <div
+                            key={day}
+                            className={cn(
+                              'flex flex-col gap-3 p-3.5 transition-colors sm:flex-row sm:items-center sm:justify-between sm:p-4',
+                              isOpen ? 'bg-background/80 hover:bg-muted/10' : 'bg-muted/15 opacity-75',
+                            )}
+                          >
+                            <label className="flex w-44 cursor-pointer items-center gap-3 text-sm font-semibold">
+                              <Switch
+                                checked={isOpen}
+                                onCheckedChange={(on) => setRanges(day, on ? [['08:00', '18:00']] : [])}
+                                aria-label={`Atiende el ${WEEKDAY_LABELS[day]}`}
+                              />
+                              <span className={cn(isOpen ? 'text-foreground font-bold' : 'text-muted-foreground')}>
+                                {WEEKDAY_LABELS[day]}
+                              </span>
+                            </label>
+
+                            {!isOpen ? (
+                              <span className="inline-flex w-fit items-center rounded-full border border-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
+                                Cerrado
+                              </span>
+                            ) : (
+                              <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
+                                {ranges.map(([from, to], index) => {
+                                  const isInvalid = from >= to
+                                  return (
+                                    <div
+                                      key={index}
+                                      className={cn(
+                                        'flex items-center gap-1.5 rounded-xl border bg-background px-2.5 py-1.5 shadow-2xs transition-colors',
+                                        isInvalid && 'border-destructive bg-destructive/5',
+                                      )}
+                                    >
+                                      <Input
+                                        type="time"
+                                        className="h-8 w-[104px] border-0 p-0 text-center font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                                        value={from}
+                                        onChange={(event) =>
+                                          setRanges(
+                                            day,
+                                            ranges.map((range, i) => (i === index ? [event.target.value, range[1]] : range)),
+                                          )
+                                        }
+                                        aria-label={`${WEEKDAY_LABELS[day]}: desde`}
+                                      />
+                                      <span className="text-xs font-medium text-muted-foreground">a</span>
+                                      <Input
+                                        type="time"
+                                        className="h-8 w-[104px] border-0 p-0 text-center font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                                        value={to}
+                                        onChange={(event) =>
+                                          setRanges(
+                                            day,
+                                            ranges.map((range, i) => (i === index ? [range[0], event.target.value] : range)),
+                                          )
+                                        }
+                                        aria-label={`${WEEKDAY_LABELS[day]}: hasta`}
+                                      />
+                                      {ranges.length > 1 && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                          aria-label="Quitar tramo"
+                                          onClick={() => setRanges(day, ranges.filter((_, i) => i !== index))}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+
+                                {ranges.length < 3 && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 gap-1 rounded-xl text-xs font-semibold"
+                                    onClick={() => setRanges(day, [...ranges, ['14:00', '18:00']])}
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    <span>Otro tramo</span>
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Barra de opciones de frecuencia y duplicación */}
+                    <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ofrecer horarios cada</Label>
+                        <Select value={String(settings.slot_minutes)} onValueChange={(value) => setSettings({ slot_minutes: Number(value) })}>
+                          <SelectTrigger className="h-10 w-32 rounded-xl bg-background font-semibold"><SelectValue /></SelectTrigger>
+                          <SelectContent>{[10, 15, 20, 30, 45, 60].map((minutes) => <SelectItem key={minutes} value={String(minutes)}>{minutes} min</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+
+                      {mondayRanges.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-auto min-h-10 max-w-full rounded-xl py-2 text-left font-semibold text-xs"
+                          onClick={() => {
+                            const opening = { ...settings.opening_hours }
+                            DAY_ORDER.forEach((day) => {
+                              if (day !== 1 && (opening[day] ?? []).length > 0) {
+                                opening[day] = mondayRanges.map(([from, to]) => [from, to] as [string, string])
+                              }
+                            })
+                            setSettings({ opening_hours: opening })
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Usar el horario del lunes en los demás días abiertos</span>
+                        </Button>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <Label>Ofrecer horarios cada</Label>
-                  <Select value={String(settings.slot_minutes)} onValueChange={(value) => setSettings({ slot_minutes: Number(value) })}>
-                    <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>{[10, 15, 20, 30, 45, 60].map((minutes) => <SelectItem key={minutes} value={String(minutes)}>{minutes} min</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {mondayRanges.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left"
-                    onClick={() => {
-                      const opening = { ...settings.opening_hours }
-                      DAY_ORDER.forEach((day) => { if (day !== 1 && (opening[day] ?? []).length > 0) opening[day] = mondayRanges.map(([from, to]) => [from, to] as [string, string]) })
-                      setSettings({ opening_hours: opening })
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Usar el horario del lunes en los demás días abiertos
-                  </Button>
-                )}
-              </div>
+                  </div>
+                )
+              })()}
             </SectionCard>
           )}
 
@@ -382,10 +531,10 @@ export function AgendaSettingsPanel() {
           <div hidden={section !== 'servicios'}>
             <SectionCard
               title="Servicios"
-              description="Definí la duración de cada servicio y si el cliente puede reservarlo desde tu tienda. Crear un servicio lo guarda al momento; los ajustes de esta lista requieren Guardar cambios."
-              action={<Button onClick={() => setNewServiceOpen(true)} className="min-h-10"><Plus className="h-4 w-4" /> Nuevo servicio</Button>}
+              description="Definí la duración de cada servicio, su portada y si el cliente puede reservarlo desde tu tienda. Crear un servicio lo guarda al momento; los ajustes de duración y reserva requieren Guardar cambios."
+              action={<Button onClick={() => setNewServiceOpen(true)} className="min-h-10 shrink-0"><Plus className="h-4 w-4" /> Nuevo servicio</Button>}
             >
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {(() => {
                   const missing = missingSuggestedServices(businessVertical, config.services.map((service) => service.name), serviceSpecialties)
                   return savedSettingsRef.current ? (
@@ -398,43 +547,289 @@ export function AgendaSettingsPanel() {
                   ) : null
                 })()}
                 {config.services.length === 0 ? (
-                  <div className="rounded-xl border border-dashed p-6 text-center">
-                    <p className="font-semibold">Todavía no tenés servicios</p>
-                    <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Agregá el primero (ej.: «Corte de cabello») con su precio y duración.</p>
+                  <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border bg-background text-primary shadow-xs">
+                      <Scissors className="h-5 w-5" />
+                    </div>
+                    <p className="mt-3 text-base font-semibold">Todavía no tenés servicios</p>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Agregá tu primer servicio (ej.: «Corte de cabello») con su precio, duración y portada para mostrarlo en la tienda.</p>
                     <Button variant="outline" className="mt-4 min-h-10" onClick={() => setNewServiceOpen(true)}><Plus className="h-4 w-4" /> Nuevo servicio</Button>
                   </div>
-                ) : (
-                  <div className="space-y-3"><Label htmlFor="service-search">Buscar servicio</Label><Input id="service-search" type="search" placeholder="Nombre del servicio…" value={serviceSearch} onChange={event => setServiceSearch(event.target.value)} /><p className="text-xs text-muted-foreground">Preparación es el tiempo libre después del servicio. Ejemplo: corte de 30 min + 10 min para limpiar ocupa 40 min.</p>
-                  {!config.services.some(service => service.name.toLocaleLowerCase().includes(serviceSearch.trim().toLocaleLowerCase())) && <p role="status" className="py-4 text-sm text-muted-foreground">No hay servicios que coincidan con la búsqueda.</p>}
-                  <ul className="space-y-3">
-                    {config.services.filter(service => service.name.toLocaleLowerCase().includes(serviceSearch.trim().toLocaleLowerCase())).map((service) => (
-                      <li key={service.product_id} className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-muted/10 p-4 text-sm">
-                        <span className="min-w-0 flex-1 basis-40">
-                          <span className="block font-medium">{service.name}</span>
-                          <span className="text-xs text-muted-foreground">{service.hide_price ? 'Precio a consultar' : formatCurrency(service.price, { currency: config.currency })}</span>
-                        </span>
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          Dura
-                          <Input type="number" min={5} max={600} step={1} className="h-9 w-20 text-sm" value={service.duration_minutes} aria-label={`Duración de ${service.name}`} onChange={(event) => setService(service.product_id, { duration_minutes: Math.max(5, Number(event.target.value) || 5) })} />
-                          min
-                        </label>
-                        {advanced && (
-                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            Preparación
-                            <Input type="number" min={0} max={120} step={1} className="h-9 w-20 text-sm" value={service.buffer_minutes ?? 0} aria-label={`Margen de ${service.name}`} onChange={(event) => setService(service.product_id, { buffer_minutes: Number(event.target.value) })} />
-                            min
-                          </label>
-                        )}
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={service.catalog_visible === false ? 'Primero mostralo en la página web para poder reservarlo online.' : undefined}>
-                          <Switch disabled={service.catalog_visible === false} checked={service.online} onCheckedChange={(on) => setService(service.product_id, { online: on })} aria-label={`Permitir reservar online: ${service.name}`} /> Reservar online
-                        </label>
-                        <ServiceWebsiteEditor service={service} onSaved={refreshKeepingDrafts} />
-                      </li>
-                    ))}
-                  </ul></div>
-                )}
+                ) : (() => {
+                  const normalizedSearch = serviceSearch.trim().toLocaleLowerCase()
+                  const totalCount = config.services.length
+                  const onlineCount = config.services.filter((s) => s.online).length
+                  const webVisibleCount = config.services.filter((s) => s.catalog_visible !== false).length
+                  const noCoverCount = config.services.filter((s) => !s.image_url).length
+                  const hiddenCount = config.services.filter((s) => s.catalog_visible === false).length
+
+                  const filterOptions: Array<{ id: ServiceFilter; label: string; count: number }> = [
+                    { id: 'all', label: 'Todos', count: totalCount },
+                    { id: 'online', label: 'Reservables online', count: onlineCount },
+                    { id: 'web', label: 'En página web', count: webVisibleCount },
+                    { id: 'no-cover', label: 'Sin portada', count: noCoverCount },
+                    ...(hiddenCount > 0 ? [{ id: 'hidden' as const, label: 'Ocultos', count: hiddenCount }] : []),
+                  ]
+
+                  const matchesFilter = (service: AgendaService) => {
+                    if (serviceFilter === 'online') return service.online
+                    if (serviceFilter === 'web') return service.catalog_visible !== false
+                    if (serviceFilter === 'no-cover') return !service.image_url
+                    if (serviceFilter === 'hidden') return service.catalog_visible === false
+                    return true
+                  }
+
+                  const filteredServices = config.services.filter((service) =>
+                    matchesFilter(service) && service.name.toLocaleLowerCase().includes(normalizedSearch),
+                  )
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Resumen rápido de servicios */}
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4" aria-label="Resumen de servicios">
+                        <div className="rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Catálogo</p>
+                          <p className="mt-0.5 text-lg font-bold tabular-nums">{totalCount} <span className="text-xs font-normal text-muted-foreground">{totalCount === 1 ? 'servicio' : 'servicios'}</span></p>
+                        </div>
+                        <div className="rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Reserva online</p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-lg font-bold tabular-nums">
+                            <span className={cn('h-2 w-2 rounded-full', onlineCount > 0 ? 'bg-emerald-500' : 'bg-amber-500')} />
+                            {onlineCount} <span className="text-xs font-normal text-muted-foreground">de {totalCount}</span>
+                          </p>
+                        </div>
+                        <div className="rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">En la web</p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-lg font-bold tabular-nums">
+                            <Eye className="h-4 w-4 text-primary" />
+                            {webVisibleCount} <span className="text-xs font-normal text-muted-foreground">visibles</span>
+                          </p>
+                        </div>
+                        <div className={cn('rounded-xl border px-3.5 py-2.5', noCoverCount > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/30 bg-emerald-500/5')}>
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Portadas</p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold">
+                            {noCoverCount > 0 ? (
+                              <><AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /> {noCoverCount} sin foto</>
+                            ) : (
+                              <><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" /> Todas completas</>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Buscador y filtros rápidos */}
+                      <div className="space-y-3 rounded-xl border bg-muted/15 p-3.5">
+                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <Label htmlFor="service-search" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Buscar servicio</Label>
+                            <div className="relative">
+                              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                id="service-search"
+                                type="search"
+                                placeholder="Nombre del servicio…"
+                                className="h-10 bg-background pl-9 pr-8"
+                                value={serviceSearch}
+                                onChange={(event) => setServiceSearch(event.target.value)}
+                              />
+                              {serviceSearch && (
+                                <button
+                                  type="button"
+                                  aria-label="Limpiar búsqueda"
+                                  onClick={() => setServiceSearch('')}
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {advanced && (
+                            <p className="rounded-lg border bg-background/80 px-3 py-2 text-xs text-muted-foreground sm:max-w-xs">
+                              <strong className="font-medium text-foreground">Preparación:</strong> tiempo libre posterior al turno (ej.: 30 min + 10 min ocupa 40 min).
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar servicios">
+                          {filterOptions.map((option) => {
+                            const active = serviceFilter === option.id
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                aria-pressed={active}
+                                onClick={() => setServiceFilter(option.id)}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                                  active
+                                    ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                                )}
+                              >
+                                <span>{option.label}</span>
+                                <span className={cn('rounded-full px-1.5 py-0.2 text-[10px] tabular-nums', active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                                  {option.count}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Lista de tarjetas de servicios */}
+                      {filteredServices.length === 0 ? (
+                        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+                          <p>No hay servicios que coincidan con {serviceSearch ? 'la búsqueda' : 'el filtro seleccionado'}.</p>
+                          {(serviceSearch || serviceFilter !== 'all') && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => { setServiceSearch(''); setServiceFilter('all') }}>
+                              Ver todos ({totalCount})
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <ul className="space-y-3">
+                          {filteredServices.map((service) => {
+                            const isVisibleOnWeb = service.catalog_visible !== false
+                            const buffer = advanced ? (service.buffer_minutes ?? 0) : 0
+                            const totalMinutes = service.duration_minutes + buffer
+                            const priceLabel = service.hide_price
+                              ? 'Precio a consultar'
+                              : service.price === 0
+                                ? 'Gratuito'
+                                : formatCurrency(service.price, { currency: config.currency })
+
+                            return (
+                              <li key={service.product_id} className="overflow-hidden rounded-2xl border bg-card shadow-xs transition-shadow hover:shadow-sm">
+                                <div className="flex flex-col gap-4 p-4 sm:p-5">
+                                  {/* Cabecera con miniatura, título, precio y estados */}
+                                  <div className="flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                                      <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted">
+                                        {service.image_url ? (
+                                          // eslint-disable-next-line @next/next/no-img-element -- miniatura dinámica del servicio en catálogo
+                                          <img src={service.image_url} alt={`Portada de ${service.name}`} className="h-full w-full object-cover" />
+                                        ) : (
+                                          <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-muted-foreground/70">
+                                            <ImageIcon aria-hidden="true" className="h-4 w-4" />
+                                            <span className="text-[10px]">Sin foto</span>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="min-w-0 flex-1 space-y-1.5">
+                                        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                                          <h3 className="text-base font-semibold tracking-tight text-foreground">{service.name}</h3>
+                                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+                                            {priceLabel}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
+                                          <span className={cn(
+                                            'inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
+                                            isVisibleOnWeb
+                                              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                              : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                                          )}>
+                                            {isVisibleOnWeb ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                            {isVisibleOnWeb ? 'En página web' : 'Oculto en web'}
+                                          </span>
+
+                                          <span className={cn(
+                                            'inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
+                                            service.online
+                                              ? 'border-primary/25 bg-primary/10 text-primary'
+                                              : 'border-border bg-muted/60 text-muted-foreground',
+                                          )}>
+                                            <Globe className="h-3 w-3" />
+                                            {service.online ? 'Reservable online' : 'Solo agenda interna'}
+                                          </span>
+
+                                          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground tabular-nums">
+                                            <Clock className="h-3 w-3" />
+                                            {buffer > 0 ? `${totalMinutes} min totales (${service.duration_minutes}+${buffer})` : `${service.duration_minutes} min`}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Controles de agenda */}
+                                  <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)] sm:items-center">
+                                    <label className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground sm:justify-start">
+                                      <span>Duración</span>
+                                      <span className="flex items-center overflow-hidden rounded-lg border bg-background">
+                                        <Input
+                                          type="number"
+                                          min={5}
+                                          max={600}
+                                          step={1}
+                                          className="h-8 w-16 border-0 px-2 text-center text-sm font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                                          value={service.duration_minutes}
+                                          aria-label={`Duración de ${service.name}`}
+                                          onChange={(event) => setService(service.product_id, { duration_minutes: Math.max(5, Number(event.target.value) || 5) })}
+                                        />
+                                        <span className="border-l bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground">min</span>
+                                      </span>
+                                    </label>
+
+                                    {advanced && (
+                                      <label className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground sm:justify-start">
+                                        <span>Preparación</span>
+                                        <span className="flex items-center overflow-hidden rounded-lg border bg-background">
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            max={120}
+                                            step={1}
+                                            className="h-8 w-16 border-0 px-2 text-center text-sm font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                                            value={service.buffer_minutes ?? 0}
+                                            aria-label={`Margen de ${service.name}`}
+                                            onChange={(event) => setService(service.product_id, { buffer_minutes: Number(event.target.value) })}
+                                          />
+                                          <span className="border-l bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground">min</span>
+                                        </span>
+                                      </label>
+                                    )}
+
+                                    <label
+                                      className={cn(
+                                        'flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-xs sm:justify-self-end',
+                                        !isVisibleOnWeb && 'cursor-not-allowed opacity-70',
+                                        !advanced && 'sm:col-start-3',
+                                      )}
+                                      title={!isVisibleOnWeb ? 'Primero mostralo en la página web para poder reservarlo online.' : undefined}
+                                    >
+                                      <span>
+                                        <span className="block font-medium text-foreground">Reservar online</span>
+                                        {!isVisibleOnWeb && <span className="block text-[10px] text-amber-600 dark:text-amber-400">Activá en web primero</span>}
+                                      </span>
+                                      <Switch
+                                        disabled={!isVisibleOnWeb}
+                                        checked={service.online}
+                                        onCheckedChange={(on) => setService(service.product_id, { online: on })}
+                                        aria-label={`Permitir reservar online: ${service.name}`}
+                                      />
+                                    </label>
+                                  </div>
+
+                                  {/* Portada y visibilidad web */}
+                                  <ServiceWebsiteEditor service={service} onSaved={refreshKeepingDrafts} />
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )
+                })()}
                 {config.services.length > 0 && (
-                  <p className="text-xs text-muted-foreground">La portada y si aparece en la web se cambian en «Foto y página web» de cada servicio. Para el nombre o el precio, editalo en <Link href="/dashboard/products" className="underline">Productos</Link>.</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/25 px-4 py-3 text-xs text-muted-foreground">
+                    <span>La portada y visibilidad web se guardan dentro de «Foto y página web» en cada tarjeta.</span>
+                    <span>Para cambiar nombre o precio, editalo en <Link href="/dashboard/products" className="font-medium text-primary underline">Productos</Link>.</span>
+                  </div>
                 )}
                 {savedSettingsRef.current && (
                   <NewServiceDialog
@@ -451,64 +846,345 @@ export function AgendaSettingsPanel() {
 
           {section === 'reservas' && (
             <SectionCard title="Reservas online" description="Tus clientes eligen servicio, día y horario desde tu tienda, y el turno aparece en la agenda.">
-              <div className="space-y-5 text-sm">
-                <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
-                  <h3 className="font-semibold">Estado de las reservas</h3>
-                  <p>{!settings.online_booking ? 'Reservas online apagadas' : readiness.ready ? 'Requisitos de configuración completos' : 'Faltan requisitos para ofrecer reservas'}</p>
-                  <ul className="space-y-1">{readiness.checks.map(check => <li key={check.label}>{check.ok ? '✓' : 'Pendiente:'} {check.label}</li>)}</ul>
-                  {readiness.uncovered.length > 0 && <p>Sin personal online habilitado: {readiness.uncovered.join(', ')}.</p>}
-                  <p className="text-xs text-muted-foreground">Revisa requisitos básicos, no garantiza horarios libres: al reservar también se consideran turnos y ausencias.</p>
-                </div>
-                <h3 className="font-semibold">Cómo reserva el cliente</h3>
-                <div className="divide-y rounded-xl border">
-                  <ToggleRow title="Aceptar reservas desde la tienda" checked={settings.online_booking} onChange={(on) => setSettings({ online_booking: on })} />
-                  <ToggleRow title="Revisar cada solicitud antes de confirmarla" detail="Activado: el cliente solicita el turno y vos lo confirmás desde Agenda. Desactivado: la reserva se confirma automáticamente si el horario está libre." checked={settings.require_confirmation} onChange={(on) => setSettings({ require_confirmation: on })} />
-                  <ToggleRow title="Avisarme por email" detail="Cuando un cliente reserva, cambia o cancela. Llega al email de contacto de la tienda; igual lo ves en la campanita de la Agenda." checked={settings.notify_email !== false} onChange={(on) => setSettings({ notify_email: on })} />
-                </div>
+              <div className="space-y-6 text-sm">
+                {/* 1. Estado y requisitos de publicación */}
+                {(() => {
+                  const okCount = readiness.checks.filter((check) => check.ok).length
+                  const totalChecks = readiness.checks.length
+                  const statusTone = !settings.online_booking
+                    ? 'border-border bg-muted/30'
+                    : readiness.ready
+                      ? 'border-emerald-500/30 bg-emerald-500/5'
+                      : 'border-amber-500/35 bg-amber-500/5'
 
-                <h3 className="font-semibold">Avisos y enlace</h3>
-                <p>{config.bookingContext?.notificationEmail ? `Email de contacto: ${config.bookingContext.notificationEmail}` : <>No hay un email de contacto válido. <Link className="underline" href="/admin/website">Configurá el contacto de tu tienda</Link> para recibir estos avisos.</>}</p>
-                {dirty && <p className="text-xs text-muted-foreground">El enlace utiliza la configuración guardada, no los cambios pendientes.</p>}
-                {(
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/50 p-3">
-                    <code className="min-w-0 flex-1 truncate text-xs">{config.bookingUrl}</code>
-                    <Button size="sm" variant="outline" disabled={!linkReady} onClick={() => void copyLink()}><Copy className="h-3.5 w-3.5" /> Copiar</Button>
-                    {linkReady && <Button size="sm" variant="ghost" asChild><a href={config.bookingUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Ver</a></Button>}
+                  const fixActionFor = (label: string): { text: string; onClick?: () => void; href?: string } | null => {
+                    if (label.includes('Tienda')) return { text: 'Publicar en Sitio Web', href: '/admin/website' }
+                    if (label.includes('Servicios')) return { text: 'Ir a Servicios', onClick: () => goTo('servicios') }
+                    if (label.includes('Horario')) return { text: 'Ir a Horario', onClick: () => goTo('horario') }
+                    if (label.includes('Personal')) return { text: 'Ir a Quién atiende', onClick: () => goTo('equipo') }
+                    return null
+                  }
+
+                  return (
+                    <div className={cn('space-y-4 rounded-2xl border p-4 sm:p-5', statusTone)}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <span className={cn(
+                            'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border',
+                            !settings.online_booking
+                              ? 'border-border bg-background text-muted-foreground'
+                              : readiness.ready
+                                ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                : 'border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-300',
+                          )}>
+                            {!settings.online_booking ? (
+                              <Globe className="h-4 w-4" />
+                            ) : readiness.ready ? (
+                              <ShieldCheck className="h-4 w-4" />
+                            ) : (
+                              <ShieldAlert className="h-4 w-4" />
+                            )}
+                          </span>
+                          <div>
+                            <h3 className="text-base font-semibold tracking-tight">Estado de las reservas</h3>
+                            <p className="mt-0.5 text-sm font-medium text-foreground">
+                              {!settings.online_booking
+                                ? 'Reservas online apagadas'
+                                : readiness.ready
+                                  ? 'Requisitos de configuración completos'
+                                  : 'Faltan requisitos para ofrecer reservas'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className={cn(
+                          'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums',
+                          readiness.ready && settings.online_booking
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : 'border-border bg-background text-muted-foreground',
+                        )}>
+                          {okCount} de {totalChecks} requisitos
+                        </span>
+                      </div>
+
+                      <ul className="grid gap-2 sm:grid-cols-2">
+                        {readiness.checks.map((check) => {
+                          const fix = !check.ok ? fixActionFor(check.label) : null
+                          return (
+                            <li
+                              key={check.label}
+                              className={cn(
+                                'flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs',
+                                check.ok
+                                  ? 'border-emerald-500/20 bg-background/80 text-foreground'
+                                  : 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                              )}
+                            >
+                              <span className="flex items-center gap-2 font-medium">
+                                <span className={cn(
+                                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                                  check.ok
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+                                )}>
+                                  {check.ok ? '✓' : '!'}
+                                </span>
+                                <span>{check.ok ? '✓' : 'Pendiente:'} {check.label}</span>
+                              </span>
+                              {fix && (
+                                fix.href ? (
+                                  <Link href={fix.href} className="shrink-0 font-semibold text-primary underline">
+                                    {fix.text}
+                                  </Link>
+                                ) : (
+                                  <button type="button" onClick={fix.onClick} className="shrink-0 font-semibold text-primary underline">
+                                    {fix.text}
+                                  </button>
+                                )
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+
+                      {readiness.uncovered.length > 0 && (
+                        <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>Sin personal online habilitado: <strong>{readiness.uncovered.join(', ')}</strong>.</span>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        Revisa requisitos básicos, no garantiza horarios libres: al reservar también se consideran turnos y ausencias.
+                      </p>
+                    </div>
+                  )
+                })()}
+
+                {/* 2. Cómo reserva el cliente */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarCheck2 className="h-4 w-4 text-primary" />
+                    <h3 className="text-base font-semibold tracking-tight">Cómo reserva el cliente</h3>
                   </div>
-                )}
-
-                {advanced && (
-                  <label className="block space-y-1.5">
-                    <span className="font-medium">Elección del profesional</span>
-                    <select className="min-h-10 w-full rounded-md border bg-background px-3 text-sm" value={settings.professional_selection ?? 'optional'} onChange={(event) => setSettings({ professional_selection: event.target.value as NonNullable<AgendaSettings['professional_selection']> })}>
-                      <option value="disabled">Asignación automática (sin selector)</option>
-                      <option value="optional">El cliente puede elegir o pedir cualquiera</option>
-                      <option value="required">El cliente debe elegir con quién atenderse</option>
-                    </select>
-                    <span className="block text-xs text-muted-foreground">En asignación automática, el sistema elige una persona disponible y muestra su nombre y precio antes de que el cliente confirme. Si exigís elegir, necesitás al menos uno activo y que se pueda reservar online.</span>
-                  </label>
-                )}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>Anticipación mínima</Label>
-                    <Select value={String(settings.min_notice_minutes)} onValueChange={(value) => setSettings({ min_notice_minutes: Number(value) })}>
-                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>{[[0, 'Sin mínimo'], [30, '30 minutos'], [60, '1 hora'], [120, '2 horas'], [240, '4 horas'], [1440, '1 día']].map(([value, label]) => <SelectItem key={value} value={String(value)}>{label}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">Tiempo mínimo entre la reserva y el inicio. Con 1 hora, a las 14:00 se puede reservar desde las 15:00.</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="max-days-ahead">Hasta cuántos días adelante</Label>
-                    <Input id="max-days-ahead" inputMode="numeric" className="h-11 text-base" value={daysText} aria-invalid={!daysValid} aria-describedby="days-help" onChange={(event) => { setDaysText(event.target.value); if (/^\d+$/.test(event.target.value) && Number(event.target.value) >= 1 && Number(event.target.value) <= 180) setSettings({ max_days_ahead: Number(event.target.value) }) }} />
-                    <p id="days-help" className={cn('text-xs', daysValid ? 'text-muted-foreground' : 'text-destructive')}>Ingresá un número entero de 1 a 180 días.</p>
+                  <div className="divide-y overflow-hidden rounded-2xl border bg-background/60">
+                    <ToggleRow
+                      icon={Globe}
+                      title="Aceptar reservas desde la tienda"
+                      detail="Habilita la página pública de turnos y los botones «Reservar turno» en tu tienda."
+                      checked={settings.online_booking}
+                      onChange={(on) => {if(on&&appointmentMode==='walk_in'){toast.error('Cambiá la modalidad de atención sin turno en Rubro y herramientas antes de activar reservas online.');return};setSettings({ online_booking: on })}}
+                    />
+                    <ToggleRow
+                      icon={ShieldCheck}
+                      title="Revisar cada solicitud antes de confirmarla"
+                      detail="Activado: el cliente solicita el turno y vos lo confirmás desde Agenda. Desactivado: la reserva se confirma automáticamente si el horario está libre."
+                      checked={settings.require_confirmation}
+                      onChange={(on) => setSettings({ require_confirmation: on })}
+                    />
+                    <ToggleRow
+                      icon={Mail}
+                      title="Avisarme por email"
+                      detail="Cuando un cliente reserva, cambia o cancela. Llega al email de contacto de la tienda; igual lo ves en la campanita de la Agenda."
+                      checked={settings.notify_email !== false}
+                      onChange={(on) => setSettings({ notify_email: on })}
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="booking-message">Mensaje para el cliente <span className="font-normal text-muted-foreground">(opcional)</span></Label>
-                  <Textarea id="booking-message" rows={3} maxLength={500} className="text-base" aria-describedby="message-count" value={settings.booking_message ?? ''} placeholder="Ej.: llegá 5 minutos antes. Si no podés venir, cancelá desde el enlace." onChange={(event) => setSettings({ booking_message: event.target.value })} />
-                  <p id="message-count" className="text-xs text-muted-foreground">{settings.booking_message?.length ?? 0}/500 caracteres</p>
+                {/* 3. Avisos y enlace directo */}
+                <div className="space-y-3 rounded-2xl border bg-muted/15 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold tracking-tight">Avisos y enlace</h3>
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+                      linkReady
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-border bg-background text-muted-foreground',
+                    )}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full', linkReady ? 'bg-emerald-500' : 'bg-muted-foreground')} />
+                      {linkReady ? 'Enlace activo' : 'Inactivo hasta guardar y completar'}
+                    </span>
+                  </div>
+
+                  <div className={cn(
+                    'flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-xs',
+                    config.bookingContext?.notificationEmail
+                      ? 'border-border bg-background'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <p>
+                        {config.bookingContext?.notificationEmail ? (
+                          <>Email de contacto: <strong className="font-semibold text-foreground">{config.bookingContext.notificationEmail}</strong></>
+                        ) : (
+                          <>No hay un email de contacto válido. <Link className="font-semibold underline" href="/admin/website">Configurá el contacto de tu tienda</Link> para recibir estos avisos.</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {dirty && (
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      El enlace utiliza la configuración guardada, no los cambios pendientes.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-background p-2.5 shadow-2xs">
+                    <Globe className="ml-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <code className="min-w-0 flex-1 truncate text-xs font-medium">{config.bookingUrl}</code>
+                    <Button size="sm" variant="outline" disabled={!linkReady} onClick={() => void copyLink()}>
+                      <Copy className="h-3.5 w-3.5" /> Copiar
+                    </Button>
+                    {linkReady && (
+                      <Button size="sm" variant="default" asChild>
+                        <a href={config.bookingUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3.5 w-3.5" /> Ver
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Ventana de reservas y profesional */}
+                <div className="space-y-4 rounded-2xl border bg-background/60 p-4 sm:p-5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-primary" />
+                    <h3 className="text-base font-semibold tracking-tight">Reglas de disponibilidad</h3>
+                  </div>
+
+                  {advanced && (
+                    <label className="block space-y-2 rounded-xl border bg-muted/20 p-3.5">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <UserCheck className="h-4 w-4 text-primary" />
+                        <span>Elección del profesional</span>
+                      </span>
+                      <select
+                        className="min-h-10 w-full rounded-lg border bg-background px-3 text-sm font-medium"
+                        value={settings.professional_selection ?? 'optional'}
+                        onChange={(event) => setSettings({ professional_selection: event.target.value as NonNullable<AgendaSettings['professional_selection']> })}
+                      >
+                        <option value="disabled">Asignación automática (sin selector)</option>
+                        <option value="optional">El cliente puede elegir o pedir cualquiera</option>
+                        <option value="required">El cliente debe elegir con quién atenderse</option>
+                      </select>
+                      <span className="block text-xs text-muted-foreground">
+                        En asignación automática, el sistema elige una persona disponible y muestra su nombre y precio antes de que el cliente confirme. Si exigís elegir, necesitás al menos uno activo y que se pueda reservar online.
+                      </span>
+                    </label>
+                  )}
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 rounded-xl border bg-background p-3.5">
+                      <Label className="font-medium">Anticipación mínima</Label>
+                      <Select value={String(settings.min_notice_minutes)} onValueChange={(value) => setSettings({ min_notice_minutes: Number(value) })}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>{[[0, 'Sin mínimo'], [30, '30 minutos'], [60, '1 hora'], [120, '2 horas'], [240, '4 horas'], [1440, '1 día']].map(([value, label]) => <SelectItem key={value} value={String(value)}>{label}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Tiempo mínimo entre la reserva y el inicio. Con 1 hora, a las 14:00 se puede reservar desde las 15:00.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 rounded-xl border bg-background p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="max-days-ahead" className="font-medium">Hasta cuántos días adelante</Label>
+                        <span className="text-[11px] text-muted-foreground">1 a 180 días</span>
+                      </div>
+                      <Input
+                        id="max-days-ahead"
+                        inputMode="numeric"
+                        className="h-10 text-base font-semibold tabular-nums"
+                        value={daysText}
+                        aria-invalid={!daysValid}
+                        aria-describedby="days-help"
+                        onChange={(event) => {
+                          setDaysText(event.target.value)
+                          if (/^\d+$/.test(event.target.value) && Number(event.target.value) >= 1 && Number(event.target.value) <= 180) {
+                            setSettings({ max_days_ahead: Number(event.target.value) })
+                          }
+                        }}
+                      />
+                      <div className="flex flex-wrap gap-1.5" aria-label="Atajos de días adelante">
+                        {[7, 15, 30, 60, 90].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              setDaysText(String(preset))
+                              setSettings({ max_days_ahead: preset })
+                            }}
+                            className={cn(
+                              'rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors',
+                              daysText === String(preset)
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
+                            )}
+                          >
+                            {preset} días
+                          </button>
+                        ))}
+                      </div>
+                      <p id="days-help" className={cn('text-xs', daysValid ? 'text-muted-foreground' : 'text-destructive')}>
+                        Ingresá un número entero de 1 a 180 días.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Mensaje de bienvenida / indicaciones al cliente */}
+                <div className="space-y-3 rounded-2xl border bg-background/60 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label htmlFor="booking-message" className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                      <MessageSquare className="h-4 w-4 text-primary" />
+                      <span>Mensaje para el cliente <span className="text-sm font-normal text-muted-foreground">(opcional)</span></span>
+                    </Label>
+                    <span id="message-count" className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                      {settings.booking_message?.length ?? 0}/500 caracteres
+                    </span>
+                  </div>
+
+                  <Textarea
+                    id="booking-message"
+                    rows={3}
+                    maxLength={500}
+                    className="text-base"
+                    aria-describedby="message-count"
+                    value={settings.booking_message ?? ''}
+                    placeholder="Ej.: llegá 5 minutos antes. Si no podés venir, cancelá desde el enlace."
+                    onChange={(event) => setSettings({ booking_message: event.target.value })}
+                  />
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-muted-foreground">Plantillas rápidas:</span>
+                    {[
+                      {
+                        label: 'Tolerancia 10 min',
+                        text: 'Por favor llegá 5 a 10 minutos antes de tu turno. Pasados 15 minutos el lugar puede liberarse.',
+                      },
+                      {
+                        label: 'Cancelación anticipada',
+                        text: 'Si no podés asistir, avisá o cancelá con al menos 2 horas de anticipación desde tu enlace.',
+                      },
+                    ].map((tpl) => (
+                      <button
+                        key={tpl.label}
+                        type="button"
+                        onClick={() => setSettings({ booking_message: tpl.text })}
+                        className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                      >
+                        + {tpl.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {settings.booking_message?.trim() && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+                      <p className="font-semibold text-primary">Así lo verá el cliente al reservar:</p>
+                      <p className="mt-1 whitespace-pre-line text-foreground">{settings.booking_message.trim()}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </SectionCard>
@@ -550,14 +1226,33 @@ function SectionCard({ title, description, action, children }: { title: string; 
   )
 }
 
-function ToggleRow({ title, detail, checked, onChange }: { title: string; detail?: string; checked: boolean; onChange: (on: boolean) => void }) {
+function ToggleRow({
+  icon: Icon,
+  title,
+  detail,
+  checked,
+  onChange,
+}: {
+  icon?: React.ComponentType<{ className?: string }>
+  title: string
+  detail?: string
+  checked: boolean
+  onChange: (on: boolean) => void
+}) {
   return (
-    <label className="flex items-start justify-between gap-4 p-3">
-      <span>
-        <span className="block font-medium">{title}</span>
-        {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
+    <label className="flex cursor-pointer items-start justify-between gap-4 p-4 transition-colors hover:bg-muted/25">
+      <span className="flex min-w-0 items-start gap-3">
+        {Icon && (
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted/40 text-muted-foreground">
+            <Icon aria-hidden="true" className="h-4 w-4" />
+          </span>
+        )}
+        <span className="min-w-0">
+          <span className="block font-medium text-foreground">{title}</span>
+          {detail && <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{detail}</span>}
+        </span>
       </span>
-      <Switch checked={checked} onCheckedChange={onChange} aria-label={title} />
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={title} className="mt-0.5 shrink-0" />
     </label>
   )
 }

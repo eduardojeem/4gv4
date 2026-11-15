@@ -1,3 +1,4 @@
+import { mobileBusinessPresentation } from '@/lib/business-presentation';
 import { loadPosPrivateCatalog } from '@/lib/pos-private-catalog';
 import { getPrivateCacheContext, isPrivateCacheContextCurrent, setPrivateCacheBranch, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +30,7 @@ import {
   type PriceMode,
 } from '@/lib/pos';
 import { fetchCategories, fetchProducts, productImages, type Category, type Product } from '@/lib/products';
-import { DEFAULT_POS_SHELF, emptyShelfMessage, isPosService, isSellable, sameShelf, type PosShelf } from '@/lib/pos-catalog';
+import { emptyShelfMessage, isPosService, isSellable, sameShelf, type PosShelf } from '@/lib/pos-catalog';
 import { fetchPosCatalog } from '@/lib/pos-catalog-api';
 import { frequentProducts, recordSold } from '@/lib/pos-frequent';
 import { CashSheet, SalesSheet } from '@/components/pos-cash';
@@ -69,7 +70,11 @@ export default function PosScreen() {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   // Qué estante se ve: productos (por defecto), servicios, los más vendidos desde este teléfono o una categoría.
-  const [shelf, setShelf] = useState<PosShelf>(DEFAULT_POS_SHELF);
+  const defaultShelf: PosShelf = mobileBusinessPresentation(panel?.organization).defaultCatalogView;
+  const shelfScope = panel?.organization.id ?? '';
+  const [shelfChoice, setShelfChoice] = useState<{scope: string; shelf: PosShelf} | null>(null);
+  const shelf = shelfChoice?.scope === shelfScope ? shelfChoice.shelf : defaultShelf;
+  const setShelf = (next: PosShelf) => setShelfChoice({scope: shelfScope, shelf: next});
   const [frequent, setFrequent] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cashOpen, setCashOpen] = useState(false);
@@ -146,7 +151,7 @@ export default function PosScreen() {
   }, [requestKey]);
 
   useEffect(() => subscribePrivateCacheContext(() => {
-    setFrequent([]); setCategories([]); setShelf(DEFAULT_POS_SHELF); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
+    setFrequent([]); setCategories([]); setShelfChoice(null); setProducts([]); setCart([]); setCustomer(null); setDone(null); setCheckoutOpen(false); setSession(null);
   }), []);
 
   // Los frecuentes con el stock y precio que acaba de traer el servidor, si están en la página.
@@ -397,7 +402,7 @@ export default function PosScreen() {
       {/* Estantes */}
       {!search && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves} style={styles.shelvesWrap}>
-          <Shelf label="Productos" icon="cube-outline" selected={shelf === 'products'} onPress={() => setShelf('products')} colors={colors} />
+          {mobileBusinessPresentation(panel?.organization).showInventory ? <Shelf label="Productos" icon="cube-outline" selected={shelf === 'products'} onPress={() => setShelf('products')} colors={colors} /> : null}
           <Shelf label="Servicios" icon="construct-outline" selected={shelf === 'services'} onPress={() => setShelf('services')} colors={colors} />
           {frequent.length > 0 && (
             <Shelf label="Más vendidos" icon="flame-outline" selected={shelf === 'frequent'} onPress={() => setShelf('frequent')} colors={colors} />

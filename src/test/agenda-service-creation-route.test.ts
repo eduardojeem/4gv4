@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ auth: vi.fn(), org: vi.fn(), rpc: vi.fn(), pla
 vi.mock('@/lib/auth/request-auth', () => ({ resolveRequestAuthUser: mocks.auth }))
 vi.mock('@/lib/saas/context', () => ({ getCurrentOrganizationContext: mocks.org }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ rpc: mocks.rpc }) }))
-vi.mock('@/lib/saas/subscription-service', () => ({ getOrganizationPlanInfo: mocks.plan, canCreateResource: mocks.capacity }))
+vi.mock('@/lib/saas/subscription-service', () => ({ getOrganizationPlanInfo: mocks.plan, canCreateResource: mocks.capacity, getSubscriptionStatus:async()=>({isBlocked:false,isExpired:false}) }))
 import { POST } from '@/app/api/agenda/services/route'
 const body = { requestKey: '00000000-0000-4000-8000-000000000003', name: 'Manicura', price: 0, durationMinutes: 55, catalogVisible: true, online: false }
 const req = (input: unknown = body) => new NextRequest('http://localhost/api/agenda/services', { method: 'POST', body: JSON.stringify(input) })
@@ -26,9 +26,9 @@ describe('authorized atomic service endpoint', () => {
     expect((await POST(req())).status).toBe(403)
     expect(mocks.rpc).not.toHaveBeenCalled()
   })
-  it('rejects disabled inventory and client authority fields', async () => {
+  it('allows services without inventory while rejecting client authority fields', async () => {
     mocks.plan.mockResolvedValue({ modules: ['services'], entitledModules: [], moduleTrials: [] })
-    expect((await POST(req())).status).toBe(403)
+    expect((await POST(req())).status).toBe(200)
     mocks.plan.mockResolvedValue({ modules: ['services','inventory'] })
     expect((await POST(req({ ...body, organizationId: 'other', limit: null }))).status).toBe(422)
   })
@@ -38,12 +38,12 @@ describe('authorized atomic service endpoint', () => {
     expect(writes).toHaveLength(1)
     expect(writes[0][1]).toMatchObject({ p_org: 'tenant', p_actor: 'actor', p_limit: 50, p_input: { price: 0, durationMinutes: 55 } })
   })
-  it('rechecks both modules inside the policy bracket', async () => {
+  it('rechecks the services module inside the policy bracket', async () => {
     mocks.plan.mockResolvedValueOnce({ modules: ['services','inventory'] }).mockResolvedValueOnce({ modules: ['inventory'] })
     expect((await POST(req())).status).toBe(403)
     expect(mocks.rpc.mock.calls.some(([name]) => name === 'create_agenda_service')).toBe(false)
   })
-  it('uses the server fallback quota on an expired subscription and maps busy writes', async () => {
+  it('uses the trusted server quota and maps busy writes', async () => {
     mocks.capacity.mockResolvedValue({ allowed: true, expired: true, limit: 3, blocked: false })
     mocks.rpc.mockImplementation(async (name: string) => name === 'create_agenda_service' ? { error: { code: '55P03' }, data: null } : { data: 'revision', error: null })
     const response = await POST(req())

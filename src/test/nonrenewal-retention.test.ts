@@ -1,0 +1,9 @@
+import {it,expect,vi,beforeEach} from 'vitest';
+const {send,admin}=vi.hoisted(()=>({send:vi.fn(),admin:vi.fn()}));
+vi.mock('@/lib/email/resend',()=>({sendEmail:send}));
+vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:admin}));
+import {runNonrenewalRetention} from '@/lib/saas/nonrenewal-retention';
+beforeEach(()=>{vi.unstubAllEnvs();vi.clearAllMocks();});
+it('does nothing before explicit lifecycle activation',async()=>{vi.stubEnv('SUBSCRIPTION_RETENTION_ENABLED','false');expect(await runNonrenewalRetention()).toMatchObject({enabled:false,notified:0});expect(admin).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();});
+it('fails visibly when the lifecycle cannot read its subscription source',async()=>{vi.stubEnv('SUBSCRIPTION_RETENTION_ENABLED','true');const query={select:vi.fn().mockReturnThis(),order:vi.fn().mockReturnThis(),range:vi.fn().mockResolvedValue({error:{message:'missing migration'}})};admin.mockReturnValue({from:()=>query});await expect(runNonrenewalRetention()).rejects.toThrow(/suscripciones/);});
+it('never advances the retention clock when the provider skips sending',async()=>{vi.stubEnv('SUBSCRIPTION_RETENTION_ENABLED','true');const rpc=vi.fn();let calls=0;admin.mockReturnValue({rpc,auth:{admin:{getUserById:vi.fn().mockResolvedValue({data:{user:{email:'owner@example.test',email_confirmed_at:'2026-01-01'}}})}},from:(table:string)=>{const query={select:vi.fn().mockReturnThis(),order:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),range:vi.fn().mockResolvedValue({data:calls++===0?[{organization_id:'org',status:'suspended',current_period_ends_at:'2020-01-01'}]:[]}),maybeSingle:vi.fn().mockResolvedValue({data:null}),single:vi.fn().mockResolvedValue({data:{owner_id:'owner'}})};if(table==='organization_nonrenewal_cycles')return query;return query;}});send.mockResolvedValue({ok:false,skipped:true});expect(await runNonrenewalRetention()).toMatchObject({notified:0,failed:1});expect(rpc).not.toHaveBeenCalled();});

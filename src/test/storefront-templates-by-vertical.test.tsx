@@ -11,8 +11,8 @@ describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
     expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: false })).toEqual(['barber', 'wholesale-pro', 'services'])
   })
 
-  it('una barbería que también vende productos suma Clásico y Moderno, no Supermercado ni Tecnología', () => {
-    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: true }).sort()).toEqual(['barber', 'classic', 'modern', 'services', 'wholesale-pro'])
+  it('una barbería que también vende productos suma Clásico, Moderno y Especial para barbero, no Supermercado ni Tecnología', () => {
+    expect(offered('barbershop', { servicesAvailable: true, catalogAvailable: true }).sort()).toEqual(['barber', 'classic', 'especial-para-barbero', 'modern', 'services', 'wholesale-pro'])
   })
 
   it('un salón de belleza con productos puede usar Belleza', () => {
@@ -26,7 +26,7 @@ describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
   })
 
   it('comercio general u otro rubro con agenda conserva todas las opciones', () => {
-    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(11)
+    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(12)
     expect(offered('other', { servicesAvailable: false, catalogAvailable: true })).not.toContain('services')
   })
 

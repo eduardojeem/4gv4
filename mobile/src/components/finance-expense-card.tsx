@@ -1,0 +1,20 @@
+import {Ionicons} from '@expo/vector-icons';
+import {Pressable,StyleSheet,Text,View,useColorScheme} from 'react-native';
+import type {Expense} from '../lib/finance-admin';
+import {getMobileDisplayLocale} from '../lib/regional-format';
+import {usePalette,palette} from '../lib/palette';
+const LABELS:Record<string,string>={pending:'Pendiente',partially_paid:'Pago parcial',paid:'Pagado',overdue:'Vencido',voided:'Anulado'};
+export function FinanceExpenseCard({expense,onPay,disabled,currency}:{expense:Expense;onPay:()=>void;disabled:boolean;currency:string}){
+ const colors=usePalette(),dark=useColorScheme()==='dark',accent=dark?'#93C5FD':palette.primary,outstanding=Number(expense.outstanding_amount),payable=outstanding>0&&expense.status!=='voided';
+ const money=(value:number)=>new Intl.NumberFormat(getMobileDisplayLocale(),{style:'currency',currency:expense.currency,maximumFractionDigits:2}).format(Number(value));
+ const statusColor=expense.status==='paid'?(dark?'#4ADE80':'#15803D'):expense.status==='overdue'?(dark?'#F87171':palette.danger):colors.muted;
+ const day=(value:string)=>{const parts=value.split('-');return parts.length===3?parts[2]+'/'+parts[1]+'/'+parts[0]:value};
+ return <View style={[styles.card,{backgroundColor:colors.card,borderColor:colors.border}]}>
+  <View style={styles.heading}><View style={[styles.icon,{backgroundColor:colors.background}]}><Ionicons name="receipt-outline" size={21} color={colors.muted}/></View><View style={styles.grow}><Text style={{color:colors.text,fontSize:16,fontWeight:'700',lineHeight:22}}>{expense.concept||expense.finance_categories?.name||'Gasto'}</Text>{expense.vendor?<Text style={{color:colors.muted,fontSize:12,marginTop:3}}>{expense.vendor}</Text>:null}</View><View style={[styles.badge,{backgroundColor:colors.background}]}><Text style={{color:statusColor,fontSize:11,fontWeight:'700'}}>{LABELS[expense.status]??expense.status}</Text></View></View>
+  <View style={{gap:4}}><Text style={{color:colors.muted,fontSize:12,fontWeight:'600'}}>{payable?'Saldo pendiente':'Total del gasto'}</Text><Text adjustsFontSizeToFit numberOfLines={1} style={{color:colors.text,fontSize:27,fontWeight:'800',letterSpacing:-0.4}}>{money(payable?outstanding:expense.amount)}</Text></View>
+  <View style={[styles.amounts,{backgroundColor:colors.background}]}><View style={styles.grow}><Text style={{color:colors.muted,fontSize:11}}>Importe total</Text><Text style={{color:colors.text,fontSize:15,fontWeight:'600',marginTop:3}}>{money(expense.amount)}</Text></View><View style={[styles.grow,{borderLeftWidth:1,borderLeftColor:colors.border,paddingLeft:14}]}><Text style={{color:colors.muted,fontSize:11}}>Ya pagaste</Text><Text style={{color:colors.text,fontSize:15,fontWeight:'600',marginTop:3}}>{money(expense.paid_amount)}</Text></View></View>
+  <View style={styles.heading}><Ionicons name="calendar-outline" size={14} color={colors.muted}/><Text style={{color:colors.muted,fontSize:12,flex:1,lineHeight:18}}>Registrado {day(expense.accounting_date)}{expense.due_date?' · Vence '+day(expense.due_date):''}</Text></View>
+  {expense.currency!==currency?<Text style={{color:palette.danger,fontSize:12,lineHeight:18}}>Este gasto está en {expense.currency}. No se permite pagarlo con la moneda actual del negocio.</Text>:payable?<Pressable accessibilityRole="button" disabled={disabled} onPress={onPay} style={[styles.pay,{backgroundColor:accent+'12',opacity:disabled?0.4:1}]}><Text style={{color:accent,fontWeight:'700'}}>Registrar pago</Text><Ionicons name="arrow-forward" size={18} color={accent}/></Pressable>:null}
+ </View>;
+}
+const styles=StyleSheet.create({card:{borderWidth:1,borderRadius:20,padding:18,gap:16},heading:{flexDirection:'row',gap:10,alignItems:'center'},grow:{flex:1,minWidth:0},icon:{width:38,height:38,borderRadius:12,alignItems:'center',justifyContent:'center'},badge:{paddingHorizontal:8,paddingVertical:6,borderRadius:8,maxWidth:95},amounts:{flexDirection:'row',gap:14,borderRadius:12,padding:12},pay:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',minHeight:46,borderRadius:12,paddingHorizontal:14}});

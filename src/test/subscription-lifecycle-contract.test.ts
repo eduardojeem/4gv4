@@ -20,9 +20,10 @@ describe('ciclo de vida de los planes', () => {
     expect(migration).toContain('perform public.open_plan_downgrade_grace(')
   })
 
-  it('una cancelación programada vencida pasa a Gratuito y no queda como impaga', () => {
-    expect(migration).toContain("perform public.apply_free_subscription_plan(target.organization_id, 'FREE')")
-    expect(migration).toContain('and coalesce(cancel_at_period_end, false) = false')
+  it('la política vigente suspende al vencer sin cambiar el plan contratado', () => {
+    const policy=read('supabase/migrations/20261112215428_subscription_paid_plan_consistency.sql');
+    expect(policy).toContain("status = 'suspended'");
+    expect(policy).not.toContain("plan = 'FREE'");
   })
 
   it('programa los vencimientos con nombres fijos', () => {
@@ -38,7 +39,10 @@ describe('ciclo de vida de los planes', () => {
 
   it('el exceso de productos no bloquea cancelar ni cambiar de plan: lo resuelve el plazo', () => {
     expect(service).toContain("const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories', 'repairs', 'services']")
-    expect(service).toContain("const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories']")
+    const cancel=service.slice(service.indexOf('export async function cancelSubscriptionAtPeriodEnd('),service.indexOf('export async function reactivateSubscription('));
+    expect(cancel).not.toContain('getOrganizationUsage');
+    expect(cancel).not.toContain('apply_free_subscription_plan');
+    expect(cancel).toContain("status:'suspended'");
   })
 
   it('las pruebas gratis vencen solas y el registro usa los días que muestra la tarjeta', () => {

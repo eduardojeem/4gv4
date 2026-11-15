@@ -28,12 +28,26 @@ import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMed
 import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { cn } from '@/lib/utils'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
+import { isValidBrandHexColor } from '@/lib/website/brand-color'
+import {
+  BARBERO_DEFAULT_HERO_GRADIENT,
+  getOverlayGradient,
+  isLightColor,
+  isSlideTextHidden,
+  shouldUseBarberoSignatureGradient,
+  SLIDE_ALIGNMENT_FLEX,
+  SLIDE_FONT_CLASS,
+  SLIDE_TITLE_SIZE_PREVIEW,
+  SLIDE_TITLE_SIZE_PREVIEW_MOBILE,
+} from '@/lib/website/carousel-presentation'
 import { PromotionalCarouselSlideSchema } from '@/lib/validation/website-settings'
 import { getPromotionStoragePathFromUrl } from '@/lib/website/promotional-carousel-storage'
 import {
   carouselExamplesFor,
   carouselLinkShortcuts,
   carouselPlacement,
+  carouselRecommendedPackFor,
   carouselSuggestions,
   defaultSlideCta,
   slideLinkProblem,
@@ -144,181 +158,330 @@ const TITLE_COLOR_PRESETS = [
   { label: 'Negro Carbón', value: '#09090b', bg: 'bg-zinc-950', border: 'border-zinc-800' },
 ]
 
-function isLightColor(color?: string): boolean {
-  if (!color) return false
-  const clean = color.trim().toLowerCase()
-  if (clean === '#ffffff' || clean === '#fff' || clean === 'white') return true
-  if (clean === '#000000' || clean === '#000' || clean === 'black' || clean === '#09090b') return false
-  const hex = clean.replace('#', '')
-  if (hex.length === 3) {
-    const r = parseInt(hex[0] + hex[0], 16)
-    const g = parseInt(hex[1] + hex[1], 16)
-    const b = parseInt(hex[2] + hex[2], 16)
-    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
-  }
-  if (hex.length === 6) {
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
-    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
-  }
-  return false
-}
-
 // ── Slide Preview ────────────────────────────────────────────────────────────
 
-function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; uploading: boolean }) {
-  const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop')
-  const alignClass = {
-    left: 'items-start text-left',
-    center: 'items-center text-center',
-    right: 'items-end text-right',
-  }[slide.contentAlign || 'left']
+const LAYOUT_MODE_LABELS: Record<'contained' | 'full' | 'compact', string> = {
+  contained: 'Enmarcado',
+  full: 'Borde a borde',
+  compact: 'Compacto',
+}
 
-  const isTextHidden = Boolean(
-    slide.hideText ||
-    (!slide.title?.trim() && !slide.message?.trim() && !slide.badge?.trim())
-  )
+const ALIGN_LABELS = {
+  left: 'Izquierda',
+  center: 'Centro',
+  right: 'Derecha',
+} as const
+
+const OVERLAY_LABELS = {
+  none: 'Sin capa (0%)',
+  subtle: 'Sutil (25%)',
+  medium: 'Equilibrado (55%)',
+  strong: 'Intenso (85%)',
+} as const
+
+function SlidePreview({
+  slide,
+  uploading,
+  layoutMode = 'contained',
+  storefrontStyle,
+  slideCount = 1,
+  brandColor,
+  customBrandColor,
+}: {
+  slide: PromotionalCarouselSlide
+  uploading: boolean
+  layoutMode?: 'contained' | 'full' | 'compact'
+  storefrontStyle?: StorefrontStyle
+  slideCount?: number
+  brandColor?: string
+  customBrandColor?: string
+}) {
+  const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop')
+  const align = slide.contentAlign || 'left'
+  const tone = slide.textTone || 'light'
+  const alignClass = SLIDE_ALIGNMENT_FLEX[align]
+  const isBarberoStyle = storefrontStyle === 'especial-para-barbero'
+  const hasValidCustomBrand = brandColor === 'custom' && isValidBrandHexColor(customBrandColor)
+
+  const resolvedSrc = slide.imageUrl ? resolveProductImageUrl(slide.imageUrl) : ''
+  const hasImage = Boolean(resolvedSrc && resolvedSrc !== '/placeholder-product.svg')
+  const isTextHidden = isSlideTextHidden(slide)
   // Recién creada y sin textos: no es «modo gráfico», todavía falta completarla.
-  const isBlank = !slide.hideText && isTextHidden && !slide.imageUrl
+  const isBlank = !slide.hideText && isTextHidden && !hasImage
   const graphicLabel = isBlank ? 'Escribí un título o elegí una plantilla para ver cómo queda' : null
 
   const intensity = slide.overlayIntensity || (slide.hideText ? 'none' : 'strong')
-  const overlayColor = slide.overlayColor || (slide.textTone === 'light' ? 'black' : 'white')
+  const overlayColor = slide.overlayColor || (tone === 'light' ? 'black' : 'white')
+  const useSignatureGradient =
+    isBarberoStyle &&
+    !isTextHidden &&
+    (hasImage || !slide.backgroundColor) &&
+    shouldUseBarberoSignatureGradient(slide) &&
+    intensity !== 'none'
 
-  const titleSizeClass = {
-    compact: 'text-base sm:text-xl font-bold',
-    normal: 'text-lg sm:text-2xl font-black',
-    large: 'text-xl sm:text-3xl font-black tracking-tight',
-  }[slide.titleSize || 'normal']
+  const titleSizeKey = slide.titleSize || 'normal'
+  const titleSizeClass =
+    mode === 'mobile'
+      ? SLIDE_TITLE_SIZE_PREVIEW_MOBILE[titleSizeKey]
+      : SLIDE_TITLE_SIZE_PREVIEW[titleSizeKey]
 
-  const titleFontClass = {
-    sans: 'font-sans',
-    display: 'font-black tracking-tight uppercase',
-    serif: 'font-serif font-bold',
-    mono: 'font-mono font-bold tracking-tighter',
-  }[slide.fontFamily || 'sans']
-
+  const titleFontClass = SLIDE_FONT_CLASS[slide.fontFamily || (isBarberoStyle ? 'display' : 'sans')]
   const hasLightTitle = slide.titleColor
     ? isLightColor(slide.titleColor)
-    : slide.textTone === 'light'
+    : tone === 'light'
 
-  const overlayBgClass = (() => {
-    if (intensity === 'none') return 'opacity-0'
-    const opacityClass = {
-      subtle: 'opacity-25',
-      medium: 'opacity-55',
-      strong: 'opacity-85',
-    }[intensity] || 'opacity-85'
+  const overlayGradientClass = getOverlayGradient(
+    tone,
+    align,
+    intensity,
+    overlayColor,
+    mode === 'mobile' ? 'mobile' : 'desktop'
+  )
 
-    if (overlayColor === 'white') return cn('bg-white', opacityClass)
-    if (overlayColor === 'brand') return cn('bg-primary', opacityClass)
-    return cn('bg-black', opacityClass)
-  })()
+  const justifyBlockClass =
+    mode === 'mobile'
+      ? alignClass
+      : align === 'center'
+        ? 'items-center text-center mx-auto'
+        : align === 'right'
+          ? 'items-end text-right ml-auto'
+          : 'items-start text-left mr-auto'
+
+  const missingCtaHref = Boolean(slide.ctaText?.trim() && !slide.ctaHref?.trim() && !isBarberoStyle)
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
-          {mode === 'desktop' ? <Monitor className="h-3.5 w-3.5 text-muted-foreground" /> : <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
-          <span className="text-xs font-medium text-muted-foreground">Vista previa</span>
+    <div className="space-y-3">
+      {/* Cabecera de la vista previa */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {mode === 'desktop' ? <Monitor className="h-3.5 w-3.5 text-primary" /> : <Smartphone className="h-3.5 w-3.5 text-primary" />}
+          <span className="text-xs font-semibold text-foreground">Vista previa en vivo</span>
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold',
+              slide.active
+                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                : 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+            )}
+          >
+            <span className={cn('h-1.5 w-1.5 rounded-full', slide.active ? 'bg-emerald-500' : 'bg-amber-500')} />
+            {slide.active ? 'Publicada' : 'Oculta'}
+          </span>
         </div>
         <div className="flex rounded-md border bg-background p-0.5" aria-label="Formato de vista previa">
-          <button type="button" aria-label="Vista previa en computadora" aria-pressed={mode === 'desktop'} onClick={() => setMode('desktop')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm', mode === 'desktop' ? 'bg-muted text-foreground' : 'text-muted-foreground')}>
+          <button type="button" aria-label="Vista previa en computadora" aria-pressed={mode === 'desktop'} onClick={() => setMode('desktop')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm cursor-pointer transition-colors', mode === 'desktop' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
             <Monitor className="h-3.5 w-3.5" />
           </button>
-          <button type="button" aria-label="Vista previa en celular" aria-pressed={mode === 'mobile'} onClick={() => setMode('mobile')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm', mode === 'mobile' ? 'bg-muted text-foreground' : 'text-muted-foreground')}>
+          <button type="button" aria-label="Vista previa en celular" aria-pressed={mode === 'mobile'} onClick={() => setMode('mobile')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm cursor-pointer transition-colors', mode === 'mobile' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
             <Smartphone className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-      <div className={cn('mx-auto overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm', mode === 'mobile' ? 'w-full max-w-[280px]' : 'w-full')}>
-        <div
-          style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
-          className={cn('relative overflow-hidden bg-muted', mode === 'mobile' ? 'aspect-[12/5]' : 'aspect-[16/8]')}
-        >
-        {slide.imageUrl ? (
 
-          <AppImage src={slide.imageUrl} alt={slide.imageAlt || ''} className="absolute inset-0 h-full w-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            {uploading
-              ? <Loader2 className="h-7 w-7 animate-spin" />
-              : <Upload className="h-7 w-7 opacity-40" />}
-            <span className="text-xs opacity-60">
-              {uploading ? 'Subiendo imagen…' : 'Seleccioná o subí una imagen'}
-            </span>
+      {/* Marco con la paleta de marca real de la organización */}
+      <div
+        data-testid="slide-live-preview"
+        data-preview-mode={mode}
+        data-layout-mode={layoutMode}
+        data-color-scheme={brandColor && brandColor !== 'custom' ? brandColor : undefined}
+        data-custom-brand={hasValidCustomBrand ? '' : undefined}
+        style={hasValidCustomBrand ? ({ '--brand-primary': customBrandColor } as React.CSSProperties) : undefined}
+        className={cn(
+          'mx-auto overflow-hidden transition-all duration-200',
+          mode === 'mobile'
+            ? 'w-full max-w-[272px] rounded-[24px] border-2 border-zinc-800/85 bg-zinc-950 p-1.5 shadow-xl dark:border-zinc-700'
+            : layoutMode === 'full' && !isBarberoStyle
+              ? 'w-full rounded-none border-y border-border/70 bg-background shadow-sm'
+              : 'w-full rounded-xl border border-border/70 bg-background p-2 shadow-sm'
+        )}
+      >
+        {mode === 'mobile' && (
+          <div className="mb-1 flex items-center justify-center">
+            <span className="h-1 w-10 rounded-full bg-zinc-700" aria-hidden="true" />
           </div>
         )}
 
-        {/* Capa de oscurecimiento o tinte en desktop */}
-        {mode === 'desktop' && intensity !== 'none' && (
-          <div className={cn('absolute inset-0 transition-opacity', overlayBgClass)} />
-        )}
+        {/* Lienzo del banner según plantilla y ancho configurado */}
+        <div
+          style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
+          className={cn(
+            'relative overflow-hidden',
+            slide.backgroundColor ? '' : isBarberoStyle ? 'bg-[#09090D]' : 'bg-slate-950',
+            mode === 'mobile'
+              ? 'rounded-[18px] min-h-[220px]'
+              : layoutMode === 'full' || isBarberoStyle
+                ? 'rounded-lg aspect-[16/7] min-h-[205px]'
+                : layoutMode === 'compact'
+                  ? 'mx-auto max-w-[92%] rounded-xl aspect-[16/6.5] min-h-[185px]'
+                  : 'rounded-2xl aspect-[16/7.5] min-h-[210px]',
+            !slide.active && 'opacity-75'
+          )}
+        >
+          {hasImage ? (
+            <AppImage
+              src={resolvedSrc}
+              alt={slide.imageAlt || ''}
+              fill
+              sizes="(max-width: 768px) 100vw, 480px"
+              className="object-cover object-center"
+              unoptimized={shouldBypassImageOptimization(resolvedSrc)}
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-400">
+              {uploading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Upload className="h-7 w-7 opacity-50" />}
+              <span className="px-4 text-center text-xs opacity-75">
+                {uploading ? 'Subiendo imagen…' : 'Seleccioná o subí una imagen'}
+              </span>
+            </div>
+          )}
 
-        {mode === 'desktop' && (
-          isTextHidden ? (
-            <div className="relative flex h-full flex-col justify-end p-4">
-              <span className="w-fit rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs">
-                {graphicLabel ?? 'Modo gráfico (sin textos superpuestos)'}
-                {slide.ctaHref && <span className="ml-1 text-white/80">· Enlace: {slide.ctaHref}</span>}
+          {/* Degradado direccional o firma de la plantilla barbero */}
+          {intensity !== 'none' && (
+            <div
+              className={cn(
+                'absolute inset-0 transition-all duration-300',
+                !useSignatureGradient && overlayGradientClass
+              )}
+              style={useSignatureGradient ? { background: BARBERO_DEFAULT_HERO_GRADIENT } : undefined}
+            />
+          )}
+
+          {/* Indicador si está desactivada */}
+          {!slide.active && (
+            <span className="absolute right-2.5 top-2.5 z-30 rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-950 shadow-sm">
+              Oculta
+            </span>
+          )}
+
+          {/* Contenido real del banner (mismo layout sobre imagen en desktop y celular) */}
+          {isTextHidden ? (
+            <div className={cn('relative z-20 flex h-full flex-col justify-end', mode === 'mobile' ? 'min-h-[220px] p-3' : 'p-4')}>
+              <span className="w-fit max-w-full truncate rounded-md bg-black/65 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-xs">
+                {graphicLabel ?? (isBarberoStyle || !slide.ctaHref ? 'Modo gráfico · Sin textos superpuestos' : `Modo gráfico · Clic → ${slide.ctaHref}`)}
+                {(isBarberoStyle && slide.ctaHref) && <span className="ml-1 text-white/80">· Enlace: {slide.ctaHref}</span>}
               </span>
             </div>
           ) : (
-            <div className={cn('relative flex h-full flex-col justify-center px-8 py-6', alignClass, slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')}>
-              {slide.badge && (
-                <span className={cn('mb-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide border', slide.textTone === 'light' ? 'bg-white/20 text-white border-white/30' : 'bg-black/10 text-zinc-950 border-black/20')}>
-                  <Sparkles className="h-2.5 w-2.5" />
-                  {slide.badge}
+            <div
+              className={cn(
+                'relative z-20 flex h-full flex-col justify-center',
+                mode === 'mobile'
+                  ? cn('min-h-[220px] px-4 py-5 pb-9', alignClass)
+                  : cn('px-6 py-5 pb-9 max-w-[88%]', justifyBlockClass),
+                tone === 'light' ? 'text-white' : 'text-zinc-950'
+              )}
+            >
+              {slide.badge?.trim() && (
+                <span
+                  className={cn(
+                    'mb-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider shadow-xs',
+                    isBarberoStyle && tone === 'light'
+                      ? 'bg-primary text-primary-foreground'
+                      : tone === 'light'
+                        ? 'border border-white/30 bg-white/20 text-white backdrop-blur-xs'
+                        : 'border border-black/15 bg-black/10 text-zinc-950'
+                  )}
+                >
+                  <Sparkles className="h-2.5 w-2.5 shrink-0" />
+                  <span className="truncate max-w-[200px]">{slide.badge}</span>
                 </span>
               )}
+
               <p
                 style={slide.titleColor ? { color: slide.titleColor } : undefined}
                 className={cn(
-                  'leading-tight',
-                  hasLightTitle && 'drop-shadow-sm',
+                  'leading-tight text-balance',
                   titleSizeClass,
                   titleFontClass,
-                  !slide.titleColor && (slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')
+                  !slide.titleColor && (tone === 'light' ? 'text-white' : 'text-zinc-950'),
+                  hasLightTitle
+                    ? 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.85)]'
+                    : 'drop-shadow-none'
                 )}
               >
-                {slide.title || <span className="opacity-40 font-normal text-base">Título de la promoción</span>}
+                {slide.title || <span className="opacity-45 font-normal text-sm">Título de la promoción</span>}
               </p>
-              <p className="mt-2 text-xs font-medium opacity-90 sm:text-sm line-clamp-2">
-                {slide.message || <span className="opacity-40 font-normal">El mensaje se mostrará sobre la imagen.</span>}
-              </p>
-              {slide.ctaText && (
-                <span className={cn('mt-3.5 w-fit rounded-lg px-3 py-1.5 text-[10px] font-bold shadow-sm sm:text-xs', slide.textTone === 'light' ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white')}>
-                  {slide.ctaText}
-                </span>
-              )}
-            </div>
-          )
-        )}
-        </div>
-        {mode === 'mobile' && (
-          isTextHidden ? (
-            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20">
-              {graphicLabel ?? <>Modo gráfico sin textos · Toda la imagen redirige {slide.ctaHref ? `a ${slide.ctaHref}` : 'al pulsar'}</>}
-            </div>
-          ) : (
-            <div className={cn('flex min-h-[160px] flex-col justify-center px-5 py-5 text-foreground', alignClass)}>
-              {slide.badge && (
-                <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
-                  <Sparkles className="h-2.5 w-2.5" />
-                  {slide.badge}
-                </span>
-              )}
+
               <p
-                style={slide.titleColor ? { color: slide.titleColor } : undefined}
-                className={cn('leading-tight', titleSizeClass, titleFontClass, !slide.titleColor && 'font-black')}
+                className={cn(
+                  'mt-1.5 font-medium leading-relaxed line-clamp-2',
+                  mode === 'mobile' ? 'text-[11px]' : 'text-xs max-w-md',
+                  tone === 'light'
+                    ? 'text-slate-100 drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]'
+                    : 'text-zinc-800'
+                )}
               >
-                {slide.title || <span className="text-base font-normal opacity-40">Título de la promoción</span>}
+                {slide.message || <span className="opacity-45 font-normal">El mensaje se mostrará sobre la imagen.</span>}
               </p>
-              <p className="mt-1.5 text-xs font-medium text-muted-foreground">{slide.message || <span className="font-normal opacity-60">El mensaje se mostrará debajo de la imagen.</span>}</p>
-              {slide.ctaText && <span className="mt-3.5 w-fit rounded-md bg-foreground px-3 py-1.5 text-[11px] font-bold text-background">{slide.ctaText}</span>}
+
+              {slide.ctaText?.trim() && (
+                <div className={cn('mt-3 flex flex-wrap items-center gap-2', align === 'center' && 'justify-center', align === 'right' && 'justify-end')}>
+                  <span
+                    className={cn(
+                      'inline-flex w-fit items-center gap-1.5 shadow-sm transition-opacity',
+                      isBarberoStyle
+                        ? cn(
+                            'rounded-full px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider',
+                            tone === 'light' ? 'bg-primary text-primary-foreground' : 'bg-zinc-950 text-white'
+                          )
+                        : cn(
+                            'rounded-lg px-3 py-1.5 text-[10px] font-bold',
+                            tone === 'light' ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white'
+                          ),
+                      missingCtaHref && 'opacity-50 ring-1 ring-dashed ring-amber-400'
+                    )}
+                  >
+                    <span>{slide.ctaText}</span>
+                    <ArrowRight className="h-3 w-3 shrink-0" />
+                  </span>
+                  {missingCtaHref && (
+                    <span className="rounded bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-zinc-950">
+                      Agregá un enlace en Botón
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-          )
+          )}
+
+          {/* Indicadores de paginación cuando hay varias diapositivas */}
+          {slideCount > 1 && (
+            <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/50 px-2 py-1 backdrop-blur-xs">
+              {Array.from({ length: Math.min(slideCount, 5) }, (_, idx) => (
+                <span
+                  key={idx}
+                  className={cn(
+                    'h-1 rounded-full transition-all',
+                    idx === 0
+                      ? isBarberoStyle
+                        ? 'w-5 bg-primary'
+                        : 'w-5 bg-white'
+                      : 'w-1.5 bg-white/40'
+                  )}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Ficha rápida del estado actual editado */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        {!isBarberoStyle && (
+          <span className="rounded-md border bg-background px-2 py-0.5 font-medium">
+            Formato: <strong className="text-foreground">{LAYOUT_MODE_LABELS[layoutMode]}</strong>
+          </span>
+        )}
+        <span className="rounded-md border bg-background px-2 py-0.5 font-medium">
+          Alineación: <strong className="text-foreground">{ALIGN_LABELS[align]}</strong>
+        </span>
+        <span className="rounded-md border bg-background px-2 py-0.5 font-medium">
+          Capa: <strong className="text-foreground">{OVERLAY_LABELS[intensity]}</strong>
+        </span>
+        {slide.ctaHref?.trim() && (
+          <span className="max-w-full truncate rounded-md border bg-background px-2 py-0.5 font-mono text-[10px] text-foreground">
+            → {slide.ctaHref}
+          </span>
         )}
       </div>
     </div>
@@ -573,6 +736,7 @@ export function PromotionalCarouselEditor({
     ? { businessVertical: capabilities.businessVertical, hasCatalog: capabilities.hasCatalog, hasServices: capabilities.hasServices, hasRepairs: capabilities.hasRepairs }
     : DEFAULT_CAROUSEL_CONTEXT
   const examples = carouselExamplesFor(context)
+  const recommendedPack = carouselRecommendedPackFor(context, Math.min(4, MAX_SLIDES))
   const suggestions = carouselSuggestions(context)
   const linkShortcuts = carouselLinkShortcuts(context)
   const placement = settingKey === 'promotional_carousel' && storefrontStyle ? carouselPlacement(storefrontStyle) : null
@@ -613,7 +777,7 @@ export function PromotionalCarouselEditor({
     setDraft((previous) => ({ ...(previous ?? current), [key]: value }))
   }
 
-  const openNewSlide = () => {
+  const openNewSlide = (initialSection: EditorSection = 'content') => {
     if (current.slides.length >= MAX_SLIDES) {
       toast.error(`Podés publicar hasta ${MAX_SLIDES} diapositivas`)
       return
@@ -622,9 +786,36 @@ export function PromotionalCarouselEditor({
     originalSlideRef.current = slide
     editingUploadPathRef.current = null
     setFieldErrors({})
-    setActiveEditorSection('content')
+    setActiveEditorSection(initialSection)
+    if (initialSection === 'template' && recommendedPack.length > 0) {
+      setTemplateCategoryFilter(recommendedPack[0].category)
+    } else {
+      setTemplateCategoryFilter('all')
+    }
     setEditingSlide(slide)
     setDialogOpen(true)
+  }
+
+  const applyRecommendedPack = () => {
+    if (recommendedPack.length === 0) return
+    const packSlides: PromotionalCarouselSlide[] = recommendedPack.map((example) => ({
+      ...newSlide(context),
+      ...example.slide,
+      badge: example.slide.badge ?? '',
+      hideText: example.slide.hideText ?? false,
+      titleSize: example.slide.titleSize ?? 'normal',
+      overlayIntensity: example.slide.overlayIntensity ?? 'strong',
+      overlayColor: example.slide.overlayColor ?? (example.slide.textTone === 'dark' ? 'white' : 'black'),
+      titleColor: example.slide.titleColor ?? '',
+      backgroundColor: example.slide.backgroundColor ?? '',
+      fontFamily: example.slide.fontFamily ?? 'sans',
+    }))
+    setDraft((previous) => ({
+      ...(previous ?? current),
+      enabled: true,
+      slides: packSlides,
+    }))
+    toast.success(`Se cargaron ${packSlides.length} banners de ejemplo (${recommendedPack[0].category}). Hacé clic en Guardar cambios para publicarlos.`)
   }
 
   const openSlide = (slide: PromotionalCarouselSlide) => {
@@ -685,7 +876,18 @@ export function PromotionalCarouselEditor({
     discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
     editingUploadPathRef.current = null
     setFieldErrors({})
-    setEditingSlide((previous) => previous ? { ...previous, ...example.slide } : previous)
+    setEditingSlide((previous) => previous ? {
+      ...previous,
+      ...example.slide,
+      badge: example.slide.badge ?? '',
+      hideText: example.slide.hideText ?? false,
+      titleSize: example.slide.titleSize ?? 'normal',
+      overlayIntensity: example.slide.overlayIntensity ?? 'strong',
+      overlayColor: example.slide.overlayColor ?? (example.slide.textTone === 'dark' ? 'white' : 'black'),
+      titleColor: example.slide.titleColor ?? '',
+      backgroundColor: example.slide.backgroundColor ?? '',
+      fontFamily: example.slide.fontFamily ?? 'sans',
+    } : previous)
     setActiveEditorSection('content')
   }
 
@@ -1059,7 +1261,7 @@ export function PromotionalCarouselEditor({
               <span>Historial de imágenes</span>
             </Button>
             {current.slides.length < MAX_SLIDES && (
-              <Button type="button" size="sm" onClick={openNewSlide} className="gap-1.5">
+              <Button type="button" size="sm" onClick={() => openNewSlide('content')} className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 Nueva diapositiva
               </Button>
@@ -1068,15 +1270,27 @@ export function PromotionalCarouselEditor({
         </div>
 
         {current.slides.length === 0 ? (
-          <div className="flex flex-col items-center rounded-xl border border-dashed py-14 text-center">
+          <div className="flex flex-col items-center rounded-xl border border-dashed px-4 py-14 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
               <ImagePlus className="h-7 w-7 text-muted-foreground" />
             </div>
             <p className="mt-4 text-sm font-semibold">Todavía no hay promociones visuales</p>
-            <p className="mt-1 max-w-sm text-xs text-muted-foreground">Agregá una imagen horizontal, el mensaje y el enlace al producto o sección correspondiente.</p>
-            <Button type="button" variant="outline" className="mt-5" onClick={openNewSlide}>
-              <Plus className="mr-2 h-4 w-4" />Agregar primera diapositiva
-            </Button>
+            <p className="mt-1 max-w-md text-xs text-muted-foreground">Agregá una imagen horizontal, el mensaje y el enlace, o empezá rápido con una plantilla de ejemplo lista para tu rubro.</p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+              {recommendedPack.length > 0 && (
+                <Button type="button" size="sm" onClick={applyRecommendedPack} className="gap-1.5">
+                  <Sparkles className="h-4 w-4" />
+                  Cargar pack de ejemplo ({recommendedPack[0].category})
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={() => openNewSlide('template')} className="gap-1.5">
+                <Images className="h-4 w-4" />
+                Elegir plantilla
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => openNewSlide('content')}>
+                <Plus className="mr-1.5 h-4 w-4" />Agregar primera diapositiva
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="divide-y rounded-xl border">
@@ -1204,7 +1418,7 @@ export function PromotionalCarouselEditor({
           </div>
 
           {editingSlide && (
-            <div className="min-h-0 flex-1 overflow-y-auto xl:grid xl:grid-cols-[minmax(0,1fr)_480px] xl:overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto xl:grid xl:grid-cols-[minmax(0,1fr)_520px] xl:overflow-hidden">
 
               {/* Left: form */}
               <div className="bg-muted/15 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
@@ -1821,8 +2035,16 @@ export function PromotionalCarouselEditor({
 
               {/* Right: preview + publish */}
               <div className="flex flex-col border-t border-border/60 bg-muted/30 px-4 py-5 sm:px-6 xl:h-full xl:overflow-y-auto xl:border-l xl:border-t-0 xl:py-6">
-                <div className="mx-auto w-full max-w-md space-y-6 xl:sticky xl:top-0">
-                  <SlidePreview slide={editingSlide} uploading={uploading} />
+                <div className="mx-auto w-full max-w-lg space-y-6 xl:sticky xl:top-0">
+                  <SlidePreview
+                    slide={editingSlide}
+                    uploading={uploading}
+                    layoutMode={current.layoutMode || 'contained'}
+                    storefrontStyle={storefrontStyle}
+                    slideCount={Math.max(1, current.slides.length + (isEditing ? 0 : 1))}
+                    brandColor={settings?.company_info?.brandColor}
+                    customBrandColor={settings?.company_info?.customBrandColor}
+                  />
 
                   <div className="space-y-4 border-t border-border/60 pt-5">
                     <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background px-4 py-4">

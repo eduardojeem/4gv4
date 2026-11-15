@@ -344,7 +344,8 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const { canReadCost: canViewCost, canUpdateCost } = useProductCostAccess()
-  const { businessVertical, operatingModel } = useSubscriptionStatus()
+  const { businessVertical, operatingModel,effectiveModules=[] } = useSubscriptionStatus()
+  const [initialUnit]=useState(()=>effectiveModules.includes('services')&&!effectiveModules.includes('inventory')?'servicio':'')
   // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
   const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
 
@@ -390,7 +391,7 @@ export function ProductModal({
       stock_quantity: 0,
       min_stock: 0,
       max_stock: 0,
-      unit_measure: '',
+      unit_measure: initialUnit,
       barcode: '',
       is_active: true,
       visibility: 'public',
@@ -687,7 +688,7 @@ export function ProductModal({
         stock_quantity: 0,
         min_stock: 0,
         max_stock: 0,
-        unit_measure: '',
+        unit_measure: initialUnit,
         barcode: '',
         is_active: true,
         visibility: 'public',
@@ -700,7 +701,7 @@ export function ProductModal({
         variants: [],
       })
     }
-  }, [productId, form])
+  }, [productId, form,initialUnit])
 
   // Algunos consumidores abren el modal desde listados resumidos que solo
   // incluyen `has_variants`. Recuperamos el detalle completo para mostrar las
@@ -1869,7 +1870,7 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Unidad de Medida <FieldRequirement /></FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <Select disabled={effectiveModules.includes('services')&&!effectiveModules.includes('inventory')} onValueChange={field.onChange} value={field.value || ""}>
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue placeholder="Seleccionar unidad" />

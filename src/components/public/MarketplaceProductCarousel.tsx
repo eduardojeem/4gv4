@@ -1,4 +1,6 @@
 'use client'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
+import {ProductWhatsAppButton} from './ProductWhatsAppButton'
 
 import { WhatsAppIcon } from '@/components/public/SocialIcons'
 
@@ -17,7 +19,6 @@ import { getOfferPricing } from '@/lib/public/marketplace-offers'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
-import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { siteUrl } from '@/lib/site-url'
 
 type Props = {
@@ -200,24 +201,9 @@ export function MarketplaceProductCarousel({
             const displayPrice = offer.price
             const discountPct = offer.percent
             const contact = product.organization_contact ?? null
-            const whatsappDigits = (contact?.whatsapp || contact?.phone || '').replace(/\D/g, '')
             const productHref = `/${product.organization_slug}/productos/${product.id}`
             const fullProductUrl = siteUrl(productHref)
-            const whatsappHref = whatsappDigits.length >= 6
-              ? getWhatsAppLink({
-                  phone: whatsappDigits,
-                  message: buildProductWhatsAppMessage({
-                    storeName: product.organization_name,
-                    productName: product.name,
-                    price: precioOculto ? 0 : displayPrice,
-                    originalPrice: !precioOculto && hasOffer ? offer.regularPrice : null,
-                    sku: product.sku,
-                    productUrl: fullProductUrl,
-                    imageUrl: resolveProductImageUrl(product.image),
-                    intent: precioOculto ? 'price' : 'inquiry',
-                  }),
-                })
-              : null
+            const whatsappHref = productWhatsappInquiryHref({company:contact,product:{name:product.name,url:fullProductUrl,priceHidden:precioOculto}})
 
             return (
               <div
@@ -412,6 +398,7 @@ export function MarketplaceProductCarousel({
                         </Link>
                       </Button>
                     </div>
+                    {!precioOculto && <ProductWhatsAppButton href={whatsappHref} productName={product.name} className="mt-2 w-full"/>}
                   </div>
                 </div>
               </div>

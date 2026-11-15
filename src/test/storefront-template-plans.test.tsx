@@ -9,6 +9,7 @@ import {
   cheapestPlanWithTemplate,
   defaultTemplatesForPlan,
   isTemplateInPlan,
+  plansWithTemplate,
   sanitizeTemplateList,
   templatesForPlan,
 } from '@/lib/website/template-plan-access'
@@ -58,10 +59,13 @@ describe('plantillas por plan: reglas', () => {
     expect(canSwitchTemplate({ next: 'modern', current: 'barber', allowed: basic })).toBe(true)
   })
 
-  it('indica el plan más barato que trae la plantilla', () => {
+  it('indica el plan más barato y todos los planes que traen la plantilla', () => {
     expect(cheapestPlanWithTemplate('tech', plans)?.name).toBe('Pro')
     expect(cheapestPlanWithTemplate('informatica-electronica', plans)?.name).toBe('Pro Max')
     expect(cheapestPlanWithTemplate('classic', plans)?.name).toBe('Basic')
+    expect(plansWithTemplate('tech', plans).map((p) => p.name)).toEqual(['Pro', 'Pro Max'])
+    expect(plansWithTemplate('classic', plans).map((p) => p.name)).toEqual(['Basic', 'Pro', 'Pro Max'])
+    expect(plansWithTemplate('informatica-electronica', plans).map((p) => p.name)).toEqual(['Pro Max'])
   })
 })
 
@@ -73,8 +77,16 @@ describe('catálogo del panel', () => {
     const options = groups.flatMap((group) => group.options)
     expect(options).toHaveLength(STOREFRONT_STYLE_PREFERENCES.length)
     const mega = options.find((option) => option.value === 'informatica-electronica')
-    expect(mega).toMatchObject({ status: 'locked_plan', upgradePlanName: 'Pro Max', reason: 'Disponible en el plan Pro Max.' })
-    expect(options.find((option) => option.value === 'classic')?.status).toBe('available')
+    expect(mega).toMatchObject({
+      status: 'locked_plan',
+      upgradePlanName: 'Pro Max',
+      enabledPlans: ['Pro Max'],
+      reason: 'Disponible en el plan Pro Max.',
+    })
+    expect(options.find((option) => option.value === 'classic')).toMatchObject({
+      status: 'available',
+      enabledPlans: ['Basic', 'Pro', 'Pro Max'],
+    })
   })
 
   it('las que no aplican al negocio quedan apagadas con el motivo', () => {
@@ -94,11 +106,44 @@ describe('catálogo del panel', () => {
     const groups = buildTemplateCatalog({ businessVertical: 'electronics', context: {}, savedValue: 'informatica-electronica', access })
     expect(groups.flatMap((group) => group.options).find((option) => option.value === 'informatica-electronica')?.status).toBe('available')
   })
+
+  it('cuando una plantilla no está habilitada en ningún plan se marca como «Próximamente»', () => {
+    const restrictedPlans = plans.map((plan) => ({
+      ...plan,
+      templates: plan.templates.filter((tpl) => tpl !== 'especial-para-barbero'),
+    }))
+    const groups = buildTemplateCatalog({
+      businessVertical: 'barbershop',
+      context: { commerceMode: 'cart', catalogAvailable: true, servicesAvailable: true },
+      access: {
+        planName: 'Pro Max',
+        allowed: restrictedPlans[2].templates,
+        plans: restrictedPlans,
+      },
+    })
+    const barbero = groups.flatMap((group) => group.options).find((option) => option.value === 'especial-para-barbero')
+    expect(barbero).toMatchObject({
+      status: 'coming_soon',
+      reason: 'Próximamente disponible.',
+    })
+    expect(barbero?.upgradePlanName).toBeUndefined()
+  })
 })
+
+const mockTemplateAccessState = {
+  value: {
+    planName: 'Basic',
+    planCode: 'BASIC',
+    allowed: defaultTemplatesForPlan('BASIC'),
+    plans,
+    businessVertical: 'electronics',
+    servicesAvailable: false,
+  },
+}
 
 vi.mock('@/hooks/use-storefront-template-access', () => ({
   useStorefrontTemplateAccess: () => ({
-    access: { planName: 'Basic', planCode: 'BASIC', allowed: defaultTemplatesForPlan('BASIC'), plans, businessVertical: 'electronics', servicesAvailable: false },
+    access: mockTemplateAccessState.value,
     error: null,
     isLoading: false,
   }),
@@ -109,9 +154,44 @@ describe('selector de /admin/website', () => {
     const { StorefrontTemplateSelector } = await import('@/components/admin/website/StorefrontTemplateSelector')
     render(<StorefrontTemplateSelector value="classic" onChange={vi.fn()} businessVertical="electronics" servicesAvailable={false} commerceMode="cart" />)
     expect(screen.getByText(/Tu plan/)).toHaveTextContent('Tu plan Basic incluye')
-    expect(screen.getByRole('button', { name: /^Mega Tienda Tech/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^Mega Tienda Tech/ })).toHaveAccessibleDescription('Disponible en el plan Pro Max.')
-    expect(screen.getByRole('button', { name: /^Tienda Clásica/ })).toBeEnabled()
+    const megaBtn = screen.getByRole('button', { name: /^Mega Tienda Tech/ })
+    expect(megaBtn).toBeDisabled()
+    expect(megaBtn).toHaveAccessibleDescription('Disponible en el plan Pro Max.')
+    expect(megaBtn).toHaveTextContent('Plan: Pro Max')
+    const classicBtn = screen.getByRole('button', { name: /^Tienda Clásica/ })
+    expect(classicBtn).toBeEnabled()
+    expect(classicBtn).toHaveTextContent('Planes: Basic, Pro, Pro Max')
     expect(screen.getByRole('link', { name: /Ver planes para desbloquear/ })).toHaveAttribute('href', '/admin/subscriptions/change-plan')
+  })
+
+  it('muestra «Próximamente» en las plantillas no habilitadas en ningún plan', async () => {
+    const withoutBarbero = plans.map((plan) => ({
+      ...plan,
+      templates: plan.templates.filter((tpl) => tpl !== 'especial-para-barbero'),
+    }))
+    mockTemplateAccessState.value = {
+      planName: 'Pro Max',
+      planCode: 'ENTERPRISE',
+      allowed: withoutBarbero[2].templates,
+      plans: withoutBarbero,
+      businessVertical: 'barbershop',
+      servicesAvailable: true,
+    }
+    const { StorefrontTemplateSelector } = await import('@/components/admin/website/StorefrontTemplateSelector')
+    render(
+      <StorefrontTemplateSelector
+        value="barber"
+        onChange={vi.fn()}
+        businessVertical="barbershop"
+        servicesAvailable={true}
+        catalogAvailable={true}
+        commerceMode="cart"
+      />
+    )
+    const barberoBtn = screen.getByRole('button', { name: /^Especial para barbero/ })
+    expect(barberoBtn).toBeDisabled()
+    expect(barberoBtn).toHaveAccessibleDescription('Próximamente disponible.')
+    expect(screen.getByText('Próximamente')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Ver planes para desbloquear/ })).not.toBeInTheDocument()
   })
 })

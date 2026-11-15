@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PanelQuickMenu } from './panel-quick-menu';
 import { useAfterDismiss } from '@/lib/after-dismiss';
 import { openWeb } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
@@ -33,12 +34,19 @@ import { profileMenuSections, type ProfileMenuEntry } from '@/lib/profile-menu';
 import { useSession } from '@/lib/session';
 
 /**
- * Los dos menús del panel, como en la web:
- * - Secciones: la barra lateral, como cajón desde la izquierda (botón ☰ y «Más»).
+ * Menús del panel:
+ * - Menú rápido compacto (botón central): bloques táctiles compactos 4xN.
+ * - Secciones completas: la barra lateral, como cajón desde la izquierda (☰).
  * - Perfil: el menú del avatar, arriba a la derecha.
  */
 
-type MenusContextValue = { openSections: () => void; openProfile: () => void };
+export type ActivePanelMenu = 'sections' | 'quick' | 'profile' | null;
+type MenusContextValue = {
+  activeMenu: ActivePanelMenu;
+  openSections: () => void;
+  openQuickMenu: () => void;
+  openProfile: () => void;
+};
 const MenusContext = createContext<MenusContextValue | null>(null);
 
 export function usePanelMenus() {
@@ -48,10 +56,21 @@ export function usePanelMenus() {
 }
 
 export function PanelMenusProvider({ children }: PropsWithChildren) {
-  const [open, setOpen] = useState<'sections' | 'profile' | null>(null);
+  const [open, setOpen] = useState<ActivePanelMenu>(null);
   return (
-    <MenusContext.Provider value={{ openSections: () => setOpen('sections'), openProfile: () => setOpen('profile') }}>
+    <MenusContext.Provider
+      value={{
+        activeMenu: open,
+        openSections: () => setOpen('sections'),
+        openQuickMenu: () => setOpen('quick'),
+        openProfile: () => setOpen('profile'),
+      }}>
       {children}
+      <PanelQuickMenu
+        visible={open === 'quick'}
+        onClose={() => setOpen(null)}
+        onOpenSections={() => setOpen('sections')}
+      />
       <SectionsDrawer visible={open === 'sections'} onClose={() => setOpen(null)} />
       <ProfileMenu visible={open === 'profile'} onClose={() => setOpen(null)} />
     </MenusContext.Provider>

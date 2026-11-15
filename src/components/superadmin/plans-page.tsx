@@ -243,6 +243,8 @@ function PlanCard({
           </span>
         </div>
 
+        <p className="text-xs text-muted-foreground">Código interno: <code>{plan.tier.toUpperCase()}</code> · El precio determina si es gratuito.</p>
+
         {/* Price */}
         <div>
           <div className="flex items-baseline gap-1.5">
@@ -417,6 +419,7 @@ function FeatureTableHeader({ plan }: { plan: SubscriptionPlan }) {
         </span>
         <span className="text-[10px] font-semibold text-slate-400">
           {formatPYG(plan.price)}{plan.price > 0 ? '/mes' : ''}
+          <span className="block text-[10px]">Código: {plan.tier.toUpperCase()}</span>
         </span>
       </div>
     </th>

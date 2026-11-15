@@ -2,13 +2,14 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const fixture = vi.hoisted(() => ({ failPage: false, includeCancelled: false, scopes: [] as string[] }))
+const fixture = vi.hoisted(() => ({ failPage: false, includeCancelled: false, scopes: [] as string[],tables:[] as string[],branchDenied:false }))
 vi.mock('@/lib/api/withTenantAuth', () => ({
   withTenantAuth: (_options: unknown, handler: (request: NextRequest, context: unknown) => unknown) =>
-    (request: NextRequest) => handler(request, { organization: { id: 'org-a', role: 'owner' } }),
+    (request: NextRequest) => handler(request, { organization: { id: 'org-a', role: 'owner' },user:{id:'user-a',role:'admin'} }),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({
   from: (table: string) => {
+    fixture.tables.push(table)
     let from = 0, to = 499
     const builder = {
       select: () => builder,
@@ -19,8 +20,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({
       maybeSingle: async () => ({ data: { timezone: 'America/Asuncion' }, error: null }),
       then: (resolve: (result: unknown) => unknown) => {
         if (fixture.failPage && table === 'credit_installments' && from > 0) return Promise.resolve(resolve({ data: null, error: { message: 'Read failed' } }))
-        const rows = table === 'credit_details' ? [
-          { id: 'credit-a', customer_id: 'customer-a', customer_name: 'Ana', status: 'active' },
+        const rows = table === 'customer_credits'?[{id:'credit-a'}]:table === 'credit_details' ? [
+          { id: 'credit-a', customer_id: 'customer-a', customer_name: 'Ana',credit_code:'CR-ANA', status: 'active' },
           ...(fixture.includeCancelled ? [{ id: 'credit-cancelled', customer_id: 'customer-b', customer_name: 'N/A', status: 'cancelled' }] : []),
         ] :
           table === 'credit_installments' ? [...Array.from({ length: 1201 }, (_, index) => ({
@@ -36,8 +37,9 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({
     return builder
   },
 }) }))
+vi.mock('@/lib/branches/server',()=>({getRequestedBranchId:(_request:unknown,id:string)=>id,resolveBranchScopeForUser:async(input:{requestedBranchId:string})=>{if(fixture.branchDenied)throw new Error('Denied');return {branchId:input.requestedBranchId}}}))
 import { GET } from '@/app/api/credits/route'
-beforeEach(() => { fixture.failPage = false; fixture.includeCancelled = false; fixture.scopes = [] })
+beforeEach(() => { fixture.failPage = false; fixture.includeCancelled = false; fixture.scopes = [];fixture.tables=[];fixture.branchDenied=false })
 
 it('keeps full global and filtered totals independent of the visible page', async () => {
   const response = await GET(new NextRequest('http://localhost/api/credits?page=2&per_page=10&status=pending'))
@@ -76,3 +78,9 @@ it('excludes cancelled installments and cancelled parents consistently with and 
 it.each(['status=unknown', 'fromDate=2026-02-30', 'minAmount=not-a-number'])('rejects invalid portfolio filters: %s', async query => {
   expect((await GET(new NextRequest('http://localhost/api/credits?' + query))).status).toBe(400)
 })
+
+it('returns a compact page without loading histories or sales',async()=>{const response=await GET(new NextRequest('http://localhost/api/credits?compact=1&page=1&per_page=10'));const {data}=await response.json();expect(response.status).toBe(200);expect(data.credits).toHaveLength(1);expect(data.installments).toHaveLength(10);expect(data.payments).toEqual([]);for(const table of ['credit_payments','credit_summary','credit_installments_progress','sales','sale_items'])expect(fixture.tables).not.toContain(table);expect(data.currency).toBe('PYG')})
+it('groups complete filtered balances before paginating customers',async()=>{const {data}=await(await GET(new NextRequest('http://localhost/api/credits?compact=1&view=customers&page=1&per_page=10&openOnly=1'))).json();expect(data.customerGroups).toHaveLength(1);expect(data.customerGroups[0].outstanding).toBe(90075);expect(data.customerGroups[0].installmentCount).toBe(1201);expect(data.pagination.total).toBe(1);expect(data.installments).toEqual([])})
+it('searches the readable credit code',async()=>{const {data}=await(await GET(new NextRequest('http://localhost/api/credits?compact=1&page=1&creditId=CR-ANA'))).json();expect(data.pagination.total).toBe(1201)})
+it('checks branch access before reading credit data',async()=>{fixture.branchDenied=true;const response=await GET(new NextRequest('http://localhost/api/credits?compact=1&page=1&branchId=11111111-1111-4111-8111-111111111111'));expect(response.status).toBe(403);expect(fixture.tables).toEqual([])})
+it('restricts explicit branch reads and reports their scope',async()=>{const branch='11111111-1111-4111-8111-111111111111';const response=await GET(new NextRequest('http://localhost/api/credits?compact=1&page=1&branchId='+branch));const {data}=await response.json();expect(response.status).toBe(200);expect(data.branchId).toBe(branch);expect(fixture.tables).toContain('customer_credits')})

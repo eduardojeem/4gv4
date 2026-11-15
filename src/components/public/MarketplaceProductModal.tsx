@@ -1,4 +1,5 @@
 'use client'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
 
 import { WhatsAppIcon } from '@/components/public/SocialIcons'
 
@@ -24,7 +25,7 @@ import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/ima
 import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice, cn } from '@/lib/utils'
-import { buildProductWhatsAppMessage, getWhatsAppLink } from '@/lib/whatsapp'
+import { buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { siteUrl } from '@/lib/site-url'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { useState, useCallback, useEffect, useMemo } from 'react'
@@ -184,27 +185,8 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
   const contact = product.organization_contact ?? null
   // El WhatsApp cargado, o el teléfono de la tienda: es el mismo respaldo que
   // usa la ficha de producto de cada tienda.
-  const whatsappDigits = (contact?.whatsapp || contact?.phone || '').replace(/\D/g, '')
   const productUrl = siteUrl(productHref)
-  const whatsappHref = whatsappDigits.length >= 6
-    ? getWhatsAppLink({
-        phone: whatsappDigits,
-        message: buildProductWhatsAppMessage({
-          storeName: product.organization_name,
-          productName: product.name,
-          price: precioOculto || priceFrom ? 0 : displayPrice,
-          originalPrice: !precioOculto && !priceFrom && hasOffer ? selectedSalePrice : null,
-          sku: matchedVariant?.sku || product.sku,
-          variantName: matchedVariant?.variant_name,
-          attributes: matchedVariant?.attributes,
-          inStock: isInStock,
-          stockQuantity: typeof stockQuantity === 'number' ? stockQuantity : null,
-          productUrl,
-          imageUrl: currentSrc,
-          intent: precioOculto ? 'price' : 'inquiry',
-        }),
-      })
-    : null
+  const whatsappHref = productWhatsappInquiryHref({company:contact,product:{name:product.name,url:productUrl},message:buildProductWhatsAppMessage({storeName:product.organization_name,productName:product.name,price:precioOculto||priceFrom?0:displayPrice,originalPrice:!precioOculto&&!priceFrom&&hasOffer?selectedSalePrice:null,sku:matchedVariant?.sku||product.sku,variantName:matchedVariant?.variant_name,attributes:matchedVariant?.attributes,inStock:isInStock,stockQuantity:typeof stockQuantity==='number'?stockQuantity:null,productUrl,imageUrl:currentSrc,intent:precioOculto?'price':'inquiry'})})
   const hasSocial = Boolean(contact?.instagram || contact?.facebook || contact?.tiktok)
   const description = product.description?.trim().replace(/\n{3,}/g, '\n\n')
 

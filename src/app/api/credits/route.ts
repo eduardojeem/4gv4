@@ -1,3 +1,4 @@
+import {groupCreditPortfolio} from '@/lib/credits/mobile-portfolio'
 import { readAllCreditRows, summarizeCreditPortfolio } from '@/lib/credits/portfolio'
 import { chunkIds } from '@/lib/customers/batch'
 import { creditInstallmentIsOverdue, creditCalendarDate } from '@/lib/credits/calendar'
@@ -20,12 +21,15 @@ function canAccessCredits(role: string | undefined, action: 'read' | 'manage') {
   return action === 'read' || action === 'manage'
 }
 
-export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'credits' }, async (request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'credits' }, async (request, { organization,user }) => {
   try {
     if (!canAccessCredits(organization.role, 'read')) return NextResponse.json({ success: false, error: 'No tenés permiso para acceder a créditos.' }, { status: 403 })
     const supabase = createAdminSupabase()
     const params = new URL(request.url).searchParams
     const filters = z.object({
+      openOnly:z.enum(['0','1']).optional(),
+      compact:z.enum(['0','1']).optional(),view:z.enum(['installments','customers']).optional(),branchId:z.union([z.string().uuid(),z.literal('all')]).optional(),
+      creditId:z.string().max(100).optional(),customerName:z.string().max(120).optional(),
       status: z.enum(['pending', 'paid', 'late', 'cancelled', '']).optional(),
       fromDate: z.string().refine(value => !value || creditCalendarDate(value) === value).optional(),
       toDate: z.string().refine(value => !value || creditCalendarDate(value) === value).optional(),
@@ -39,12 +43,22 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if ((page !== null && (!Number.isInteger(page) || page < 1)) || !Number.isInteger(perPage) || perPage < 1 || perPage > 100) {
       return NextResponse.json({ success: false, error: 'Paginación inválida.' }, { status: 400 })
     }
-    const [creditRows, settings] = await Promise.all([
+    const compact=params.get('compact')==='1'
+    const branchRequest=params.get('branchId')
+    let branchId:string|null=null
+    if(branchRequest==='all'){if(!['owner','admin'].includes(organization.role))return NextResponse.json({error:'No tenés permiso para consultar todas las sucursales.'},{status:403})}
+    else if(branchRequest||request.headers.get('x-branch-id')){try{const scope=await resolveBranchScopeForUser({userId:user.id,role:user.role as Parameters<typeof resolveBranchScopeForUser>[0]['role'],requestedBranchId:getRequestedBranchId(request,branchRequest),organizationId:organization.id,strict:true});branchId=scope.branchId}catch{return NextResponse.json({error:'No podés consultar esa sucursal.'},{status:403})}}
+    const [allCredits, settings] = await Promise.all([
       readAllCreditRows((from,to) => supabase.from('credit_details').select('*').eq('organization_id', organization.id).order('id').range(from,to)),
-      supabase.from('organization_settings').select('timezone').eq('organization_id', organization.id).maybeSingle(),
+      supabase.from('organization_settings').select('timezone,currency').eq('organization_id', organization.id).maybeSingle(),
     ])
     if (settings.error) throw settings.error
     const timeZone = settings.data?.timezone || 'America/Asuncion'
+    const currency=settings.data?.currency||'PYG'
+    if(!/^[A-Z]{3}$/.test(currency))throw new Error('Moneda inválida')
+    new Intl.DateTimeFormat('es-PY',{timeZone}).format(new Date())
+    let creditRows=allCredits
+    if(branchId){const scopedCredits=await readAllCreditRows((from,to)=>supabase.from('customer_credits').select('id').eq('organization_id',organization.id).eq('branch_id',branchId).order('id').range(from,to));const allowed=new Set(scopedCredits.map(row=>String(row.id)));creditRows=creditRows.filter(row=>allowed.has(String(row.id)))}
     const creditIds = creditRows.map(row => String(row.id))
     const customerIds = [...new Set(creditRows.map(row => String(row.customer_id)))]
     const readCreditChildren = async (table:string,columns:string) => (await Promise.all(chunkIds(creditIds,200).map(ids =>
@@ -52,18 +66,18 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     ))).flat()
     const [installments, payments, summary, installmentsProgress, customers, sales] = await Promise.all([
       readCreditChildren('credit_installments','*'),
-      readCreditChildren('credit_payments','*'),
-      Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>
+      compact?Promise.resolve([]):readCreditChildren('credit_payments','*'),
+      compact?Promise.resolve([]):Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>
         supabase.from('credit_summary').select('*').in('credit_id',ids).order('credit_id').range(from,to)))).then(rows => rows.flat()),
-      Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>
+      compact?Promise.resolve([]):Promise.all(chunkIds(creditIds,200).map(ids=>readAllCreditRows((from,to)=>
         supabase.from('credit_installments_progress').select('*').in('credit_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
-      Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>
+      compact?Promise.resolve([]):Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>
         supabase.from('customers').select('id,customer_code').eq('organization_id',organization.id).in('id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
-      Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>
+      compact?Promise.resolve([]):Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>
         supabase.from('sales').select('id,code,total_amount,payment_method,customer_id,created_at,notes').eq('organization_id',organization.id)
           .in('customer_id',ids).in('payment_method',['credit','crédito','credito']).order('id').range(from,to)))).then(rows => rows.flat()),
     ])
-    const saleItems = (await Promise.all(chunkIds(sales.map(row=>String(row.id)),200).map(ids=>readAllCreditRows((from,to)=>
+    const saleItems = compact?[]:(await Promise.all(chunkIds(sales.map(row=>String(row.id)),200).map(ids=>readAllCreditRows((from,to)=>
       supabase.from('sale_items').select('id,sale_id,quantity,unit_price,subtotal,product:products(id,name)').in('sale_id',ids).order('id').range(from,to))))).flat()
     const isCancelled = (value: unknown) => ['cancelled','cancelado','canceled'].includes(String(value ?? '').toLowerCase())
     const creditById = new Map(creditRows.map(row => [String(row.id), row]))
@@ -82,13 +96,14 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       creditRows as unknown as Parameters<typeof summarizeCreditPortfolio>[0],
       orderedInstallments as unknown as Parameters<typeof summarizeCreditPortfolio>[1], timeZone)
     const filtered = orderedInstallments.filter(row=>{
-      const credit=creditRows.find(c=>String(c.id)===String(row.credit_id))
+      const credit=creditById.get(String(row.credit_id))
       if (isCancelled(credit?.status)) return false
       if (isCancelled(row.status) && params.get('status') !== 'cancelled') return false
       if (credit?.status === 'completed' && row.status !== 'paid') return false
+      if(params.get('openOnly')==='1'&&(row.status==='paid'||Number(row.amount)-Number(row.amount_paid??0)<=0))return false
       const status=params.get('status')
       if (status && row.status !== status) return false
-      if (params.get('creditId') && !String(row.credit_id).toLowerCase().includes(params.get('creditId')!.toLowerCase())) return false
+      if (params.get('creditId') && !String(row.credit_id).toLowerCase().includes(params.get('creditId')!.toLowerCase())&&!String(credit?.credit_code??'').toLowerCase().includes(params.get('creditId')!.toLowerCase())) return false
       if (params.get('customerName') && !String(credit?.customer_name || '').toLowerCase().includes(params.get('customerName')!.toLowerCase())) return false
       const date=creditCalendarDate(String(row.due_date),timeZone)
       if (params.get('fromDate') && date && date<params.get('fromDate')!) return false
@@ -99,12 +114,16 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const filteredSummary = summarizeCreditPortfolio(
       creditRows as unknown as Parameters<typeof summarizeCreditPortfolio>[0],
       filtered as unknown as Parameters<typeof summarizeCreditPortfolio>[1], timeZone)
+    const groups=compact&&params.get('view')==='customers'?groupCreditPortfolio(creditRows as unknown as Record<string,unknown>[],filtered,timeZone):null
+    const visibleInstallments=groups?[]:page===null?filtered:filtered.slice((page-1)*perPage,page*perPage)
+    const visibleCredits=new Set(visibleInstallments.map(row=>String(row.credit_id)))
     return NextResponse.json({ success:true,data:{
-      credits:creditRows,installments:page===null?filtered:filtered.slice((page-1)*perPage,page*perPage),
+      credits:compact?creditRows.filter(row=>visibleCredits.has(String(row.id))):creditRows,installments:visibleInstallments,
+      ...(groups?{customerGroups:page===null?groups:groups.slice((page-1)*perPage,page*perPage)}:{}),
       payments:orderedPayments,summary,installmentsProgress:installmentsProgress.map(row => ({...row,status_effective:statuses.get(String(row.id)) ?? row.status_effective})),customers,sales,saleItems,
-      globalSummary,filteredSummary,timeZone,asOf:new Date().toISOString(),
-      pagination:{page:page??1,perPage:page===null?filtered.length:perPage,total:filtered.length,complete:page===null},
-    } })
+      globalSummary,filteredSummary,timeZone,currency,branchId,organizationId:organization.id,asOf:new Date().toISOString(),
+      pagination:{page:page??1,perPage:page===null?filtered.length:perPage,total:groups?.length??filtered.length,complete:page===null},
+    } },{headers:{'Cache-Control':'private, no-store'}})
   } catch {
     logger.error('Credit portfolio read failed')
     return NextResponse.json({success:false,error:'No se pudo cargar la cartera completa. Reintentá antes de consultar saldos.'},{status:500})

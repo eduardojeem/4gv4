@@ -82,7 +82,7 @@ export function StorefrontAppearancePreview({
 
         {/* Portada Premium (si está activa) */}
         {heroEnabled ? (
-          <div className={cn('bg-gradient-to-br px-4 py-5 text-white', theme.hero, style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800')}>
+          <div className={cn('bg-gradient-to-br px-4 py-5 text-white', theme.hero, style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800', style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30')}>
             <span className={cn(STOREFRONT_EYEBROW_CLASS[style], 'text-[9px]', style !== 'sport' && style !== 'tech' && style !== 'market' && 'text-white/80')}>
               {verticalDef.hero.badge || 'Bienvenidos'}
             </span>
@@ -93,11 +93,11 @@ export function StorefrontAppearancePreview({
               {verticalDef.hero.subtitle}
             </p>
             <div className="mt-3 flex items-center gap-2">
-              <span className={cn('inline-block bg-white px-3 py-1 text-[10px] font-bold shadow-xs', radius, theme.ctaBtn)}>
+              <span className={cn('inline-block bg-white px-3 py-1 text-[10px] font-bold shadow-xs', radius, theme.ctaBtn, style === 'especial-para-barbero' && 'rounded-full bg-primary text-primary-foreground')}>
                 {verticalDef.hero.ctaPrimaryText || 'Ver productos'}
               </span>
               {style !== 'catalog-basic' && (
-                <span className="inline-block border border-white/40 px-2 py-1 text-[9px] font-medium text-white/90 rounded">
+                <span className={cn('inline-block border border-white/40 px-2 py-1 text-[9px] font-medium text-white/90', style === 'especial-para-barbero' ? 'rounded-full' : 'rounded')}>
                   {verticalDef.hero.ctaSecondaryText || 'WhatsApp'}
                 </span>
               )}
@@ -105,9 +105,9 @@ export function StorefrontAppearancePreview({
           </div>
         ) : (
           /* Portada Desactivada: Catálogo limpio directo con chips temáticos del rubro */
-          <div className="border-b bg-muted/20 px-3 py-2 space-y-1.5">
+          <div className={cn('border-b px-3 py-2 space-y-1.5', style === 'especial-para-barbero' ? 'bg-[#111116] text-white border-primary/25' : 'bg-muted/20')}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <span className={cn('text-[10px] font-bold uppercase tracking-wider', style === 'especial-para-barbero' ? 'text-primary' : 'text-muted-foreground')}>
                 Rubro: {verticalDef.icon} {verticalDef.verticalLabel}
               </span>
               <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
@@ -120,8 +120,13 @@ export function StorefrontAppearancePreview({
                 <span
                   key={chip}
                   className={cn(
-                    'whitespace-nowrap rounded-md px-2 py-0.5 text-[9px] font-medium',
-                    idx === 0 ? 'bg-primary text-primary-foreground font-bold' : 'bg-background border border-border/70 text-foreground/80'
+                    'whitespace-nowrap px-2 py-0.5 text-[9px] font-medium',
+                    style === 'especial-para-barbero' ? 'rounded-full' : 'rounded-md',
+                    idx === 0
+                      ? 'bg-primary text-primary-foreground font-bold'
+                      : style === 'especial-para-barbero'
+                      ? 'bg-white/10 border border-white/15 text-zinc-200'
+                      : 'bg-background border border-border/70 text-foreground/80'
                   )}
                 >
                   {chip}
@@ -133,19 +138,19 @@ export function StorefrontAppearancePreview({
 
         {/* Grilla de productos adaptada al rubro */}
         <div className="p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className={cn('text-xs font-bold text-foreground', STOREFRONT_HEADING_CLASS[style])}>
+          <div className={cn('mb-2 flex items-center justify-between', style === 'especial-para-barbero' && 'rounded-md bg-[#111116] px-2 py-1 text-white')}>
+            <p className={cn('text-xs font-bold', style === 'especial-para-barbero' ? 'text-white' : 'text-foreground', STOREFRONT_HEADING_CLASS[style])}>
               {style === 'services' ? 'Servicios del local' : 'Productos destacados'}
             </p>
-            <span className="text-[9px] text-muted-foreground">
-              {style === 'wholesale-pro' ? 'Precios por mayor' : style === 'catalog-basic' ? 'Vitrina digital' : 'Disponibles'}
+            <span className={cn('text-[9px]', style === 'especial-para-barbero' ? 'text-primary font-semibold' : 'text-muted-foreground')}>
+              {style === 'wholesale-pro' ? 'Precios por mayor' : style === 'especial-para-barbero' ? 'Minorista & Mayorista' : style === 'catalog-basic' ? 'Vitrina digital' : 'Disponibles'}
             </span>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
             {verticalDef.previewProducts.map((prod, index) => (
-              <div key={index} className="space-y-1.5 rounded-lg border border-border/50 bg-card p-1.5 shadow-2xs">
-                <div className={cn('relative w-full bg-muted/70 flex items-center justify-center text-muted-foreground/50', radius, portrait ? 'aspect-[3/4]' : 'aspect-[4/3]')}>
+              <div key={index} className={cn('space-y-1.5 border p-1.5 shadow-2xs', style === 'especial-para-barbero' ? 'rounded-xl border-zinc-200/90 bg-white dark:border-zinc-800 dark:bg-zinc-900' : 'rounded-lg border-border/50 bg-card')}>
+                <div className={cn('relative w-full bg-muted/70 flex items-center justify-center text-muted-foreground/50', radius, portrait ? 'aspect-[3/4]' : style === 'especial-para-barbero' ? 'aspect-square bg-zinc-50 dark:bg-zinc-950' : 'aspect-[4/3]')}>
                   <span className="text-base select-none">{verticalDef.icon}</span>
                   {prod.badge && (
                     <span className="absolute top-1 left-1 rounded bg-black/60 px-1 py-0.2 text-[8px] font-bold text-white uppercase">
@@ -153,16 +158,16 @@ export function StorefrontAppearancePreview({
                     </span>
                   )}
                 </div>
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-bold text-foreground truncate leading-tight">
+                <div className={cn('space-y-0.5', style === 'especial-para-barbero' && 'text-center')}>
+                  <p className={cn('text-[10px] font-bold text-foreground truncate leading-tight', style === 'especial-para-barbero' && 'uppercase')}>
                     {prod.name}
                   </p>
-                  <p className="text-[9px] font-semibold text-primary">
+                  <p className={cn('text-[9px] font-semibold', style === 'especial-para-barbero' ? 'font-black text-emerald-600 dark:text-emerald-400' : 'text-primary')}>
                     {prod.price}
                   </p>
                 </div>
                 {style !== 'catalog-basic' ? (
-                  <div className="w-full rounded bg-primary/10 py-0.5 text-center text-[8px] font-bold text-primary">
+                  <div className={cn('w-full py-0.5 text-center text-[8px] font-bold', style === 'especial-para-barbero' ? 'rounded-full bg-zinc-900 text-white dark:bg-primary dark:text-primary-foreground' : 'rounded bg-primary/10 text-primary')}>
                     {style === 'services' ? 'Reservar' : 'Agregar'}
                   </div>
                 ) : (

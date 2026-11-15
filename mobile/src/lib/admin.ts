@@ -1,3 +1,4 @@
+import { assertFinanceSummaryIntegrity } from '../../../src/lib/finance/summary-integrity';
 import { apiFetch, ApiError } from './api';
 import { normalizeSubscription, type BillingProfile, type SubscriptionDetails } from './subscription-model';
 
@@ -308,6 +309,7 @@ export type FinanceSummaryData = {
   upcomingDue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
   overdue: { id: string; dueDate: string; amount: number; concept?: string | null }[];
   /** «Te deben»: lo que los clientes deben hoy (no depende del período). */
+  receivablesStatus?: 'available' | 'unavailable';
   receivables?: { total: number; overdue: number; credits: number; repairs: number; customers: number };
   /** El mismo resumen del período anterior, para comparar. */
   comparison?: {
@@ -323,7 +325,9 @@ export async function fetchFinanceSummary(params?: { startDate?: string; endDate
 
   const qs = query.toString();
   try {
-    return await apiFetch<FinanceSummaryData>(`/api/admin/finances/summary${qs ? `?${qs}` : ''}`);
+    const report = await apiFetch<FinanceSummaryData>(`/api/admin/finances/summary${qs ? `?${qs}` : ''}`);
+    assertFinanceSummaryIntegrity(report);
+    return report;
   } catch (error) {
     // Mantener el motivo del servidor: un módulo desactivado no es un error de rol.
     if (error instanceof ApiError) throw error;

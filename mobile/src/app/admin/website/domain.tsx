@@ -6,13 +6,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
+import { WebsiteVisibilityCard } from '@/components/website/website-visibility-card';
 import {
   Field,
-  Notice,
   SaveBar,
   Section,
   StatusPill,
-  ToggleRow,
   WebsiteScreen,
   useUnsavedChangesGuard,
   websiteStyles,
@@ -27,6 +26,7 @@ import {
   mergeSetting,
   publicStoreUrl,
   publicationIssues,
+  publicationToggleCopy,
   slugIssue,
   type CompanyInfo,
   type WebsiteSettings,
@@ -101,11 +101,12 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
         Alert.alert('Antes de publicar', pubIssues.join('\n'));
         return false;
       }
+      const copy = publicationToggleCopy(saved, company);
       if (
         !(await confirm(
-          '¿Publicar tu tienda?',
-          'Cualquier persona con el enlace va a poder verla y hacer pedidos o consultas.',
-          'Publicar',
+          copy.title,
+          copy.message,
+          copy.confirmLabel,
         ))
       )
         return false;
@@ -220,50 +221,13 @@ function DomainEditor({ settings }: { settings: WebsiteSettings }) {
         />
       </Section>
 
-      {pubIssues.length > 0 ? (
-        <Section
-          title="Requisitos para publicar"
-          icon="checkmark-circle-outline"
-          hint="Completá estos puntos antes de hacer pública tu tienda:"
-        >
-          {pubIssues.map((msg, i) => (
-            <Notice
-              key={i}
-              tone="warning"
-              text={msg}
-              actionLabel="Ir a Negocio y contacto"
-              onAction={() => router.push('/admin/website/business' as never)}
-            />
-          ))}
-        </Section>
-      ) : null}
-
-      <Section title="Visibilidad" icon="eye-outline">
-        <ToggleRow
-          label="Tienda publicada"
-          hint="Visible para cualquier persona con el enlace"
-          value={published}
-          onValueChange={(value) =>
-            set({
-              storefrontPublic: value,
-              ...(value ? {} : { marketplacePublic: false }),
-            })
-          }
-        />
-        <ToggleRow
-          label="Aparecer en el marketplace"
-          hint="Tu comercio se lista en el directorio de MiTiendaPy"
-          value={published && company.marketplacePublic === true}
-          disabled={!published}
-          onValueChange={(value) => set({ marketplacePublic: value })}
-        />
-        {!published ? (
-          <Notice
-            tone="warning"
-            text="Mientras no esté publicada, quien abra el enlace ve un aviso de tienda cerrada."
-          />
-        ) : null}
-      </Section>
+      <WebsiteVisibilityCard
+        company={company}
+        commerceMode={mode}
+        mode="draft"
+        onDraftPatch={set}
+        hideDomainShortcut
+      />
 
       <Section title="Dominio propio" icon="globe-outline">
         <Text style={[styles.muted, { color: colors.muted }]}>

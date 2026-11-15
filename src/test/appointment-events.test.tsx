@@ -6,6 +6,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const state = vi.hoisted(() => ({ emails: [] as Array<{ to: string; subject: string; html: string }> }))
 vi.mock('@/lib/email/resend', () => ({ sendEmail: async (params: { to: string; subject: string; html: string }) => { state.emails.push(params); return { ok: true } } }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
+// La campanita carga las novedades de la organización activa.
+vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => ({ scope: 'user:org', organizationId: 'org' }) }))
 
 import { notifyAppointmentEvent } from '@/lib/agenda/appointment-events'
 import { describeAppointmentEvent } from '@/lib/agenda/messages'

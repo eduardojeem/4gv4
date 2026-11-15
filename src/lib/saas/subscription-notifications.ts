@@ -1,4 +1,5 @@
 import 'server-only'
+import {readPlanMonthlyPrice} from './plan-price'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/resend'
 import { renderSubscriptionNoticeEmail, renderSubscriptionReceiptEmail } from '@/lib/email/templates'
@@ -17,6 +18,7 @@ const DAY_MS = 86_400_000
 const DOWNGRADE_NOTICE_WINDOW_MS = 3 * DAY_MS
 
 type SubscriptionRow = {
+  price_monthly?: unknown
   organization_id: string
   plan: string | null
   status: string | null
@@ -47,7 +49,7 @@ function daysLeft(value: string | null, now: number) {
 
 /** Qué aviso le toca hoy a una suscripción, si alguno. Pura, para poder probarla. */
 export function reminderFor(row: SubscriptionRow, now: number): { kind: ReminderKind; periodKey: string; date: string | null } | null {
-  const plan = (row.plan || 'FREE').toUpperCase()
+  const price = readPlanMonthlyPrice(row.price_monthly)
 
   if (row.status === 'trialing' && row.trial_ends_at) {
     const days = daysLeft(row.trial_ends_at, now)
@@ -57,7 +59,7 @@ export function reminderFor(row: SubscriptionRow, now: number): { kind: Reminder
     return null
   }
 
-  if (row.status === 'active' && plan !== 'FREE' && !row.cancel_at_period_end && row.current_period_ends_at) {
+  if (row.status === 'active' && price !== null && price > 0 && !row.cancel_at_period_end && row.current_period_ends_at) {
     const days = daysLeft(row.current_period_ends_at, now)
     if (days === null || days <= 0) return null
     if (days <= 1) return { kind: 'renewal_1', periodKey: row.current_period_ends_at, date: row.current_period_ends_at }
@@ -70,7 +72,7 @@ export function reminderFor(row: SubscriptionRow, now: number): { kind: Reminder
     return { kind: 'past_due', periodKey: key, date: null }
   }
 
-  if (plan === 'FREE' && row.payment_status === 'unpaid' && row.updated_at
+  if (price === 0 && row.payment_status === 'unpaid' && row.updated_at
     && now - new Date(row.updated_at).getTime() <= DOWNGRADE_NOTICE_WINDOW_MS) {
     return { kind: 'downgraded', periodKey: row.updated_at.slice(0, 10), date: null }
   }
@@ -92,7 +94,7 @@ const NOTICE_COPY: Record<ReminderKind, (date: string | null) => {
   }),
   trial_1: (date) => ({
     title: 'Tu prueba gratis termina mañana',
-    detail: `La prueba termina el ${date ? formatDay(date) : 'mañana'}. Si no pagás, tu cuenta queda 7 días con el pago pendiente y después pasa al plan Gratuito.`,
+    detail: `La prueba termina el ${date ? formatDay(date) : 'mañana'}. Si no renovás, las operaciones se suspenden al vencer. Vas a poder consultar tu cuenta y renovar.`,
     cta: 'Pagar ahora',
     type: 'SUBSCRIPTION_EXPIRING',
   }),
@@ -104,13 +106,13 @@ const NOTICE_COPY: Record<ReminderKind, (date: string | null) => {
   }),
   renewal_1: (date) => ({
     title: 'Tu plan vence mañana',
-    detail: `Tu plan vence el ${date ? formatDay(date) : 'mañana'}. Si no pagás, la cuenta queda 7 días con el pago pendiente y después pasa al plan Gratuito.`,
+    detail: `Tu plan vence el ${date ? formatDay(date) : 'mañana'}. Si no renovás, las operaciones se suspenden al vencer. Vas a poder consultar tu cuenta y renovar.`,
     cta: 'Pagar ahora',
     type: 'SUBSCRIPTION_EXPIRING',
   }),
   past_due: () => ({
     title: 'Tu suscripción tiene el pago pendiente',
-    detail: 'Mientras tanto no podés sumar usuarios, productos ni sucursales por encima del plan Gratuito. En 7 días la cuenta pasa al plan Gratuito si no se regulariza.',
+    detail: 'Las operaciones están suspendidas hasta que renueves. Tu historial se conserva y podés consultar tu cuenta y regularizar el pago.',
     cta: 'Regularizar el pago',
     type: 'SUBSCRIPTION_PAYMENT_FAILED',
   }),
@@ -201,8 +203,11 @@ export async function sendSubscriptionReminders(now = Date.now()): Promise<Remin
     .in('status', ['trialing', 'active', 'past_due'])
   if (error) throw new Error(`No se pudieron leer las suscripciones: ${error.message}`)
 
+  const catalog = await createAdminSupabase().from('subscription_plans').select('tier, price')
+  if (catalog.error) throw new Error('No se pudieron verificar los precios para los avisos de suscripción.')
+  const prices = new Map((catalog.data ?? []).map(plan => [String(plan.tier).toUpperCase(), plan.price]))
   for (const row of (data ?? []) as SubscriptionRow[]) {
-    const reminder = reminderFor(row, now)
+    const reminder = reminderFor({...row,price_monthly:prices.get(String(row.plan).toUpperCase())}, now)
     if (!reminder) continue
     let recorded = false
     try {

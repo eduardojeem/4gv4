@@ -9,6 +9,7 @@ import { STOREFRONT_STYLE_LABELS, type StorefrontStylePreference } from '@/lib/w
 import {
   PLAN_CODE_ORDER,
   canSwitchTemplate,
+  cheapestPlanWithTemplate,
   templateToCheck,
   templatesForPlan,
   type PlanTemplateAccessRow,
@@ -116,5 +117,13 @@ export async function checkStorefrontTemplateChange(
     context: { servicesAvailable: access.servicesAvailable },
   })
   if (allowed) return null
-  return `La plantilla «${STOREFRONT_STYLE_LABELS[templateToCheck(next, access.businessVertical, { servicesAvailable: access.servicesAvailable }) as keyof typeof STOREFRONT_STYLE_LABELS] ?? next}» no está incluida en tu plan ${access.planName}.`
+  const context = { servicesAvailable: access.servicesAvailable }
+  const resolvedLabel =
+    STOREFRONT_STYLE_LABELS[
+      templateToCheck(next, access.businessVertical, context) as keyof typeof STOREFRONT_STYLE_LABELS
+    ] ?? next
+  if (access.plans.length > 0 && !cheapestPlanWithTemplate(next, access.plans, access.businessVertical, context)) {
+    return `La plantilla «${resolvedLabel}» estará disponible próximamente.`
+  }
+  return `La plantilla «${resolvedLabel}» no está incluida en tu plan ${access.planName}.`
 }

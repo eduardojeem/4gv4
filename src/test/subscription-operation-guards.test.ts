@@ -1,0 +1,14 @@
+import {NextRequest,NextResponse} from 'next/server';
+import {beforeEach,it,expect,vi} from 'vitest';
+const state=vi.hoisted(()=>({blocked:true,handler:vi.fn()}));
+vi.mock('@/lib/auth/request-auth',()=>({resolveRequestAuthUser:async()=>({authenticated:true,user:{id:'actor',role:'admin',aal:'aal2'}})}));
+vi.mock('@/lib/saas/context',()=>({getCurrentOrganizationContext:async()=>({id:'org',role:'owner',name:'Store',slug:'store',plan:'FREE'}),resolveUserOrganizationId:async()=> 'org'}));
+vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:()=>({insert:async()=>({error:null})})})}));
+vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:()=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{role:'owner'},error:null})};return q;}})}));
+vi.mock('@/lib/saas/subscription-service',()=>({getOrganizationPlanInfo:vi.fn(),getSubscriptionStatus:async()=>({isBlocked:state.blocked,isExpired:state.blocked})}));
+import {withTenantAuth} from '@/lib/api/withTenantAuth';
+import {withAdminAuth} from '@/lib/api/withAdminAuth';
+beforeEach(()=>{state.blocked=true;state.handler.mockReset();state.handler.mockImplementation(async()=>NextResponse.json({ok:true}));});
+it('blocks a tenant sale before the mutation handler runs',async()=>{const response=await withTenantAuth({},state.handler)(new NextRequest('http://localhost/api/pos/process-sale',{method:'POST'}));expect(response.status).toBe(402);expect(state.handler).not.toHaveBeenCalled();});
+it('allows tenant reads while suspended',async()=>{expect((await withTenantAuth({},state.handler)(new NextRequest('http://localhost/api/products'))).status).toBe(200);});
+it('blocks admin operational writes but allows subscription renewal',async()=>{expect((await withAdminAuth(state.handler)(new NextRequest('http://localhost/api/admin/expenses',{method:'POST'}))).status).toBe(402);expect(state.handler).not.toHaveBeenCalled();expect((await withAdminAuth(state.handler)(new NextRequest('http://localhost/api/admin/subscriptions/payments/stripe',{method:'POST'}))).status).toBe(200);});

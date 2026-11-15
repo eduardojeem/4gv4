@@ -1,0 +1,12 @@
+import {it,expect,vi,beforeEach} from 'vitest';import {NextRequest} from 'next/server';
+const mocks=vi.hoisted(()=>({context:{organization:{id:'org',role:'owner'},user:{id:'user',role:'admin'}},exportData:vi.fn(),check:vi.fn()}));
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:(request:NextRequest,context:unknown)=>unknown)=>(request:NextRequest)=>handler(request,mocks.context)}));
+vi.mock('@/lib/saas/business-data-export',()=>({exportOrganizationBusinessData:mocks.exportData}));vi.mock('@/lib/rate-limiter',()=>({rateLimiter:{check:mocks.check}}));
+import {GET} from '@/app/api/admin/subscriptions/data-export/route';
+beforeEach(()=>{vi.clearAllMocks();mocks.context.organization.role='owner';mocks.check.mockResolvedValue(true);mocks.exportData.mockResolvedValue({organizationId:'org',datasets:{}});});
+const request=(id='org')=>new NextRequest('http://localhost/api/admin/subscriptions/data-export',{headers:{'x-export-organization-id':id}});
+it('denies non-owner bulk exports',async()=>{mocks.context.organization.role='admin';expect((await GET(request())).status).toBe(403);expect(mocks.exportData).not.toHaveBeenCalled();});
+it('rejects a different visible organization',async()=>{expect((await GET(request('other'))).status).toBe(409);expect(mocks.exportData).not.toHaveBeenCalled();});
+it('uses the authorized tenant and private attachment headers',async()=>{const result=await GET(request());expect(result.status).toBe(200);expect(mocks.exportData).toHaveBeenCalledWith('org');expect(result.headers.get('cache-control')).toContain('no-store');expect(result.headers.get('content-disposition')).toContain('attachment');});
+it('never delivers an incomplete file after a reader failure',async()=>{mocks.exportData.mockRejectedValue(new Error('No se pudo completar'));expect((await GET(request())).status).toBe(503);});
+it('limits repeated exports',async()=>{mocks.check.mockResolvedValue(false);expect((await GET(request())).status).toBe(429);expect(mocks.exportData).not.toHaveBeenCalled();});

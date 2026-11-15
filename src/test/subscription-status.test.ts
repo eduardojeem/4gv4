@@ -4,7 +4,7 @@ import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 describe('subscription status evaluation', () => {
   const now = new Date('2026-07-31T12:00:00.000Z')
 
-  it('uses free plan limits when a paid subscription is past due', () => {
+  it('blocks new operations when a paid subscription is past due', () => {
     const status = evaluateSubscriptionStatus({
       status: 'past_due',
       paymentStatus: 'unpaid',
@@ -12,7 +12,7 @@ describe('subscription status evaluation', () => {
     }, now)
 
     expect(status.isExpired).toBe(true)
-    expect(status.isBlocked).toBe(false)
+    expect(status.isBlocked).toBe(true)
   })
 
   it('keeps access during an active paid period even when payment is marked unpaid', () => {

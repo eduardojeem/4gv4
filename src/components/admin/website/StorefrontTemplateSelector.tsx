@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Check, Cpu, Crown, Filter, Info, Layers, Lock, Scissors, Shirt, ShoppingBasket, Sparkles, Store } from 'lucide-react'
+import { Check, Clock, Cpu, Crown, Filter, Info, Layers, Lock, Scissors, Shirt, ShoppingBasket, Sparkles, Store } from 'lucide-react'
 import { StorefrontTemplateThumbnail } from '@/components/admin/website/StorefrontTemplateThumbnail'
 import { type StorefrontStylePreference, type StorefrontTemplateGroupId } from '@/lib/website/storefront-style'
 import { buildTemplateCatalog, type TemplateCatalogOption } from '@/lib/website/template-catalog'
@@ -68,8 +68,13 @@ export function StorefrontTemplateSelector({
   )
 
   const total = groups.reduce((sum, group) => sum + group.options.length, 0)
-  const included = groups.reduce((sum, group) => sum + group.options.filter((option) => option.status !== 'locked_plan').length, 0)
-  const lockedCount = total - included
+  const comingSoonCount = groups.reduce((sum, group) => sum + group.options.filter((option) => option.status === 'coming_soon').length, 0)
+  const availableTotal = total - comingSoonCount
+  const included = groups.reduce(
+    (sum, group) => sum + group.options.filter((option) => option.status !== 'locked_plan' && option.status !== 'coming_soon').length,
+    0
+  )
+  const lockedCount = groups.reduce((sum, group) => sum + group.options.filter((option) => option.status === 'locked_plan').length, 0)
   const visibleGroups = selectedFilter === 'all' ? groups : groups.filter((group) => group.id === selectedFilter)
 
   return (
@@ -80,7 +85,8 @@ export function StorefrontTemplateSelector({
             <Crown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-primary" />
             <span>
               Tu plan <strong className="text-foreground">{access.planName}</strong> incluye{' '}
-              <strong className="text-foreground">{included} de {total}</strong> plantillas.
+              <strong className="text-foreground">{included} de {availableTotal}</strong> plantillas
+              {comingSoonCount > 0 ? ` · ${comingSoonCount} próximamente` : ''}.
             </span>
           </p>
           {lockedCount > 0 && (
@@ -224,6 +230,12 @@ function TemplateCard({
           {option.upgradePlanName ?? 'Otro plan'}
         </span>
       )}
+      {option.status === 'coming_soon' && (
+        <span aria-hidden="true" className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+          <Clock aria-hidden="true" className="h-2.5 w-2.5" />
+          Próximamente
+        </span>
+      )}
       {(option.isSuggested || option.isRecommended) && option.status === 'available' && (
         <span aria-hidden="true" className="absolute right-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-full bg-background/95 px-1.5 py-0.5 text-[10px] font-semibold text-primary shadow-sm">
           <Sparkles aria-hidden="true" className="h-2.5 w-2.5" />
@@ -251,6 +263,11 @@ function TemplateCard({
               option.tier === 'premium' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground'
             )}>
               {TEMPLATE_TIER_LABEL[option.tier]}
+            </span>
+          )}
+          {option.enabledPlans && option.enabledPlans.length > 0 && option.status !== 'coming_soon' && (
+            <span className="rounded border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {option.enabledPlans.length === 1 ? 'Plan' : 'Planes'}: {option.enabledPlans.join(', ')}
             </span>
           )}
           {current && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Actual</span>}

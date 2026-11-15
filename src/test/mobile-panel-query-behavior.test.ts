@@ -26,13 +26,21 @@ it('filters valid offers across the dataset before slicing and counting pages',(
  expect(client).toContain("search.set('offers', 'true')");expect(client).not.toContain('page.products.filter(hasActiveOffer)')
 })
 it('all paginated screens guard stale completions and retain pagination with offers',()=>{
- for(const section of ['products','customers','credits','orders','repairs']){
+ // Créditos se reescribió con su propio control de generación (ver el test siguiente).
+ for(const section of ['products','customers','orders','repairs']){
   const source=read(`mobile/src/app/panel/${section}/index.tsx`)
   const page=source.slice(source.indexOf('const loadMore ='),source.indexOf('const loadMore =')+1800)
   expect(page).toContain('requestScope.capture()');expect(page).toContain('if (!isCurrent()) return;')
   expect(page).not.toContain("filter === 'offers'")
   expect(source).toContain('<PanelAccessState />')
  }
+})
+it('credits ignores a stale next page after filters or the session change',()=>{
+ const source=read('mobile/src/app/panel/credits/index.tsx')
+ const page=source.slice(source.indexOf('async function loadMore()'),source.indexOf('async function loadMore()')+1200)
+ expect(page).toContain('seq=generation.current')
+ expect(page).toContain('if(seq!==generation.current||getPrivateCacheContext().epoch!==scope.epoch)return')
+ expect(source).toContain('<PanelAccessState/>')
 })
 it('exposes backend capabilities without granting writes from section-read access',()=>{
  const api=read('src/app/api/mobile/dashboard/route.ts')

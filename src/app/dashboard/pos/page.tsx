@@ -96,6 +96,7 @@ import {
 import { usePOSRepairs, type PosCartRepair } from './hooks/usePOSRepairs'
 import { usePOSSearch } from './hooks/usePOSSearch'
 import { usePOSSaleProcessor } from './hooks/usePOSSaleProcessor'
+import {useTenantScope} from '@/hooks/use-tenant-scope'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 /** Lo minimo que necesita el carrito para armar la linea de una reparacion.
@@ -141,6 +142,7 @@ function POSPageContent() {
   const { settings } = useSharedSettings()
   const { selectedBranchId } = useBranch()
   const { user } = useAuth()
+  const {scope:catalogScope}=useTenantScope()
   const posStorageScope = `${user?.id || 'anonymous'}:${selectedBranchId || 'unselected'}`
   const taxPercentage = Number.isFinite(settings.taxRate) ? settings.taxRate : 10
   const taxRate = taxPercentage / 100
@@ -560,7 +562,7 @@ function POSPageContent() {
   // Smart search integration (after inventoryProducts is available)
   // NOTA: useSmartSearch y todo el estado de búsqueda/filtros/paginación
   // están ahora encapsulados en usePOSSearch.
-  const posSearch = usePOSSearch({ products: inventoryProducts as Product[] })
+  const posSearch = usePOSSearch({ products: inventoryProducts as Product[],scopeKey:catalogScope+':'+selectedBranchId })
   const {
     catalogView, setCatalogView, catalogCounts, otherViewMatches,
     searchTerm, setSearchTerm: _setSearchTerm, handleSearchChange, handleSearchKeyDown,

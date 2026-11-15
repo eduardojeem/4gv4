@@ -160,3 +160,17 @@ describe('mobile credit collection attempt persistence', () => {
     expect(await getPendingMobileCollection(storage, context)).toEqual(saved);
   });
 });
+
+it('replays the original integer wire amounts of a pre-decimal app attempt',async()=>{
+ const storage=new MemoryStorage();const legacyInput:CollectInput={amount:100.5,method:'cash',branchId:'branch-a',allocations:[{id:'installment',type:'installment',amount:100.5}]};
+ await storage.setItem('mobile-credit-collection:v1:user-a:org-a',JSON.stringify({context,input:legacyInput,idempotencyKey:'legacy-stable-key',createdAt:'2026-11-01T12:00:00Z'}));
+ let sent:CollectInput|undefined;
+ await retryMobileCollection(storage,context,{storage,collect:async(_id,payload,key)=>{sent=payload;expect(key).toBe('legacy-stable-key');return result}});
+ expect(sent?.amount).toBe(101);expect(sent?.allocations?.[0].amount).toBe(101);
+});
+it('versions new attempts and preserves their decimal wire amounts on recovery',async()=>{
+ const storage=new MemoryStorage(),decimalInput:CollectInput={amount:100.5,method:'cash',branchId:'branch-a'};
+ await expect(submitMobileCollection(context,decimalInput,{storage,collect:async()=>{throw new Error('timeout')}})).rejects.toThrow();
+ expect(await getPendingMobileCollection(storage,context)).toMatchObject({serializationVersion:2,input:{amount:100.5}});
+ await retryMobileCollection(storage,context,{storage,collect:async(_id,payload)=>{expect(payload.amount).toBe(100.5);return result}});
+});

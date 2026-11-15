@@ -1,6 +1,8 @@
 'use client'
 
-import { WhatsAppIcon } from '@/components/public/SocialIcons'
+import {ProductWhatsAppButton} from '@/components/public/ProductWhatsAppButton'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
+import {siteUrl} from '@/lib/site-url'
 
 import { AppImage } from '@/components/ui/app-image'
 
@@ -339,6 +341,7 @@ export function ProductDetailInteractive({
   const commerceMode = settings?.checkout?.commerceMode ?? 'cart'
   // Publicado sin precio: no se muestra ni se puede comprar, se pregunta.
   const precioOculto = hidesPublicPrice(product)
+  const inquiryHref=productWhatsappInquiryHref({company:companyInfo,product:{name:product.name,url:siteUrl(`${tenantPrefix}/productos/${product.id}`),priceHidden:precioOculto}})
   const phoneDisplay = companyInfo?.whatsapp || companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
@@ -934,38 +937,7 @@ export function ProductDetailInteractive({
               </Button>
             )}
 
-            {commerceMode === 'catalog' ? (
-              phoneClean ? (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full gap-2 rounded-xl text-sm font-semibold border-border/80 text-foreground hover:bg-muted"
-                  onClick={() => handleContact('whatsapp')}
-                >
-                  <WhatsAppIcon className="h-4 w-4 text-emerald-600" />
-                  Consultar disponibilidad
-                </Button>
-              ) : null
-            ) : (
-              <Button
-                size="lg"
-                variant={commerceMode === 'whatsapp' || precioOculto ? 'default' : 'outline'}
-                className={cn(
-                  'w-full gap-2 rounded-xl text-sm font-semibold transition-all',
-                  commerceMode === 'whatsapp' || precioOculto
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
-                    : 'border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-                )}
-                onClick={() => handleContact('whatsapp')}
-              >
-                <WhatsAppIcon className="h-4 w-4" />
-                {precioOculto
-                  ? 'Preguntar el precio por WhatsApp'
-                  : isInStock
-                  ? 'Consultar / Pedir por WhatsApp'
-                  : 'Consultar reposición por WhatsApp'}
-              </Button>
-            )}
+            <ProductWhatsAppButton href={inquiryHref} productName={product.name} className="w-full text-sm"/>
 
             {!precioOculto && commerceMode === 'cart' && (
               <div className="grid grid-cols-2 gap-2">
@@ -1007,7 +979,7 @@ export function ProductDetailInteractive({
         </div>
 
         {/* Disponibilidad por sucursales */}
-        <BranchAvailability branches={branchStock} />
+        <BranchAvailability branches={branchStock} company={companyInfo} product={{name:product.name,url:siteUrl(`${tenantPrefix}/productos/${product.id}`)}} />
 
         {/* Modal interactivo para consulta y pedido directo por WhatsApp */}
         {phoneClean && (

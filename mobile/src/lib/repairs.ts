@@ -3,6 +3,11 @@ import type { Ionicons } from '@expo/vector-icons';
 
 import { ApiError, apiFetch } from './api';
 import { formatMobileDate } from './regional-format';
+import {
+  MAX_REPAIR_ACCESS_LENGTH,
+  validateRepairAccess,
+  type AccessType,
+} from './repair-access';
 
 /**
  * Reparaciones en la app: las mismas APIs que la sección de la web
@@ -294,7 +299,11 @@ export const DEVICE_TYPES: { key: 'smartphone' | 'tablet' | 'laptop' | 'desktop'
   { key: 'other', label: 'Otro' },
 ];
 
-export type AccessType = 'none' | 'pin' | 'pattern' | 'password' | 'biometric' | 'other';
+export {
+  MAX_REPAIR_ACCESS_LENGTH,
+  validateRepairAccess,
+  type AccessType,
+};
 
 export const ACCESS_TYPES: {
   key: AccessType;
@@ -310,66 +319,6 @@ export const ACCESS_TYPES: {
   { key: 'biometric', label: 'Biométrico', icon: 'finger-print-outline', color: '#D97706', hint: 'Huella / reconocimiento facial' },
   { key: 'other', label: 'Otro', icon: 'help-circle-outline', color: '#64748B', hint: 'Otro método o notas de acceso' },
 ];
-
-/**
- * Validaciones de acceso idénticas al esquema oficial de la web (repair.schema.ts).
- */
-export function validateRepairAccess(accessType: AccessType, password?: string | null): string | null {
-  const type = accessType || 'none';
-  const pwd = (password || '').trim();
-
-  if (type === 'none' || type === 'biometric') {
-    return null;
-  }
-
-  if (type === 'pin') {
-    if (!pwd) {
-      return 'Ingresá el PIN del dispositivo (o cambiá el tipo de acceso).';
-    }
-    if (!/^[\d\s,/-]+$/.test(pwd)) {
-      return 'El PIN solo puede contener números (separá varios con comas).';
-    }
-    if (pwd.length > 100) {
-      return 'El PIN es demasiado largo (máximo 100 caracteres).';
-    }
-    return null;
-  }
-
-  if (type === 'password') {
-    if (!pwd) {
-      return 'Ingresá la contraseña del dispositivo (o cambiá el tipo de acceso).';
-    }
-    if (pwd.length > 100) {
-      return 'La contraseña es demasiado larga (máximo 100 caracteres).';
-    }
-    return null;
-  }
-
-  if (type === 'pattern') {
-    if (!pwd) {
-      return 'Dibujá el patrón de desbloqueo (o cambiá el tipo de acceso).';
-    }
-    if (pwd.length < 2) {
-      return 'El patrón debe conectar al menos 2 puntos.';
-    }
-    if (pwd.length > 100) {
-      return 'El patrón es demasiado largo (máximo 100 caracteres).';
-    }
-    return null;
-  }
-
-  if (type === 'other') {
-    if (!pwd) {
-      return 'Describí el método de desbloqueo o acceso al equipo.';
-    }
-    if (pwd.length > 200) {
-      return 'La descripción es demasiado larga (máximo 200 caracteres).';
-    }
-    return null;
-  }
-
-  return null;
-}
 
 export type NewRepairInput = {
   customer_id: string;

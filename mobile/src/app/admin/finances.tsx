@@ -1,9 +1,11 @@
+import type { ControlMetric } from '../../../../src/lib/finance/control-model';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import {
   useCallback,
   useEffect,
   useRef,
+  useMemo,
   useState,
   useSyncExternalStore,
 } from 'react';
@@ -16,6 +18,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -41,13 +44,18 @@ import {
   sumDue,
   type FinancePeriod,
 } from '@/lib/finance-model';
-import { openWeb } from '@/lib/marketplace';
+import { FinanceOperations, type FinanceTab } from '@/components/finance-operations';
+import { FinanceMobileToolbar } from '@/components/finance-navigation';
+import { BottomSheet } from '@/components/bottom-sheet';
+import { shareFinanceSummary } from '@/lib/finance-export';
+import type { FinanceScope } from '@/lib/finance-admin';
+import { validateFinanceDates, type FinanceDates } from '../../../../src/lib/finance/summary-integrity';
 import { usePalette } from '@/lib/palette';
 import {
   getPrivateCacheContext,
   subscribePrivateCacheContext,
 } from '@/lib/private-cache-context';
-import { formatMobileCurrency } from '@/lib/regional-format';
+import { getMobileDisplayLocale } from '@/lib/regional-format';
 import { fetchOrgSettings } from '@/lib/settings-admin';
 
 type Report = {
@@ -59,10 +67,13 @@ type Report = {
   currency: string;
   branches: BranchItem[];
   branchesUnavailable: boolean;
+  dates: FinanceDates;
 };
 const PERIODS = [
   { key: 'today', label: 'Hoy' },
+  { key: 'week', label: 'Esta semana' },
   { key: 'month', label: 'Este mes' },
+  { key: 'previousMonth', label: 'Mes anterior' },
   { key: '30d', label: 'Últimos 30 días' },
   { key: 'year', label: 'Este año' },
 ] as const;
@@ -90,7 +101,15 @@ export default function FinancesAdminScreen() {
     subscribePrivateCacheContext,
     getPrivateCacheContext,
   );
-  const [period, setPeriod] = useState<FinancePeriod>('month');
+  const [period,setPeriod]=useState<FinancePeriod>('30d');
+  const [controlMetric,setControlMetric]=useState<ControlMetric>('revenue');
+  const [tab,setTab]=useState<FinanceTab>('summary');
+  const [customDates,setCustomDates]=useState<FinanceDates|undefined>();
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [dateEditor,setDateEditor]=useState(false);
+  const [dateFrom,setDateFrom]=useState('');
+  const [dateTo,setDateTo]=useState('');
+  const [sharing,setSharing]=useState(false);
   const [branch, setBranch] = useState<{
     organizationId: string | null;
     id: string;
@@ -104,6 +123,7 @@ export default function FinancesAdminScreen() {
     scope.epoch,
     period,
     branchId,
+    customDates,
   );
   const [report, setReport] = useState<Report | null>(null);
   const [failure, setFailure] = useState<{
@@ -112,12 +132,11 @@ export default function FinancesAdminScreen() {
   } | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const generation = useRef(0);
-  // Al cambiar de período o sucursal queda lo anterior (atenuado) mientras
-  // carga, en vez de vaciar la pantalla; nunca de otro negocio o sesión.
+  // Un informe solo se muestra bajo el período, empresa y sucursal que lo originaron.
   const shown =
     report &&
     report.organizationId === scope.organizationId &&
-    report.epoch === scope.epoch
+    report.epoch === scope.epoch && report.key === key
       ? report
       : null;
   const stale = Boolean(shown && shown.key !== key);
@@ -141,7 +160,7 @@ export default function FinancesAdminScreen() {
         snapshot.epoch !== getPrivateCacheContext().epoch
       )
         return;
-      const dates = financePeriodDates(period, settings.timeZone);
+      const dates = financePeriodDates(period, settings.timeZone, new Date(), customDates);
       const result = await fetchFinanceSummary({
         ...dates,
         ...(branchId !== 'all' ? { branchId } : {}),
@@ -151,7 +170,9 @@ export default function FinancesAdminScreen() {
         snapshot.epoch !== getPrivateCacheContext().epoch
       )
         return;
+      if (!result.filters || result.filters.startDate !== dates.startDate || result.filters.endDate !== dates.endDate || (result.filters.branchId ?? 'all') !== branchId) throw new Error('Los filtros del informe no coinciden con los solicitados. Reintentá.');
       setReport({
+        dates,
         key,
         organizationId: snapshot.organizationId,
         epoch: snapshot.epoch,
@@ -177,7 +198,7 @@ export default function FinancesAdminScreen() {
     } finally {
       if (request === generation.current) setBusyKey(null);
     }
-  }, [key, period, branchId]);
+  }, [key, period, branchId, customDates]);
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -192,85 +213,44 @@ export default function FinancesAdminScreen() {
     });
     return () => subscription.remove();
   }, [load]);
-  const web = () => {
-    void openWeb('/admin/finances').catch(() =>
-      Alert.alert('No pudimos abrir Finanzas', 'Volvé a intentar.'),
-    );
-  };
+  const web = () => setTab('payables');
   const amount = (value: number) =>
-    formatMobileCurrency(Number.isFinite(value) ? value : 0, shown?.currency ?? 'PYG');
+    Number.isFinite(value) ? new Intl.NumberFormat(getMobileDisplayLocale(), {style:'currency',currency:shown?.currency??'PYG',maximumFractionDigits:2}).format(value) : 'No disponible';
   const headline = data ? financeHeadline(data) : null;
   const warnings = data ? groupFinanceWarnings(data.coverageWarnings) : [];
   const breakdown = data && headline ? financeBreakdown(data, headline.profit) : null;
   const previous = data?.comparison ? financeHeadline({ ...data, accrued: { ...data.comparison.accrued } }) : null;
-  const profitComparison = headline ? comparisonText(headline.profit, previous?.profit) : null;
+  const profitComparison = headline && !headline.estimated && previous && !previous.estimated ? comparisonText(headline.profit, previous.profit) : null;
   const revenueComparison = data ? comparisonText(data.accrued.revenue, data.comparison?.accrued.revenue) : null;
   const due = data && shown ? splitDueThisWeek(data.upcomingDue, financePeriodDates('today', shown.timeZone).startDate) : null;
   const sources = data?.accrued.revenueBreakdown;
   const balance = data ? cashBalance(data.cash.netCashFlow) : null;
   const cashParts = data ? cashSources(data.cash.breakdown) : null;
-  const branches = shown?.branches ?? [];
+  const branches = report?.organizationId===scope.organizationId&&report.epoch===scope.epoch?report.branches:[];
   const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
   const profitColor = !headline || headline.profit === 0 ? colors.text : headline.profit > 0 ? tone.good : tone.bad;
   const profitTitle = !headline
     ? ''
-    : headline.profit < 0
+    : headline.profit === 0 ? headline.estimated ? 'Resultado estimado' : 'Sin ganancia ni pérdida' : headline.profit < 0
       ? headline.estimated ? 'Pérdida estimada' : 'Pérdida'
       : headline.estimated ? 'Ganancia estimada' : 'Ganancia';
 
+  const operationScope = useMemo<FinanceScope | null>(() => shown && scope.userId ? {
+    ...shown.dates,userId:scope.userId,organizationId:shown.organizationId,epoch:shown.epoch,
+    branchId:shown.data.filters?.branchId ?? null,currency:shown.currency,timeZone:shown.timeZone,
+  } : null,[shown,scope.userId]);
+  const share=async()=>{
+    if(!data||!operationScope||sharing)return;setSharing(true);
+    try{await shareFinanceSummary(data,operationScope);}catch(cause){Alert.alert('No pudimos compartir el informe',cause instanceof Error?cause.message:'Volvé a intentar.');}finally{setSharing(false);}
+  };
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
-          Finanzas
-        </Text>
-        <Text style={{ color: colors.muted }}>
-          {shown
-            ? periodText(financePeriodDates(period, shown.timeZone))
-            : 'Cómo le va a tu negocio'}
-        </Text>
-      </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filters}
-        contentContainerStyle={styles.filterContent}
-      >
-        {PERIODS.map((item) => (
-          <Chip
-            key={item.key}
-            label={item.label}
-            selected={period === item.key}
-            accent={accent}
-            onAccent={tone.onAccent}
-            colors={colors}
-            onPress={() => setPeriod(item.key)}
-          />
-        ))}
-      </ScrollView>
-      {/* Con una sola sucursal «Todas» y esa muestran lo mismo: no se ofrece elegir. */}
-      {branches.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filters}
-          contentContainerStyle={styles.filterContent}
-        >
-          {[{ id: 'all', name: 'Todas las sucursales' }, ...branches].map((item) => (
-            <Chip
-              key={item.id}
-              icon={item.id === 'all' ? 'business-outline' : 'storefront-outline'}
-              label={item.name}
-              selected={branchId === item.id}
-              accent={accent}
-              onAccent={tone.onAccent}
-              colors={colors}
-              onPress={() => setBranch({ organizationId: scope.organizationId, id: item.id })}
-            />
-          ))}
-        </ScrollView>
-      )}
-      <ScrollView
+      <FinanceMobileToolbar tab={tab} onTabChange={setTab} accent={accent}
+        periodLabel={period==='custom'?'Fechas elegidas':PERIODS.find(item=>item.key===period)?.label??'Período'}
+        branchLabel={branchId==='all'?'Todas las sucursales':branches.find(item=>item.id===branchId)?.name??'Sucursal seleccionada'}
+        dateLabel={shown?periodText(shown.dates):loading?'Actualizando informe…':'Elegí el alcance del informe'}
+        onFilters={()=>{setDateEditor(false);setFiltersOpen(true)}} onShare={()=>void share()} sharing={sharing} canShare={Boolean(data)&&!loading}/>
+      {tab!=='summary'&&operationScope?<FinanceOperations initialControlMetric={controlMetric} key={key+tab+controlMetric} scope={operationScope} mode={tab} branches={branches} onChanged={load}/>:<ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -285,6 +265,8 @@ export default function FinancesAdminScreen() {
             No se pudo cargar la lista de sucursales. Deslizá hacia abajo para reintentar.
           </Text>
         )}
+        {!data?.receivables&&data?<View accessibilityRole="alert" style={[styles.card,{borderColor:colors.border}]}><Text style={{color:colors.text,fontWeight:'700'}}>Saldo por cobrar no disponible</Text><Text style={{color:colors.muted}}>No se interpreta como cero. Volvé a consultar o revisá la cartera.</Text><Action label="Ver deudas de clientes" color={accent} onPress={()=>router.push('/panel/credits' as never)}/></View>:null}
+        {data?.receivables?<View style={{paddingVertical:4}}><Text style={{color:colors.muted}}>La deuda de clientes es el saldo actual; no depende del período elegido.</Text><Action label="Ver deudas de clientes" color={accent} onPress={()=>router.push('/panel/credits' as never)}/></View>:null}
         {stale && loading && (
           <View style={styles.updating} accessibilityLiveRegion="polite">
             <ActivityIndicator size="small" color={accent} />
@@ -415,7 +397,7 @@ export default function FinancesAdminScreen() {
                         onPress={() => router.push('/panel/repairs' as never)}
                       />
                     )}
-                    <Action label="Ver el detalle en la web" color={accent} onPress={web} />
+                    <Action label="Ver cuentas y gastos" color={accent} onPress={web} />
                   </View>
                 )}
 
@@ -472,6 +454,7 @@ export default function FinancesAdminScreen() {
                       )}
                     </View>
                   )}
+                  <View style={styles.between}>{(['revenue','operatingExpenses','netProfit'] as const).map((metric,index)=><Action key={metric} label={['Origen de ingresos','Origen de gastos','Origen del resultado'][index]} color={accent} onPress={()=>{setControlMetric(metric);setTab('control');}}/>)}</View>
                   <Line label="Vendiste" value={amount(data.accrued.revenue)} colors={colors} />
                   <Line
                     dot={BAR.goods}
@@ -577,7 +560,7 @@ export default function FinancesAdminScreen() {
                 {data.overdue.length > 5 && (
                   <Text style={{ color: colors.muted }}>Y {data.overdue.length - 5} más.</Text>
                 )}
-                <Action label="Pagar en la web" color={accent} onPress={web} />
+                <Action label="Ver todas y registrar pago" color={accent} onPress={web} />
               </View>
             )}
 
@@ -637,14 +620,30 @@ export default function FinancesAdminScreen() {
             )}
           </View>
         )}
-        <Pressable accessibilityRole="button" onPress={web} style={[card, styles.between]}>
+        <Pressable accessibilityRole="button" onPress={()=>setTab('expenses')} style={[card,styles.between]}>
           <View style={{ flexShrink: 1, gap: 4 }}>
             <Text style={[styles.bold, { color: colors.text }]}>Anotar gastos y pagar cuentas</Text>
-            <Text style={{ color: colors.muted }}>Por ahora los gastos, las cuentas y los sueldos se cargan en la web.</Text>
+            <Text style={{ color: colors.muted }}>Registrá gastos, revisá cuentas y consultá el equipo desde las pestañas de esta pantalla.</Text>
           </View>
           <Ionicons name="open-outline" size={20} color={accent} />
         </Pressable>
-      </ScrollView>
+      </ScrollView>}
+      <BottomSheet visible={filtersOpen} title="Filtros del informe" subtitle="Se aplican a la vista que estás consultando." onClose={()=>setFiltersOpen(false)} footer={<Action label={dateEditor?'Aplicar fechas':'Ver informe'} color={accent} onPress={()=>{if(dateEditor){try{const dates=validateFinanceDates({startDate:dateFrom,endDate:dateTo});setCustomDates(dates);setPeriod('custom');setDateEditor(false);setFiltersOpen(false);}catch(cause){Alert.alert('Revisá las fechas',cause instanceof Error?cause.message:'Fechas inválidas.');}}else setFiltersOpen(false)}}/>}>
+        <Text style={[styles.bold,{color:colors.text}]}>Período</Text>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{PERIODS.map(item=><Chip key={item.key} label={item.label} selected={period===item.key} accent={accent} onAccent={tone.onAccent} colors={colors} onPress={()=>{setDateEditor(false);setPeriod(item.key)}}/>)}</View>
+        <Action label={period==='custom'?'Cambiar fechas personalizadas':'Elegir fechas personalizadas'} color={accent} onPress={()=>{setDateFrom(shown?.dates.startDate??'');setDateTo(shown?.dates.endDate??'');setDateEditor(true)}}/>
+        {dateEditor&&<View style={{gap:10,padding:14,borderRadius:16,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background}}>
+          <Text style={{color:colors.muted}}>Ingresá las fechas y tocá Aplicar fechas.</Text>
+          <Text style={{color:colors.text,fontWeight:'600'}}>Desde (AAAA-MM-DD)</Text><TextInput accessibilityLabel="Desde" value={dateFrom} onChangeText={setDateFrom} placeholder="2026-11-01" placeholderTextColor={colors.muted} style={{color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:10,padding:12}}/>
+          <Text style={{color:colors.text,fontWeight:'600'}}>Hasta (AAAA-MM-DD)</Text><TextInput accessibilityLabel="Hasta" value={dateTo} onChangeText={setDateTo} placeholder="2026-11-30" placeholderTextColor={colors.muted} style={{color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:10,padding:12}}/>
+        </View>}
+        {branches.length > 1 && <View style={{gap:10}}>
+        <Text style={[styles.bold,{color:colors.text}]}>Sucursal</Text>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{[{id:'all',name:'Todas las sucursales'},...branches].map(item=><Chip key={item.id} label={item.name} selected={branchId===item.id} accent={accent} onAccent={tone.onAccent} colors={colors} onPress={()=>setBranch({organizationId:scope.organizationId,id:item.id})}/>)}</View>
+        </View>}
+        {shown?.branchesUnavailable&&<Text style={{color:tone.warn}}>No pudimos consultar las sucursales. Actualizá el informe para reintentar.</Text>}
+      </BottomSheet>
+
     </View>
   );
 }
@@ -824,18 +823,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  content: { padding: 16, gap: 14, paddingBottom: 40 },
+  content: { padding: 16, gap: 18, paddingBottom: 48 },
   noPad: { padding: 0, paddingBottom: 0 },
   dim: { opacity: 0.55 },
   updating: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  card: { padding: 16, borderRadius: 14, borderWidth: 1, gap: 10 },
+  card: { padding: 18, borderRadius: 20, borderWidth: 1, gap: 12 },
   center: { alignItems: 'center' },
   centerText: { textAlign: 'center' },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   bold: { fontWeight: '700', fontSize: 16 },
   cardTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
-  heroAmount: { fontSize: 34, fontWeight: '800' },
+  heroAmount: { fontSize: 36, letterSpacing: -0.7, fontWeight: '800' },
   tiles: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1, gap: 6 },
   tileAmount: { fontSize: 20, fontWeight: '800' },

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import useSWR from 'swr'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { toast } from 'sonner'
 import { Bell, CalendarCheck2, CalendarClock, CalendarX2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -51,7 +52,8 @@ function ago(iso: string) {
  * Agenda abierta, avisa y recarga el tablero.
  */
 export function AppointmentEventsBell({ timeZone, onNew }: { timeZone: string; onNew?: () => void }) {
-  const { data, mutate } = useSWR('/api/agenda/events', fetchEvents, { refreshInterval: 60_000, revalidateOnFocus: true })
+  const { scope } = useTenantScope()
+  const { data, mutate } = useSWR([scope, '/api/agenda/events'], ([, url]) => fetchEvents(url), { refreshInterval: 60_000, revalidateOnFocus: true })
   const lastSeenTop = useRef<string | null>(null)
 
   useEffect(() => {

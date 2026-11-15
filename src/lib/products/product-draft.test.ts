@@ -110,7 +110,7 @@ describe('el modal ya no borra lo que se está escribiendo', () => {
     // `product` llega como prop y cualquier recarga de la lista lo reemplaza por
     // uno nuevo con los mismos datos: con el objeto en las dependencias, ese
     // reemplazo disparaba `form.reset()` sobre lo que la persona escribía.
-    expect(modal).toContain('}, [productId, form])')
+    expect(modal).toMatch(/\}, \[productId, form,\s*initialUnit\]\)/)
     expect(modal).not.toContain('}, [product, form])')
     expect(modal).toContain('const product = productRef.current')
   })

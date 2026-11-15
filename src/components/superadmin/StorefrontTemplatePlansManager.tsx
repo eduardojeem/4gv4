@@ -135,7 +135,8 @@ export function StorefrontTemplatePlansManager() {
         </h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Elegí qué plantillas de tienda puede usar cada plan. Las tiendas ven las demás con candado y el plan desde el que
-          están. Quien ya usa una plantilla la conserva aunque se la saques al plan; solo no puede volver a elegirla si cambia a otra.
+          están; si una plantilla no está habilitada en ningún plan activo, las organizaciones la ven como «Próximamente».
+          Quien ya usa una plantilla la conserva aunque se la saques al plan; solo no puede volver a elegirla si cambia a otra.
           «Automático» se habilita solo si la plantilla que elige para el rubro también está en el plan.
         </p>
       </header>
@@ -174,7 +175,12 @@ export function StorefrontTemplatePlansManager() {
                   {group.title}
                 </th>
               </tr>
-              {group.templateKeys.map((style) => (
+              {group.templateKeys.map((style) => {
+                const activePlans = plans.filter((plan) => plan.isActive)
+                const plansToCheck = activePlans.length > 0 ? activePlans : plans
+                const enabledPlans = plansToCheck.filter((plan) => (draft[plan.code] ?? []).includes(style))
+                const enabledInAnyPlan = enabledPlans.length > 0
+                return (
                 <tr key={style} className="border-t border-border/50">
                   <th scope="row" className="p-3 text-left font-normal">
                     <span className="flex items-center gap-3">
@@ -183,11 +189,28 @@ export function StorefrontTemplatePlansManager() {
                       )}
                       <span>
                         <span className="block font-medium">{labelOf(style)}</span>
-                        <span className={cn(
-                          'text-[11px]',
-                          STOREFRONT_TEMPLATE_TIER[style] === 'premium' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
-                        )}>
-                          {TEMPLATE_TIER_LABEL[STOREFRONT_TEMPLATE_TIER[style]]}
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className={cn(
+                            'text-[11px]',
+                            STOREFRONT_TEMPLATE_TIER[style] === 'premium' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+                          )}>
+                            {TEMPLATE_TIER_LABEL[STOREFRONT_TEMPLATE_TIER[style]]}
+                          </span>
+                          {enabledInAnyPlan ? (
+                            <span
+                              title="Planes activos donde las organizaciones tienen habilitada esta plantilla."
+                              className="rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                            >
+                              {enabledPlans.length === 1 ? 'Plan' : 'Planes'}: {enabledPlans.map((plan) => plan.name).join(', ')}
+                            </span>
+                          ) : (
+                            <span
+                              title="No está habilitada en ningún plan activo; en la sección de las organizaciones se muestra como «Próximamente»."
+                              className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                            >
+                              Próximamente en organizaciones
+                            </span>
+                          )}
                         </span>
                       </span>
                     </span>
@@ -205,7 +228,8 @@ export function StorefrontTemplatePlansManager() {
                     </td>
                   ))}
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           ))}
           <tfoot className="border-t bg-muted/20">

@@ -110,7 +110,7 @@ describe('dashboard navigation information architecture', () => {
     expect(findItem('pos')).toMatchObject({ mobileLabel: 'POS' })
 
     const mobile = read('src/components/dashboard/mobile-nav.tsx')
-    expect(mobile).toContain('getMobileDashboardItems(groups, 4, businessVertical)')
+    expect(mobile).toContain('getMobileDashboardItems(groups, 4, businessVertical,operatingModel,primaryActivity)')
     expect(mobile).toContain('item.mobileLabel ?? item.label')
   })
 
@@ -137,3 +137,5 @@ describe('dashboard navigation information architecture', () => {
     expect(sidebar).not.toContain('sm:w-80')
   })
 })
+
+it('prioritizes an arbitrary service business without naming it a barbershop',()=>{const groups=filterDashboardNavGroups({role:'admin',effectiveModules:['services','repairs','pos'],hasPermission:()=>true,businessVertical:'other',operatingModel:'service'});expect(getBusinessFocusSection(groups,'other','service')).toBe('agenda');expect(groups.flatMap(g=>g.items).find(i=>i.key==='products')?.label).toBe('Servicios')});

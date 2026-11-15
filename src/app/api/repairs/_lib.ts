@@ -1,3 +1,4 @@
+import {subscriptionOperationResponse} from '@/lib/saas/subscription-operation-access'
 import { resolveOrganizationProductCostAccess } from '@/lib/products/cost-access'
 import { redactRepairInternalCosts } from '@/lib/repairs/cost-redaction'
 import { NextResponse } from 'next/server'
@@ -99,6 +100,8 @@ export async function resolveRepairRouteContext(
       { status: 403 }
     )
   }
+
+  if(moduleContext.role!=='super_admin'){const blocked=await subscriptionOperationResponse(request,moduleContext.organizationId);if(blocked)return blocked}
 
   const requestedBranchId = getRequestedBranchId(request)
   let branchScope

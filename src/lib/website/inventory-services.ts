@@ -26,22 +26,42 @@ export function serviceCoverUrl(row: Pick<InventoryServiceRow, 'image_url' | 'im
   return row.images?.find(Boolean) || row.image_url || undefined
 }
 
+export interface InventoryServicesWebsiteOptions {
+  businessVertical?: string | null
+}
+
 /**
  * Servicios del catálogo para la web: solo los activos y marcados para la
  * página web (visibility = public). Respeta «precio a consultar».
  */
-export function inventoryServicesForWebsite(rows: readonly InventoryServiceRow[]): Service[] {
+export function inventoryServicesForWebsite(
+  rows: readonly InventoryServiceRow[],
+  options: InventoryServicesWebsiteOptions = {},
+): Service[] {
+  const vertical = options.businessVertical
+  const isPersonalCare = vertical === 'barbershop' || vertical === 'beauty_services' || vertical === 'cosmetics'
+  const fallbackCategory =
+    vertical === 'barbershop'
+      ? 'Barbería y Salón'
+      : vertical === 'beauty_services' || vertical === 'cosmetics'
+        ? 'Estética y Cuidado'
+        : vertical
+          ? 'Servicios'
+          : 'Servicios Técnicos'
+  const fallbackIcon = vertical === 'barbershop' ? 'scissors' : isPersonalCare ? 'sparkles' : 'wrench'
+  const fallbackBenefits = options.businessVertical ? [] : ['Garantía escrita', 'Atención profesional']
+
   return rows
     .filter((row) => row.is_active !== false && (row.visibility ?? 'public') === 'public')
     .map((row) => ({
       id: row.id,
       title: row.name,
       description: row.description || '',
-      price: row.hide_price ? null : row.sale_price || 0,
-      icon: 'wrench',
+      price: row.hide_price ? null : row.sale_price ?? 0,
+      icon: fallbackIcon,
       color: 'blue',
-      benefits: ['Garantía escrita', 'Atención profesional'],
-      category: categoryName(row.category) || 'Servicios Técnicos',
+      benefits: fallbackBenefits,
+      category: categoryName(row.category) || fallbackCategory,
       active: true,
       source: 'inventory' as const,
       ...(serviceCoverUrl(row) ? { imageUrl: serviceCoverUrl(row) } : {}),

@@ -19,11 +19,13 @@ import {
 } from 'react-native';
 
 import { DeliverySheet } from '@/components/delivery-sheet';
+import { PatternPreview } from '@/components/pattern-picker';
 import { CostsSheet, EditRepairSheet, PaymentSheet } from '@/components/repair-editors';
 import { QualityCheckSheet } from '@/components/quality-check-sheet';
 import { formatGs, openWeb } from '@/lib/marketplace';
 import { usePanel } from '@/lib/panel';
 import { palette, usePalette } from '@/lib/palette';
+import { parsePatternToDots } from '@/lib/repair-access';
 import {
   cachedRepair,
   changeRepairStatus,
@@ -60,15 +62,15 @@ export default function RepairDetail() {
   const colors = usePalette();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [repair, setRepair] = useState<Repair | undefined>(() => (id ? cachedRepair(id) : undefined));
-  const [loading, setLoading] = useState(() => !repair && Boolean(id));
+  const [settledId, setSettledId] = useState<string | null>(() => (repair && id ? id : null));
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [target, setTarget] = useState<RepairStatus | null>(null);
+  const loading = Boolean(id) && !repair && settledId !== id;
 
   useEffect(() => {
     if (!id) return;
     let active = true;
-    if (!repair) setLoading(true);
     fetchRepair(id)
       .then((data) => {
         if (!active) return;
@@ -77,12 +79,10 @@ export default function RepairDetail() {
       })
       .catch((err) => {
         if (!active) return;
-        if (!repair) {
-          setFetchError(err instanceof Error ? err.message : 'No se pudo cargar la reparación.');
-        }
+        setFetchError(err instanceof Error ? err.message : 'No se pudo cargar la reparación.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setSettledId(id);
       });
     return () => {
       active = false;
@@ -572,15 +572,16 @@ function AccessInfoField({ repair, colors }: { repair: Repair; colors: Colors })
   const pwd = repair.access_password;
 
   if (type === 'none') {
-    return <Field label="Desbloqueo" value="Sin bloqueo" colors={colors} tone="#16A34A" />;
+    return <Field label="Desbloqueo" value="Sin bloqueo" colors={colors} tone={colors.successText} />;
   }
 
   if (type === 'biometric') {
-    return <Field label="Desbloqueo" value="Biométrico (Huella/Rostro)" colors={colors} tone="#D97706" />;
+    return <Field label="Desbloqueo" value="Biométrico (Huella/Rostro)" colors={colors} tone={colors.warningText} />;
   }
 
   const typeLabel =
     type === 'pin' ? 'PIN' : type === 'pattern' ? 'Patrón' : type === 'password' ? 'Contraseña' : 'Acceso';
+  const patternDots = type === 'pattern' ? parsePatternToDots(pwd) : [];
 
   return (
     <View style={styles.accessFieldWrap}>
@@ -596,19 +597,25 @@ function AccessInfoField({ repair, colors }: { repair: Repair; colors: Colors })
               hitSlop={8}
               style={styles.eyeBtn}
               accessibilityLabel={revealed ? 'Ocultar dato de desbloqueo' : 'Mostrar dato de desbloqueo'}>
-              <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={18} color={palette.primary} />
+              <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.accent} />
             </Pressable>
           ) : null}
         </View>
       </View>
+      {revealed && type === 'pattern' && patternDots.length >= 2 ? (
+        <View style={[styles.patternPreviewBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <PatternPreview value={pwd} size={136} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  accessFieldWrap: { width: '100%' },
+  accessFieldWrap: { width: '100%', gap: 8 },
   accessValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  patternPreviewBox: { borderWidth: 1, borderRadius: 14, padding: 10, alignItems: 'center' },
   eyeBtn: { padding: 4 },
   bold: { fontWeight: '800' },
   mono: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },

@@ -24,21 +24,43 @@ const professionalSchema = z.object({
   // Se muestran en la tienda: foto (URL https o ruta propia) y especialidad.
   photo_url: z.string().trim().max(500).refine((value) => value === '' || value.startsWith('https://') || value.startsWith('/'), 'La foto no es válida').nullable().optional(),
   specialty: z.string().trim().max(80).nullable().optional(),
+  remuneration_type: z.enum(['commission', 'fixed', 'hybrid', 'chair_rental']).optional(),
+  commission_rate_services: z.number().min(0).max(100).nullable().optional(),
+  commission_rate_products: z.number().min(0).max(100).nullable().optional(),
+  commission_fixed_deduction: z.number().min(0).nullable().optional(),
 })
 
 const COLUMNS = PROFESSIONAL_COLUMNS
 
-export const POST = withTenantAuth(guard, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: 'users.manage', module: 'services' }, async (request, { organization }) => {
+  if (!['owner', 'admin'].includes(organization.role)) return NextResponse.json({ error: 'Solo un administrador puede agregar empleados.' }, { status: 403 })
   const parsed = professionalSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos' }, { status: 400 })
   const supabase = await createClient()
   const advanced = parsed.data.online_visible !== undefined || parsed.data.opening_hours !== undefined
   if (advanced && !(await loadAgendaConfig(supabase, organization.id))?.capabilities.professionalBooking) return NextResponse.json({ error: 'Falta aplicar la migración transaccional de reservas.' }, { status: 503 })
-  const { data, error } = await supabase
+
+  const insertPayload: Record<string, unknown> = { ...parsed.data, phone: parsed.data.phone || null, organization_id: organization.id }
+  let { data, error } = await supabase
     .from('agenda_professionals')
-    .insert({ ...parsed.data, phone: parsed.data.phone || null, organization_id: organization.id })
+    .insert(insertPayload)
     .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
     .single()
+
+  if (error && /remuneration_type|commission_rate/.test(error.message)) {
+    delete insertPayload.remuneration_type
+    delete insertPayload.commission_rate_services
+    delete insertPayload.commission_rate_products
+    delete insertPayload.commission_fixed_deduction
+    const retry = await supabase
+      .from('agenda_professionals')
+      .insert(insertPayload)
+      .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
+      .single()
+    data = retry.data
+    error = retry.error
+  }
+
   if (error) {
     logger.error('No se pudo crear el profesional', { error: error.message })
     return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
@@ -55,18 +77,38 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }) => 
   const supabase = await createClient()
   const advanced = parsed.data.online_visible !== undefined || parsed.data.opening_hours !== undefined
   if (advanced && !(await loadAgendaConfig(supabase, organization.id))?.capabilities.professionalBooking) return NextResponse.json({ error: 'Falta aplicar la migración transaccional de reservas.' }, { status: 503 })
-  const { data, error } = await supabase
+
+  const updatePayload: Record<string, unknown> = {
+    ...parsed.data,
+    ...('phone' in parsed.data ? { phone: parsed.data.phone || null } : {}),
+    ...('photo_url' in parsed.data ? { photo_url: parsed.data.photo_url || null } : {}),
+    ...('specialty' in parsed.data ? { specialty: parsed.data.specialty || null } : {}),
+  }
+
+  let { data, error } = await supabase
     .from('agenda_professionals')
-    .update({
-      ...parsed.data,
-      ...('phone' in parsed.data ? { phone: parsed.data.phone || null } : {}),
-      ...('photo_url' in parsed.data ? { photo_url: parsed.data.photo_url || null } : {}),
-      ...('specialty' in parsed.data ? { specialty: parsed.data.specialty || null } : {}),
-    })
+    .update(updatePayload)
     .eq('id', id.data)
     .eq('organization_id', organization.id)
     .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
     .maybeSingle()
+
+  if (error && /remuneration_type|commission_rate/.test(error.message)) {
+    delete updatePayload.remuneration_type
+    delete updatePayload.commission_rate_services
+    delete updatePayload.commission_rate_products
+    delete updatePayload.commission_fixed_deduction
+    const retry = await supabase
+      .from('agenda_professionals')
+      .update(updatePayload)
+      .eq('id', id.data)
+      .eq('organization_id', organization.id)
+      .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
+      .maybeSingle()
+    data = retry.data
+    error = retry.error
+  }
+
   if (error || !data) return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
   return NextResponse.json({ professional: data })
 })

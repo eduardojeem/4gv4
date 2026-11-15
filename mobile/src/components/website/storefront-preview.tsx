@@ -15,6 +15,7 @@ const darkThemeStyles = new Set<StorefrontStyle>([
   'tech',
   'barber',
   'sport',
+  'especial-para-barbero',
 ]);
 
 export function StorefrontLivePreview({
@@ -45,6 +46,7 @@ export function StorefrontLivePreview({
   const headerText = headerMode === 'solid' ? '#0F172A' : '#FFFFFF';
 
   const isDarkCanvas = darkThemeStyles.has(resolvedStyle);
+  const isBarberSupply = resolvedStyle === 'especial-para-barbero';
   const isCatalogOnly = resolvedStyle === 'catalog-basic';
   const isServiceFocus =
     resolvedStyle === 'services' || resolvedStyle === 'barber';
@@ -53,16 +55,18 @@ export function StorefrontLivePreview({
   const isMarket =
     resolvedStyle === 'market' || resolvedStyle === 'wholesale-pro';
 
-  const canvasBg = isDarkCanvas ? '#0F172A' : '#F8FAFC';
-  const cardBg = isDarkCanvas ? '#1E293B' : '#FFFFFF';
+  const canvasBg = isBarberSupply ? '#0B0B0F' : isDarkCanvas ? '#0F172A' : '#F8FAFC';
+  const cardBg = isBarberSupply ? '#FFFFFF' : isDarkCanvas ? '#1E293B' : '#FFFFFF';
   const ink = isDarkCanvas ? '#F8FAFC' : '#0F172A';
   const mutedInk = isDarkCanvas ? '#94A3B8' : '#64748B';
   const radius =
     resolvedStyle === 'modern' || resolvedStyle === 'beauty'
       ? 14
-      : resolvedStyle === 'sport'
-        ? 4
-        : 10;
+      : isBarberSupply
+        ? 12
+        : resolvedStyle === 'sport'
+          ? 4
+          : 10;
 
   const badgeText =
     hero?.badge?.trim() ||
@@ -292,8 +296,8 @@ export function StorefrontLivePreview({
                 style={[
                   styles.mockThumb,
                   {
-                    aspectRatio: isPortrait ? 3 / 4 : 4 / 3,
-                    backgroundColor: isDarkCanvas ? '#0F172A' : '#F1F5F9',
+                    aspectRatio: isBarberSupply ? 1 : isPortrait ? 3 / 4 : 4 / 3,
+                    backgroundColor: isBarberSupply ? '#F4F4F5' : isDarkCanvas ? '#0F172A' : '#F1F5F9',
                     borderRadius: Math.max(4, radius - 4),
                   },
                 ]}
@@ -304,7 +308,7 @@ export function StorefrontLivePreview({
                   >
                     <Text style={styles.offerTagText}>-20%</Text>
                   </View>
-                ) : isServiceFocus ? (
+                ) : isServiceFocus || isBarberSupply ? (
                   <Ionicons name="cut-outline" size={14} color={accent} />
                 ) : (
                   <Ionicons
@@ -321,16 +325,16 @@ export function StorefrontLivePreview({
               <View
                 style={[
                   styles.mockLineLg,
-                  { backgroundColor: isDarkCanvas ? '#334155' : '#E2E8F0' },
+                  { backgroundColor: isBarberSupply ? '#E4E4E7' : isDarkCanvas ? '#334155' : '#E2E8F0' },
                 ]}
               />
               <View style={styles.mockPriceRow}>
                 <View
-                  style={[styles.mockPrice, { backgroundColor: `${accent}88` }]}
+                  style={[styles.mockPrice, { backgroundColor: isBarberSupply ? '#10B981' : `${accent}88` }]}
                 />
                 {!isCatalogOnly ? (
                   <View
-                    style={[styles.mockAdd, { backgroundColor: accent }]}
+                    style={[styles.mockAdd, { backgroundColor: isBarberSupply ? '#18181B' : accent }]}
                   >
                     <Ionicons
                       name={isServiceFocus ? 'calendar' : 'add'}
@@ -359,10 +363,11 @@ export function TemplateWireframeThumb({
   active?: boolean;
 }) {
   const dark = darkThemeStyles.has(styleId);
+  const barberSupply = styleId === 'especial-para-barbero';
   const portrait = styleId === 'fashion' || styleId === 'beauty';
   const service = styleId === 'services' || styleId === 'barber';
   const catalogOnly = styleId === 'catalog-basic';
-  const bg = dark ? '#0F172A' : '#F8FAFC';
+  const bg = barberSupply ? '#0B0B0F' : dark ? '#0F172A' : '#F8FAFC';
   const line = dark ? '#334155' : '#CBD5E1';
 
   return (
@@ -378,7 +383,7 @@ export function TemplateWireframeThumb({
       <View
         style={[
           thumbStyles.header,
-          { backgroundColor: dark ? '#1E293B' : '#FFFFFF' },
+          { backgroundColor: barberSupply ? '#14141B' : dark ? '#1E293B' : '#FFFFFF' },
         ]}
       >
         <View style={[thumbStyles.dot, { backgroundColor: accent }]} />
@@ -401,7 +406,7 @@ export function TemplateWireframeThumb({
               thumbStyles.card,
               {
                 height: portrait ? 24 : 18,
-                backgroundColor: dark ? '#1E293B' : '#FFFFFF',
+                backgroundColor: barberSupply ? '#FFFFFF' : dark ? '#1E293B' : '#FFFFFF',
                 borderColor: line,
               },
             ]}
@@ -410,11 +415,13 @@ export function TemplateWireframeThumb({
               style={[
                 thumbStyles.miniAccent,
                 {
-                  backgroundColor: service
-                    ? accent
-                    : catalogOnly
-                      ? line
-                      : `${accent}55`,
+                  backgroundColor: barberSupply
+                    ? '#10B981'
+                    : service
+                      ? accent
+                      : catalogOnly
+                        ? line
+                        : `${accent}55`,
                 },
               ]}
             />

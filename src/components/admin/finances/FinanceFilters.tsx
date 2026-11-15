@@ -4,7 +4,6 @@ import type { DateRange } from 'react-day-picker'
 import {
   endOfDay,
   endOfMonth,
-  endOfWeek,
   format,
   isValid,
   parseISO,
@@ -21,10 +20,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import type { AdminFinanceFilters } from '@/hooks/use-admin-finances'
+import { financeBusinessToday } from '@/lib/finance/calendar'
 import { cn } from '@/lib/utils'
 
 interface FinanceFiltersProps {
   filters: AdminFinanceFilters
+  timeZone?: string
   isRefreshing: boolean
   onDateRangeChange: (range: DateRange | undefined) => void
   onRefresh: () => void
@@ -32,6 +33,7 @@ interface FinanceFiltersProps {
 
 export function FinanceFilters({
   filters,
+  timeZone='America/Asuncion',
   isRefreshing,
   onDateRangeChange,
   onRefresh,
@@ -43,7 +45,7 @@ export function FinanceFilters({
     to: isValid(toDate) ? toDate : undefined,
   }
 
-  const now = new Date()
+  const now = parseISO(financeBusinessToday(timeZone))
   const quickRanges: Array<{ label: string; range: DateRange; startStr: string; endStr: string }> = [
     {
       label: 'Hoy',
@@ -53,15 +55,15 @@ export function FinanceFilters({
     },
     {
       label: 'Esta semana',
-      range: { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) },
+      range: { from: startOfWeek(now, { weekStartsOn: 1 }), to: now },
       startStr: format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-      endStr: format(endOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      endStr: format(now, 'yyyy-MM-dd'),
     },
     {
       label: 'Este mes',
-      range: { from: startOfMonth(now), to: endOfMonth(now) },
+      range: { from: startOfMonth(now), to: now },
       startStr: format(startOfMonth(now), 'yyyy-MM-dd'),
-      endStr: format(endOfMonth(now), 'yyyy-MM-dd'),
+      endStr: format(now, 'yyyy-MM-dd'),
     },
     {
       label: 'Mes anterior',

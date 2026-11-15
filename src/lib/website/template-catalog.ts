@@ -4,6 +4,7 @@
  *
  * - `available`: se puede elegir.
  * - `locked_plan`: el plan no la trae (se indica desde qué plan está).
+ * - `coming_soon`: ningún plan activo la habilita todavía (próximamente).
  * - `unavailable`: no aplica al negocio (rubro, agenda o forma de venta), con el motivo.
  *
  * Lo comparten la grilla de /admin/website y el modal «Diseñá tu tienda».
@@ -23,13 +24,13 @@ import {
 } from '@/lib/website/storefront-style'
 import {
   STOREFRONT_TEMPLATE_TIER,
-  cheapestPlanWithTemplate,
   isTemplateInPlan,
+  plansWithTemplate,
   type PlanTemplateSummary,
   type TemplateTier,
 } from '@/lib/website/template-plan-access'
 
-export type TemplateStatus = 'available' | 'locked_plan' | 'unavailable'
+export type TemplateStatus = 'available' | 'locked_plan' | 'coming_soon' | 'unavailable'
 
 export interface TemplatePlanAccess {
   planName: string
@@ -50,6 +51,8 @@ export interface TemplateCatalogOption {
   reason?: string
   /** Plan más barato que la trae (solo si está bloqueada por plan). */
   upgradePlanName?: string
+  /** Nombres de los planes activos donde la plantilla está habilitada. */
+  enabledPlans?: string[]
   isSuggested: boolean
   isRecommended: boolean
 }
@@ -73,7 +76,7 @@ const GROUP_BY_VERTICAL: Record<string, StorefrontTemplateGroupId> = {
 }
 
 const TIER_ORDER: Record<TemplateTier, number> = { base: 0, rubro: 1, premium: 2 }
-const STATUS_ORDER: Record<TemplateStatus, number> = { available: 0, locked_plan: 1, unavailable: 2 }
+const STATUS_ORDER: Record<TemplateStatus, number> = { available: 0, locked_plan: 1, coming_soon: 2, unavailable: 3 }
 
 function unavailableReason(style: StorefrontStylePreference, context: StorefrontStyleContext): string {
   if (style === 'catalog-basic') return 'Solo con la forma de venta «Catálogo» (sin carrito ni pedidos).'
@@ -106,10 +109,19 @@ export function buildTemplateCatalog(input: {
       const resolvedStyle = resolveStorefrontStyle(key, businessVertical, context)
       const fitsBusiness = isStorefrontStyleAvailable(key, context)
       const inPlan = !access || key === savedValue || isTemplateInPlan(key, access.allowed, businessVertical, context)
-      const status: TemplateStatus = !fitsBusiness ? 'unavailable' : inPlan ? 'available' : 'locked_plan'
-      const upgradePlan = status === 'locked_plan' && access
-        ? cheapestPlanWithTemplate(key, access.plans, businessVertical, context)
+      const enabledPlanList = access
+        ? plansWithTemplate(key, access.plans, businessVertical, context)
+        : []
+      const upgradePlan = !inPlan && fitsBusiness && access
+        ? enabledPlanList[0] ?? null
         : null
+      const status: TemplateStatus = !fitsBusiness
+        ? 'unavailable'
+        : inPlan
+          ? 'available'
+          : access && access.plans.length > 0 && !upgradePlan
+            ? 'coming_soon'
+            : 'locked_plan'
       return [{
         value: key,
         label: key === 'auto' ? 'Automático' : option.label,
@@ -122,12 +134,15 @@ export function buildTemplateCatalog(input: {
         status,
         reason: status === 'unavailable'
           ? unavailableReason(key, context)
-          : status === 'locked_plan'
-            ? upgradePlan
-              ? `Disponible en el plan ${upgradePlan.name}.`
-              : `No está incluida en tu plan ${access?.planName ?? ''}.`.replace(' .', '.')
-            : undefined,
+          : status === 'coming_soon'
+            ? 'Próximamente disponible.'
+            : status === 'locked_plan'
+              ? upgradePlan
+                ? `Disponible en el plan ${upgradePlan.name}.`
+                : `No está incluida en tu plan ${access?.planName ?? ''}.`.replace(' .', '.')
+              : undefined,
         upgradePlanName: upgradePlan?.name,
+        enabledPlans: access ? enabledPlanList.map((plan) => plan.name) : undefined,
         isSuggested: key === suggestedStyle,
         isRecommended: context.commerceMode === 'catalog' && key === 'catalog-basic',
       }]

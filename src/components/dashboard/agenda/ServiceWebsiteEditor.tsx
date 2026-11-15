@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Trash2 } from 'lucide-react'
+import { Camera, ChevronDown, ImagePlus, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import {
   SERVICE_COVER_TYPES,
   imagesWithCover,
@@ -87,14 +88,23 @@ export function ServiceWebsiteEditor({ service, onSaved }: { service: AgendaServ
 
   const inputId = `service-cover-${service.product_id}`
   return (
-    <details className="basis-full min-w-0 rounded-xl border bg-card p-3">
-      <summary className="cursor-pointer py-1 text-sm font-medium">
-        Foto y página web
-        <span className="ml-2 text-xs font-normal text-muted-foreground">
-          {savedVisible ? 'Visible en la web' : 'Oculto en la web'} · {service.image_url ? 'Con portada' : 'Sin portada'}
+    <details className={cn('group min-w-0 overflow-hidden rounded-xl border bg-muted/15 transition-colors', dirty && 'border-primary/40 bg-primary/5')}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <Camera aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>Foto y página web</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {savedVisible ? 'Visible en la web' : 'Oculto en la web'} · {service.image_url ? 'Con portada' : 'Sin portada'}
+          </span>
+          {dirty && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Sin guardar
+            </span>
+          )}
         </span>
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
       </summary>
-      <fieldset disabled={busy} className="mt-3 space-y-4">
+      <fieldset disabled={busy} className="space-y-4 border-t bg-card p-3.5 sm:p-4">
         <div className="flex flex-wrap items-start gap-4">
           <div className="flex aspect-video w-44 max-w-full items-center justify-center overflow-hidden rounded-xl border bg-muted text-xs text-muted-foreground">
             {image
@@ -130,6 +140,7 @@ export function ServiceWebsiteEditor({ service, onSaved }: { service: AgendaServ
                   type="button"
                   size="sm"
                   variant="ghost"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => {
                     if (file) { setFile(null); uploaded.current = null; if (input.current) input.current.value = ''; return }
                     setRemoveCover(true)
@@ -143,7 +154,7 @@ export function ServiceWebsiteEditor({ service, onSaved }: { service: AgendaServ
           </div>
         </div>
 
-        <label className="flex items-start justify-between gap-3 rounded-xl bg-muted/30 p-3 text-sm">
+        <label className="flex cursor-pointer items-start justify-between gap-3 rounded-xl border bg-muted/25 p-3 text-sm">
           <span>
             <span className="block font-medium">Mostrar en la página web</span>
             <span className="mt-1 block text-xs text-muted-foreground">
@@ -153,9 +164,10 @@ export function ServiceWebsiteEditor({ service, onSaved }: { service: AgendaServ
           <Switch checked={visible} onCheckedChange={setVisibility} aria-label={`Mostrar ${service.name} en la página web`} />
         </label>
 
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <div className="flex flex-wrap items-center gap-2">
+        {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <Button type="button" size="sm" disabled={!dirty || busy} onClick={() => void save()}>
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {busy ? 'Guardando…' : 'Guardar foto y página web'}
           </Button>
           {dirty && <Button type="button" size="sm" variant="ghost" onClick={reset}>Descartar</Button>}

@@ -1,3 +1,4 @@
+import {productWhatsappInquiryHref} from '../../../src/lib/public/product-whatsapp';
 import { MarketplaceBusinessPromo } from '@/components/marketplace-business-promo';
 import { MarketplaceLocationPicker } from '@/components/marketplace-location-picker';
 import { MarketplaceStoresShowcase } from '@/components/marketplace-stores-showcase';
@@ -11,8 +12,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Alert,
   FlatList,
+  Keyboard,
   Modal,
   Pressable,
   RefreshControl,
@@ -26,6 +29,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MarketplaceHeader } from '@/components/marketplace-header';
+import { MarketplaceQuickMenu } from '@/components/marketplace-quick-menu';
 import { CartSheet, type CartItem } from '@/components/cart-sheet';
 import { CategoriesSheet } from '@/components/categories-sheet';
 import { StoreDetailSheet } from '@/components/store-detail-sheet';
@@ -33,7 +37,15 @@ import { ProductDetailSheet } from '@/components/product-detail-sheet';
 import { RepairTrackerModal } from '@/components/repair-tracker-modal';
 import { secureStorage } from '@/lib/secure-storage';
 import {
+  formatMarketplaceLocationChip,
+  isMarketplaceTabHighlighted,
+  marketplaceBottomTabs,
+  resolveInitialMarketplaceTab,
+  type MarketplaceNavTab,
+} from '@/lib/marketplace-nav-model';
+import {
   fetchMarketplaceHome,
+  SITE_URL,
   formatMarketPrice,
   openWeb,
   productPath,
@@ -54,7 +66,7 @@ const cyan = {
   soft: { light: '#E0F2FE', dark: 'rgba(14,165,233,0.15)' },
 };
 
-type NavTab = 'inicio' | 'productos' | 'ofertas' | 'tiendas' | 'perfil';
+type NavTab = MarketplaceNavTab;
 type SortOption = 'default' | 'price_asc' | 'price_desc' | 'name_asc';
 type PriceRange = 'all' | 'under_100k' | '100k_500k' | 'over_500k';
 type FacetTab = 'categorias' | 'marcas' | 'tiendas';
@@ -98,12 +110,18 @@ export default function MarketplaceScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   // Pestaña activa dentro del mismo layout unificado
-  const [activeTab, setActiveTab] = useState<NavTab>(() => {
-    if (params.tab && ['inicio', 'ofertas', 'productos', 'tiendas', 'perfil'].includes(params.tab)) {
-      return params.tab as NavTab;
-    }
-    return 'inicio';
-  });
+  const [activeTab, setActiveTab] = useState<NavTab>(() => resolveInitialMarketplaceTab(params.tab));
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   // Datos globales del Marketplace
   const [catalogResponse, setCatalogResponse] = useState<{key:string;value:MarketplaceHome}|null>(null);
@@ -325,6 +343,16 @@ export default function MarketplaceScreen() {
     setActiveTab(tab);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
+
+  const bottomTabs = useMemo(
+    () => marketplaceBottomTabs({ signedIn: Boolean(session) }),
+    [session]
+  );
+
+  const locationChipLabel = useMemo(
+    () => formatMarketplaceLocationChip(marketLocation, catalogResponse?.value.location),
+    [marketLocation, catalogResponse]
+  );
 
   const stat = (key: 'stores' | 'products') => data?.stats.find((item) => item.key === key)?.value;
 
@@ -2359,174 +2387,102 @@ export default function MarketplaceScreen() {
           </Pressable>
         </Modal>
 
-        {/* ── Barra de Navegación Inferior Flotante (Menú Rediseñado Ultra Moderno) ── */}
-        <View
-          style={[
-            styles.floatingBarContainer,
-            { bottom: Math.max(14, insets.bottom + 6) },
-          ]}>
+        {/* ── Barra de Navegación Inferior (Inicio · Productos · + · Ofertas · Acceder/Perfil) ── */}
+        {!keyboardVisible && (
           <View
             style={[
-              styles.floatingBar,
+              styles.bottomBarDock,
               {
-                backgroundColor: dark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                borderColor: dark ? 'rgba(51, 65, 85, 0.85)' : 'rgba(226, 232, 240, 0.95)',
+                paddingBottom: Math.max(insets.bottom, 8),
+                backgroundColor: dark ? 'rgba(15, 23, 42, 0.97)' : 'rgba(255, 255, 255, 0.98)',
+                borderTopColor: dark ? 'rgba(51, 65, 85, 0.85)' : 'rgba(226, 232, 240, 0.95)',
               },
             ]}>
-            
-            {/* Tab: Inicio */}
-            <Pressable
-              onPress={() => handleTabPress('inicio')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'inicio' }}
-              style={styles.tabButton}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  activeTab === 'inicio' && {
-                    backgroundColor: dark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.12)',
-                  },
-                ]}>
-                <Ionicons
-                  name={activeTab === 'inicio' ? 'storefront' : 'storefront-outline'}
-                  size={20}
-                  color={activeTab === 'inicio' ? palette.primary : colors.muted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'inicio' ? palette.primary : colors.muted, fontWeight: activeTab === 'inicio' ? '800' : '600' },
-                ]}>
-                Inicio
-              </Text>
-              {activeTab === 'inicio' && <View style={[styles.activeTabDot, { backgroundColor: palette.primary }]} />}
-            </Pressable>
+            <View accessibilityRole="tablist" style={styles.bottomBarRow}>
+              {bottomTabs.map((item) => {
+                const selected = isMarketplaceTabHighlighted(item.key, activeTab, showQuickMenu);
 
-            {/* Tab: Productos */}
-            <Pressable
-              onPress={() => handleTabPress('productos')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'productos' }}
-              style={styles.tabButton}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  activeTab === 'productos' && {
-                    backgroundColor: dark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.12)',
-                  },
-                ]}>
-                <Ionicons
-                  name={activeTab === 'productos' ? 'cube' : 'cube-outline'}
-                  size={20}
-                  color={activeTab === 'productos' ? palette.primary : colors.muted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'productos' ? palette.primary : colors.muted, fontWeight: activeTab === 'productos' ? '800' : '600' },
-                ]}>
-                Productos
-              </Text>
-              {activeTab === 'productos' && <View style={[styles.activeTabDot, { backgroundColor: palette.primary }]} />}
-            </Pressable>
+                if (item.isAction) {
+                  const storesSelected = !showQuickMenu && activeTab === 'tiendas';
+                  return (
+                    <View key={item.key} style={styles.plusSlotWrap}>
+                      <Pressable
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          setShowQuickMenu(true);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={item.accessibilityLabel}
+                        accessibilityState={{ expanded: showQuickMenu }}
+                        style={({ pressed }) => [
+                          styles.plusOrbBtn,
+                          {
+                            backgroundColor: storesSelected
+                              ? dark
+                                ? '#0F172A'
+                                : '#1E293B'
+                              : palette.primary,
+                            borderColor: dark ? '#0F172A' : '#FFFFFF',
+                            transform: [{ scale: pressed ? 0.93 : 1 }],
+                          },
+                        ]}>
+                        <Ionicons name="add" size={27} color="#FFFFFF" />
+                      </Pressable>
+                      {storesSelected && (
+                        <View style={[styles.activeTabDot, { backgroundColor: palette.primary }]} />
+                      )}
+                    </View>
+                  );
+                }
 
-            {/* Tab: Ofertas */}
-            <Pressable
-              onPress={() => handleTabPress('ofertas')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'ofertas' }}
-              style={styles.tabButton}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  activeTab === 'ofertas' && {
-                    backgroundColor: 'rgba(220,38,38,0.15)',
-                  },
-                ]}>
-                <Ionicons
-                  name={activeTab === 'ofertas' ? 'pricetag' : 'pricetag-outline'}
-                  size={20}
-                  color={activeTab === 'ofertas' ? '#DC2626' : colors.muted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'ofertas' ? '#DC2626' : colors.muted, fontWeight: activeTab === 'ofertas' ? '800' : '600' },
-                ]}>
-                Ofertas
-              </Text>
-              {activeTab === 'ofertas' && <View style={[styles.activeTabDot, { backgroundColor: '#DC2626' }]} />}
-            </Pressable>
+                const isOffers = item.key === 'ofertas';
+                const activeTint = isOffers ? '#DC2626' : palette.primary;
+                const activePillBg = isOffers
+                  ? 'rgba(220,38,38,0.14)'
+                  : dark
+                    ? 'rgba(37,99,235,0.25)'
+                    : 'rgba(37,99,235,0.12)';
 
-            {/* Tab: Tiendas */}
-            <Pressable
-              onPress={() => handleTabPress('tiendas')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'tiendas' }}
-              style={styles.tabButton}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  activeTab === 'tiendas' && {
-                    backgroundColor: dark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.12)',
-                  },
-                ]}>
-                <Ionicons
-                  name={activeTab === 'tiendas' ? 'business' : 'business-outline'}
-                  size={20}
-                  color={activeTab === 'tiendas' ? palette.primary : colors.muted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'tiendas' ? palette.primary : colors.muted, fontWeight: activeTab === 'tiendas' ? '800' : '600' },
-                ]}>
-                Tiendas
-              </Text>
-              {activeTab === 'tiendas' && <View style={[styles.activeTabDot, { backgroundColor: palette.primary }]} />}
-            </Pressable>
-
-            {/* Tab: Mi Perfil (Estilo Web) */}
-            <Pressable
-              onPress={() => handleTabPress('perfil')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'perfil' }}
-              style={styles.tabButton}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  activeTab === 'perfil' && {
-                    backgroundColor: dark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.12)',
-                  },
-                ]}>
-                <Ionicons
-                  name={activeTab === 'perfil' ? 'person' : 'person-outline'}
-                  size={20}
-                  color={activeTab === 'perfil' ? palette.primary : colors.muted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === 'perfil' ? palette.primary : colors.muted, fontWeight: activeTab === 'perfil' ? '800' : '600' },
-                ]}>
-                Mi Perfil
-              </Text>
-              {activeTab === 'perfil' && <View style={[styles.activeTabDot, { backgroundColor: palette.primary }]} />}
-            </Pressable>
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => item.targetTab && handleTabPress(item.targetTab)}
+                    accessibilityRole="tab"
+                    accessibilityLabel={item.accessibilityLabel}
+                    accessibilityState={{ selected }}
+                    style={({ pressed }) => [styles.tabButton, { opacity: pressed ? 0.72 : 1 }]}>
+                    <View style={[styles.tabIconWrap, selected && { backgroundColor: activePillBg }]}>
+                      <Ionicons
+                        name={selected ? item.activeIcon : item.icon}
+                        size={20}
+                        color={selected ? activeTint : colors.muted}
+                      />
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tabText,
+                        {
+                          color: selected ? activeTint : colors.muted,
+                          fontWeight: selected ? '800' : '600',
+                        },
+                      ]}>
+                      {item.label}
+                    </Text>
+                    {selected && <View style={[styles.activeTabDot, { backgroundColor: activeTint }]} />}
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Botón Flotante de Carrito de Compras si hay items */}
-        {cartItems.length > 0 && (
+        {cartItems.length > 0 && !keyboardVisible && (
           <View
             style={[
               styles.floatingCartContainer,
-              { bottom: Math.max(14, insets.bottom + 6) + 74 },
+              { bottom: Math.max(insets.bottom, 8) + 88 },
             ]}>
             <Pressable
               onPress={async () => {
@@ -2639,6 +2595,49 @@ export default function MarketplaceScreen() {
         <RepairTrackerModal
           visible={showRepairTracker}
           onClose={() => setShowRepairTracker(false)}
+        />
+
+        {/* Modal Bento Premium de Accesos Rápidos (Botón central +) */}
+        <MarketplaceQuickMenu
+          visible={showQuickMenu}
+          onClose={() => setShowQuickMenu(false)}
+          signedIn={Boolean(session)}
+          locationLabel={locationChipLabel}
+          favoritesCount={favorites.size}
+          categoriesCount={data?.categories.length ?? 0}
+          storesCount={data?.pagination?.stores.total ?? data?.stores.length ?? 0}
+          canOpenPanel={panelAllowed && Boolean(org)}
+          orgName={org?.name}
+          registerLabel={registerLabel}
+          onSearchProducts={(query) => {
+            if (typeof query === 'string' && query.length > 0) {
+              setProductQuery(query);
+              setProductCategory(null);
+              setProductBrand(null);
+              setProductStore(null);
+              setOnlyOffers(false);
+            }
+            setOnlyFavorites(false);
+            setProductPage(1);
+            setActiveTab('productos');
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+          }}
+          onOpenStores={() => {
+            setActiveTab('tiendas');
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+          }}
+          onOpenCategories={() => setShowCategoriesSheet(true)}
+          onOpenFavorites={() => {
+            setOnlyFavorites(true);
+            setProductPage(1);
+            setActiveTab('productos');
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+          }}
+          onOpenOrders={() => router.push('/mis-pedidos' as never)}
+          onOpenRepairs={() => setShowRepairTracker(true)}
+          onSignIn={() => router.push('/sign-in' as never)}
+          onOpenPanel={() => router.push('/panel' as never)}
+          onOpenSaas={() => router.push('/saas' as never)}
         />
       </View>
     </SafeAreaView>
@@ -2866,6 +2865,7 @@ function ProductCard({
       ? product.price - product.offerPrice
       : null;
 
+  const inquiryHref=productWhatsappInquiryHref({company:product.store,product:{name:product.name,url:SITE_URL.replace(/\/$/,'')+productPath(product),priceHidden:product.price===null}});
   const openProduct = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (onPress) {
@@ -3004,6 +3004,7 @@ function ProductCard({
           </View>
         </Pressable>
 
+        {inquiryHref?<Pressable accessibilityRole="link" accessibilityLabel={'Consultar por WhatsApp sobre '+product.name} onPress={()=>{void Linking.openURL(inquiryHref).catch(()=>Alert.alert('No se pudo abrir WhatsApp','Intentá nuevamente o consultá los datos de contacto de la tienda.'))}} style={{minHeight:44,marginTop:8,paddingHorizontal:8,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,borderRadius:10,backgroundColor:colors.isDark?'#064E3B':'#ECFDF5'}}><Ionicons name="logo-whatsapp" size={16} color={colors.isDark?'#6EE7B7':'#047857'}/><Text style={{fontSize:11,fontWeight:'700',flexShrink:1,textAlign:'center',color:colors.isDark?'#6EE7B7':'#047857'}}>Consultar por WhatsApp</Text></Pressable>:null}
         {/* Pie de Card con disponibilidad y acciones */}
         <View style={[styles.cardFooterBar, { borderTopColor: colors.border }]}>
           <View style={styles.stockStatusRow}>
@@ -4489,29 +4490,52 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  /* ── Barra de Navegación Inferior Flotante (Menú Rediseñado) ── */
-  floatingBarContainer: {
+  /* ── Barra de Navegación Inferior Acoplada con botón central + ── */
+  bottomBarDock: {
     position: 'absolute',
-    left: 14,
-    right: 14,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     alignItems: 'center',
     zIndex: 99,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 14,
   },
-  floatingBar: {
+  bottomBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     width: '100%',
-    maxWidth: 460,
-    height: 66,
-    borderRadius: 33,
-    borderWidth: 1.5,
-    paddingHorizontal: 8,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    maxWidth: 500,
+    height: 64,
+    paddingHorizontal: 6,
+  },
+  plusSlotWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    height: '100%',
+  },
+  plusOrbBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 3.5,
+    marginTop: -22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563EB',
+    shadowOpacity: 0.34,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   tabButton: {
     flex: 1,
