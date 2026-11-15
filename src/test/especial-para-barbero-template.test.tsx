@@ -352,6 +352,31 @@ describe('EspecialBarberoHeader: volver al marketplace', () => {
   })
 })
 
+describe('EspecialBarberoHeader: reservas, ofertas y servicios', () => {
+  it('con agenda online muestra «Reservar turno» hacia /turnos', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    mockState.agenda = { currency: 'PYG', services: [{ id: 's1', name: 'Corte', duration: 30, price: 50000 }], professionals: [] }
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    expect(screen.getByRole('link', { name: 'Reservar turno' })).toHaveAttribute('href', '/mitienda/turnos')
+  })
+
+  it('sin agenda online no ofrece reservar', () => {
+    mockState.agenda = null
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    expect(screen.queryByRole('link', { name: 'Reservar turno' })).not.toBeInTheDocument()
+  })
+
+  it('Ofertas va adelante en la tira, con su color, y se resalta en su página', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    const { container } = renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal de la tienda' })
+    const links = Array.from(nav.querySelectorAll('a')).map((link) => link.textContent?.trim())
+    expect(links.slice(0, 2)).toEqual(['Inicio', 'Ofertas'])
+    const ofertas = container.querySelector('[data-nav-accent="ofertas"]')
+    expect(ofertas?.className).toContain('bg-amber-400')
+  })
+})
+
 describe('EspecialBarberoHome', () => {
   it('renderiza portada oscura, ofertas reales excluyendo precios ocultos y grilla de marcas', () => {
     renderWithStyle(
