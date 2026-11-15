@@ -566,6 +566,14 @@ export function EspecialBarberoHeader({
                       Mi Perfil
                     </Link>
                   </DropdownMenuItem>
+                  {bookingHref && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`${prefix}/perfil#turnos`} className="flex items-center gap-2">
+                        <CalendarCheck2 className="h-4 w-4" />
+                        Mis turnos
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <Link href={`${prefix}/perfil?tab=orders`} className="flex items-center gap-2">
                       <Package className="h-4 w-4" />

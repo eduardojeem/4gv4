@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { CompanyInfoSchema } from '@/lib/validation/website-settings'
 import {
   STOREFRONT_STYLE_OPTIONS,
@@ -22,6 +23,7 @@ import type { WebsiteSettings } from '@/types/website-settings'
 
 const mockState = vi.hoisted(() => ({
   pathname: '/mitienda/inicio',
+  authUser: null as null | { id: string; email: string; profile?: { name: string } },
   searchParams: new URLSearchParams(),
   push: vi.fn(),
   refresh: vi.fn(),
@@ -125,7 +127,7 @@ vi.mock('@/hooks/usePublicCategories', () => ({
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({ user: null, signOut: vi.fn() }),
+  useAuth: () => ({ user: mockState.authUser, signOut: vi.fn() }),
 }))
 
 vi.mock('@/contexts/theme-context', () => ({
@@ -245,6 +247,7 @@ beforeEach(() => {
   mockState.addProduct.mockClear()
   mockState.products = sampleProducts(false)
   mockState.agenda = null
+  mockState.authUser = null
 })
 
 describe('Especial para barbero: registro, validación y planes', () => {
@@ -358,6 +361,15 @@ describe('EspecialBarberoHeader: reservas, ofertas y servicios', () => {
     mockState.agenda = { currency: 'PYG', services: [{ id: 's1', name: 'Corte', duration: 30, price: 50000 }], professionals: [] }
     renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
     expect(screen.getByRole('link', { name: 'Reservar turno' })).toHaveAttribute('href', '/mitienda/turnos')
+  })
+
+  it('el menú de perfil ofrece «Mis turnos» si la tienda toma reservas', async () => {
+    mockState.pathname = '/mitienda/inicio'
+    mockState.agenda = { currency: 'PYG', services: [{ id: 's1', name: 'Corte', duration: 30, price: 50000 }], professionals: [] }
+    mockState.authUser = { id: 'u1', email: 'cliente@test.com', profile: { name: 'Cliente' } }
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    await userEvent.click(screen.getByRole('button', { name: /Cliente|cliente@test.com/i }))
+    expect(await screen.findByRole('menuitem', { name: 'Mis turnos' })).toHaveAttribute('href', '/mitienda/perfil#turnos')
   })
 
   it('sin agenda online no ofrece reservar', () => {
