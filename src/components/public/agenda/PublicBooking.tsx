@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils'
 import { addDays, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { useBookingQuote } from './use-booking-quote'
 import { BookingQuoteSummary } from './BookingQuoteSummary'
+import { ServicePromotionBadge, ServicePromotionNote } from './ServicePromotionNote'
+import type { ServicePromotion } from '@/lib/public/service-promotions'
 
 type DisplaySlot = { startsAt: string; time: string; professionalIds?: string[] }
 
@@ -28,7 +30,7 @@ type Info = {
   message: string | null
   openDays: number[]
   /** professionalIds: quién hace el servicio (vacío si no hay profesionales). */
-  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}> }>
+  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}>; promotions?: ServicePromotion[] }>
   professionals: Array<{ id: string; name: string; color: string }>
 }
 
@@ -222,6 +224,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
                   <Clock className="h-3 w-3" /> {item.duration} min
                   {item.price === null ? ' · Precio a consultar' : item.price === 0 ? ' · Sin costo (Asesoramiento gratuito)' : <> · {formatCurrency(item.price, { currency: info.currency })}{info.professionalBookingAvailable && ' (tarifa base)'}</>}
                 </p>
+                {item.promotions?.[0] && <ServicePromotionBadge promotion={item.promotions[0]} currency={info.currency} className="mt-1.5" />}
               </button>
             ))}
           </div>
@@ -295,6 +298,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
 
       {startsAt && service && (
         <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos">
+          {service.promotions?.[0] && <ServicePromotionNote promotion={service.promotions[0]} price={quoted.quote?.price ?? service.price} currency={info.currency} />}
           {selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
           {info.professionalBookingAvailable && (quoted.loading ? <p role="status">Confirmando tarifa y disponibilidad…</p> : quoted.quote ?
             <BookingQuoteSummary serviceName={service.name} timeZone={info.timeZone} quote={quoted.quote} currency={info.currency} accepted={quoted.accepted} onAccept={quoted.accept} expired={quoted.expired} /> : <p role="alert">{quoted.error}</p>)}

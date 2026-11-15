@@ -8,10 +8,12 @@ const closuresQuery = {
   gt: vi.fn().mockReturnThis(), lt: vi.fn().mockReturnThis(),
   order: vi.fn().mockReturnThis(), limit: vi.fn(async () => closuresResult),
 }
-beforeEach(() => { vi.clearAllMocks(); closuresResult.data = []; closuresResult.error = null })
+const promotionsResult = { data: [] as Array<Record<string, unknown>>, error: null as { message: string } | null }
+const promotionsQuery = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn(async () => promotionsResult) }
+beforeEach(() => { vi.clearAllMocks(); closuresResult.data = []; closuresResult.error = null; promotionsResult.data = []; promotionsResult.error = null })
 
 const agenda = {
-  admin: { from: vi.fn(() => closuresQuery) },
+  admin: { from: vi.fn((table: string) => (table === 'promotions' ? promotionsQuery : closuresQuery)) },
   organization: { id: 'org-don-pepe', name: 'Barbería Don Pepe' },
   config: {
     timeZone: 'America/Asuncion',
@@ -63,6 +65,25 @@ describe('GET de la reserva online', () => {
     const response = await call()
     expect(response.status).toBe(200)
     expect((await response.json()).closures).toEqual([])
+  })
+
+  it('agrega a cada servicio las promos vigentes que lo nombran, sin usos ni límites', async () => {
+    promotionsResult.data = [
+      { id: 'p1', code: 'CORTE20', name: 'Corte 20%', description: null, type: 'percentage', value: 20, min_purchase: 0, max_discount: null, applicable_products: [SERVICE], applicable_categories: [], start_date: null, end_date: null, is_active: true, usage_count: 3, usage_limit: 100, public_mode: 'coupon' },
+      { id: 'p2', code: 'REPA', name: 'Reparaciones', description: null, type: 'percentage', value: 15, min_purchase: 0, max_discount: null, applicable_products: [], applicable_categories: ['service'], start_date: null, end_date: null, is_active: true, usage_count: 0, usage_limit: null, public_mode: 'coupon' },
+    ]
+    const body = await (await call()).json()
+    expect(promotionsQuery.eq).toHaveBeenCalledWith('organization_id', 'org-don-pepe')
+    expect(promotionsQuery.in).toHaveBeenCalledWith('public_mode', ['coupon', 'automatic'])
+    expect(body.services[0].promotions).toEqual([expect.objectContaining({ id: 'p1', code: 'CORTE20', value: 20 })])
+    expect(body.services[0].promotions[0]).not.toHaveProperty('usage_count')
+  })
+
+  it('si fallan las promos, la reserva sigue con los servicios sin promos', async () => {
+    promotionsResult.error = { message: 'boom' }
+    const response = await call()
+    expect(response.status).toBe(200)
+    expect((await response.json()).services[0].promotions).toEqual([])
   })
 
   it('devuelve los horarios de un día', async () => {
