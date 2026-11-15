@@ -106,43 +106,29 @@ describe('el directorio', () => {
     expect(screen.getByRole('button', { name: /Tecnología/ })).toBeEnabled()
   })
 
-  it('mantiene Ubicación visible aunque haya una sola ciudad', () => {
-    render(<EmpresasClient organizations={ORGS.filter((o) => o.city === 'Encarnación')} />)
-    expect(screen.getByLabelText('Filtrar por ciudad')).toBeInTheDocument()
-    expect(screen.getByText('Ubicación')).toBeInTheDocument()
+  it('la ciudad se elige en la barra de ubicación del marketplace, no en el directorio', () => {
+    render(<EmpresasClient organizations={ORGS} />)
+    expect(screen.queryByLabelText('Filtrar por ciudad')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar tiendas')).toBeInTheDocument()
     expect(screen.getByLabelText('Ordenar tiendas')).toBeInTheDocument()
   })
 
-  it('busca ciudades sin tildes y conserva los otros filtros al elegir una ubicación', () => {
-    url = 'rubro=tecnologia&orden=nombre'
-    render(<EmpresasClient organizations={ORGS} initialRubro="tecnologia" initialSort="nombre" />)
-    fireEvent.click(screen.getByLabelText('Filtrar por ciudad'))
-    fireEvent.change(screen.getByPlaceholderText('Buscar ciudad...'), { target: { value: 'encarnacion' } })
-    expect(screen.queryByRole('option', { name: 'Asunción (1)' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('option', { name: 'Encarnación (1)' }))
+  it('la ciudad de la barra de ubicación filtra sin tildes y conserva los otros filtros', () => {
+    url = 'rubro=tecnologia&orden=nombre&city=encarnacion'
+    render(<EmpresasClient organizations={ORGS} initialRubro="tecnologia" initialCity="encarnacion" initialSort="nombre" />)
     expect(screen.getByText('Mundo Celulares')).toBeInTheDocument()
     expect(screen.queryByText('Compu Center')).not.toBeInTheDocument()
-    expect(push).toHaveBeenCalledWith('/marketplace/empresas?rubro=tecnologia&orden=nombre&ciudad=encarnacion', { scroll: false })
     expect(screen.getByText('Ciudad: Encarnación')).toBeInTheDocument()
   })
 
-  it('permite quitar solo la ciudad manteniendo el rubro', () => {
+  it('permite quitar solo la ciudad manteniendo el rubro, y se lo avisa a la barra de ubicación', () => {
     url = 'rubro=tecnologia&ciudad=encarnacion'
     render(<EmpresasClient organizations={ORGS} initialRubro="tecnologia" initialCity="encarnacion" />)
     fireEvent.click(screen.getByRole('button', { name: 'Ciudad: Encarnación' }))
     expect(screen.getByText('Compu Center')).toBeInTheDocument()
     expect(screen.queryByText('Boutique Luna')).not.toBeInTheDocument()
-    expect(push).toHaveBeenCalledWith('/marketplace/empresas?rubro=tecnologia', { scroll: false })
-  })
-
-  it('una búsqueda de ciudad sin coincidencias conserva la opción de ver todas', () => {
-    render(<EmpresasClient organizations={ORGS} />)
-    fireEvent.click(screen.getByLabelText('Filtrar por ciudad'))
-    fireEvent.change(screen.getByPlaceholderText('Buscar ciudad...'), { target: { value: 'zzzz' } })
-    expect(screen.getByText('No se encontraron ciudades para esa búsqueda.')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('option', { name: 'Todas las ciudades (5)' }))
-    expect(screen.queryByPlaceholderText('Buscar ciudad...')).not.toBeInTheDocument()
-    expect(screen.getByText('Compu Center')).toBeInTheDocument()
+    // `city=all` explícito: sin él, la barra volvía a poner la ciudad guardada.
+    expect(push).toHaveBeenCalledWith('/marketplace/empresas?rubro=tecnologia&city=all', { scroll: false })
   })
 })
 

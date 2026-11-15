@@ -41,6 +41,8 @@ interface Props {
   exploreAllLabel?: string
   title?: string
   subtitle?: string
+  /** Sin buscador ni filtros propios, cuando la página ya tiene los suyos. */
+  showSearch?: boolean
 }
 
 function getStoreBackdrop(rubro?: string | null): string {
@@ -100,6 +102,7 @@ export function MarketplaceStoresProductsCarousel({
   exploreAllLabel = 'Ver todas',
   title = 'Tiendas destacadas y sus productos',
   subtitle = 'Explorá las tiendas oficiales del marketplace y descubrí sus últimos productos disponibles con compra y atención directa.',
+  showSearch = true,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -305,10 +308,11 @@ export function MarketplaceStoresProductsCarousel({
         </div>
 
         {/* ── Barra de Búsqueda Flotante tipo Cápsula Blanca (Estilo Showcase) ── */}
+        {showSearch && (
         <div className="relative mb-6">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-slate-500" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -417,6 +421,8 @@ export function MarketplaceStoresProductsCarousel({
             </div>
           )}
         </div>
+
+        )}
 
         {/* ── Contenedor Relativo con Flechas Flotantes Laterales (Mismo diseño de categorías) ── */}
         {filteredStores.length === 0 ? (

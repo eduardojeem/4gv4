@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       : `Conoce ${page.organization.name} y su catálogo de productos.`
 
   return {
-    title: `${page.organization.name} | Marketplace MiPOS`,
+    title: `${page.organization.name} | Marketplace MiTiendaPy`,
     description,
     openGraph: { title, description, type: 'website' },
   }

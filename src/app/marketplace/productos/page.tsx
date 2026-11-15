@@ -7,7 +7,7 @@ import { ProductsClient } from '@/components/public/ProductsClient'
 import { getMarketplaceProductsPage } from '@/lib/public/marketplace'
 
 export const metadata: Metadata = {
-  title: 'Productos | Marketplace MiPOS',
+  title: 'Productos | Marketplace MiTiendaPy',
   description: 'Catálogo global de productos publicados por empresas en el marketplace.',
 }
 
