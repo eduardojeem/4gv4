@@ -10,7 +10,7 @@ import {
   loadBranchInventoryStockMap,
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
-import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import { chunkQueryValues, fetchAllPages } from '@/lib/analytics/query-batches'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { asCostRpcClient, attachProductCosts, fillEmbeddedProductCosts } from '@/lib/products/cost-columns'
 
@@ -586,66 +586,76 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         currentCustomersCountResponse,
         previousCustomersCountResponse,
         financeSummary,
+        repairPaymentsResponse,
       ] = await Promise.all([
         // Sales: only select needed fields (not full row)
-        supabase
+        fetchAllPages(() => supabase
           .from('sales')
           .select('id, created_at, total_amount, status, customer_id, created_by, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
-          .lte('created_at', windowEnd.toISOString()),
-        supabase
+          .lte('created_at', windowEnd.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('sales')
           .select('id, created_at, total_amount, status, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', previousFrom.toISOString())
-          .lte('created_at', previousTo.toISOString()),
-        supabase
+          .lte('created_at', previousTo.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('repairs')
           .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)').eq('organization_id', organizationId!)
           .gte('created_at', selectedFrom.toISOString())
-          .lte('created_at', selectedTo.toISOString()),
+          .lte('created_at', selectedTo.toISOString())
+          .order('id')),
         // Entregas hechas DENTRO del periodo, por su propia fecha. La consulta
         // de arriba filtra por `created_at` —cuando ingreso el equipo— y lee el
         // estado de hoy: eso responde «de las que entraron, cuantas ya
         // entregamos», que no es «cuantas entregamos». Un equipo que ingreso el
         // mes pasado y se entrego este no aparecia en ningun lado.
-        supabase
+        fetchAllPages(() => supabase
           .from('repairs')
           .select('id, delivered_at, branch_id, final_cost, estimated_cost').eq('organization_id', organizationId!)
           .eq('status', 'entregado')
           .gte('delivered_at', selectedFrom.toISOString())
-          .lte('delivered_at', selectedTo.toISOString()),
+          .lte('delivered_at', selectedTo.toISOString())
+          .order('id')),
         // Previous repairs: only need counts and revenue, minimal fields
-        supabase
+        fetchAllPages(() => supabase
           .from('repairs')
           .select('id, status, final_cost, estimated_cost, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', previousFrom.toISOString())
-          .lte('created_at', previousTo.toISOString()),
-        supabase
+          .lte('created_at', previousTo.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('cash_closures')
           .select('id, created_at, branch_id, date, status, discrepancy').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
-          .lte('created_at', windowEnd.toISOString()),
-        supabase
+          .lte('created_at', windowEnd.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('cash_movements')
           .select('session_id, created_at, type, amount').eq('organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
-          .lte('created_at', windowEnd.toISOString()),
-        supabase
+          .lte('created_at', windowEnd.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('cash_alerts')
           .select('session_id, created_at, is_resolved, severity, register:cash_registers!inner(organization_id)').eq('register.organization_id', organizationId!)
           .gte('created_at', windowStart.toISOString())
-          .lte('created_at', windowEnd.toISOString()),
-        supabase
+          .lte('created_at', windowEnd.toISOString())
+          .order('id')),
+        fetchAllPages(() => supabase
           .from('products')
           .select('id, name, sale_price, stock_quantity, min_stock, is_active, category:categories(name)').eq('organization_id', organizationId!)
           .eq('is_active', true)
-          .limit(2000),
+          .order('id')),
         // Product movements: only need product_id for the "moved" set
-        supabase
+        fetchAllPages(() => supabase
           .from('product_movements')
           .select('product_id, branch_id').eq('organization_id', organizationId!)
           .gte('created_at', selectedFrom.toISOString())
-          .lte('created_at', selectedTo.toISOString()),
+          .lte('created_at', selectedTo.toISOString())
+          .order('id')),
         supabase
           .from('customers')
           .select('*', { count: 'exact', head: true }).eq('organization_id', organizationId!)
@@ -657,32 +667,52 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         fetchFinanceSummary(filters),
+        // Cobros del taller fuera del POS: los cobrados en el POS ya están en el
+        // total de la venta, así que contarlos acá los duplicaría.
+        fetchAllPages(() => supabase
+          .from('repair_payments')
+          .select('amount, created_at, branch_id').eq('organization_id', organizationId!)
+          .is('sale_id', null)
+          .gte('created_at', selectedFrom.toISOString())
+          .lte('created_at', selectedTo.toISOString())
+          .order('id')),
       ])
 
       if (salesWindowResponse.error) throw salesWindowResponse.error
       if (previousSalesResponse.error) throw previousSalesResponse.error
       if (productsResponse.error) throw productsResponse.error
 
+      // Lo que falla se muestra en el aviso del panel: un cero silencioso se leía
+      // como «no hubo actividad».
+      const partialErrors: string[] = []
+      const truncatedSources = [salesWindowResponse, previousSalesResponse, repairsResponse, deliveredInPeriodResponse, previousRepairsResponse, cashClosuresResponse, cashMovementsResponse, cashAlertsResponse, productsResponse, productMovementsResponse, repairPaymentsResponse]
+      if (truncatedSources.some((response) => response.truncated)) partialErrors.push('el período tiene demasiados registros y se muestran parciales; acortá el rango')
       // Semi-critical: repairs might fail if profiles relation is broken
       if (repairsResponse.error) {
         console.warn('[analytics] repairs query failed:', repairsResponse.error.message)
+        partialErrors.push('reparaciones')
       }
       if (previousRepairsResponse.error) {
         console.warn('[analytics] previous repairs query failed:', previousRepairsResponse.error.message)
+        partialErrors.push('comparación de reparaciones')
       }
 
       // Non-critical tables: log but don't throw (they might not exist yet)
       if (cashClosuresResponse.error) {
         console.warn('[analytics] cash_closures query failed:', cashClosuresResponse.error.message)
+        partialErrors.push('cierres de caja')
       }
       if (cashMovementsResponse.error) {
         console.warn('[analytics] cash_movements query failed:', cashMovementsResponse.error.message)
+        partialErrors.push('movimientos de caja')
       }
       if (cashAlertsResponse.error) {
         console.warn('[analytics] cash_alerts query failed:', cashAlertsResponse.error.message)
+        partialErrors.push('alertas de caja')
       }
       if (productMovementsResponse.error) {
         console.warn('[analytics] product_movements query failed:', productMovementsResponse.error.message)
+        partialErrors.push('movimientos de productos')
       }
 
       const branchScopedSalesWindow = ((salesWindowResponse.data || []) as SaleRecord[])
@@ -702,6 +732,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       // para conteos operativos y el gráfico de estados, que sí deben mostrar
       // las canceladas como una categoría más.
       const revenueRepairs = selectedRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
+      if (repairPaymentsResponse.error) partialErrors.push('cobros de reparaciones')
+      const repairPaymentsOutsidePos = ((repairPaymentsResponse.data || []) as Array<{ amount?: number | string | null; created_at?: string | null; branch_id?: string | null }>)
+        .filter((payment) => filters.branch === 'all' || String(payment.branch_id || 'principal') === filters.branch)
+      const deliveredRepairsInPeriod = ((deliveredInPeriodResponse.data || []) as RepairRecord[])
+        .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
@@ -870,10 +905,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })()
 
       const selectedPosRevenue = sumSales(selectedSales)
-      const selectedRepairRevenue = revenueRepairs.reduce((sum, repair) => {
+      // Taller: lo facturado por los equipos ENTREGADOS en el período. Antes se
+      // sumaban los que ingresaron, con el presupuesto estimado si no tenían precio:
+      // un equipo recién recibido ya figuraba como ingreso.
+      const selectedRepairRevenue = deliveredRepairsInPeriod.reduce((sum, repair) => {
         return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
       }, 0)
-      const currentGrossRevenue = selectedPosRevenue + selectedRepairRevenue
+      // Total: ventas del POS (que ya incluyen las reparaciones cobradas ahí) más
+      // lo cobrado del taller fuera del POS. Antes se sumaba el taller entero
+      // encima del POS y las reparaciones cobradas en el POS contaban dos veces.
+      const repairCollectedOutsidePos = repairPaymentsOutsidePos.reduce((sum, payment) => sum + toNumber(payment.amount), 0)
+      const currentGrossRevenue = selectedPosRevenue + repairCollectedOutsidePos
       // Costo directo de repuestos: solo de las que facturan. Contar el costo
       // de una cancelada (sin contar su ingreso) hundiría la ganancia estimada.
       const withdrawals = scopedMovements
@@ -1091,7 +1133,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         if (statusLower === 'entregado') current.completed += 1
         else current.active += 1
 
-        current.revenue += toNumber(repair.final_cost ?? repair.estimated_cost)
+        // Solo factura lo entregado: un equipo en curso todavía no es ingreso.
+        if (statusLower === 'entregado') current.revenue += toNumber(repair.final_cost ?? repair.estimated_cost)
 
         const receivedAt = toDate(repair.received_at ?? repair.created_at)
         const completedAt = toDate(repair.completed_at ?? repair.delivered_at)
@@ -1162,8 +1205,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })
 
       // El gráfico de tendencia refleja ingreso: las canceladas no aportan.
-      revenueRepairs.forEach((repair) => {
-        const repairDate = toDate(repair.created_at)
+      repairPaymentsOutsidePos.forEach((payment) => {
+        const repairDate = toDate(payment.created_at)
         if (!repairDate) return
         const bucketDate = useWeeklyBuckets
           ? startOfDay(subDays(repairDate, repairDate.getDay()))
@@ -1178,7 +1221,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           grossRevenue: 0,
           orders: 0,
         }
-        const repairRevenue = toNumber(repair.final_cost ?? repair.estimated_cost)
+        const repairRevenue = toNumber(payment.amount)
         current.repairRevenue += repairRevenue
         current.grossRevenue += repairRevenue
         trendMap.set(key, current)
@@ -1241,7 +1284,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             rawValue: currentGrossRevenue,
             delta: financeGrowth,
             tone: currentGrossRevenue > 0 ? 'info' : 'neutral',
-            helper: `POS ${formatMoney(selectedPosRevenue)} · Taller ${formatMoney(selectedRepairRevenue)}`,
+            helper: `POS ${formatMoney(selectedPosRevenue)} · Cobrado del taller fuera del POS ${formatMoney(repairCollectedOutsidePos)}`,
           },
           {
             id: 'pos-revenue',
@@ -1378,7 +1421,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         branchOptions,
         loading: false,
         refreshing: false,
-        error: null,
+        error: partialErrors.length ? partialErrors.join(', ') : null,
       })
 
       // Mark cache as fresh
