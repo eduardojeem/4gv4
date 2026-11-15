@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
+import { useHydrated } from '@/hooks/use-hydrated'
 
 interface Category {
   id: string
@@ -28,8 +29,14 @@ export function usePublicCategories() {
     { revalidateOnFocus: false }
   )
 
+  // La caché de SWR es global: si otra parte de la página ya trajo las
+  // categorías, un bloque que se hidrata más tarde las tendría en su primer
+  // dibujo y el servidor no (error de hidratación en encabezado, pie e inicio).
+  // Hasta hidratar se devuelve lo mismo que en el servidor: ninguna.
+  const hydrated = useHydrated()
+
   return {
-    categories: data || [],
+    categories: hydrated ? data || [] : [],
     isLoading,
     error: error ? error.message : null
   }
