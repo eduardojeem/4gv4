@@ -23,6 +23,21 @@ describe('RepairFinalPriceCorrectionDialog', () => {
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({ newFinalTotal: 250_000, reason: 'Precio final digitado incorrectamente' })
   })
 
+  it('gives the unpaid balance up: price goes to what was paid and the reason is recorded', async () => {
+    const user = userEvent.setup(); const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<RepairFinalPriceCorrectionDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Dar saldo por perdido' }))
+    expect((screen.getByLabelText('Nuevo precio final') as HTMLInputElement).value).toBe('100000')
+    await user.type(screen.getByLabelText('¿Por qué no se va a cobrar?'), 'El cliente no responde hace 6 meses')
+    await user.click(screen.getByRole('button', { name: 'Revisar corrección' }))
+    expect(screen.getByText('Pagado')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Dar saldo por perdido' }))
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(body.newFinalTotal).toBe(100_000)
+    expect(body.reason).toMatch(/^Saldo dado por perdido \(.*100\.000\): El cliente no responde hace 6 meses$/)
+  })
+
   it('blocks a price below the amount already paid and directs the user to after-sales', async () => {
     const user = userEvent.setup()
     render(<RepairFinalPriceCorrectionDialog open repair={{ ...repair, paidAmount: 200_000 }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
