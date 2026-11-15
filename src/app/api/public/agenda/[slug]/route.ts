@@ -104,6 +104,29 @@ async function servicePromotions(agenda: PublicAgenda): Promise<Record<string, S
   }
 }
 
+/**
+ * «Reservar para mí»: los datos de contacto de quien inició sesión, para
+ * completar el formulario. Solo los suyos (la sesión la lee el servidor) y
+ * preferentemente los de su ficha en esta tienda.
+ */
+async function accountContact(agenda: PublicAgenda) {
+  const noStore = { 'Cache-Control': 'no-store' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Iniciá sesión' }, { status: 401, headers: noStore })
+  const [{ data: customer }, { data: profile }] = await Promise.all([
+    agenda.admin.from('customers').select('name, phone').eq('organization_id', agenda.organization.id).eq('profile_id', user.id).maybeSingle(),
+    agenda.admin.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle(),
+  ])
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const ficha = customer as { name?: unknown; phone?: unknown } | null
+  const perfil = profile as { full_name?: unknown; phone?: unknown } | null
+  return NextResponse.json({
+    name: text(ficha?.name) || text(perfil?.full_name) || text(user.user_metadata?.full_name) || text(user.user_metadata?.name),
+    phone: text(ficha?.phone) || text(perfil?.phone) || text(user.user_metadata?.phone) || text(user.phone),
+  }, { headers: noStore })
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const agenda = await resolveAgenda(slug)
@@ -114,6 +137,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const serviceId = searchParams.get('service')
 
   if (searchParams.get('next') === '1') return NextResponse.json({ next: await nextFreeSlot(agenda) })
+  if (searchParams.get('me') === '1') return accountContact(agenda)
 
   if (date && serviceId) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !z.string().uuid().safeParse(serviceId).success) {
@@ -194,7 +218,7 @@ const bookingSchema = z.object({
 async function linkBookingToAccount(
   agenda: PublicAgenda,
   appointmentId: string,
-  booking: { name: string },
+  booking: { name: string; phone: string },
 ) {
   try {
     const supabase = await createClient()
@@ -216,6 +240,16 @@ async function linkBookingToAccount(
       .eq('id', appointmentId)
       .eq('organization_id', agenda.organization.id)
     if (error) throw error
+    // Si su propia ficha no tenía teléfono, queda el que escribió para el turno:
+    // la próxima vez «Reservar para mí» ya lo completa. Nunca pisa uno cargado.
+    const { error: phoneError } = await agenda.admin
+      .from('customers')
+      .update({ phone: booking.phone })
+      .eq('id', linked.customerId)
+      .eq('organization_id', agenda.organization.id)
+      .eq('profile_id', user.id)
+      .or('phone.is.null,phone.eq.')
+    if (phoneError) throw phoneError
   } catch (error) {
     logger.warn('No se pudo enlazar la reserva con la cuenta del cliente', { organizationId: agenda.organization.id, error: error instanceof Error ? error.message : String(error) })
   }

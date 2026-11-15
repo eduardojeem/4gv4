@@ -130,6 +130,25 @@ describe('account name from sign-up data',()=>{
  })
 })
 
+describe('account phone from the store customer record',()=>{
+ it('fills the missing phone from the customer record of this store',async()=>{
+  account.user={id:'u1',email:'ana@example.test',profile:{name:'Ana Pérez',phone:''}}
+  const api=vi.fn(async(input:RequestInfo|URL)=>{
+   const url=String(input)
+   if(url.includes('me=1')) return new Response(JSON.stringify({name:'Ana Pérez',phone:'0982 333 444'}))
+   return new Response(JSON.stringify(url.includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional'}))
+  })
+  vi.stubGlobal('fetch',api)
+  render(<PublicBooking slug="store" initialServiceId="service"/> )
+  fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+  fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
+  await waitFor(()=>expect(screen.getByLabelText('WhatsApp')).toHaveValue('0982 333 444'))
+  expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
+  expect(screen.queryByText(/Completá los campos faltantes/)).not.toBeInTheDocument()
+ })
+})
+
 describe('chosen professional message',()=>{
  const services=[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof','prof2']}]
  const pros=[{id:'prof',name:'Ana',color:'#000000'},{id:'prof2',name:'Beto',color:'#111111'}]

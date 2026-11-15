@@ -84,6 +84,17 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
     setPhone(accountPhone)
     accountContactOwner.current = user.id
     setUsingAccount(true)
+    if (accountName && accountPhone) return
+    // Lo que falta puede estar en su ficha de cliente de esta tienda.
+    const owner = user.id
+    fetch(`/api/public/agenda/${encodeURIComponent(slug)}?me=1`, { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((contact: { name?: string; phone?: string } | null) => {
+        if (!contact || accountContactOwner.current !== owner) return
+        if (contact.name) setName((current) => current || contact.name || '')
+        if (contact.phone) setPhone((current) => current || contact.phone || '')
+      })
+      .catch(() => {})
   }
 
   const sendLock = useRef(false)
@@ -317,7 +328,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
             <p className="text-xs text-muted-foreground">{usingAccount
               ? <>Usamos los datos de tu cuenta ({accountName || user.email || 'usuario'}). Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</>
               : <>Sesión iniciada como {accountName || user.email || 'usuario'}. Si el turno es para vos, completamos tus datos.</>}</p>
-            {usingAccount && (!accountName || !accountPhone) && <p role="status" className="text-xs text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes abajo.</p>}
+            {usingAccount && (!name.trim() || !phone.trim()) && <p role="status" className="text-xs text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes abajo.</p>}
           </section>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
