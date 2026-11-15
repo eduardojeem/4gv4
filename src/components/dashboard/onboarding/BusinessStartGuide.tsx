@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useBusinessStartGuide, type BusinessStartGuidePayload } from '@/hooks/use-business-start-guide'
 import { FirstOperationGuide } from './FirstOperationGuide'
+import { isStartGuideComplete } from '@/lib/onboarding/start-guide'
 
 export function BusinessStartGuide() {
   const { enabled, data, error, loading, saving, refresh, savePreferences } = useBusinessStartGuide()
@@ -12,7 +13,9 @@ export function BusinessStartGuide() {
     {error ? <div role="alert" className="mt-2 space-y-2 text-sm"><p>{error}</p><Button variant="outline" onClick={() => void refresh()}>Reintentar</Button></div> : <p className="mt-2 text-sm text-muted-foreground">Comprobando datos guardados…</p>}
   </section>
   const { guide, preferences } = data
-  const checklist = data.setupChecklist
+  const checklist = data.setupChecklist && data.setupChecklist.percent < 100 ? data.setupChecklist : null
+  // Con todo lo obligatorio listo, la guía no vuelve a aparecer en el panel.
+  if (isStartGuideComplete(guide)) return checklist ? <SetupChecklist checklist={checklist} /> : null
   if (preferences.postponed) return <div className="space-y-4">{checklist && <SetupChecklist checklist={checklist} />}<section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
     <p className="text-sm">Tu guía de preparación sigue disponible.</p>
     <Button variant="outline" disabled={saving || loading} onClick={() => void savePreferences({ ...preferences, postponed: false })}>Continuar preparación</Button>

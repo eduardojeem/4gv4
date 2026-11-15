@@ -83,3 +83,14 @@ export function evaluateStartGuide(evidence: StartGuideEvidence, preferences: St
     operationMilestones: { sale: evidence.firstSale, reservation: evidence.firstReservation, service: evidence.firstService, repair: evidence.firstRepair, collection: evidence.firstCollection },
   }
 }
+
+/**
+ * La preparación está lista cuando todos los pasos obligatorios están
+ * comprobados. Los opcionales (web, equipo, primera operación) no la frenan:
+ * con todo configurado, la guía deja de ocupar el panel.
+ */
+export function isStartGuideComplete(guide: Pick<StartGuideResult, 'tasks' | 'completed' | 'total'>): boolean {
+  return guide.total > 0
+    && guide.completed === guide.total
+    && guide.tasks.every(task => !task.required || task.state === 'ready')
+}

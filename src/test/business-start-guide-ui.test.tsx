@@ -30,6 +30,17 @@ describe('business start guide UI', () => {
     expect(screen.queryByText('Preparar mi negocio')).toBeNull()
     expect(fetch).not.toHaveBeenCalled()
   })
+  it('hides the guide once every required step is ready', async () => {
+    const ready = payload()
+    ready.guide = { ...ready.guide, tasks: [{ ...ready.guide.tasks[0], state: 'ready' }, { id: 'website', label: 'Web', description: 'Opcional', href: '/admin/website', required: false, state: 'unknown' }], completed: 1, total: 1, nextTaskId: 'website' }
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ready })
+    vi.stubGlobal('fetch', fetch)
+    const { container } = render(<BusinessStartGuide />)
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByText('Comprobando datos guardados…')).toBeNull())
+    expect(screen.queryByText('Preparar mi negocio')).toBeNull()
+    expect(container.textContent).toBe('')
+  })
   it('lets a postponed guide be reopened', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => payload('org', true) }))
     render(<BusinessStartGuide />)
