@@ -328,7 +328,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
             <p className="text-xs text-muted-foreground">{usingAccount
               ? <>Usamos los datos de tu cuenta ({accountName || user.email || 'usuario'}). Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</>
               : <>Sesión iniciada como {accountName || user.email || 'usuario'}. Si el turno es para vos, completamos tus datos.</>}</p>
-            {usingAccount && (!name.trim() || !phone.trim()) && <p role="status" className="text-xs text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes abajo.</p>}
+            {usingAccount && (!name.trim() || !phone.trim()) && <p role="status" className="text-xs font-medium text-amber-700 dark:text-amber-300">{!phone.trim() ? 'Tu cuenta no tiene un WhatsApp cargado. Escribilo abajo una vez: queda guardado para tus próximas reservas.' : 'Completá tu nombre abajo.'}</p>}
           </section>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
@@ -337,7 +337,10 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
             </div>
             <div className="space-y-1">
               <Label htmlFor="booking-phone">WhatsApp</Label>
-              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="booking-phone-help" aria-invalid={usingAccount && !phone.trim() ? true : undefined} className={cn(usingAccount && !phone.trim() && 'border-amber-500 ring-1 ring-amber-500/40')} />
+              <p id="booking-phone-help" className="text-xs text-muted-foreground">
+                {info.requireConfirmation ? 'La tienda te escribe a este número para confirmar el turno.' : 'La tienda te avisa a este número si hay algún cambio en tu turno.'}
+              </p>
             </div>
           </div>
           <div className="space-y-1">

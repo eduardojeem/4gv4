@@ -145,7 +145,7 @@ describe('account phone from the store customer record',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
   await waitFor(()=>expect(screen.getByLabelText('WhatsApp')).toHaveValue('0982 333 444'))
   expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
-  expect(screen.queryByText(/Completá los campos faltantes/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/no tiene un WhatsApp cargado/)).not.toBeInTheDocument()
  })
 })
 
@@ -179,7 +179,8 @@ describe('account contact safeguards',()=>{
   fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
   fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
   fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
-  expect(screen.getByText(/Completá los campos faltantes/)).toBeInTheDocument()
+  expect(screen.getByText(/no tiene un WhatsApp cargado/)).toBeInTheDocument()
+  expect(screen.getByText('La tienda te escribe a este número para confirmar el turno.')).toBeInTheDocument()
   expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
   expect(screen.getByLabelText('WhatsApp')).toHaveValue('')
   expect(screen.getByRole('button',{name:'Pedir el turno'})).toBeDisabled()
