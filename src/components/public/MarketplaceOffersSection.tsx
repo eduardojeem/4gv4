@@ -41,10 +41,12 @@ export function MarketplaceOffersSection({ groups }: Props) {
               Promociones por empresa
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-              Productos con descuento publicados por cada organizacion. Cambia de empresa para ver su vitrina de ofertas.
+              {availableGroups.length > 1 ? 'Productos con descuento de cada tienda. Elegí una para ver sus ofertas.' : 'Productos con descuento publicados por las tiendas del marketplace.'}
             </p>
           </div>
 
+          {/* Con una sola tienda, «Empresas 1» no suma nada. */}
+          {availableGroups.length > 1 && (
           <div className="grid grid-cols-2 gap-2 text-sm sm:flex">
             <div className="rounded-lg border border-rose-200 bg-white px-4 py-3 dark:border-rose-900/40 dark:bg-slate-950">
               <div className="text-xs text-slate-500">Empresas</div>
@@ -55,8 +57,10 @@ export function MarketplaceOffersSection({ groups }: Props) {
               <div className="font-bold text-rose-600 dark:text-rose-400">{totalOffers}</div>
             </div>
           </div>
+          )}
         </div>
 
+        {availableGroups.length > 1 && (
         <div className="mb-6 flex gap-2 overflow-x-auto pb-2 scrollbar-hide" aria-label="Empresas con ofertas">
           {availableGroups.map((group) => {
             const active = group.organizationSlug === activeGroup.organizationSlug
@@ -83,6 +87,7 @@ export function MarketplaceOffersSection({ groups }: Props) {
             )
           })}
         </div>
+        )}
 
         <div className="rounded-lg border border-rose-200 bg-white p-4 shadow-sm dark:border-rose-900/40 dark:bg-slate-950">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
