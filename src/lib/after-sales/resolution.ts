@@ -10,6 +10,7 @@ const ERRORS: Record<string, { status: number; message: string }> = {
   AFTER_SALES_INVALID_TRANSITION: { status: 409, message: 'El estado del caso cambió. Actualizá la lista antes de continuar.' },
   AFTER_SALES_OPEN_CASE_EXISTS: { status: 409, message: 'Ya existe un reclamo abierto para ese producto o reparación.' },
   AFTER_SALES_REFUND_EXCEEDS_CAP: { status: 400, message: 'El reintegro supera lo que corresponde a las unidades reclamadas y al total de la venta.' },
+  AFTER_SALES_REFUND_EXCEEDS_PAID: { status: 400, message: 'El reintegro no puede superar lo que el cliente pagó por la reparación. Si quedó saldo pendiente, corregí el precio final en la reparación.' },
   AFTER_SALES_REFUND_METHOD_REQUIRED: { status: 400, message: 'Indicá cómo se devuelve el dinero: por caja o como saldo a favor.' },
   AFTER_SALES_LINE_REQUIRED: { status: 400, message: 'Seleccioná la línea de venta reclamada para validar el importe y las unidades.' },
   AFTER_SALES_INVALID_SOURCE: { status: 400, message: 'Los datos del cliente, venta o reparación no coinciden. Revisá el comprobante de origen.' },
