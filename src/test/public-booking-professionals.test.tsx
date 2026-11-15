@@ -149,6 +149,21 @@ describe('account phone from the store customer record',()=>{
  })
 })
 
+describe('professional cards',()=>{
+ it('shows photo, specialty or initials so the customer recognizes the barber',async()=>{
+  const services=[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof','prof2']}]
+  const pros=[{id:'prof',name:'Ana Gómez',color:'#000000',photoUrl:'https://cdn.test/ana.webp',specialty:'Fade y barba'},{id:'prof2',name:'Beto Ruiz',color:'#123456'}]
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({...info,professionalBookingAvailable:false,professionalSelection:'optional',services,professionals:pros}))))
+  const { container }=render(<PublicBooking slug="store" initialServiceId="service"/> )
+  const ana=await screen.findByRole('button',{name:'Ana Gómez'})
+  expect(ana.querySelector('img')).toHaveAttribute('src','https://cdn.test/ana.webp')
+  expect(ana).toHaveTextContent('Fade y barba')
+  expect(screen.getByRole('button',{name:'Beto Ruiz'})).toHaveTextContent('BR')
+  expect(screen.getByRole('button',{name:'Cualquiera'})).toHaveTextContent('El primero que esté libre')
+  expect(container.querySelectorAll('img')).toHaveLength(1)
+ })
+})
+
 describe('chosen professional message',()=>{
  const services=[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof','prof2']}]
  const pros=[{id:'prof',name:'Ana',color:'#000000'},{id:'prof2',name:'Beto',color:'#111111'}]

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarCheck2, CheckCircle2, Clock, Loader2 } from 'lucide-react'
+import { CalendarCheck2, CheckCircle2, Clock, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,10 +31,24 @@ type Info = {
   openDays: number[]
   /** professionalIds: quién hace el servicio (vacío si no hay profesionales). */
   services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}>; promotions?: ServicePromotion[] }>
-  professionals: Array<{ id: string; name: string; color: string }>
+  professionals: Array<{ id: string; name: string; color: string; photoUrl?: string | null; specialty?: string | null }>
 }
 
 const ANY = 'any'
+
+/** Foto del profesional o, sin foto, sus iniciales sobre su color. */
+function ProfessionalAvatar({ person }: { person: { name: string; color: string; photoUrl?: string | null } }) {
+  if (person.photoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={person.photoUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-background" />
+  }
+  const initials = person.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '').join('')
+  return (
+    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ring-2 ring-background" style={{ backgroundColor: person.color || 'var(--primary)' }}>
+      {initials || '?'}
+    </span>
+  )
+}
 
 function Step({ number, title, children, done, highlight }: { number: number; title: string; children: React.ReactNode; done?: boolean; highlight?: boolean }) {
   return (
@@ -254,19 +268,30 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
         <Step number={2} title="¿Con quién?" done={!needsProfessional}>
             {serviceProfessionals.length===0&&<p role="alert">No hay profesionales disponibles para este servicio. Consultá con la tienda.</p>}
           <p className="text-xs text-muted-foreground">Solo se ofrecen horarios donde el profesional esté libre durante todo el servicio y su tiempo de preparación.</p>
-          <div className="flex flex-wrap gap-2">
-            {[...(mode==='required'?[]:[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }]), ...serviceProfessionals].map((professional) => (
-              <button
-                key={professional.id}
-                type="button"
-                aria-pressed={professionalId === professional.id}
-                onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
-                className={cn('flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-base', professionalId === professional.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: professional.color }} /> {professional.name}
-                  {service?.professionalTerms?.filter(row=>row.professionalId===professional.id).map(row=><span key={row.professionalId} className="text-sm">· {row.duration} min · {row.price===null?'Precio a consultar':row.price===0?'Sin costo':formatCurrency(row.price,{currency:info.currency})}</span>)}
-              </button>
-            ))}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[...(mode==='required'?[]:[{ id: ANY, name: 'Cualquiera', color: '#94a3b8', photoUrl: null as string | null, specialty: 'El primero que esté libre' as string | null }]), ...serviceProfessionals].map((professional) => {
+              const terms = service?.professionalTerms?.find(row=>row.professionalId===professional.id)
+              const selected = professionalId === professional.id
+              return (
+                <button
+                  key={professional.id}
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={professional.name}
+                  onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
+                  className={cn('flex min-h-16 items-center gap-3 rounded-xl border p-2.5 text-left transition-colors', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
+                >
+                  {professional.id === ANY
+                    ? <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Users className="h-5 w-5" /></span>
+                    : <ProfessionalAvatar person={professional} />}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{professional.name}</span>
+                    {professional.specialty && <span className="block truncate text-xs text-muted-foreground">{professional.specialty}</span>}
+                    {terms && <span className="block text-xs text-muted-foreground">{terms.duration} min · {terms.price===null?'Precio a consultar':terms.price===0?'Sin costo':formatCurrency(terms.price,{currency:info.currency})}</span>}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </Step>
       )}
