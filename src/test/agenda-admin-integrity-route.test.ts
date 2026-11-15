@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 const mocks=vi.hoisted(()=>({role:'admin',aal:'aal2',rpc:vi.fn(),generateLink:vi.fn(),sendEmail:vi.fn(),quota:vi.fn(),from:vi.fn()}))
-vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:Function)=>(request:Request)=>handler(request,{organization:{id:'org',role:mocks.role,name:'Local'},user:{id:'actor',aal:mocks.aal}})}))
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:(request:Request,context:unknown)=>unknown)=>(request:Request)=>handler(request,{organization:{id:'org',role:mocks.role,name:'Local'},user:{id:'actor',aal:mocks.aal}})}))
 vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({rpc:mocks.rpc,from:mocks.from,auth:{admin:{generateLink:mocks.generateLink}}})}))
 vi.mock('@/lib/supabase/server',()=>({createClient:vi.fn()}))
 vi.mock('@/lib/email/resend',()=>({sendEmail:mocks.sendEmail,renderBrandedEmail:()=>'<mail/>'}))
