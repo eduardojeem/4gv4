@@ -336,6 +336,22 @@ describe('EspecialBarberoHeader', () => {
   })
 })
 
+describe('EspecialBarberoHeader: volver al marketplace', () => {
+  it('en la tienda de una organización, también desde ofertas, lleva al marketplace', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    // Botón para computadora y franja para el celular.
+    expect(screen.getByRole('link', { name: 'Volver al marketplace' })).toHaveAttribute('href', '/marketplace')
+    expect(screen.getByRole('link', { name: 'Volver al Marketplace' })).toHaveAttribute('href', '/marketplace')
+  })
+
+  it('en el dominio propio de la tienda no lo muestra', () => {
+    mockState.pathname = '/ofertas'
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    expect(screen.queryByRole('link', { name: /volver al marketplace/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('EspecialBarberoHome', () => {
   it('renderiza portada oscura, ofertas reales excluyendo precios ocultos y grilla de marcas', () => {
     renderWithStyle(

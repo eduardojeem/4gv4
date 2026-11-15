@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
+  ArrowLeft,
   ArrowRight,
   Briefcase,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
   Search,
   Shield,
   Sparkles,
+  Store,
   Tag,
   Truck,
   User,
@@ -487,6 +489,23 @@ export function EspecialBarberoHeader({
 
           {/* Derecha: Cuenta (Minorista / Mayorista) + Tema + Carrito */}
           <div className="flex items-center gap-2 shrink-0">
+            {slug && (
+              <Link
+                href="/marketplace"
+                aria-label="Volver al marketplace"
+                className={cn(
+                  'hidden lg:inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors',
+                  isDarkChrome
+                    ? 'border-white/15 bg-white/5 text-white hover:border-primary hover:text-primary'
+                    : isAccent
+                    ? 'border-white/25 bg-white/15 text-primary-foreground hover:bg-white/25'
+                    : 'border-border bg-background text-foreground hover:border-primary hover:text-primary'
+                )}
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>Marketplace</span>
+              </Link>
+            )}
             {hydrated && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1030,6 +1049,21 @@ export function EspecialBarberoHeader({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* En el celular, la vuelta al marketplace va en una franja propia, como en las demás plantillas. */}
+      {slug && (
+        <div className="border-t border-primary-foreground/15 bg-primary text-primary-foreground lg:hidden">
+          <Link
+            href="/marketplace"
+            aria-label="Volver al Marketplace"
+            className="container mx-auto flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-sm font-bold transition-colors hover:bg-primary-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/70"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Volver al Marketplace</span>
+          </Link>
+        </div>
+      )}
     </header>
   )
 }
