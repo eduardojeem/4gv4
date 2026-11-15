@@ -1,5 +1,6 @@
-import { MarketplaceBusinessPromo } from '@/components/public/MarketplaceBusinessPromo'
-import { getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
+import { MarketplaceBusinessBanner } from '@/components/public/MarketplaceBusinessBanner'
+import { getLocationCatalog, getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
+import { buildCategoryShowcase } from '@/lib/public/category-showcase'
 import type { Metadata } from 'next'
 import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import Link from './MarketplaceLink'
@@ -15,8 +16,7 @@ import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/b
 import { getPlatformAnnouncements } from '@/lib/platform/announcement'
 import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
-import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
-import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
+import { MarketplaceStoresProductsCarousel } from '@/components/public/MarketplaceStoresProductsCarousel'
 import { MarketplaceCategoriesShowcase } from '@/components/public/MarketplaceCategoriesShowcase'
 import { visibleDirectoryStats } from '@/lib/public/business-directory'
 
@@ -57,6 +57,12 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
     scoped?Promise.resolve(scoped.products.filter(product=>product.has_offer&&!product.hide_price).slice(0,MARKETPLACE_HOME_OFFER_LIMIT)):duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), []),
     getPlatformAnnouncements().catch(() => []),
   ])
+  // Productos reales por rubro para «Categorías destacadas». Si el catálogo no
+  // responde, la sección muestra los rubros con búsqueda por texto, como antes.
+  const showcaseProducts = scoped
+    ? scoped.products
+    : await duringBuild(getLocationCatalog().then((catalog) => catalog.products), null).catch(() => null)
+  const categoryShowcase = showcaseProducts ? buildCategoryShowcase(showcaseProducts) : null
   // Both client sections share these objects; neither displays more than four
   // products per store. Trim once to preserve RSC reference deduplication.
   const organizations = organizationRows.map(organization => ({
@@ -164,7 +170,7 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
       </section>
 
       {/* ── Carrusel Showcase de Categorías ── */}
-      <MarketplaceCategoriesShowcase />
+      <MarketplaceCategoriesShowcase stats={categoryShowcase} />
 
       {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups.slice(0, 6)} />}
 
@@ -210,43 +216,20 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
         </section>
       )}
 
-      {/* Vitrina visual original: navegación manual, sin repetir otra grilla de productos por tienda. */}
+      {/* ── Tiendas: una sola vidriera. Antes había un panel por tienda que repetía
+          las ofertas de arriba y, al final, la grilla completa del directorio. ── */}
       {organizations.length > 0 && (
-        <MarketplaceBusinessPromoShowcase organizations={organizations} />
+        <MarketplaceStoresProductsCarousel
+          organizations={organizations}
+          title="Tiendas del marketplace"
+          subtitle="Comercios con catálogo público y algunos de sus productos."
+          exploreAllHref="/marketplace/empresas"
+          exploreAllLabel="Ver todas las tiendas"
+        />
       )}
 
-      <MarketplaceBusinessPromo />
-
-      {/* ── Empresas asociadas ── */}
-      {organizations.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  Empresas asociadas
-                </h2>
-              </div>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Tiendas con catálogo público activo
-              </p>
-            </div>
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href="/marketplace/empresas">
-                Ver directorio
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-            {organizations.slice(0, 8).map((organization) => (
-              <OrganizationDirectoryCard key={organization.id} organization={organization} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Para negocios: un aviso, no la presentación completa con planes. */}
+      <MarketplaceBusinessBanner />
 
     </div>
   )
