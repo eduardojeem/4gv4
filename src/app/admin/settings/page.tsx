@@ -59,6 +59,8 @@ import {
   isSupportedCurrency,
 } from '@/lib/currency'
 import { cn } from '@/lib/utils'
+import { KnownCitiesDatalist } from '@/components/forms/known-cities-datalist'
+import { cityForSaving } from '@/lib/public/city-normalizer'
 import { getSupportedRegionalCountries, normalizeCountryCode } from '@/lib/regional/contract'
 import { countryLabel, localeForRegion, regionalSuggestion } from '@/lib/regional/country-labels'
 
@@ -633,12 +635,19 @@ export default function AdminSettingsPage() {
                       id="city"
                       value={settings.city}
                       onChange={(event) => updateSetting('city', event.target.value)}
-                      onBlur={() => touch('city')}
+                      onBlur={() => {
+                        const fixed = cityForSaving(settings.city)
+                        if (fixed !== settings.city) updateSetting('city', fixed)
+                        touch('city')
+                      }}
+                      list="known-cities"
+                      autoComplete="address-level2"
                       placeholder="Ej: Asunción"
                       className="h-10"
                       aria-invalid={Boolean(visibleError('city'))}
                       aria-describedby={visibleError('city') ? 'city-error' : undefined}
                     />
+                    <KnownCitiesDatalist />
                     <FieldError id="city-error" message={visibleError('city')} />
                   </div>
                 </div>

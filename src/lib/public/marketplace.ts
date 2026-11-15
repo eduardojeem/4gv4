@@ -1,4 +1,5 @@
 import { publicLocation, type PublicLocation } from './marketplace-location'
+import { knownParaguayCity } from './city-normalizer'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PRODUCT_ORGANIZATION } from '@/lib/supabase/embeds'
 import { logger } from '@/lib/logger'
@@ -563,7 +564,10 @@ async function getMarketplaceOrganizationsUncached(
 
     return {
       ...organization,
-      countryCode: orgSetting?.country_code ?? null,
+      // Sin país confirmado, una ciudad conocida de Paraguay alcanza: si no,
+      // «encarnacion» (país sin confirmar) y «Encarnación» (Paraguay) salían
+      // como dos ciudades distintas en el filtro.
+      countryCode: orgSetting?.country_code ?? (knownParaguayCity(city) ? 'PY' : null),
       currency: orgSetting?.currency ?? null,
       locations: [...new Map([city,...orgBranches.map(branch=>branch.city)].map(value=>publicLocation(orgSetting?.country_code,value)).filter((value):value is PublicLocation=>Boolean(value)).map(value=>[value.key,value])).values()],
       rubro: resolvedRubro,

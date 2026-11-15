@@ -1,15 +1,16 @@
-import { normalizeCity, removeAccents } from './city-normalizer'
+import { knownParaguayCity, normalizeCity, removeAccents } from './city-normalizer'
 import { countryLabel } from '../regional/country-labels'
 export type PublicLocation = { key: string; city: string; countryCode: string | null }
 export type MarketplaceLocation = { country: string; city: string }
 export const ALL_LOCATIONS: MarketplaceLocation = { country:'all', city:'all' }
 export function publicLocation(country: string | null | undefined, city: string | null | undefined): PublicLocation | null {
  if (!city?.trim()) return null
- const countryCode = country && /^[A-Z]{2}$/.test(country.toUpperCase()) ? country.toUpperCase() : null
+ const confirmed = country && /^[A-Z]{2}$/.test(country.toUpperCase()) ? country.toUpperCase() : null
+ const countryCode = confirmed ?? (knownParaguayCity(city) ? 'PY' : null)
  let display = city.trim()
  const label = countryCode ? countryLabel(countryCode) : ''
  if (label) display = display.replace(new RegExp('[, -]+(?:'+label+'|'+countryCode+')$','i'),'').trim()
- const normalized = countryCode === 'PY' ? normalizeCity(display) : null
+ const normalized = countryCode === 'PY' || !countryCode ? normalizeCity(display) : null
  const slug = normalized?.key ?? removeAccents(display).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')
  if (!slug) return null
  return {key:(countryCode??'unknown')+':'+slug,city:normalized?.display??display,countryCode}

@@ -75,6 +75,8 @@ import { checkoutChoicesError, type CheckoutChoices } from '@/lib/onboarding/che
 import { siteUrl } from '@/lib/site-url'
 import { ShareStoreCard } from './ShareStoreCard'
 import { BusinessStartGuide } from './BusinessStartGuide'
+import { KnownCitiesDatalist } from '@/components/forms/known-cities-datalist'
+import { cityForSaving } from '@/lib/public/city-normalizer'
 
 type StepProgress = {
   hasCompanyInfo: boolean
@@ -1049,11 +1051,18 @@ export function OnboardingClient({
                       id="city"
                       value={form.city}
                       onChange={(event) => updateField('city', event.target.value)}
+                      onBlur={() => {
+                        const fixed = cityForSaving(form.city)
+                        if (fixed !== form.city) updateField('city', fixed)
+                      }}
+                      list="known-cities"
+                      autoComplete="address-level2"
                       placeholder="Ej: Asunción"
                       className="h-10"
                       aria-invalid={Boolean(fieldErrors.city)}
                       aria-describedby={fieldErrors.city ? 'city-error' : undefined}
                     />
+                    <KnownCitiesDatalist />
                     <FieldError id="city-error" message={fieldErrors.city} />
                   </div>
                 </div>
