@@ -10,6 +10,7 @@ import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/ag
 import { bookingWriteError, quoteReservationSchema, reserveQuote } from '@/lib/agenda/booking-writes'
 import { resolveServiceTerms } from '@/lib/agenda/service-terms'
 import { CLOSURE_NOTICE_DAYS, type PublicClosure } from '@/lib/agenda/closures'
+import { SERVICE_PROMOTION_COLUMNS, servicePromotionsByService, type ServicePromotion } from '@/lib/public/service-promotions'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +80,28 @@ async function publicClosures(agenda: PublicAgenda): Promise<PublicClosure[]> {
   return (data as Array<{ starts_at: string; ends_at: string; public_message: string }>).map((row) => ({ startsAt: row.starts_at, endsAt: row.ends_at, message: row.public_message }))
 }
 
+/**
+ * Promos vigentes de la tienda que nombran cada servicio online. Si la consulta
+ * falla, la reserva sigue funcionando sin promos.
+ */
+async function servicePromotions(agenda: PublicAgenda): Promise<Record<string, ServicePromotion[]>> {
+  const serviceIds = agenda.config.services.filter((service) => service.online).map((service) => service.product_id)
+  if (serviceIds.length === 0) return {}
+  try {
+    const { data, error } = await agenda.admin
+      .from('promotions')
+      .select(SERVICE_PROMOTION_COLUMNS)
+      .eq('organization_id', agenda.organization.id)
+      .eq('is_active', true)
+      .in('public_mode', ['coupon', 'automatic'])
+    if (error) throw new Error(error.message)
+    return servicePromotionsByService((data ?? []) as Array<Record<string, unknown>>, serviceIds)
+  } catch (error) {
+    logger.warn('No se pudieron leer las promos de servicios', { organizationId: agenda.organization.id, error: error instanceof Error ? error.message : String(error) })
+    return {}
+  }
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const agenda = await resolveAgenda(slug)
@@ -106,6 +129,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
+  const promotionsByService = await servicePromotions(agenda)
   return NextResponse.json({
     storeName: organization.name,
     timeZone: config.timeZone,
@@ -130,6 +154,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           const terms=resolveServiceTerms({price:service.price,durationMinutes:service.duration_minutes,bufferMinutes:service.buffer_minutes??0},rate?{price:rate.price,durationMinutes:rate.duration_minutes,bufferMinutes:rate.buffer_minutes}:null)
           return {professionalId:professional.id,price:service.hide_price?null:terms.price,duration:terms.durationMinutes}
         })}:{}),
+        // Promos que el local aplica al cobrar este servicio (la reserva no cobra).
+        promotions: promotionsByService[service.product_id] ?? [],
         // Quién lo hace: la reserva solo ofrece a esos profesionales.
         professionalIds: professionalsForService(config.professionals.filter(p => p.online_visible !== false), service.product_id).map((professional) => professional.id),
       })),
