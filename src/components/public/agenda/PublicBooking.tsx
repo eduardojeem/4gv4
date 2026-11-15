@@ -157,6 +157,8 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
           phone,
           notes: notes || null,
           website,
+          // El servidor lee la sesión; acá solo se dice que el turno es para la cuenta.
+          ...(usingAccount && user ? { for_self: true } : {}),
         }),
       })
       const body = await response.json().catch(() => ({}))
@@ -204,6 +206,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       {!authLoading && user && <section aria-label="Reservar con mi cuenta" className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
         <div><p className="font-semibold">{usingAccount ? 'Estás reservando para vos' : '¿Querés reservar para vos?'}</p><p className="text-sm text-muted-foreground">Sesión iniciada como {accountName || user.email || 'usuario'}. Podés usar los datos de tu cuenta y revisarlos antes de confirmar.</p></div>
         <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={useAccountContact}>{usingAccount ? 'Volver a usar mis datos' : 'Reservar para mí'}</Button>{usingAccount && <Button type="button" variant="ghost" onClick={() => { accountContactOwner.current=null; setUsingAccount(false); setName(''); setPhone('') }}>Reservar para otra persona</Button>}</div>
+        {usingAccount && <p className="text-sm text-muted-foreground">Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</p>}
         {usingAccount && (!accountName || !accountPhone) && <p role="status" className="text-sm text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes en el paso final.</p>}
       </section>}
       {info.message && <p className="rounded-xl bg-primary/5 p-3 text-sm">{info.message}</p>}

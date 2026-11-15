@@ -10,6 +10,8 @@ import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/ag
 import { bookingWriteError, quoteReservationSchema, reserveQuote } from '@/lib/agenda/booking-writes'
 import { resolveServiceTerms } from '@/lib/agenda/service-terms'
 import { CLOSURE_NOTICE_DAYS, type PublicClosure } from '@/lib/agenda/closures'
+import { createClient } from '@/lib/supabase/server'
+import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
 import { SERVICE_PROMOTION_COLUMNS, servicePromotionsByService, type ServicePromotion } from '@/lib/public/service-promotions'
 
 export const dynamic = 'force-dynamic'
@@ -178,7 +180,46 @@ const bookingSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
   // Campo trampa: las personas no lo ven ni lo llenan; los bots sí.
   website: z.string().max(0).optional(),
+  /** «Reservar para mí» con la sesión iniciada: el turno va a la ficha de esa cuenta. */
+  for_self: z.boolean().optional(),
 })
+
+/**
+ * «Reservar para mí»: la cuenta se vincula como cliente de la tienda (o se
+ * reutiliza su ficha) y el turno queda en esa ficha, así aparece en «Mis
+ * turnos» del perfil aunque el teléfono no coincida. La sesión se lee en el
+ * servidor: el navegador solo dice «es para mí», nunca qué cliente es.
+ * Si algo falla, el turno ya está reservado y sigue enlazado por teléfono.
+ */
+async function linkBookingToAccount(
+  agenda: PublicAgenda,
+  appointmentId: string,
+  booking: { name: string },
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const linked = await linkPublicCustomerAccount(agenda.admin, {
+      organizationId: agenda.organization.id,
+      profileId: user.id,
+      fullName: String(user.user_metadata?.full_name || user.user_metadata?.name || booking.name),
+      email: user.email,
+      // Solo el teléfono de la cuenta: con el del formulario, alguien podría
+      // escribir el de otra persona y quedarse con su ficha (la vinculación
+      // reutiliza una ficha sin cuenta con el mismo teléfono).
+      phone: String(user.user_metadata?.phone || user.phone || '').trim() || null,
+    })
+    const { error } = await agenda.admin
+      .from('appointments')
+      .update({ customer_id: linked.customerId })
+      .eq('id', appointmentId)
+      .eq('organization_id', agenda.organization.id)
+    if (error) throw error
+  } catch (error) {
+    logger.warn('No se pudo enlazar la reserva con la cuenta del cliente', { organizationId: agenda.organization.id, error: error instanceof Error ? error.message : String(error) })
+  }
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -206,6 +247,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }, { timeZone: config.timeZone, notifyEmail: config.settings.notify_email !== false })
       } catch { logger.error('No se pudo emitir el aviso de una reserva confirmada') }
     }
+    if (verified.data.for_self) await linkBookingToAccount(agenda, data.id, verified.data)
     return NextResponse.json({ token: data.public_token, status: data.status }, { status: data.idempotent ? 200 : 201, headers: { 'Cache-Control': 'no-store' } })
   }
   const parsed = bookingSchema.safeParse(raw)
@@ -248,6 +290,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!error?.message?.includes('APPOINTMENT_OVERLAP')) logger.error('No se pudo reservar el turno online', { error: error?.message })
     return NextResponse.json({ error: appointmentErrorMessage(error, 'No se pudo reservar. Probá de nuevo.') }, { status: 409 })
   }
+  if (parsed.data.for_self) await linkBookingToAccount(agenda, (data as { id: string }).id, parsed.data)
   // La tienda se entera: campanita de la Agenda y, si lo pidió, email.
   await notifyAppointmentEvent(admin, {
     organizationId: organization.id,
