@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ExternalLink, Globe, Home, Laptop, Loader2, Lock, ShoppingBag, Smartphone, Sparkles, Store, Tablet, Tag } from 'lucide-react'
+import { Check, Clock, ExternalLink, Globe, Home, Laptop, Loader2, Lock, ShoppingBag, Smartphone, Sparkles, Store, Tablet, Tag } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -275,11 +275,19 @@ export function StorefrontTemplatePreviewDialog({
                                         {option.label}
                                         {selected && <Check aria-hidden="true" className="h-3.5 w-3.5 text-primary" />}
                                         {option.status === 'locked_plan' && <Lock aria-label="Bloqueada por plan" className="h-3 w-3 text-muted-foreground" />}
+                                        {option.status === 'coming_soon' && (
+                                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                                            <Clock aria-hidden="true" className="h-2.5 w-2.5" />
+                                            Próximamente
+                                          </span>
+                                        )}
                                       </span>{' '}
                                       <span className="block truncate text-xs text-muted-foreground">
                                         {blocked ? option.reason : option.subtitle}
                                       </span>
-                                      {(option.value === initial.storefrontStyle || option.isSuggested) && (
+                                      {(option.value === initial.storefrontStyle ||
+                                        option.isSuggested ||
+                                        (option.enabledPlans && option.enabledPlans.length > 0 && option.status !== 'coming_soon')) && (
                                         <span className="mt-1 flex flex-wrap gap-1">
                                           {option.value === initial.storefrontStyle && (
                                             <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Actual</span>
@@ -288,6 +296,11 @@ export function StorefrontTemplatePreviewDialog({
                                             <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                                               <Sparkles aria-hidden="true" className="h-2.5 w-2.5" />
                                               Sugerida
+                                            </span>
+                                          )}
+                                          {option.enabledPlans && option.enabledPlans.length > 0 && option.status !== 'coming_soon' && (
+                                            <span className="rounded border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                              {option.enabledPlans.length === 1 ? 'Plan' : 'Planes'}: {option.enabledPlans.join(', ')}
                                             </span>
                                           )}
                                         </span>

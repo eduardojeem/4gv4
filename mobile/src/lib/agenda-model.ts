@@ -1,3 +1,4 @@
+import { homeVisitDetails, homeVisitIssue, type HomeVisitFields } from '../../../src/lib/agenda/home-visit';
 /**
  * Agenda (turnos) en la app: los MISMOS datos y reglas que /dashboard/agenda en
  * la web. Lógica pura, sin React Native, para poder probarla. Las fechas se
@@ -8,7 +9,7 @@
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 
-export type Appointment = {
+export type Appointment = HomeVisitFields & {
   id: string;
   number: number;
   professional_id: string | null;
@@ -68,6 +69,7 @@ export type ProfessionalRate = {
 };
 
 export type AgendaData = {
+  attentionMode?: 'local'|'home'|'both';
   available: boolean;
   date: string;
   days: number;
@@ -77,7 +79,7 @@ export type AgendaData = {
   professionals: AgendaProfessional[];
   services: AgendaService[];
   professionalRates: ProfessionalRate[];
-  capabilities: { professionalBooking: boolean };
+  capabilities: { professionalBooking: boolean; homeAppointments?:boolean };
   timeZone: string;
   currency: string;
   storeName: string;
@@ -285,7 +287,7 @@ export function serviceTerms(
 /** Servicio escrito a mano, sin elegir uno del catálogo. */
 export const FREE_SERVICE = '__free__';
 
-export type AppointmentForm = {
+export type AppointmentForm = HomeVisitFields & {
   customerId: string | null;
   customerName: string;
   customerPhone: string;
@@ -303,8 +305,9 @@ export type AppointmentForm = {
   allowOutsideHours: boolean;
 };
 
-export function emptyForm(data: Pick<AgendaData, 'settings'>, date: string, time = '', professionalId: string | null = null): AppointmentForm {
+export function emptyForm(data: Pick<AgendaData,'settings'> & Partial<Pick<AgendaData,'capabilities'|'attentionMode'>>, date: string, time = '', professionalId: string | null = null): AppointmentForm {
   return {
+    ...homeVisitDetails({attention_mode:data.capabilities?.homeAppointments&&data.attentionMode==='home'?'home':'local'}),
     customerId: null, customerName: '', customerPhone: '', service: null, serviceName: '', professionalId,
     date, time, duration: String(data.settings.slot_minutes || 30), price: '0', buffer: 0, notes: '', pending: false,
     acceptNewTerms: false, allowOutsideHours: false,
@@ -314,6 +317,7 @@ export function emptyForm(data: Pick<AgendaData, 'settings'>, date: string, time
 export function formFromAppointment(appointment: Appointment, timeZone: string): AppointmentForm {
   const local = utcToZoned(appointment.starts_at, timeZone);
   return {
+    ...homeVisitDetails(appointment),
     customerId: appointment.customer_id, customerName: appointment.customer_name, customerPhone: appointment.customer_phone ?? '',
     service: appointment.service_product_id ?? FREE_SERVICE, serviceName: appointment.service_name, professionalId: appointment.professional_id,
     date: local.date, time: local.time, duration: String(durationOf(appointment)), price: String(Number(appointment.price)),
@@ -330,6 +334,7 @@ export const termsChanged = (form: AppointmentForm, original: Appointment | null
 
 export function formIssues(form: AppointmentForm, data: Pick<AgendaData, 'professionals' | 'capabilities'>, original: Appointment | null = null): string[] {
   const issues: string[] = [];
+  const visitIssue=homeVisitIssue(form);if(visitIssue)issues.push(visitIssue);
   if (!form.customerName.trim()) issues.push('Poné el nombre del cliente.');
   if (!form.serviceName.trim()) issues.push('Elegí o escribí el servicio.');
   if (data.professionals.some((professional) => professional.is_active) && !form.professionalId) issues.push('Elegí quién atiende.');
@@ -350,6 +355,7 @@ export function appointmentPayload(form: AppointmentForm, data: Pick<AgendaData,
   const duration = Math.max(5, Math.trunc(toNumber(form.duration)) || data.settings.slot_minutes);
   const price = Math.max(0, toNumber(form.price || '0') || 0);
   return {
+    ...(data.capabilities.homeAppointments ? homeVisitDetails(form) : {}),
     customer_id: form.customerId,
     customer_name: form.customerName.trim(),
     customer_phone: form.customerPhone.trim() || null,
@@ -405,6 +411,7 @@ export function whatsappUrl(phone: string | null, message: string): string | nul
 export function toAgendaData(raw: Record<string, unknown>): AgendaData {
   const data = raw as Partial<AgendaData>;
   return {
+    attentionMode: data.attentionMode??'local',
     available: data.available !== false,
     date: data.date ?? todayIn(data.timeZone),
     days: Number(data.days ?? 1),
@@ -414,7 +421,7 @@ export function toAgendaData(raw: Record<string, unknown>): AgendaData {
     professionals: (data.professionals ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
     services: (data.services ?? []).map((service) => ({ ...service, price: Number(service.price) || 0 })),
     professionalRates: data.professionalRates ?? [],
-    capabilities: { professionalBooking: data.capabilities?.professionalBooking === true },
+    capabilities: { professionalBooking: data.capabilities?.professionalBooking === true,homeAppointments:data.capabilities?.homeAppointments===true },
     timeZone: data.timeZone || DEFAULT_TIMEZONE,
     currency: data.currency || 'PYG',
     storeName: data.storeName ?? '',

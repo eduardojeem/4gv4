@@ -1,3 +1,4 @@
+import {canUseCatalogRecord} from '@/lib/organization/business-experience'
 import { fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
@@ -113,7 +114,7 @@ function toVariantRpcRows(variants: Array<{
   }))
 }
 
-export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { user, organization }) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: ['inventory', 'services'] }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     
@@ -169,7 +170,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const deviceModelFilter = searchParams.get('device_model')?.trim() || null
     const sortAscending = searchParams.get('direction') !== 'desc'
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
-    const catalogKind = parseProductCatalogKind(searchParams.get('catalog_kind'))
+    const catalogKind = organization.catalogServicesOnly ? 'service' : parseProductCatalogKind(searchParams.get('catalog_kind'))
     const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1)
     const perPage = Math.min(1000, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
     const requestedBranchId = getRequestedBranchId(request)
@@ -200,6 +201,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       // la fila se conserva para no romper el historico de ventas.
       .is('archived_by_plan_at', null)
     
+    if(organization.catalogServicesOnly)queryBuilder=queryBuilder.eq('unit_measure','servicio')
     // Apply filters
     if (query) {
       const safeQuery = query.replace(/[,%()]/g, ' ').trim()
@@ -510,7 +512,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 })
 
 // POST /api/products - Create new product
-export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { user, organization }) => {
+export const POST = withTenantAuth({ permission: 'products.create', module: ['inventory', 'services'] }, async (request, { user, organization }) => {
   try {
     const rawBody = await request.json().catch(() => null)
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
@@ -555,6 +557,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     if (!await productReferencesBelongToOrganization(costClient, organization.id, validated)) {
       return NextResponse.json({ success: false, error: 'La categoría o el proveedor no pertenecen a esta organización.', code: 'PRODUCT_REFERENCE_FORBIDDEN' }, { status: 400 })
     }
+    if(!canUseCatalogRecord(organization.catalogServicesOnly,validated)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
     const resourceType = validated.unit_measure === 'servicio' ? 'services' : 'products'
     const resourceLabel = resourceType === 'services' ? 'servicio' : 'producto'
     const planGate = await canCreateResource(organization.id, resourceType)
@@ -798,7 +801,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 })
 
 // PUT /api/products - Update product
-export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { user, organization }) => {
+export const PUT = withTenantAuth({ permission: 'products.update', module: ['inventory', 'services'] }, async (request, { user, organization }) => {
   try {
     const rawBody = await request.json().catch(() => null)
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
@@ -877,6 +880,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    if(!canUseCatalogRecord(organization.catalogServicesOnly,existingProduct,validated)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
     const fixedPlanIssues = fixedProductPlanErrors({ ...existingProduct, ...validated } as unknown as Parameters<typeof fixedProductPlanErrors>[0])
     if (fixedPlanIssues.length) return NextResponse.json({ success: false, error: 'Revisá los planes por monto: no son compatibles con el precio del producto.', details: fixedPlanIssues.map(issue => ({ field: 'installments_plans.' + issue.index + '.installmentAmount', message: issue.message })) }, { status: 400 })
 
@@ -1272,7 +1276,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 })
 
 // DELETE /api/products - Delete products (single or bulk)
-export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (request, { user, organization }) => {
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: ['inventory', 'services'] }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')
@@ -1293,6 +1297,12 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
     }
 
     const adminSupabase = createAdminSupabase()
+    {
+      const {data:records,error:scopeError}=await adminSupabase.from('products').select('id,unit_measure').eq('organization_id',organization.id).in('id',ids)
+      if(scopeError)return NextResponse.json({success:false,error:'No se pudo verificar el catálogo antes de borrar.'},{status:503})
+      if(records?.length!==ids.length)return NextResponse.json({success:false,error:'Uno o más registros no pertenecen a esta empresa.',code:'PRODUCT_REFERENCE_FORBIDDEN'},{status:403})
+      if(records.some(row=>!canUseCatalogRecord(organization.catalogServicesOnly,row))) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
+    }
 
     // Verificar si alguno de los productos tiene transacciones
     const [

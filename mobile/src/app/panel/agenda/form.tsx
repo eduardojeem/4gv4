@@ -105,8 +105,11 @@ function AppointmentEditor({ title, data, original, initial }: Loaded & { title:
     const list = Array.from({ length: 14 }, (_, index) => addDays(today, index));
     return list.includes(form.date) ? list : [form.date, ...list];
   }, [today, form.date]);
-  const times = timeOptions(form.date, hours, data.settings.slot_minutes, duration);
-  const outside = isValidTime(form.time) && !withinHours(form.date, form.time, duration, hours);
+  const travelBefore=form.attention_mode==='home'?form.travel_before_minutes??0:0,travelAfter=form.attention_mode==='home'?form.travel_after_minutes??0:0;
+  const occupiedDuration=duration+form.buffer+travelBefore+travelAfter;
+  const fitsHours=(time:string)=>minutesOf(time)>=travelBefore&&withinHours(form.date,timeOf(minutesOf(time)-travelBefore),occupiedDuration,hours);
+  const times = timeOptions(form.date, hours, data.settings.slot_minutes, duration).filter(fitsHours);
+  const outside = isValidTime(form.time) && !fitsHours(form.time);
   const end = isValidTime(form.time) ? timeOf((minutesOf(form.time) + duration) % (24 * 60)) : null;
   const advanced = data.capabilities.professionalBooking;
 
@@ -233,9 +236,19 @@ function AppointmentEditor({ title, data, original, initial }: Loaded & { title:
         <Field label="Otra hora" value={form.time} onChangeText={(value) => set({ time: value.replace(/[^\d:]/g, '').slice(0, 5) })} placeholder="09:30" keyboardType="numbers-and-punctuation" maxLength={5}
           help={end ? `Termina a las ${end}.` : 'Formato de 24 horas, por ejemplo 14:30.'} />
         {outside ? <Notice tone="warning" text="Ese horario queda fuera del horario de atención." /> : null}
-        {outside && advanced && data.canConfigure ? <ToggleRow label="Agendar igual fuera de horario" value={form.allowOutsideHours} onValueChange={(value) => set({ allowOutsideHours: value })} /> : null}
+        {outside && form.attention_mode!=='home' && advanced && data.canConfigure ? <ToggleRow label="Agendar igual fuera de horario" value={form.allowOutsideHours} onValueChange={(value) => set({ allowOutsideHours: value })} /> : null}
       </Section>
 
+      {data.capabilities.homeAppointments ? <Section title="Lugar de atención" icon="location-outline">
+        <View style={styles.chips}><Chip label="En el local" selected={form.attention_mode!=='home'} onPress={()=>set({attention_mode:'local',travel_before_minutes:0,travel_after_minutes:0,service_address:null,arrival_instructions:null})}/><Chip label="A domicilio" selected={form.attention_mode==='home'} onPress={()=>set({attention_mode:'home'})}/></View>
+        {form.attention_mode==='home'?<>
+          <Field label="Dirección del cliente" value={form.service_address??''} onChangeText={service_address=>set({service_address})} maxLength={500} placeholder="Calle, número y ciudad"/>
+          <Field label="Indicaciones para llegar" value={form.arrival_instructions??''} onChangeText={arrival_instructions=>set({arrival_instructions})} maxLength={1000} multiline/>
+          <Field label="Traslado de ida (minutos)" value={String(form.travel_before_minutes??0)} keyboardType="number-pad" onChangeText={value=>set({travel_before_minutes:Number(value)})}/>
+          <Field label="Traslado de vuelta (minutos)" value={String(form.travel_after_minutes??0)} keyboardType="number-pad" onChangeText={value=>set({travel_after_minutes:Number(value)})}/>
+          <Text style={{color:colors.muted}}>Los traslados bloquean la agenda antes y después del servicio. Deben quedar dentro del horario de atención y no cambian el precio.</Text>
+        </>:null}
+      </Section>:null}
       <Section title="Detalle" icon="document-text-outline">
         <View style={styles.row}>
           <View style={styles.flex}>

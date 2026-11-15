@@ -1,0 +1,4 @@
+import { expect,it } from 'vitest';
+import {agendaSummarySchema,agendaSummaryCounts} from '@/lib/agenda/summary-model';
+it('rejects missing counts and invalid business time zones',()=>{expect(agendaSummarySchema.safeParse({available:true,timeZone:'bad-zone',pendingCount:0,appointments:[]}).success).toBe(false);expect(agendaSummarySchema.safeParse({available:true,timeZone:'America/Asuncion',appointments:[]}).success).toBe(false)});
+it('counts actual statuses without including cancelled appointments',()=>{const appointments=['confirmed','completed','cancelled','no_show'].map((status,i)=>({id:String(i),starts_at:'2026-11-14T12:00:00Z',customer_name:'Cliente',service_name:'Servicio',status}));const parsed=agendaSummarySchema.parse({available:true,timeZone:'America/Asuncion',pendingCount:3,appointments});expect(agendaSummaryCounts(parsed)).toEqual({registered:3,completed:1,noShow:1,pending:3,partial:false})});

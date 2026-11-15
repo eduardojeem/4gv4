@@ -7,19 +7,43 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 
 import { NewServiceDialog } from '@/components/dashboard/agenda/NewServiceDialog'
 import { appointmentEventsToNotifications, isAppointmentNotification } from '@/hooks/use-appointment-notifications'
-import type { AgendaSettings } from '@/lib/agenda/agenda-server'
 
-const settings = { slot_minutes: 30, opening_hours: {}, online_booking: true, require_confirmation: false, min_notice_minutes: 0, max_days_ahead: 30, booking_message: null, notify_email: true } as AgendaSettings
+vi.mock('@/contexts/SubscriptionStatusContext', () => ({
+  useSubscriptionStatus: () => ({ businessVertical: 'barbershop', serviceSpecialties: [] }),
+}))
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('nuevo servicio desde la agenda', () => {
   // La creación en sí (un solo paso, /api/agenda/services) la prueban service-creation-ui y service-entry.
   it('no deja repetir un servicio que ya existe', () => {
-    render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={['Corte clásico']} savedSettings={settings} defaultDuration={30} currency="PYG" onCreated={vi.fn()} />)
+    render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={['Corte clásico']} currency="PYG" onCreated={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'corte clásico ' } })
     fireEvent.change(screen.getByLabelText('Precio'), { target: { value: '50000' } })
     expect(screen.getByText('Ya tenés un servicio con este nombre.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Agregar servicio' })).toBeDisabled()
+  })
+
+  it('ofrece atajos de precio gratis, duraciones rápidas, portada opcional y vista previa en vivo', () => {
+    render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={[]} currency="PYG" onCreated={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Diagnóstico Capilar' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Gratis (0)' }))
+    fireEvent.click(screen.getByRole('button', { name: '45 min' }))
+
+    expect(screen.getByLabelText('Precio')).toHaveValue('0')
+    expect(screen.getByLabelText('Duración')).toHaveValue(45)
+    const preview = screen.getByLabelText('Resumen del servicio')
+    expect(preview).toHaveTextContent('Diagnóstico Capilar')
+    expect(preview).toHaveTextContent('Gratuito')
+    expect(preview).toHaveTextContent('45 min')
+    expect(screen.getByRole('button', { name: 'Agregar servicio' })).toBeEnabled()
+
+    // Valida formato de portada inválida sin enviar el formulario
+    const fileInput = document.getElementById('new-service-cover') as HTMLInputElement
+    const invalidFile = new File(['abc'], 'doc.pdf', { type: 'application/pdf' })
+    fireEvent.change(fileInput, { target: { files: [invalidFile] } })
+    expect(screen.getByText('Elegí una foto JPG, PNG, WebP o AVIF.')).toBeInTheDocument()
   })
 
   it('la sección Servicios tiene el botón y la lista conserva lo que se está editando', () => {

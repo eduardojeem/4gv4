@@ -58,7 +58,7 @@ export function SubscriptionCancellation({ isFreePlan, cancelAtPeriodEnd, period
       toast.success(
         hasFuturePeriod
           ? 'Suscripción programada para cancelarse al fin del período.'
-          : 'Suscripción cancelada. Tu cuenta pasó al plan Gratuito.'
+          : 'Renovación cancelada. Las operaciones quedaron suspendidas; podés consultar tu cuenta y renovar.'
       )
       setOpen(false)
       router.refresh()
@@ -99,7 +99,7 @@ export function SubscriptionCancellation({ isFreePlan, cancelAtPeriodEnd, period
         <AlertDescription className="space-y-3">
           <p>
             Tu plan <strong>{currentPlanName}</strong> seguirá activo hasta el{' '}
-            <strong>{formatDate(periodEndDate)}</strong>. Luego pasará automáticamente al plan Gratuito.
+            <strong>{formatDate(periodEndDate)}</strong>. Después se suspenden las operaciones hasta que renueves.
           </p>
           <Button size="sm" variant="outline" onClick={reactivate} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
@@ -126,13 +126,11 @@ export function SubscriptionCancellation({ isFreePlan, cancelAtPeriodEnd, period
               {hasFuturePeriod ? (
                 <>
                   Tu plan <strong>{currentPlanName}</strong> seguirá activo hasta el{' '}
-                  <strong>{formatDate(periodEndDate)}</strong>. Al finalizar ese período, tu cuenta pasará al plan
-                  Gratuito. No se realizarán nuevos cobros.
+                  <strong>{formatDate(periodEndDate)}</strong>. Al finalizar ese período, las operaciones quedan suspendidas. Podés consultar tu cuenta y renovar.
                 </>
               ) : (
                 <>
-                  Tu plan <strong>{currentPlanName}</strong> pasará al plan Gratuito de inmediato. No se realizarán
-                  nuevos cobros.
+                  Tu plan <strong>{currentPlanName}</strong> dejará de permitir operaciones de inmediato. Conservás el historial y el acceso para renovar.
                 </>
               )}
             </DialogDescription>

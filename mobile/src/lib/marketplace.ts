@@ -19,10 +19,12 @@ export type MarketProduct = {
   offerPrice: number | null;
   inStock: boolean;
   featured: boolean;
-  store: { name: string; slug: string; whatsapp?: string | null; countryCode?: string | null; locations?: PublicLocation[] };
+  store: { name: string; slug: string; whatsapp?: string | null; phone?:string|null; productWhatsappEnabled?:boolean; countryCode?: string | null; locations?: PublicLocation[] };
 };
 
 export type MarketStore = {
+  phone?:string|null;
+  productWhatsappEnabled?:boolean;
   businessVertical?: string | null;
   operatingModel?: string | null;
   countryCode?: string | null;

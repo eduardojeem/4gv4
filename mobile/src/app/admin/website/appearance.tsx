@@ -575,6 +575,14 @@ function AppearanceEditor({ settings }: { settings: WebsiteSettings }) {
                     <Pressable
                       key={opt.value}
                       onPress={() => {
+                        if (opt.status === 'coming_soon') {
+                          Alert.alert(
+                            'Próximamente',
+                            opt.reason ||
+                              'Esta plantilla estará disponible próximamente.',
+                          );
+                          return;
+                        }
                         if (opt.status === 'locked_plan') {
                           Alert.alert(
                             'Plantilla de un plan superior',
@@ -628,6 +636,8 @@ function AppearanceEditor({ settings }: { settings: WebsiteSettings }) {
                           </Text>
                           {selected ? (
                             <StatusPill label="Elegida" tone="primary" />
+                          ) : opt.status === 'coming_soon' ? (
+                            <StatusPill label="Próximamente" tone="warning" />
                           ) : opt.isSuggested ? (
                             <StatusPill label="Sugerida" tone="success" />
                           ) : opt.isRecommended ? (
@@ -644,10 +654,24 @@ function AppearanceEditor({ settings }: { settings: WebsiteSettings }) {
                         >
                           {opt.description}
                         </Text>
+                        {opt.enabledPlans &&
+                        opt.enabledPlans.length > 0 &&
+                        opt.status !== 'coming_soon' ? (
+                          <Text
+                            style={[styles.optionHint, { color: colors.text }]}
+                          >
+                            {opt.enabledPlans.length === 1 ? 'Plan' : 'Planes'}:{' '}
+                            {opt.enabledPlans.join(', ')}
+                          </Text>
+                        ) : null}
                         {opt.reason ? (
                           <View style={styles.lockRow}>
                             <Ionicons
-                              name="lock-closed-outline"
+                              name={
+                                opt.status === 'coming_soon'
+                                  ? 'time-outline'
+                                  : 'lock-closed-outline'
+                              }
                               size={12}
                               color="#B45309"
                             />

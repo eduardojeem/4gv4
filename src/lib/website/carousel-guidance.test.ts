@@ -1,16 +1,42 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { carouselExamplesFor, carouselLinkShortcuts, carouselPlacement, carouselSuggestions, defaultSlideCta, slideLinkProblem, type CarouselContext } from './carousel-guidance'
+import {
+  carouselExamplesFor,
+  carouselLinkShortcuts,
+  carouselPlacement,
+  carouselRecommendedPackFor,
+  carouselSuggestions,
+  defaultSlideCta,
+  slideLinkProblem,
+  type CarouselContext,
+} from './carousel-guidance'
 
 const barbershop: CarouselContext = { businessVertical: 'barbershop', hasCatalog: false, hasServices: true, hasRepairs: false }
+const mixedBarbershop: CarouselContext = { businessVertical: 'barbershop', hasCatalog: true, hasServices: true, hasRepairs: false }
 const clothing: CarouselContext = { businessVertical: 'clothing', hasCatalog: true, hasServices: false, hasRepairs: false }
 const phoneShop: CarouselContext = { businessVertical: 'electronics', hasCatalog: true, hasServices: false, hasRepairs: true }
 
 describe('carrusel según la tienda', () => {
-  it('una barbería sin productos solo ve plantillas de turnos', () => {
+  it('una barbería sin productos ve primero plantillas de barbería con imágenes y destinos de agenda', () => {
     const examples = carouselExamplesFor(barbershop)
-    expect(examples.map((example) => example.category)).toEqual(['Servicios', 'Servicios'])
-    expect(examples.every((example) => example.slide.ctaHref === '/turnos')).toBe(true)
+    const recommended = examples.filter((example) => example.recommended)
+    expect(recommended).toHaveLength(4)
+    expect(recommended.every((example) => example.category === 'Barbería')).toBe(true)
+    expect(recommended.every((example) => example.slide.imageUrl.startsWith('/images/promotional-carousel/hero-barberia-'))).toBe(true)
+    expect(examples.every((example) => example.needs === 'services')).toBe(true)
+    expect(examples.every((example) => example.slide.ctaHref === '/turnos' || example.slide.ctaHref === '/servicios')).toBe(true)
     expect(examples[0].recommended).toBe(true)
+  })
+
+  it('una barbería con venta y servicios incluye turnos e insumos pro con archivos locales reales', () => {
+    const pack = carouselRecommendedPackFor(mixedBarbershop, 5)
+    expect(pack.map((example) => example.name)).toContain('Máquinas & Insumos Pro')
+    expect(pack.length).toBe(5)
+    for (const example of pack) {
+      const publicPath = join(process.cwd(), 'public', example.slide.imageUrl.replace(/^\//, ''))
+      expect(existsSync(publicPath)).toBe(true)
+    }
   })
 
   it('una tienda de ropa ve primero las de moda y nunca servicio técnico', () => {

@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CreditCollectionsSummary } from '@/components/credit-collections-summary';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { CashSheet } from '@/components/pos-cash';
 import { BILLS, COINS, fetchClosures, recordCashCount, type Closure } from '@/lib/cash';
@@ -109,6 +110,8 @@ export default function CashRegisterScreen() {
           <Text style={[styles.title, { color: colors.text }]}>Caja</Text>
           <Text style={[styles.muted, styles.left, { color: colors.muted }]}>{session.branch.name}</Text>
         </View>
+
+        <CreditCollectionsSummary branchId={session.branch.id} revision={attempt} />
 
         {turn ? (
           <>

@@ -564,6 +564,7 @@ export function CompanyInfoForm() {
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
               WhatsApp <span className="text-xs font-normal text-muted-foreground">— opcional</span>
             </Label>
+            <label className="flex min-h-11 items-start gap-3 rounded-xl border p-3 text-sm"><input type="checkbox" className="mt-1 h-4 w-4" checked={formData.productWhatsappEnabled!==false} onChange={event=>setDraft(current=>({...(current??formData),productWhatsappEnabled:event.target.checked}))}/><span><strong>Consultas por WhatsApp en productos</strong><span className="mt-1 block text-xs text-muted-foreground">Muestra el botón en el marketplace, la tienda y la app si tenés un número válido. El mensaje incluye el producto y su enlace.</span></span></label>
             <Input id="whatsapp" type="tel" value={formData.whatsapp || ''} onChange={(e) => handleChange('whatsapp', e.target.value)} placeholder="595981000000" maxLength={50} className="h-11" />
             <p className="text-[11px] text-muted-foreground">
               Ingresa el número con el código de país, sin símbolos ni espacios (ej: <strong>595981000000</strong>). {formData.whatsapp && <span>Enlace generado: <strong>wa.me/{formData.whatsapp.replace(/\D/g, '')}</strong></span>}

@@ -39,6 +39,7 @@ export const STOREFRONT_TEMPLATE_TIER: Record<StorefrontStylePreference, Templat
   'informatica-electronica': 'premium',
   'wholesale-pro': 'premium',
   barber: 'premium',
+  'especial-para-barbero': 'premium',
 }
 
 export const TEMPLATE_TIER_LABEL: Record<TemplateTier, string> = {
@@ -122,6 +123,17 @@ export interface PlanTemplateSummary {
   templates: StorefrontStylePreference[]
 }
 
+/** Todos los planes que traen la plantilla, ordenados del más económico al más completo. */
+export function plansWithTemplate(
+  style: StorefrontStylePreference,
+  plans: readonly PlanTemplateSummary[],
+  businessVertical?: unknown,
+  context: StorefrontStyleContext = {}
+): PlanTemplateSummary[] {
+  const ordered = [...plans].sort((a, b) => PLAN_CODE_ORDER.indexOf(a.code) - PLAN_CODE_ORDER.indexOf(b.code))
+  return ordered.filter((plan) => isTemplateInPlan(style, plan.templates, businessVertical, context))
+}
+
 /** El plan más barato que trae la plantilla, para el aviso «Disponible en Pro Max». */
 export function cheapestPlanWithTemplate(
   style: StorefrontStylePreference,
@@ -129,6 +141,5 @@ export function cheapestPlanWithTemplate(
   businessVertical?: unknown,
   context: StorefrontStyleContext = {}
 ): PlanTemplateSummary | null {
-  const ordered = [...plans].sort((a, b) => PLAN_CODE_ORDER.indexOf(a.code) - PLAN_CODE_ORDER.indexOf(b.code))
-  return ordered.find((plan) => isTemplateInPlan(style, plan.templates, businessVertical, context)) ?? null
+  return plansWithTemplate(style, plans, businessVertical, context)[0] ?? null
 }

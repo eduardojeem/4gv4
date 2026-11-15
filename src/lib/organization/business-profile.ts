@@ -1,3 +1,4 @@
+import { PRIMARY_ACTIVITIES } from './primary-activity'
 import { z } from 'zod'
 import { ServiceBusinessDetailsSchema } from './service-specialties'
 
@@ -44,6 +45,7 @@ export type ModulePlanAvailability = {
 }
 
 export const BusinessProfileInputSchema = z.object({
+  primaryActivity: z.enum(PRIMARY_ACTIVITIES).optional(),
   businessVertical: z.enum(BUSINESS_VERTICALS),
   operatingModel: z.enum(OPERATING_MODELS),
   enabledModules: z.array(z.enum(ORGANIZATION_MODULES)).nullable(),

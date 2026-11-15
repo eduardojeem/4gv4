@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useMemo, useState } from 'react';
@@ -12,12 +13,14 @@ import {
 } from 'react-native';
 
 import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
+import { WebsiteVisibilityCard } from '@/components/website/website-visibility-card';
 import {
   Field,
   Notice,
   SaveBar,
   Section,
   StatusPill,
+  ToggleRow,
   WebsiteScreen,
   useUnsavedChangesGuard,
   websiteStyles,
@@ -33,16 +36,32 @@ import {
   SOCIAL_BASE,
   companyIssues,
   extractMapsCoordinates,
+  isActivatingPublication,
   isDirty,
   isShortMapsLink,
   isValidGoogleMapsUrl,
   mergeSetting,
+  publicationIssues,
+  publicationToggleCopy,
   socialHandle,
   type CompanyInfo,
   type SocialPlatform,
   type WebsiteSettings,
 } from '@/lib/website-model';
 import { remainingWebsiteEdits } from '@/lib/website-save-state';
+
+const confirm = (title: string, message: string, action: string) =>
+  new Promise<boolean>((resolve) =>
+    Alert.alert(
+      title,
+      message,
+      [
+        { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+        { text: action, onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    ),
+  );
 
 const SOCIALS: readonly {
   platform: SocialPlatform;
@@ -92,6 +111,7 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
   );
   const dirty = isDirty(saved, company);
   const issues = companyIssues(company);
+  const mode = settings.checkout?.commerceMode ?? 'cart';
 
   const set = (next: Partial<CompanyInfo>) =>
     setPatch((current) => ({ ...current, ...next }));
@@ -136,10 +156,44 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
       Alert.alert('Revisá los datos', problems.join('\n'));
       return false;
     }
+    const activating = isActivatingPublication(saved, company);
+    if (activating) {
+      if (!company.slug?.trim()) {
+        Alert.alert(
+          'Falta la dirección web',
+          'Elegí una dirección pública en «Dirección y publicación» antes de activar.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Ir a Dirección',
+              onPress: () => router.push('/admin/website/domain' as never),
+            },
+          ],
+        );
+        return false;
+      }
+      const pubProblems = publicationIssues(company, mode);
+      if (pubProblems.length) {
+        Alert.alert('Antes de publicar', pubProblems.join('\n'));
+        return false;
+      }
+      const copy = publicationToggleCopy(saved, company);
+      if (!(await confirm(copy.title, copy.message, copy.confirmLabel))) {
+        return false;
+      }
+    }
     setSaving(true);
     try {
-      const result = await saveCompanyInfo(saved, patch);
-      applySaved({ company_info: result ?? company });
+      const result = await saveCompanyInfo(saved, patch, activating);
+      applySaved({
+        company_info: {
+          ...(result ?? company),
+          storefrontPublic: company.storefrontPublic,
+          marketplacePublic:
+            company.storefrontPublic === true &&
+            company.marketplacePublic === true,
+        },
+      });
       setPatch((current) => remainingWebsiteEdits(current, patch));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return true;
@@ -155,7 +209,7 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
     } finally {
       setSaving(false);
     }
-  }, [issues, saved, patch, company, applySaved]);
+  }, [issues, saved, company, mode, patch, applySaved]);
 
   useUnsavedChangesGuard(dirty, save, saving);
 
@@ -175,6 +229,14 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
     >
       <OfflineNotice />
       <Notice text="Estos datos aparecen en tu tienda online y también sincronizan teléfono, email, RUC y dirección con tu sucursal." />
+
+      <WebsiteVisibilityCard
+        company={company}
+        commerceMode={mode}
+        mode="draft"
+        onDraftPatch={set}
+        hideBusinessShortcut
+      />
 
       <Section title="Identidad" icon="storefront-outline">
         <Field
@@ -223,6 +285,8 @@ function BusinessEditor({ settings }: { settings: WebsiteSettings }) {
           maxLength={20}
           error={issues.phone}
         />
+        <ToggleRow label="Consultas por WhatsApp en productos" value={company.productWhatsappEnabled!==false} onValueChange={productWhatsappEnabled=>set({productWhatsappEnabled})}/>
+        <Text style={{color:colors.muted,fontSize:12}}>Botón en marketplace, tienda y app con el producto y su enlace. Requiere un número válido.</Text>
         <Field
           label="WhatsApp"
           value={company.whatsapp ?? ''}

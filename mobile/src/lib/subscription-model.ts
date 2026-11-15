@@ -1,3 +1,4 @@
+import {isZeroPricePlan,hasVerifiedPlanPrice} from '../../../src/lib/saas/plan-price';
 /**
  * Cómo la app lee y muestra la suscripción. La respuesta es la de
  * /api/admin/subscriptions (la misma que usa la web): el plan llega como
@@ -44,6 +45,7 @@ export type SubscriptionDetails = {
     code: string;
     name: string;
     price_monthly: number;
+    price_verified?: boolean;
     limits: Record<string, number | null>;
     modules: string[];
   } | null;
@@ -90,6 +92,7 @@ export function normalizeSubscription(raw: RawResponse): SubscriptionDetails {
           code: String(plan.code ?? ''),
           name: String(plan.name ?? plan.code ?? ''),
           price_monthly: num(plan.price_monthly),
+          price_verified: hasVerifiedPlanPrice({price_monthly:plan.price_monthly,price_verified:plan.price_verified as boolean|undefined,limits_are_fallback:plan.limits_are_fallback as boolean|undefined}),
           limits,
           modules: Array.isArray(plan.modules) ? plan.modules.map(String) : [],
         }
@@ -149,7 +152,7 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   manual: 'Manual',
 };
 
-export const isFreePlan = (plan: SubscriptionDetails['plan']) => !plan || plan.code.toUpperCase() === 'FREE';
+export const isFreePlan = (plan: SubscriptionDetails['plan']) => isZeroPricePlan(plan);
 
 /** Qué cupos mostrar: los de siempre, más Reparaciones y Servicios si el plan trae ese módulo. */
 export function visibleQuotas(details: SubscriptionDetails): { key: QuotaKey; label: string; current: number | null; max: number | null | undefined }[] {

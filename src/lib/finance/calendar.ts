@@ -1,0 +1,2 @@
+export function financeBusinessToday(timeZone:string,now=new Date()) {const parts=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);const part=(key:string)=>parts.find(p=>p.type===key)?.value??'';return part('year')+'-'+part('month')+'-'+part('day')}
+export function financeLast30Days(timeZone:string,now=new Date()){const endDate=financeBusinessToday(timeZone,now),date=new Date(endDate+'T12:00:00Z');date.setUTCDate(date.getUTCDate()-29);return {startDate:date.toISOString().slice(0,10),endDate}}

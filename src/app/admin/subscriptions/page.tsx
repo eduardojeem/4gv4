@@ -1,3 +1,4 @@
+import {evaluateSubscriptionStatus} from '@/lib/saas/subscription-status'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -201,7 +202,8 @@ export default async function AdminSubscriptionsPage() {
 
   const subscription = state.subscription
   const billingMissingFields = getBillingMissingFields(state.billingProfile)
-  const subscriptionStatus = subscription?.status || 'sin_estado'
+  const evaluatedStatus=evaluateSubscriptionStatus({status:subscription?.status,paymentStatus:subscription?.payment_status,periodEndsAt:subscription?.current_period_ends_at,trialEndsAt:subscription?.trial_ends_at})
+  const subscriptionStatus = evaluatedStatus.isBlocked ? 'suspended' : subscription?.status || 'sin_estado'
   const paymentStatus = subscription?.payment_status || 'manual'
   const cancelScheduled = subscription?.cancel_at_period_end === true
   const periodEnd = subscription?.current_period_ends_at || subscription?.trial_ends_at || null
@@ -333,7 +335,7 @@ export default async function AdminSubscriptionsPage() {
               daysLeft === null
                 ? 'Sin fecha configurada'
                 : cancelScheduled
-                  ? `Pasa a Gratuito el ${formatDate(periodEnd)}`
+                  ? `Las operaciones se suspenden el ${formatDate(periodEnd)}`
                   : formatDate(periodEnd)
             }
             icon={CalendarClock}
@@ -446,8 +448,7 @@ export default async function AdminSubscriptionsPage() {
             <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               <p className="max-w-xl leading-relaxed">
-                Al cancelar, tu organización pasa al plan Gratuito cuando termina el período ya pagado. No se pierde el
-                historial de ventas ni los reportes.
+                Al cancelar, las operaciones se suspenden cuando termina el período ya pagado. Conservás el historial y el acceso para consultar tu cuenta o renovar.
               </p>
             </div>
             <div className="shrink-0">

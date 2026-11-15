@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useNavigation } from 'expo-router';
+import { router, useNavigation, usePathname } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import {
   createContext,
@@ -62,6 +62,12 @@ export function WebsiteScreen({
 }) {
   const colors = usePalette();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  // En /admin y /panel la barra inferior (AdminTabBar / PanelTabBar) ya consume
+  // el área segura inferior cuando el teclado está cerrado; duplicarla dejaba
+  // un hueco grande debajo de SaveBar o ScrollView.
+  const insideTabChrome = pathname.startsWith('/admin') || pathname.startsWith('/panel');
+  const bottomInset = insideTabChrome ? 0 : insets.bottom;
   const [uploads, setUploads] = useState(0);
   const uploadChanged = useCallback(
     (active: boolean) =>
@@ -132,7 +138,7 @@ export function WebsiteScreen({
             style={styles.flex}
             contentContainerStyle={[
               styles.content,
-              { paddingBottom: (footer ? 18 : 34) + insets.bottom },
+              { paddingBottom: (footer ? 16 : 28) + bottomInset },
             ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -141,7 +147,7 @@ export function WebsiteScreen({
                 <RefreshControl
                   refreshing={Boolean(refreshing)}
                   onRefresh={onRefresh}
-                  tintColor={palette.primary}
+                  tintColor={colors.accent}
                 />
               ) : undefined
             }
@@ -156,7 +162,7 @@ export function WebsiteScreen({
               {
                 borderColor: colors.border,
                 backgroundColor: colors.card,
-                paddingBottom: 12 + insets.bottom,
+                paddingBottom: 12 + bottomInset,
               },
             ]}
           >
@@ -182,24 +188,24 @@ export function StatusPill({
   const colors = usePalette();
   const paletteMap: Record<PillTone, { bg: string; fg: string; border: string }> = {
     primary: {
-      bg: `${palette.primary}15`,
-      fg: palette.primary,
-      border: `${palette.primary}35`,
+      bg: colors.isDark ? 'rgba(96, 165, 250, 0.18)' : `${palette.primary}15`,
+      fg: colors.accent,
+      border: colors.isDark ? 'rgba(96, 165, 250, 0.36)' : `${palette.primary}35`,
     },
     success: {
-      bg: `${palette.success}16`,
-      fg: palette.success,
-      border: `${palette.success}35`,
+      bg: colors.isDark ? 'rgba(74, 222, 128, 0.16)' : `${palette.success}16`,
+      fg: colors.successText,
+      border: colors.isDark ? 'rgba(74, 222, 128, 0.34)' : `${palette.success}35`,
     },
     warning: {
-      bg: '#FEF3C7',
-      fg: '#B45309',
-      border: '#FDE68A',
+      bg: colors.isDark ? 'rgba(251, 191, 36, 0.16)' : '#FEF3C7',
+      fg: colors.warningText,
+      border: colors.isDark ? 'rgba(251, 191, 36, 0.34)' : '#FDE68A',
     },
     danger: {
-      bg: '#FEE2E2',
-      fg: '#B91C1C',
-      border: '#FECACA',
+      bg: colors.isDark ? 'rgba(248, 113, 113, 0.16)' : '#FEE2E2',
+      fg: colors.dangerText,
+      border: colors.isDark ? 'rgba(248, 113, 113, 0.34)' : '#FECACA',
     },
     neutral: {
       bg: colors.background,
@@ -271,7 +277,7 @@ export function SettingsCard({
   accentColor?: string;
 }) {
   const colors = usePalette();
-  const iconAccent = locked ? colors.muted : (accentColor ?? palette.primary);
+  const iconAccent = locked ? colors.muted : (accentColor ?? colors.accent);
   return (
     <Pressable
       onPress={onPress}
@@ -334,7 +340,7 @@ export function Section({
     >
       <View style={styles.sectionHead}>
         {icon ? (
-          <Ionicons name={icon} size={17} color={palette.primary} />
+          <Ionicons name={icon} size={17} color={colors.accent} />
         ) : null}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
           {title}
@@ -402,7 +408,7 @@ export function Field({
         style={[
           styles.inputWrap,
           {
-            borderColor: error ? palette.danger : colors.border,
+            borderColor: error ? colors.dangerText : colors.border,
             backgroundColor: colors.background,
           },
         ]}
@@ -437,7 +443,7 @@ export function Field({
         />
       </View>
       {error ? (
-        <Text style={styles.error}>{error}</Text>
+        <Text style={[styles.error, { color: colors.dangerText }]}>{error}</Text>
       ) : help ? (
         <Text style={[styles.help, { color: colors.muted }]}>{help}</Text>
       ) : null}
@@ -516,15 +522,15 @@ export function ChipSelector<T extends string>({
         style={[
           websiteStyles.chip,
           {
-            borderColor: active ? palette.primary : colors.border,
-            backgroundColor: active ? `${palette.primary}15` : colors.background,
+            borderColor: active ? colors.accent : colors.border,
+            backgroundColor: active ? colors.accentSoft : colors.background,
           },
         ]}
       >
         <Text
           style={[
             websiteStyles.chipText,
-            { color: active ? palette.primary : colors.text },
+            { color: active ? colors.accent : colors.text },
           ]}
         >
           {opt.label}
@@ -648,18 +654,21 @@ export function SaveBar({
             styles.saveDot,
             {
               backgroundColor: uploading
-                ? palette.primary
+                ? colors.accent
                 : saving
-                  ? palette.primary
+                  ? colors.accent
                   : dirty
-                    ? '#D97706'
+                    ? colors.warningText
                     : palette.success,
             },
           ]}
         />
         <Text
           numberOfLines={1}
-          style={[styles.saveState, { color: dirty ? '#B45309' : colors.muted }]}
+          style={[
+            styles.saveState,
+            { color: dirty ? colors.warningText : colors.muted },
+          ]}
         >
           {uploading
             ? 'Subiendo imagen…'
@@ -800,15 +809,23 @@ export function Notice({
   actionLabel?: string;
   onAction?: () => void;
 }) {
-  const tones = {
-    info: ['#EFF6FF', '#1D4ED8', 'information-circle-outline'],
-    warning: ['#FFFBEB', '#B45309', 'alert-circle-outline'],
-    danger: ['#FEF2F2', '#B91C1C', 'cloud-offline-outline'],
-    success: ['#F0FDF4', '#15803D', 'checkmark-circle-outline'],
-  } as const;
-  const [bg, fg, icon] = tones[tone];
+  const colors = usePalette();
+  const tones = colors.isDark
+    ? ({
+        info: ['rgba(59, 130, 246, 0.14)', 'rgba(96, 165, 250, 0.30)', '#93C5FD', 'information-circle-outline'],
+        warning: ['rgba(245, 158, 11, 0.14)', 'rgba(251, 191, 36, 0.32)', '#FCD34D', 'alert-circle-outline'],
+        danger: ['rgba(239, 68, 68, 0.14)', 'rgba(248, 113, 113, 0.32)', '#FCA5A5', 'cloud-offline-outline'],
+        success: ['rgba(34, 197, 94, 0.14)', 'rgba(74, 222, 128, 0.30)', '#86EFAC', 'checkmark-circle-outline'],
+      } as const)
+    : ({
+        info: ['#EFF6FF', '#DBEAFE', '#1D4ED8', 'information-circle-outline'],
+        warning: ['#FFFBEB', '#FDE68A', '#B45309', 'alert-circle-outline'],
+        danger: ['#FEF2F2', '#FECACA', '#B91C1C', 'cloud-offline-outline'],
+        success: ['#F0FDF4', '#BBF7D0', '#15803D', 'checkmark-circle-outline'],
+      } as const);
+  const [bg, border, fg, icon] = tones[tone];
   return (
-    <View style={[styles.notice, { backgroundColor: bg }]}>
+    <View style={[styles.notice, { backgroundColor: bg, borderColor: border, borderWidth: 1 }]}>
       <Ionicons name={icon} size={16} color={fg} />
       <View style={styles.flex}>
         <Text style={[styles.noticeText, { color: fg }]}>{text}</Text>

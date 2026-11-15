@@ -1,0 +1,8 @@
+import {it,expect,vi,beforeEach} from 'vitest';import {NextRequest} from 'next/server';
+const state=vi.hoisted(()=>({servicesOnly:true,records:[] as Array<{id:string;unit_measure:string}>,tables:[] as string[]}));
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:(request:NextRequest,context:unknown)=>unknown)=>(request:NextRequest)=>handler(request,{user:{id:'u'},organization:{id:'A',role:'owner',catalogServicesOnly:state.servicesOnly}})}));
+vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:(table:string)=>{state.tables.push(table);const q={select:()=>q,eq:()=>q,in:async()=>({data:state.records,error:null})};return q}})}));
+import {DELETE} from '@/app/api/products/route';
+beforeEach(()=>{state.servicesOnly=true;state.records=[];state.tables=[]});
+it('rejects foreign IDs before touching sales, orders or inventory',async()=>{state.servicesOnly=false;const response=await DELETE(new NextRequest('http://localhost/api/products?ids=foreign'));expect(response.status).toBe(403);expect((await response.json()).code).toBe('PRODUCT_REFERENCE_FORBIDDEN');expect(state.tables).toEqual(['products'])});
+it('services-only bulk deletion rejects physical goods before any mutation',async()=>{state.records=[{id:'p',unit_measure:'unidad'}];const response=await DELETE(new NextRequest('http://localhost/api/products?ids=p'));expect(response.status).toBe(403);expect((await response.json()).code).toBe('CATALOG_TYPE_FORBIDDEN');expect(state.tables).toEqual(['products'])});

@@ -1,7 +1,10 @@
 'use client'
 
+import { assertFinanceSummaryIntegrity } from '@/lib/finance/summary-integrity'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { format, subDays } from 'date-fns'
+import { format } from 'date-fns'
+import { financeLast30Days } from '@/lib/finance/calendar'
 import type { DateRange } from 'react-day-picker'
 import useSWR from 'swr'
 
@@ -47,13 +50,7 @@ async function fetchActiveOrganizationId(): Promise<string> {
   return organizationId
 }
 
-function buildInitialDateRange(): Pick<AdminFinanceFilters, 'startDate' | 'endDate'> {
-  const today = new Date()
-  return {
-    startDate: format(subDays(today, 29), 'yyyy-MM-dd'),
-    endDate: format(today, 'yyyy-MM-dd'),
-  }
-}
+function buildInitialDateRange() { return financeLast30Days('America/Asuncion') }
 
 async function fetchFinanceSummary(url: string): Promise<FinanceSummaryReport> {
   const response = await fetch(url, { cache: 'no-store' })
@@ -63,12 +60,15 @@ async function fetchFinanceSummary(url: string): Promise<FinanceSummaryReport> {
     throw new Error((payload as { error?: string } | null)?.error || 'No se pudo cargar el resumen financiero.')
   }
 
+  assertFinanceSummaryIntegrity(payload)
   return payload as FinanceSummaryReport
 }
 
 export function useAdminFinances() {
   const { selectedBranchId, selectedBranch } = useBranch()
   const [dateFilters, setDateFilters] = useState(buildInitialDateRange)
+  const [timeZone,setTimeZone]=useState('America/Asuncion')
+  const manualDates=useRef(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [organizationLoading, setOrganizationLoading] = useState(true)
   const [organizationError, setOrganizationError] = useState<Error | null>(null)
@@ -83,7 +83,12 @@ export function useAdminFinances() {
 
     try {
       const nextOrganizationId = await fetchActiveOrganizationId()
+      const calendarResponse=await fetch('/api/admin/finances/calendar?organizationId='+encodeURIComponent(nextOrganizationId),{cache:'no-store'})
+      const calendar=await calendarResponse.json()
+      if(!calendarResponse.ok||calendar.organizationId!==nextOrganizationId||typeof calendar.timeZone!=='string')throw new Error(calendar.error??'No se pudo consultar el calendario del negocio.')
       if (organizationRequestRef.current === requestId) {
+        setTimeZone(calendar.timeZone)
+        if(!manualDates.current)setDateFilters(financeLast30Days(calendar.timeZone))
         setOrganizationId(nextOrganizationId)
       }
     } catch (error) {
@@ -125,11 +130,13 @@ export function useAdminFinances() {
   )
 
   const setFilters = useCallback((next: Partial<Pick<AdminFinanceFilters, 'startDate' | 'endDate'>>) => {
+    manualDates.current=true
     setDateFilters((current) => ({ ...current, ...next }))
   }, [])
 
   const setDateRange = useCallback((range: DateRange | undefined) => {
     if (!range?.from) return
+    manualDates.current=true
     const startDate = format(range.from, 'yyyy-MM-dd')
     setDateFilters({
       startDate,
@@ -138,6 +145,7 @@ export function useAdminFinances() {
   }, [])
 
   return {
+    timeZone,
     summary: organizationId ? data ?? null : null,
     filters,
     setFilters,

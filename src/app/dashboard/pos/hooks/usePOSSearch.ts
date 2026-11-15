@@ -12,6 +12,8 @@
  * - Persistencia de preferencias en localStorage
  */
 
+import {useSubscriptionStatus} from '@/contexts/SubscriptionStatusContext'
+import {businessExperience} from '@/lib/organization/business-experience'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { toast } from 'sonner'
@@ -30,6 +32,7 @@ const PREFS_KEY = 'pos.prefs'
 
 export interface UsePOSSearchOptions {
   products: Product[]
+  scopeKey?: string
 }
 
 export interface UsePOSSearchReturn {
@@ -103,7 +106,9 @@ export interface UsePOSSearchReturn {
   addToRecentSearches: (v: string) => void
 }
 
-export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchReturn {
+export function usePOSSearch({ products,scopeKey='' }: UsePOSSearchOptions): UsePOSSearchReturn {
+  const profile=useSubscriptionStatus()
+  const experience=businessExperience(profile)
   // --- Estado de búsqueda ---
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
@@ -132,9 +137,9 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
 
   // --- Vista del catálogo ---
   // Un negocio solo de servicios abre en Servicios; se respeta la elección manual.
-  const [chosenCatalogView, setCatalogViewState] = useState<POSCatalogView | null>(null)
+  const [chosenCatalogView, setCatalogViewState] = useState<{scope:string;view:POSCatalogView}|null>(null)
   const availableCounts = countByCatalogView(products.filter(product => product.is_active !== false))
-  const catalogView = chosenCatalogView ?? (availableCounts.products === 0 && availableCounts.services > 0 ? 'services' : DEFAULT_POS_CATALOG_VIEW)
+  const catalogView = (chosenCatalogView?.scope===scopeKey?chosenCatalogView.view:null) ?? (experience.serviceFocused||availableCounts.products === 0 && availableCounts.services > 0 ? 'services' : DEFAULT_POS_CATALOG_VIEW)
 
   // --- Filtros ---
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -190,12 +195,15 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
 
   // Al cambiar de vista la categoría elegida puede no existir en la otra.
   const setCatalogView = useCallback((view: POSCatalogView) => {
-    setCatalogViewState(view)
+    setCatalogViewState({scope:scopeKey,view})
+    if(scopeKey)try{localStorage.setItem('pos.catalog-view:'+scopeKey,view)}catch{}
     setSelectedCategory('all')
-  }, [])
+  }, [scopeKey])
 
   // Restaurar preferencias desde localStorage (solo al montar)
   const hydrated = useHydrated()
+  const [restoredScope,setRestoredScope]=useState<string|null>(null)
+  if(hydrated&&scopeKey&&restoredScope!==scopeKey){setRestoredScope(scopeKey);try{const view=localStorage.getItem('pos.catalog-view:'+scopeKey);setCatalogViewState(view==='services'||view==='products'?{scope:scopeKey,view}:null)}catch{}}
   const [preferencesLoaded, setPreferencesLoaded] = useState(false)
   if (hydrated && !preferencesLoaded) {
     setPreferencesLoaded(true)

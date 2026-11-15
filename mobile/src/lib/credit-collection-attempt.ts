@@ -12,6 +12,8 @@ export type PendingMobileCollection = Readonly<{
   input: CollectInput;
   idempotencyKey: string;
   createdAt: string;
+  /** Missing on legacy attempts whose adapter rounded wire amounts to integers. */
+  serializationVersion?: 2;
 }>;
 
 export type CollectionStorage = {
@@ -57,7 +59,7 @@ function isPending(value: unknown): value is PendingMobileCollection {
     context && typeof context.userId === 'string' && typeof context.organizationId === 'string' &&
     typeof context.customerId === 'string' && (context.branchId === null || typeof context.branchId === 'string') &&
     input && typeof input.amount === 'number' && ['cash', 'card', 'transfer'].includes(input.method) &&
-    typeof row.idempotencyKey === 'string' && row.idempotencyKey.length >= 8 && typeof row.createdAt === 'string'
+    (row.serializationVersion===undefined||row.serializationVersion===2) && typeof row.idempotencyKey === 'string' && row.idempotencyKey.length >= 8 && typeof row.createdAt === 'string'
   );
 }
 
@@ -106,6 +108,7 @@ async function send(context: CollectionAttemptContext, input: CollectInput, depe
       input,
       idempotencyKey: `app-collect-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`,
       createdAt: new Date().toISOString(),
+      serializationVersion:2,
     };
     if (!pending) {
       try {
@@ -116,7 +119,7 @@ async function send(context: CollectionAttemptContext, input: CollectInput, depe
       }
     }
     try {
-      const result = await dependencies.collect(context.customerId, attempt.input, attempt.idempotencyKey);
+      const result = await dependencies.collect(context.customerId, collectionWireInput(attempt), attempt.idempotencyKey);
       await dependencies.storage.removeItem(key);
       return result;
     } catch (error) {
@@ -150,4 +153,10 @@ export async function retryMobileCollection(storage: CollectionStorage, context:
   const pending = await getPendingMobileCollection(storage, context);
   if (!pending) throw new MobileCollectionAttemptError('No hay un cobro pendiente de recuperar.', false);
   return send(context, pending.input, dependencies);
+}
+
+/** Replay legacy wire values exactly; never reinterpret a committed request after upgrading. */
+export function collectionWireInput(attempt:PendingMobileCollection):CollectInput {
+ if(attempt.serializationVersion===2)return attempt.input;
+ return {...attempt.input,amount:Math.round(attempt.input.amount),...(attempt.input.allocations?{allocations:attempt.input.allocations.map(row=>({...row,amount:Math.round(row.amount)}))}:{})};
 }

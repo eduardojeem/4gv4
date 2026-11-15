@@ -49,8 +49,9 @@ export async function GET() {
       effectiveModules: planInfo.effectiveModules,
       hasPermission: (permission) => role === 'super_admin' || permissions.has(permission),
       businessVertical: planInfo.businessVertical,
+      operatingModel: planInfo.operatingModel,
     })
-    const tabs = getMobileDashboardItems(groups, 4, planInfo.businessVertical)
+    const tabs = getMobileDashboardItems(groups, 4, planInfo.businessVertical, planInfo.operatingModel, planInfo.primaryActivity)
 
     const profileRow = profile.data as { full_name?: string | null; avatar_url?: string | null } | null
 
@@ -78,6 +79,12 @@ export async function GET() {
         logoUrl: organization.logoUrl,
         role: organization.role,
         plan: planInfo.name,
+        businessVertical: planInfo.businessVertical,
+        operatingModel: planInfo.operatingModel,
+        effectiveModules: planInfo.effectiveModules,
+        appointmentMode: planInfo.appointmentMode,
+        primaryActivity: planInfo.primaryActivity,
+        attentionMode: planInfo.attentionMode,
         brandColor: typeof company?.brandColor === 'string' ? company.brandColor : undefined,
         customBrandColor: typeof company?.customBrandColor === 'string' ? company.customBrandColor : undefined,
       },
@@ -89,7 +96,7 @@ export async function GET() {
       })),
       tabs: tabs.map((item) => item.key),
       // Ordena los accesos rápidos del inicio según el rubro.
-      businessFocus: getBusinessFocusSection(groups, planInfo.businessVertical),
+      businessFocus: getBusinessFocusSection(groups, planInfo.businessVertical, planInfo.operatingModel),
     })
   } catch (error) {
     logger.error('[mobile-dashboard] No se pudo armar el menú', error)

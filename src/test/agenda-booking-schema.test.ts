@@ -9,7 +9,7 @@ function database(rows: Record<string, unknown>, errors: Record<string, unknown>
     from(table: string) {
       const result = { data: rows[table] ?? [], error: errors[table] ?? null }
       const query = {
-        select: () => query, eq: () => query, order: () => query, limit: () => query,
+        select: () => query, eq: () => query, or: () => query, order: () => query, limit: () => query,
         maybeSingle: async () => result,
         then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
       }
@@ -64,3 +64,5 @@ describe('professional booking schema compatibility', () => {
     }), 'org')).rejects.toThrow('permission denied')
   })
 })
+
+it('enables home visit fields only when the database supports travel intervals',async()=>{const old=await loadAgendaConfig(database({...legacy,agenda_settings:{professional_selection:'optional'},bookingVersion:3}),'org');const current=await loadAgendaConfig(database({...legacy,agenda_settings:{professional_selection:'optional'},bookingVersion:4}),'org');expect(old?.capabilities.homeAppointments).toBe(false);expect(current?.capabilities.homeAppointments).toBe(true)});

@@ -1,5 +1,5 @@
 export type SubscriptionExpiryNotice = { title: string; dateLabel: string; expiresAt: string; tone: 'warning' | 'danger' };
-type Subscription = { plan?: string | null; status?: string | null; current_period_ends_at?: string | null; trial_ends_at?: string | null; cancel_at_period_end?: boolean | null };
+type Subscription = { monthlyPrice?: number | null; plan?: string | null; status?: string | null; current_period_ends_at?: string | null; trial_ends_at?: string | null; cancel_at_period_end?: boolean | null };
 export const canSeeSubscriptionExpiry = (role: string, superAdmin: boolean) => superAdmin || role === 'owner' || role === 'admin';
 const timeZone = 'America/Asuncion';
 function calendarDay(time: number) {
@@ -11,7 +11,7 @@ function calendarDay(time: number) {
 export function buildSubscriptionExpiryNotice(sub: Subscription | null, now = Date.now()): SubscriptionExpiryNotice | null {
   if (!sub || !['active','trial','trialing','past_due','expired'].includes(sub.status ?? '')) return null;
   const trial = sub.status === 'trialing' || sub.status === 'trial';
-  if (!trial && (!sub.plan || sub.plan.toUpperCase() === 'FREE')) return null;
+  if (!trial && (!sub.plan || sub.monthlyPrice === 0)) return null;
   const end = subscriptionPeriodEnd(sub);
   if (!end) return null;
   const timestamp = Date.parse(end);

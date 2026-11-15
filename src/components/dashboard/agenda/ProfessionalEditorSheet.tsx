@@ -3,7 +3,7 @@
 import { ProfessionalEmployeeLink } from './ProfessionalEmployeeLink'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Coins, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -21,7 +21,7 @@ import { SERVICE_SPECIALTY_LABELS } from '@/lib/organization/service-specialties
 
 export const PROFESSIONAL_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6']
 
-export type EditorTab = 'perfil' | 'servicios' | 'horario' | 'tarifas'
+export type EditorTab = 'perfil' | 'servicios' | 'comisiones' | 'horario' | 'tarifas'
 
 type Props = {
   professional: AgendaProfessional | null
@@ -38,6 +38,7 @@ type Props = {
   onUpdate: (patch: Partial<AgendaProfessional>) => Promise<boolean>
   onServicesSaved: (serviceIds: string[]) => void
   onRatesSaved: (rates: AgendaProfessionalRate[]) => void
+  onProfessionalSaved?: (patch: Partial<AgendaProfessional>) => void
 }
 
 /**
@@ -58,6 +59,7 @@ export function ProfessionalEditorSheet({
   onUpdate,
   onServicesSaved,
   onRatesSaved,
+  onProfessionalSaved,
 }: Props) {
   const [tab, setTab] = useState<EditorTab>(initialTab)
 
@@ -80,18 +82,40 @@ export function ProfessionalEditorSheet({
         </SheetHeader>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as EditorTab)} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="mx-5 mt-4 grid h-auto grid-cols-2 sm:grid-cols-4">
+          <TabsList className="mx-5 mt-4 grid h-auto grid-cols-3 sm:grid-cols-5">
             <TabsTrigger value="perfil" className="min-h-9">Perfil</TabsTrigger>
             <TabsTrigger value="servicios" className="min-h-9">Servicios</TabsTrigger>
+            <TabsTrigger value="comisiones" className="min-h-9 font-semibold text-primary">
+              <Coins className="mr-1 h-3.5 w-3.5 inline text-emerald-600" />
+              Comisiones
+            </TabsTrigger>
             {advanced && <TabsTrigger value="horario" className="min-h-9">Horario</TabsTrigger>}
             {advanced && <TabsTrigger value="tarifas" className="min-h-9">Tarifas</TabsTrigger>}
           </TabsList>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             <TabsContent value="perfil" className="mt-0">
-              <ProfileForm key={professional.id} professional={professional} advanced={advanced} otherNames={otherNames} onUpdate={onUpdate} />
+              <ProfileForm
+                key={professional.id}
+                professional={professional}
+                advanced={advanced}
+                otherNames={otherNames}
+                onUpdate={onUpdate}
+                onSelectTab={setTab}
+              />
             </TabsContent>
             <TabsContent value="servicios" className="mt-0">
               <ServicesChecklist key={`${professional.id}:${(professional.service_ids ?? []).join(',')}`} professional={professional} services={services} onSaved={onServicesSaved} />
+            </TabsContent>
+            <TabsContent value="comisiones" className="mt-0">
+              <div className="space-y-4">
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+                  <p className="font-semibold text-primary">Esquema de comisiones de {professional.name}</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Definí el porcentaje por servicios realizados y venta de productos en el sillón para la liquidación semanal.
+                  </p>
+                </div>
+                <ProfessionalEmployeeLink key={professional.id} professionalId={professional.id} onSaved={onProfessionalSaved} />
+              </div>
             </TabsContent>
             {advanced && (
               <TabsContent value="horario" className="mt-0">
@@ -131,11 +155,13 @@ function ProfileForm({
   advanced,
   otherNames,
   onUpdate,
+  onSelectTab,
 }: {
   professional: AgendaProfessional
   advanced: boolean
   otherNames: string[]
   onUpdate: (patch: Partial<AgendaProfessional>) => Promise<boolean>
+  onSelectTab: (tab: EditorTab) => void
 }) {
   const [name, setName] = useState(professional.name)
   const [specialty, setSpecialty] = useState(professional.specialty ?? '')
@@ -189,7 +215,26 @@ function ProfileForm({
         <p className="text-xs text-muted-foreground">Se muestra en tu tienda debajo del nombre.</p>
       </div>
 
-      <ProfessionalEmployeeLink professionalId={professional.id} />
+      <div className="flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+            <Coins className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-foreground">Comisiones y cobros</p>
+            <p className="text-[11px] text-muted-foreground">Porcentaje por corte y reventa de productos.</p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-xl border-emerald-500/30 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/10"
+          onClick={() => onSelectTab('comisiones')}
+        >
+          Editar comisiones →
+        </Button>
+      </div>
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Organización interna: color en la agenda</legend>

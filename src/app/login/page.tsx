@@ -139,7 +139,11 @@ export default function LoginPage() {
     // marketplace y las tiendas: desde cualquier otra página pública, una
     // cuenta con negocio terminaba en el panel sin haberlo pedido.
     // `sanitizeRedirectPath` descarta lo que no sea una ruta interna.
-    router.push(redirectTo)
+    let destination=redirectTo
+    if(redirectTo.startsWith('/dashboard')||redirectTo.startsWith('/admin')){
+      try{const response=await fetch('/api/subscription/access',{cache:'no-store'});if(response.ok){const access=await response.json();if(access.blocked===true&&access.canRenew===true)destination='/admin/subscriptions?renew=required';}}catch{/* The account remains accessible; its layout also shows the renewal notice. */}
+    }
+    router.push(destination)
     router.refresh()
   }
 

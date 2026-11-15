@@ -1,0 +1,11 @@
+import {expect,it} from 'vitest'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
+import {CompanyInfoSchema} from '@/lib/validation/website-settings'
+const product={name:'Producto de prueba',url:'https://mitiendapy.com/tienda/productos/123'}
+it('links to the company with product and URL, without prices',()=>{const link=productWhatsappInquiryHref({company:{whatsapp:'0981123456'},product});expect(link).toContain('https://wa.me/595981123456?text=');expect(decodeURIComponent(link!)).toContain(product.name);expect(decodeURIComponent(link!)).toContain(product.url)})
+it('respects the company setting even when a branch has a number',()=>{expect(productWhatsappInquiryHref({company:{whatsapp:'0981123456',productWhatsappEnabled:false},branch:{phone:'0981555555'},product})).toBeNull();expect(CompanyInfoSchema.parse({productWhatsappEnabled:false}).productWhatsappEnabled).toBe(false)})
+it('uses a selected branch number, otherwise the company number',()=>{expect(productWhatsappInquiryHref({company:{whatsapp:'0981123456'},branch:{phone:'0981555555'},product})).toContain('/595981555555?');expect(productWhatsappInquiryHref({company:{whatsapp:'0981123456'},branch:{phone:'12'},product})).toContain('/595981123456?')})
+it('hides the action without valid contact and falls back to the company phone',()=>{expect(productWhatsappInquiryHref({company:{whatsapp:'12',phone:''},product})).toBeNull();expect(productWhatsappInquiryHref({company:{whatsapp:'12',phone:'0981123456'},product})).toContain('/595981123456?')})
+it('preserves international numbers and rejects unsafe product URLs',()=>{expect(productWhatsappInquiryHref({company:{whatsapp:'+54 9 11 1234 5678'},product})).toContain('/5491112345678?');expect(productWhatsappInquiryHref({company:{whatsapp:'0981123456'},product:{...product,url:'javascript:alert(1)'}})).toBeNull()})
+it('normalizes a stored Paraguayan country code followed by a local zero',()=>{expect(productWhatsappInquiryHref({company:{whatsapp:'5950981123456'},product})).toContain('/595981123456?')});
+it('asks for the hidden price without inventing an amount',()=>{const href=productWhatsappInquiryHref({company:{whatsapp:'0981123456'},product:{...product,priceHidden:true}})!;expect(decodeURIComponent(href)).toContain('Quiero consultar el precio');expect(decodeURIComponent(href)).toContain(product.url)});

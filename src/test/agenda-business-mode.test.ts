@@ -1,0 +1,5 @@
+import {it,expect,vi} from 'vitest';import {NextRequest} from 'next/server';
+const {create}=vi.hoisted(()=>({create:vi.fn(()=>{throw new Error('No debe acceder a datos')} )}));
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:(request:NextRequest,context:unknown)=>unknown)=>(request:NextRequest)=>handler(request,{user:{id:'u'},organization:{id:'A',role:'owner',appointmentMode:'walk_in'}})}));vi.mock('@/lib/supabase/server',()=>({createClient:create}));
+import {PUT} from '@/app/api/agenda/settings/route';
+it('prevents enabling online reservations for a walk-in-only business',async()=>{const response=await PUT(new NextRequest('http://localhost/api/agenda/settings',{method:'PUT',body:JSON.stringify({slot_minutes:30,opening_hours:{'1':[['08:00','18:00']]},online_booking:true,require_confirmation:true,min_notice_minutes:60,max_days_ahead:30,services:[]})}));expect(response.status).toBe(400);expect((await response.json()).code).toBe('APPOINTMENT_MODE_CONFLICT');expect(create).not.toHaveBeenCalled()});

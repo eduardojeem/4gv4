@@ -1,3 +1,5 @@
+import { readPrimaryActivity, type PrimaryActivity } from '@/lib/organization/primary-activity'
+import { readPlanMonthlyPrice, hasVerifiedPlanPrice } from './plan-price'
 import { countMonthlyRepairs } from './repair-monthly-usage'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { readServiceBusinessDetails } from '@/lib/organization/service-specialties'
@@ -22,6 +24,8 @@ export interface PlanRecord {
   slug: string | null
   name: string
   price_monthly: number
+  price_verified?: boolean
+  configuration_verified?: boolean
   price_note: string | null
   currency: string
   limits: Record<string, unknown>
@@ -31,9 +35,8 @@ export interface PlanRecord {
   is_popular?: boolean
   /**
    * true cuando no se encontro el plan en la tabla `plans` y se sirvieron los
-   * limites del plan Free con el codigo de la organizacion. Sin esta marca la
-   * pantalla decia "Plan BASIC" mientras el sistema aplicaba 50 productos, y no
-   * habia forma de notarlo desde la interfaz.
+   * límites de respaldo sin configuración verificable. Ese respaldo no se usa
+   * para activar planes ni autorizar operaciones.
    */
   limits_are_fallback?: boolean
 }
@@ -143,6 +146,12 @@ function toNumber(value: unknown, fallback = 0) {
   return fallback
 }
 
+function hasConfiguredPlanLimits(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const limits=value as Record<string,unknown>
+  return ['users','branches','cashRegisters','products','repairs'].every(key=>Object.prototype.hasOwnProperty.call(limits,key)&&(limits[key]===null||(typeof limits[key]==='number'&&Number.isFinite(limits[key])&&Number(limits[key])>=0)))
+}
+
 function normalizePlan(row: Record<string, unknown> | null | undefined): PlanRecord {
   if (!row) return DEFAULT_PLAN
   const code = String(row.code || 'FREE').toUpperCase() as PlanCode
@@ -152,10 +161,12 @@ function normalizePlan(row: Record<string, unknown> | null | undefined): PlanRec
     code,
     slug: typeof row.slug === 'string' ? row.slug : code.toLowerCase(),
     name: typeof row.name === 'string' ? row.name : code,
-    price_monthly: toNumber(row.price_monthly),
+    price_monthly: readPlanMonthlyPrice(row.price_monthly) ?? 0,
+    price_verified: row.price_verified !== false && readPlanMonthlyPrice(row.price_monthly) !== null,
+    configuration_verified: row.configuration_verified !== false,
     price_note: typeof row.price_note === 'string' ? row.price_note : null,
     currency: typeof row.currency === 'string' ? row.currency : 'PYG',
-    limits: typeof row.limits === 'object' && row.limits ? { ...fallbackLimits, ...row.limits } : fallbackLimits,
+    limits: typeof row.limits === 'object' && row.limits && !Array.isArray(row.limits) ? { ...row.limits } : fallbackLimits,
     features: typeof row.features === 'object' && row.features ? row.features as Record<string, unknown> : {},
     modules: Array.isArray(row.modules) ? row.modules.map(String) : [],
     is_active: row.is_active !== false,
@@ -176,7 +187,12 @@ export function buildFallbackPlan(planCode: string): PlanRecord {
   const fallbackCode = normalizePlanCode(planCode)
   return normalizePlan({
     ...DEFAULT_PLAN,
-    code: planCode,
+    code: fallbackCode,
+    slug: fallbackCode.toLowerCase(),
+    name: 'Plan no verificado (' + fallbackCode + ')',
+    price_note: null,
+    price_verified: false,
+    configuration_verified: false,
     limits: DEFAULT_LIMITS[fallbackCode] ?? DEFAULT_LIMITS.FREE,
     modules: deriveTechnicalModules(fallbackCode, []),
     limits_are_fallback: true,
@@ -219,13 +235,15 @@ export function getPlanLimit(plan: Pick<PlanRecord, 'limits'>, resourceType: Res
   return Number.isFinite(numeric) ? numeric : null
 }
 
-export function planRequiresPayment(plan: Pick<PlanRecord, 'price_monthly'>) {
+export function planRequiresPayment(plan: Pick<PlanRecord, 'price_monthly'> & { price_verified?: boolean; limits_are_fallback?: boolean }) {
+  if (!hasVerifiedPlanPrice(plan)) throw new Error('No se pudo verificar el precio del plan. No se puede activar como gratuito.')
   return Number(plan.price_monthly) > 0
 }
 
 export async function getPlanLimits(planCode: string): Promise<PlanRecord> {
   const supabase = createAdminSupabase()
-  const code = planCode.toUpperCase()
+  if (!isSupportedPlanCode(planCode)) throw new Error('No se pudo verificar el código del plan.')
+  const code = normalizePlanCode(planCode)
   const [technicalResult, commercialResult] = await Promise.all([
     supabase
       .from('plans')
@@ -246,10 +264,11 @@ export async function getPlanLimits(planCode: string): Promise<PlanRecord> {
   }
 
   const [merged] = mergeCommercialPlans(
-    technicalResult.data ? [technicalResult.data as Record<string, unknown>] : [{ ...DEFAULT_PLAN, code }],
+    technicalResult.data ? [technicalResult.data as Record<string, unknown>] : [],
     commercialResult.data ? [commercialResult.data as Record<string, unknown>] : []
   )
 
+  if (!merged || merged.configuration_verified !== true) throw new Error('No se pudo verificar la configuración del plan ' + code + '. Revisá el catálogo en Super Admin.')
   return normalizePlan(merged)
 }
 
@@ -261,14 +280,18 @@ function mergeCommercialPlans(
     commercialRows.map((row) => [normalizePlanCode(row.tier), row])
   )
 
-  const merged = planRows.map((row) => {
+  const merged: Array<Record<string, unknown>> = planRows.map((row) => {
     const code = normalizePlanCode(row.code)
     const commercial = commercialByCode.get(code)
 
-    if (!commercial) return row
+    if (!commercial) return { ...row, configuration_verified: false, price_verified: false }
+    const verified = hasConfiguredPlanLimits(row.limits) && Array.isArray(row.modules) && readPlanMonthlyPrice(commercial.price) !== null
 
     return {
       ...row,
+      code,
+      configuration_verified: verified,
+      price_verified: readPlanMonthlyPrice(commercial.price) !== null,
       slug: typeof commercial.tier === 'string' ? commercial.tier : row.slug,
       name: typeof commercial.name === 'string' ? commercial.name : row.name,
       price_monthly: commercial.price,
@@ -286,6 +309,8 @@ function mergeCommercialPlans(
     if (!merged.some((plan) => normalizePlanCode(plan.code) === code)) {
       merged.push({
         code,
+        configuration_verified: false,
+        price_verified: readPlanMonthlyPrice(row.price) !== null,
         slug: row.tier,
         name: row.name,
         price_monthly: row.price,
@@ -444,21 +469,12 @@ async function applyScheduledDowngradeIfDue(organizationId: string) {
     ? new Date(data.current_period_ends_at).getTime() <= Date.now()
     : false
 
-  if (!data?.cancel_at_period_end || !periodEnded || normalizePlanCode(data.plan) === 'FREE') {
-    return false
-  }
-
-  const { data: applied, error: applyError } = await supabase.rpc('apply_free_subscription_plan', {
-    p_organization_id: organizationId,
-    p_plan: 'FREE',
-  })
-
-  if (applyError || applied !== true) {
-    throw new Error(applyError?.message || 'No se pudo aplicar la cancelación programada.')
-  }
-
-  await openProductGraceIfOverLimit(organizationId, 'FREE')
-
+  if (!data?.cancel_at_period_end || !periodEnded) return false
+  const { error: suspendError } = await supabase.from('subscriptions')
+    .update({status:'suspended',payment_status:'unpaid',cancel_at_period_end:false,updated_at:new Date().toISOString()})
+    .eq('organization_id',organizationId).eq('cancel_at_period_end',true)
+    .lte('current_period_ends_at',new Date().toISOString())
+  if(suspendError)throw new Error('No se pudo aplicar la suspensión al terminar el período.')
   return true
 }
 
@@ -587,12 +603,10 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
     supabase
       .from('plans')
       .select('code, name, limits, modules, is_active')
-      .eq('is_active', true)
       .order('code', { ascending: true }),
     supabase
       .from('subscription_plans')
       .select('tier, name, price, price_note, is_popular, limits, features, is_active')
-      .eq('is_active', true)
       .order('price', { ascending: true }),
     getOrganizationUsage(organizationId),
     supabase
@@ -637,24 +651,18 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
     .sort((a, b) => a.price_monthly - b.price_monthly)
   const subscription = subscriptionResult.data as SubscriptionRecord | null
   const organizationPlan = typeof organizationResult.data?.plan === 'string' ? organizationResult.data.plan : null
-  const currentPlanCode = subscription?.plan || organizationPlan || plans[0]?.code || DEFAULT_PLAN.code
+  const storedPlanCode = subscription?.plan || organizationPlan
+  if (!isSupportedPlanCode(storedPlanCode)) throw new Error('No se pudo verificar el plan asignado a la organización.')
+  const currentPlanCode = normalizePlanCode(storedPlanCode)
   const resolvedPlan = plans.find((plan) => plan.code === currentPlanCode)
-  if (!resolvedPlan) {
-    // No es un detalle menor: la organizacion queda operando con limites de Free
-    // aunque figure en otro plan.
-    console.error('[subscription] Plan no encontrado en la tabla `plans`; se aplican limites Free', {
-      organizationId,
-      currentPlanCode,
-      availablePlanCodes: plans.map((plan) => plan.code),
-    })
-  }
-  const currentPlan = resolvedPlan ?? buildFallbackPlan(currentPlanCode)
+  if (!resolvedPlan || resolvedPlan.configuration_verified !== true) throw new Error('No se pudo verificar la configuración del plan vigente. Revisá el catálogo en Super Admin.')
+  const currentPlan = resolvedPlan
 
   return {
     subscription,
     repairUsage,
     currentPlan,
-    plans,
+    plans: plans.filter(plan => plan.is_active && plan.configuration_verified),
     usage,
     billingProfile: billingResult.data as BillingProfile | null,
     payments: (paymentsResult.data ?? []) as SubscriptionPayment[],
@@ -679,6 +687,7 @@ export async function getOrganizationPlanInfo(
   enabledModules: OrganizationModule[] | null
   effectiveModules: OrganizationModule[]
   serviceSpecialties: import('@/lib/organization/service-specialties').ServiceSpecialty[]
+  primaryActivity: PrimaryActivity
   attentionMode: 'local' | 'home' | 'both'
   appointmentMode: 'booking' | 'walk_in' | 'both'
   businessVertical: BusinessVertical
@@ -766,8 +775,9 @@ export async function getOrganizationPlanInfo(
     trialModules: moduleTrials.map((trial) => trial.module),
   })
 
-  // Baja de cortesía: quedó en FREE por impago (la automatización marca payment_status='unpaid').
+  // Solo un precio cero verificado representa una baja histórica a un plan gratuito.
   const downgradedFromExpiry = code === 'FREE' && sub?.payment_status === 'unpaid'
+    && !planRequiresPayment(await getPlanLimits(code))
   const repairPhotoUpgrade = [...planRows]
     .sort((a, b) => tierRank(a.code) - tierRank(b.code))
     .find((row) => row.is_active !== false && repairPhotoLimitFromLimits(normalizePlanCode(row.code), row.limits) > 0)
@@ -785,6 +795,7 @@ export async function getOrganizationPlanInfo(
     serviceSpecialties: readServiceBusinessDetails({ serviceSpecialties: org?.service_specialties }).serviceSpecialties,
     attentionMode: readServiceBusinessDetails({ attentionMode: org?.attention_mode }).attentionMode,
     appointmentMode: readServiceBusinessDetails({ appointmentMode: org?.appointment_mode }).appointmentMode,
+    primaryActivity: readPrimaryActivity(org?.primary_activity),
     operatingModel: profile.operatingModel,
     downgradedFromExpiry,
     moduleTrials,
@@ -811,12 +822,13 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
     throw new Error(`No se pudo validar el estado de la suscripción: ${error.message}`)
   }
 
-  return evaluateSubscriptionStatus({
+  const evaluated = evaluateSubscriptionStatus({
     status: data?.status,
     paymentStatus: data?.payment_status,
     trialEndsAt: data?.trial_ends_at,
     periodEndsAt: data?.current_period_ends_at,
   })
+  return data ? evaluated : {...evaluated,isBlocked:true}
 }
 
 export async function canCreateResource(
@@ -840,7 +852,7 @@ export async function canCreateResource(
   }
 
   const current = state.usage[resourceType]
-  const effectivePlan = subscriptionStatus.isExpired ? await getPlanLimits('FREE') : state.currentPlan
+  const effectivePlan = state.currentPlan
   const limit = getPlanLimit(effectivePlan, resourceType)
 
   return {
@@ -854,7 +866,7 @@ export async function canCreateResource(
 }
 
 /**
- * Reparaciones tienen un límite MENSUAL (free 20/mes, basic 150/mes, pro ilimitado), no por total.
+ * Reparaciones tienen un límite MENSUAL configurado en el catálogo, no por total.
  * Cuenta las reparaciones creadas en el mes calendario en curso para la organización.
  */
 export async function canCreateRepair(
@@ -869,7 +881,7 @@ export async function canCreateRepair(
     return { allowed: false, current: 0, limit: null, plan: state.currentPlan, blocked: true }
   }
 
-  const effectivePlan = subscriptionStatus.isExpired ? await getPlanLimits('FREE') : state.currentPlan
+  const effectivePlan = state.currentPlan
   const raw = effectivePlan.limits?.repairs
   const limit = raw === null || typeof raw === 'undefined'
     ? null
@@ -907,9 +919,8 @@ export async function getChangePlanData(organizationId: string): Promise<{
     supabase
       .from('subscription_plans')
       .select('tier, name, price, price_note, description, is_popular, limits, highlights, features, is_active')
-      .eq('is_active', true)
       .order('price', { ascending: true }),
-    supabase.from('plans').select('code, limits').eq('is_active', true),
+    supabase.from('plans').select('code, limits, is_active'),
     getOrganizationUsage(organizationId),
   ])
 
@@ -927,16 +938,15 @@ export async function getChangePlanData(organizationId: string): Promise<{
 
   // Límites técnicos desde la DB (fuente única); DEFAULT_LIMITS solo como fallback.
   const technicalLimitsByCode = new Map(
-    ((technicalResult.data ?? []) as Array<Record<string, unknown>>).map((row) => [
+    ((technicalResult.data ?? []) as Array<Record<string, unknown>>).filter(row=>hasConfiguredPlanLimits(row.limits)).map((row) => [
       normalizePlanCode(row.code),
       (typeof row.limits === 'object' && row.limits ? row.limits : {}) as Record<string, unknown>,
     ])
   )
 
-  const plans = ((commercialResult.data ?? []) as Array<Record<string, unknown>>).map((row): CommercialPlan => {
+  const plans = ((commercialResult.data ?? []) as Array<Record<string, unknown>>).filter(row => technicalLimitsByCode.has(normalizePlanCode(row.tier)) && readPlanMonthlyPrice(row.price) !== null).map((row): CommercialPlan => {
     const code = normalizePlanCode(row.tier) as PlanCode
     const limits: Record<string, unknown> = {
-      ...(DEFAULT_LIMITS[code] || DEFAULT_LIMITS.FREE),
       ...(technicalLimitsByCode.get(code) || {}),
     }
     return {
@@ -956,11 +966,11 @@ export async function getChangePlanData(organizationId: string): Promise<{
     }
   })
 
-  const base = normalizePlan({ code: currentCode })
-  const fallbackPlan: CommercialPlan = { ...base, description: null, is_popular: false, highlights: [], features: [] }
-  const currentPlan = plans.find((p) => p.code === normalizePlanCode(currentCode)) ?? fallbackPlan
+  if (!isSupportedPlanCode(currentCode)) throw new Error('No se pudo verificar el plan asignado.')
+  const currentPlan = plans.find((p) => p.code === normalizePlanCode(currentCode))
+  if (!currentPlan) throw new Error('No se pudo verificar la configuración del plan vigente.')
 
-  return { currentPlan, usage, plans }
+  return { currentPlan, usage, plans: plans.filter(plan => plan.is_active && ((technicalResult.data ?? []) as Array<Record<string,unknown>>).some(row => normalizePlanCode(row.code) === plan.code && row.is_active !== false)) }
 }
 
 export type PlanChangeConflict = { resource: string; current: number; limit: number }
@@ -1073,8 +1083,8 @@ export async function changePlan(
 
 /**
  * Programa la cancelación al fin del período: conserva el plan pagado hasta el
- * vencimiento y luego baja a Gratuito (ver getOrganizationPlanInfo).
- * Bloquea si el uso actual supera los límites del plan Gratuito.
+ * vencimiento y luego suspende operaciones, conservando plan e historial.
+ * Cancelar no depende de reducir recursos ni activa un plan pago sin cobro.
  */
 export async function cancelSubscriptionAtPeriodEnd(
   organizationId: string,
@@ -1083,66 +1093,17 @@ export async function cancelSubscriptionAtPeriodEnd(
   | { success: false; error: string; conflictingResources?: Array<{ resource: string; current: number; limit: number }> }
 > {
   const supabase = createAdminSupabase()
-  const { data: sub, error: subError } = await supabase
-    .from('subscriptions')
-    .select('plan, current_period_ends_at')
-    .eq('organization_id', organizationId)
-    .maybeSingle()
-
-  if (subError) return { success: false, error: subError.message }
-
-  if (normalizePlanCode(sub?.plan) === 'FREE') {
-    return { success: false, error: 'Ya estás en el plan Gratuito; no hay una suscripción paga para cancelar.' }
-  }
-
-  // Validar uso contra los límites de Gratuito (bloquear si excede). Los
-  // productos quedan afuera: al bajar se abre el plazo para regularizarlos.
-  const freePlan = await getPlanLimits(normalizePlanCode('free') as PlanCode)
-  const usage = await getOrganizationUsage(organizationId)
-  const resourceLabels: Record<string, string> = {
-    users: 'Usuarios', branches: 'Sucursales', cashRegisters: 'Cajas', products: 'Productos',
-  }
-  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'categories']
-  const conflictingResources: Array<{ resource: string; current: number; limit: number }> = []
-  for (const key of countResources) {
-    const limit = getPlanLimit(freePlan, key)
-    if (limit === null) continue
-    const current = usage[key] ?? 0
-    if (current > limit) {
-      conflictingResources.push({ resource: resourceLabels[key] || key, current, limit })
-    }
-  }
-  if (conflictingResources.length > 0) {
-    return {
-      success: false,
-      error: 'Tu uso actual supera los límites del plan Gratuito. Reducí estos recursos antes de cancelar.',
-      conflictingResources,
-    }
-  }
-
-  const now = new Date().toISOString()
-  const periodEnd = sub?.current_period_ends_at ? new Date(sub.current_period_ends_at) : null
-  const hasFuturePeriod = !!periodEnd && periodEnd.getTime() > Date.now()
-
-  if (hasFuturePeriod) {
-    // Hay período pagado pendiente → programar la baja para esa fecha.
-    const { error } = await supabase
-      .from('subscriptions')
-      .update({ cancel_at_period_end: true, updated_at: now })
-      .eq('organization_id', organizationId)
-    if (error) return { success: false, error: error.message }
-    return { success: true, effectiveUntil: sub?.current_period_ends_at ?? null }
-  }
-
-  // Sin período futuro definido → bajar a Gratuito de inmediato (estado limpio).
-  const { data: applied, error } = await supabase.rpc('apply_free_subscription_plan', {
-    p_organization_id: organizationId,
-    p_plan: 'FREE',
-  })
-  if (error || applied !== true) {
-    return { success: false, error: error?.message || 'No se pudo aplicar el plan Gratuito.' }
-  }
-  return { success: true, effectiveUntil: null }
+  const {data:sub,error:subError}=await supabase.from('subscriptions').select('plan,current_period_ends_at').eq('organization_id',organizationId).maybeSingle()
+  if(subError)return {success:false,error:subError.message}
+  if(!sub)return {success:false,error:'No se encontró una suscripción para cancelar.'}
+  const currentPlan=await getPlanLimits(sub.plan)
+  if(!planRequiresPayment(currentPlan))return {success:false,error:'El plan no tiene renovación paga para cancelar.'}
+  const now=new Date(),periodEnd=sub.current_period_ends_at?new Date(sub.current_period_ends_at):null
+  const hasFuturePeriod=!!periodEnd&&Number.isFinite(periodEnd.getTime())&&periodEnd.getTime()>now.getTime()
+  const patch=hasFuturePeriod?{cancel_at_period_end:true,updated_at:now.toISOString()}:{status:'suspended',payment_status:'unpaid',cancel_at_period_end:false,updated_at:now.toISOString()}
+  const {error}=await supabase.from('subscriptions').update(patch).eq('organization_id',organizationId)
+  if(error)return {success:false,error:error.message}
+  return {success:true,effectiveUntil:hasFuturePeriod?sub.current_period_ends_at:null}
 }
 
 /** Revierte una cancelación programada (vuelve a renovar normalmente). */

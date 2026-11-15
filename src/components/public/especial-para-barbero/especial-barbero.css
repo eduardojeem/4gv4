@@ -1,0 +1,191 @@
+/* ==========================================================================
+   Plantilla: Especial para Barbero (Inspirada en primebarbersupply.com)
+   Colores de acento completamente dinámicos a partir de --primary (marca org)
+   ========================================================================== */
+
+[data-storefront-style="especial-para-barbero"] {
+  --ebs-accent: var(--primary);
+  --ebs-accent-strong: color-mix(in oklch, var(--primary) 82%, #f97316 18%);
+  --ebs-accent-soft: color-mix(in oklch, var(--primary) 14%, transparent);
+  --ebs-accent-glow: color-mix(in oklch, var(--primary) 26%, transparent);
+  --ebs-surface: #0b0b0f;
+  --ebs-surface-elevated: #14141b;
+}
+
+/* Pulso vivo para estado de WhatsApp / Mayorista */
+@keyframes ebs-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.48;
+    transform: scale(0.84);
+  }
+}
+
+.ebs-pulse-dot {
+  animation: ebs-pulse 2s ease-in-out infinite;
+}
+
+/* Mega menú animado (4 columnas) */
+@keyframes ebs-mega-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ebs-mega-panel {
+  animation: ebs-mega-enter 0.25s ease forwards;
+}
+
+/* Pista de slider con curva suave estilo Prime */
+.ebs-slide-track {
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1);
+  will-change: transform;
+}
+
+/* Indicadores tipo pill expandible */
+.ebs-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  transition: width 0.3s ease, background 0.3s ease, opacity 0.3s ease;
+}
+
+.ebs-dot.is-active {
+  width: 28px;
+  background: linear-gradient(90deg, var(--primary), color-mix(in oklch, var(--primary) 82%, #f97316 18%));
+}
+
+/* Banners promocionales intercalados */
+.ebs-banner-card {
+  border-radius: 20px;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ebs-banner-card:hover {
+  border-color: color-mix(in oklch, var(--primary) 55%, transparent);
+  box-shadow: 0 18px 36px -14px rgba(0, 0, 0, 0.32);
+}
+
+.ebs-banner-media {
+  transition: transform 0.6s ease;
+}
+
+.ebs-banner-card:hover .ebs-banner-media {
+  transform: scale(1.02);
+}
+
+/* Tarjeta de producto estilo catálogo profesional de barbería */
+.ebs-product-card {
+  border-radius: 18px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.ebs-product-card:hover {
+  transform: translateY(-6px);
+  border-color: color-mix(in oklch, var(--primary) 48%, transparent);
+  box-shadow:
+    0 20px 35px -16px rgba(9, 9, 11, 0.22),
+    0 8px 20px -10px color-mix(in oklch, var(--primary) 24%, transparent);
+}
+
+.ebs-product-card .ebs-card-image {
+  transition: transform 0.4s ease;
+}
+
+.ebs-product-card:hover .ebs-card-image {
+  transform: scale(1.07);
+}
+
+.ebs-card-cta {
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease,
+    transform 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+.ebs-card-cta .ebs-card-arrow {
+  transition: transform 0.2s ease;
+}
+
+.ebs-product-card:hover .ebs-card-cta-primary,
+.ebs-card-cta-primary:hover {
+  background: linear-gradient(135deg, var(--primary), color-mix(in oklch, var(--primary) 82%, #f97316 18%));
+  color: var(--primary-foreground);
+  box-shadow: 0 10px 20px -10px color-mix(in oklch, var(--primary) 55%, transparent);
+}
+
+.ebs-card-cta:hover .ebs-card-arrow,
+.ebs-product-card:hover .ebs-card-cta-primary .ebs-card-arrow {
+  transform: translateX(3px);
+}
+
+/* Tarjetas de marcas en grilla oscura */
+.ebs-brand-tile {
+  border-radius: 14px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ebs-brand-tile:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklch, var(--primary) 70%, transparent);
+  box-shadow: 0 14px 26px -14px color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
+/* Íconos sociales circulares */
+.ebs-social-btn {
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.ebs-social-btn:hover {
+  transform: translateY(-2px);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+/* Animación de entrada por scroll */
+.ebs-reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.ebs-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ebs-pulse-dot,
+  .ebs-mega-panel {
+    animation: none !important;
+  }
+
+  .ebs-slide-track,
+  .ebs-dot,
+  .ebs-banner-card,
+  .ebs-banner-media,
+  .ebs-product-card,
+  .ebs-product-card .ebs-card-image,
+  .ebs-card-cta,
+  .ebs-card-cta .ebs-card-arrow,
+  .ebs-brand-tile,
+  .ebs-social-btn,
+  .ebs-reveal {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

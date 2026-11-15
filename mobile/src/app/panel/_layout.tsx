@@ -1,3 +1,4 @@
+import {SubscriptionRenewalBanner} from '@/components/subscription-renewal-banner';
 import { AppVersionBanner } from '@/components/app-version-banner';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -25,6 +26,7 @@ export default function PanelLayout() {
           <View style={{ flex: 1, backgroundColor: colors.background }}>
             <PanelHeader />
             <AppVersionBanner />
+            <SubscriptionRenewalBanner />
             <View style={{ flex: 1 }}>
               <Slot />
             </View>

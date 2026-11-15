@@ -34,7 +34,7 @@ export default function DashboardLayout({
                       <SubscriptionBanner />
                       <main
                         id="dashboard-main"
-                        className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative"
+                        className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-6 relative"
                       >
                         <div className="min-h-full">
                           <DemoBanner />

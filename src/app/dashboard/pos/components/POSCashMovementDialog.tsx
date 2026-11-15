@@ -68,6 +68,7 @@ const newMovementKey = () =>
 // sumaba a la caja pero dejaba la cuota o la reparación impaga (y se podía
 // cobrar dos veces). Esos cobros se hacen desde Créditos o Reparaciones.
 const IN_REASONS: ReasonOption[] = [
+  { id: 'alquiler_sillon', label: 'Cobro Alquiler de Sillón', icon: '💈', template: 'Cobro alquiler de sillón: ' },
   { id: 'cambio_inicial', label: 'Cambio Inicial', icon: '🪙', template: 'Cambio inicial para apertura de turno' },
   { id: 'aporte_capital', label: 'Aporte de Capital', icon: '💼', template: 'Aporte de capital / Inyección de efectivo' },
   { id: 'ajuste_positivo', label: 'Ajuste Positivo', icon: '📈', template: 'Ajuste positivo por sobrante de arqueo' },
@@ -76,6 +77,7 @@ const IN_REASONS: ReasonOption[] = [
 ]
 
 const OUT_REASONS: ReasonOption[] = [
+  { id: 'liquidacion_comisiones', label: 'Liquidación de Comisiones', icon: '💈', template: 'Liquidación de comisiones a barbero: ', expenseCode: 'payroll' },
   { id: 'pago_proveedor', label: 'Pago a Proveedor', icon: '🚚', template: 'Pago a proveedor: ', expenseCode: 'suppliers_purchases' },
   { id: 'compra_repuestos', label: 'Compra de Insumos / Repuestos', icon: '🔧', template: 'Compra de repuestos / insumos: ', expenseCode: 'inventory_purchases' },
   { id: 'pago_servicios', label: 'Servicios (Luz / Internet / Agua)', icon: '💡', template: 'Pago de servicio: ', expenseCode: 'electricity' },

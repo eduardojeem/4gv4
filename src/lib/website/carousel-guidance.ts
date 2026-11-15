@@ -31,11 +31,116 @@ const ANY_STORE = ['general', 'other'] as const
  */
 export const CAROUSEL_EXAMPLES: readonly CarouselExample[] = [
   {
-    name: 'Reservá tu turno', category: 'Servicios', badgeIcon: '✂️', needs: 'services', verticals: ['barbershop', 'beauty_services', 'cosmetics', ...ANY_STORE],
+    name: 'Reservá tu turno en Barbería',
+    category: 'Barbería',
+    badgeIcon: '💈',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: {
+      badge: 'Turnos Online',
+      title: 'Tu corte y estilo, en manos expertas',
+      message: 'Elegí el servicio, tu barbero preferido y el horario en un minuto. Sin esperas.',
+      imageUrl: '/images/promotional-carousel/hero-barberia-turnos.jpg',
+      imageAlt: 'Barbero profesional realizando un corte degradado fade en el salón',
+      ctaText: 'Reservar turno',
+      ctaHref: '/turnos',
+      textTone: 'light',
+      contentAlign: 'left',
+      titleSize: 'normal',
+      overlayIntensity: 'strong',
+      overlayColor: 'black',
+    },
+  },
+  {
+    name: 'Combo Corte + Barba',
+    category: 'Barbería',
+    badgeIcon: '✂️',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: {
+      badge: 'Experiencia Club',
+      title: 'Combo Corte de Autor + Barba',
+      message: 'Corte fade o clásico más ritual completo de barba a navaja, toalla caliente y styling final.',
+      imageUrl: '/images/promotional-carousel/hero-barberia-combo.jpg',
+      imageAlt: 'Estación de barbería clásica con sillón de barbero, tijeras, navaja y cliente',
+      ctaText: 'Reservar combo',
+      ctaHref: '/turnos',
+      textTone: 'light',
+      contentAlign: 'left',
+      titleSize: 'normal',
+      overlayIntensity: 'medium',
+      overlayColor: 'black',
+    },
+  },
+  {
+    name: 'Máquinas & Insumos Pro',
+    category: 'Barbería',
+    badgeIcon: '⚡',
+    needs: 'catalog',
+    verticals: ['barbershop'],
+    slide: {
+      badge: 'Minorista & Mayorista',
+      title: 'Clippers, Trimmers & Pomadas Pro',
+      message: 'Equipamiento profesional original y productos para el cuidado del cabello y la barba.',
+      imageUrl: '/images/promotional-carousel/hero-barberia-insumos.jpg',
+      imageAlt: 'Máquinas clippers inalámbricas, tijeras, peine de carbono y pomada sobre pizarra oscura',
+      ctaText: 'Ver catálogo',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'left',
+      titleSize: 'normal',
+      overlayIntensity: 'strong',
+      overlayColor: 'black',
+    },
+  },
+  {
+    name: 'Ritual de Barba & Vapor',
+    category: 'Barbería',
+    badgeIcon: '🪒',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: {
+      badge: 'Toalla Caliente',
+      title: 'Ritual de Barba a Navaja y Vapor',
+      message: 'Perfilado de precisión con vapor aromático, aceites esenciales y aftershave hidratante.',
+      imageUrl: '/images/promotional-carousel/hero-barberia-barba.jpg',
+      imageAlt: 'Barbero perfilando la barba con navaja clásica y toalla caliente con vapor',
+      ctaText: 'Ver servicios',
+      ctaHref: '/servicios',
+      textTone: 'light',
+      contentAlign: 'right',
+      titleSize: 'normal',
+      overlayIntensity: 'strong',
+      overlayColor: 'black',
+    },
+  },
+  {
+    name: 'Spa Facial & Black Mask',
+    category: 'Barbería',
+    badgeIcon: '✨',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: {
+      badge: 'Cuidado Facial',
+      title: 'Tratamiento Capilar & Black Mask',
+      message: 'Limpieza facial profunda con vaporizador y mascarilla de carbón activado para renovar tu piel.',
+      imageUrl: '/images/promotional-carousel/hero-barberia-spa.jpg',
+      imageAlt: 'Cliente recibiendo tratamiento facial con mascarilla black mask y vapor en barbería',
+      ctaText: 'Reservar turno',
+      ctaHref: '/turnos',
+      textTone: 'light',
+      contentAlign: 'left',
+      titleSize: 'normal',
+      overlayIntensity: 'medium',
+      overlayColor: 'black',
+    },
+  },
+  {
+    name: 'Reservá tu turno', category: 'Servicios', badgeIcon: '✂️', needs: 'services', verticals: ['beauty_services', 'cosmetics', ...ANY_STORE],
     slide: { title: 'Reservá tu turno online', message: 'Elegí el servicio, el día y el horario en un minuto. Sin llamadas ni esperas.', imageUrl: '', imageAlt: '', ctaText: 'Reservar turno', ctaHref: '/turnos', textTone: 'light', contentAlign: 'left' },
   },
   {
-    name: 'Promo de la semana', category: 'Servicios', badgeIcon: '⭐', needs: 'services', verticals: ['barbershop', 'beauty_services', 'cosmetics', ...ANY_STORE],
+    name: 'Promo de la semana', category: 'Servicios', badgeIcon: '⭐', needs: 'services', verticals: ['beauty_services', 'cosmetics', ...ANY_STORE],
     slide: { title: 'Precio especial de lunes a jueves', message: 'Aprovechá la promo de la semana: reservá tu lugar antes de que se llenen los horarios.', imageUrl: '', imageAlt: '', ctaText: 'Reservar ahora', ctaHref: '/turnos', textTone: 'light', contentAlign: 'center' },
   },
   {
@@ -92,6 +197,13 @@ export function carouselExamplesFor(context: CarouselContext) {
     .map((example) => ({ ...example, recommended: Boolean(example.verticals?.includes(context.businessVertical)) }))
 }
 
+/** Pack listo para cargar en 1 clic con los banners recomendados del rubro que incluyen imagen. */
+export function carouselRecommendedPackFor(context: CarouselContext, maxSlides = 4): CarouselExample[] {
+  return carouselExamplesFor(context)
+    .filter((example) => example.recommended && Boolean(example.slide.imageUrl?.trim()))
+    .slice(0, maxSlides)
+}
+
 export interface CarouselLinkShortcut { label: string; href: string }
 
 /** Atajos de enlace: solo a secciones que la tienda tiene. */
@@ -108,6 +220,18 @@ export function carouselSuggestions(context: CarouselContext) {
   const titles: string[] = []
   const messages: string[] = []
   const buttons: string[] = []
+  if (context.businessVertical === 'barbershop') {
+    if (context.hasServices) {
+      titles.push('Tu corte y estilo, en manos expertas', 'Combo Corte de Autor + Barba', 'Ritual de Barba a Navaja y Vapor')
+      messages.push('Elegí el servicio, tu barbero preferido y el horario en un minuto. Sin esperas.')
+      buttons.push('Reservar turno', 'Reservar combo')
+    }
+    if (context.hasCatalog) {
+      titles.push('Clippers, Trimmers & Pomadas Pro', 'Insumos de Barbería Minorista y Mayorista')
+      messages.push('Equipamiento profesional original y productos para el cuidado del cabello y la barba.')
+      buttons.push('Ver catálogo', 'Ver ofertas')
+    }
+  }
   if (context.hasServices) {
     titles.push('Reservá tu turno online', 'Promo de la semana', 'Nuevo servicio disponible')
     messages.push('Elegí el servicio, el día y el horario en un minuto.', 'Reservá tu lugar antes de que se llenen los horarios.')

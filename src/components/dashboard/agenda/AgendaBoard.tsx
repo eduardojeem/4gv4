@@ -1,9 +1,12 @@
 'use client'
 
+import {useSubscriptionStatus} from '@/contexts/SubscriptionStatusContext'
+import {businessExperience} from '@/lib/organization/business-experience'
 import Link from 'next/link'
+import {useSearchParams} from 'next/navigation'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Globe, Loader2, Plus, RefreshCw, Settings2 } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Coins, Globe, Loader2, Plus, RefreshCw, Settings2, Trophy } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +16,11 @@ import { APPOINTMENT_STATUS_LABELS } from '@/lib/agenda/agenda-api'
 import { addDays, minutesOf, timeOf, todayIn, utcToZoned, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { AppointmentDialog, STATUS_COLORS, type DialogState } from '@/components/dashboard/agenda/AppointmentDialog'
 import { AppointmentEventsBell } from '@/components/dashboard/agenda/AppointmentEventsBell'
+import { BarberSettlementDialog } from '@/components/dashboard/agenda/BarberSettlementDialog'
+import { BarberDailySummaryCard } from '@/components/dashboard/agenda/BarberDailySummaryCard'
+import { AntiNoShowReminderCard } from '@/components/dashboard/agenda/AntiNoShowReminderCard'
+import { BarberProductivityModal } from '@/components/dashboard/agenda/BarberProductivityModal'
+import { useAuth } from '@/contexts/auth-context'
 import type { AgendaData, Appointment } from '@/components/dashboard/agenda/types'
 
 const HOUR_HEIGHT = 64
@@ -61,21 +69,29 @@ function AppointmentBlock({ appointment, data, top, height, color, onOpen }: {
 }
 
 export function AgendaBoard() {
+  const profile=useSubscriptionStatus(),experience=businessExperience(profile)
+  const requestedAppointment=useSearchParams().get('appointment')
+  const handledAppointment=useRef('')
   const [data, setData] = useState<AgendaData | null>(null)
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState<string | null>(null)
   const [view, setView] = useState<View>('day')
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [settlementOpen, setSettlementOpen] = useState(false)
+  const [productivityOpen, setProductivityOpen] = useState(false)
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string | null>(null)
 
-  const { scope, currentScope } = useTenantScope()
+  const { user } = useAuth()
+  const { scope, currentScope,organizationId } = useTenantScope()
   const [loadedScope, setLoadedScope] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const requestRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
-  useEffect(() => { setDialog(null) }, [scope])
+  useEffect(() => { setDialog(null); setSettlementOpen(false); setProductivityOpen(false); setSelectedProfessionalId(null); hasInitializedFilter.current = false }, [scope])
   useEffect(() => () => { requestRef.current++; abortRef.current?.abort() }, [])
 
   const load = useCallback(async (target: string | null, mode: View) => {
+    if(!organizationId)return
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -85,7 +101,7 @@ export function AgendaBoard() {
     try {
       const params = new URLSearchParams({ days: mode === 'week' ? '7' : '1' })
       if (target) params.set('date', target)
-      const response = await fetch(`/api/agenda?${params}`, { cache: 'no-store', signal: controller.signal })
+      const response = await fetch(`/api/agenda?${params}`, { headers:{'x-organization-id':organizationId},cache: 'no-store', signal: controller.signal })
       const body = await response.json().catch(() => null)
       if (request !== requestRef.current || currentScope.current !== scope) return
       setLoadedScope(scope)
@@ -99,26 +115,64 @@ export function AgendaBoard() {
     } finally {
       if (request === requestRef.current && currentScope.current === scope) setLoading(false)
     }
-  }, [scope, currentScope])
+  }, [scope, currentScope,organizationId])
 
   useEffect(() => { void load(date, view) }, [load, date, view])
   const reloadBoard = useCallback(() => { void load(date, view) }, [load, date, view])
 
+  useEffect(()=>{
+    if(!requestedAppointment||!organizationId||!data?.timeZone||loadedScope!==scope)return
+    const key=scope+':'+requestedAppointment
+    if(handledAppointment.current===key)return
+    handledAppointment.current=key
+    const controller=new AbortController()
+    fetch('/api/agenda/'+encodeURIComponent(requestedAppointment),{headers:{'x-organization-id':organizationId},cache:'no-store',signal:controller.signal}).then(async response=>{
+      if(!response.ok)throw new Error('No se pudo abrir el turno seleccionado.')
+      const body=await response.json(),appointment=body.appointment as Appointment|undefined
+      if(!appointment||appointment.id!==requestedAppointment||!Number.isFinite(Date.parse(appointment.starts_at)))throw new Error('El turno recibido no es válido.')
+      if(controller.signal.aborted||currentScope.current!==scope)return
+      setDate(utcToZoned(appointment.starts_at,data.timeZone).date);setView('day');setDialog({mode:'view',appointment})
+    }).catch(()=>{if(!controller.signal.aborted&&currentScope.current===scope)setError('No se pudo abrir el turno seleccionado. Puede que ya no esté disponible.')})
+    return()=>controller.abort()
+  },[requestedAppointment,data?.timeZone,loadedScope,scope,currentScope,organizationId])
+
   const today = data ? todayIn(data.timeZone) : null
   const activeProfessionals = useMemo(() => (data?.professionals ?? []).filter((professional) => professional.is_active), [data])
 
+  // Identificar si el usuario autenticado está vinculado a un profesional de la agenda
+  const myProfessional = useMemo(() => {
+    if (!user?.id || !activeProfessionals.length) return null
+    return activeProfessionals.find((p) => p.user_id === user.id) ?? null
+  }, [user?.id, activeProfessionals])
+
+  // Por defecto, si el usuario es barbero/empleado (!canConfigure) y tiene un profesional asignado, filtrar por sus turnos
+  const hasInitializedFilter = useRef(false)
+  useEffect(() => {
+    if (data && myProfessional && !hasInitializedFilter.current) {
+      hasInitializedFilter.current = true
+      if (!data.canConfigure) {
+        setSelectedProfessionalId(myProfessional.id)
+      }
+    }
+  }, [data, myProfessional])
+
+  const visibleProfessionals = useMemo(() => {
+    if (!selectedProfessionalId) return activeProfessionals
+    return activeProfessionals.filter((p) => p.id === selectedProfessionalId)
+  }, [activeProfessionals, selectedProfessionalId])
+
   const columns = useMemo(() => {
     if (!data) return []
-    const list: Array<{ id: string | null; key: string; name: string; color: string }> = activeProfessionals.length
-      ? activeProfessionals.map((professional) => ({ id: professional.id, key: professional.id, name: professional.name, color: professional.color }))
+    const list: Array<{ id: string | null; key: string; name: string; color: string }> = visibleProfessionals.length
+      ? visibleProfessionals.map((professional) => ({ id: professional.id, key: professional.id, name: professional.name, color: professional.color }))
       : [{ id: null, key: 'agenda', name: 'Agenda', color: '#6366f1' }]
     const known = new Set(activeProfessionals.map((professional) => professional.id))
-    // Turnos de un profesional dado de baja (o sin asignar con profesionales cargados).
-    if (activeProfessionals.length && data.appointments.some((a) => !a.professional_id || !known.has(a.professional_id))) {
+    // Turnos de un profesional dado de baja (o sin asignar con profesionales cargados), solo si no filtramos por uno específico
+    if (!selectedProfessionalId && activeProfessionals.length && data.appointments.some((a) => !a.professional_id || !known.has(a.professional_id))) {
       list.push({ id: UNASSIGNED, key: UNASSIGNED, name: 'Sin asignar', color: '#94a3b8' })
     }
     return list
-  }, [data, activeProfessionals])
+  }, [data, visibleProfessionals, activeProfessionals, selectedProfessionalId])
 
   const columnFor = (appointment: Appointment) => {
     if (!activeProfessionals.length) return 'agenda'
@@ -126,6 +180,7 @@ export function AgendaBoard() {
   }
 
   const replace = (appointment: Appointment) => {
+    if (currentScope.current !== scope) return
     setData((current) => {
       if (!current) return current
       const exists = current.appointments.some((item) => item.id === appointment.id)
@@ -148,18 +203,25 @@ export function AgendaBoard() {
     )
   }
 
-  const dayAppointments = data.appointments.filter((appointment) => utcToZoned(appointment.starts_at, data.timeZone).date === date)
+  const dayAppointments = data.appointments.filter((appointment) => {
+    const isDate = utcToZoned(appointment.starts_at, data.timeZone).date === date
+    if (!isDate) return false
+    if (selectedProfessionalId) return appointment.professional_id === selectedProfessionalId
+    return true
+  })
   const frame = dayWindow(data, date, dayAppointments)
   const height = ((frame.end - frame.start) / 60) * HOUR_HEIGHT
   const hours = Array.from({ length: (frame.end - frame.start) / 60 }, (_, index) => frame.start + index * 60)
   const step = view === 'week' ? 7 : 1
   const active = dayAppointments.filter((a) => a.status !== 'cancelled')
   const dayTotal = active.filter((a) => a.status !== 'no_show').reduce((sum, a) => sum + Number(a.price), 0)
+  const selectedProfessional = activeProfessionals.find((p) => p.id === selectedProfessionalId)
 
   const createAt = (columnId: string | null, minute: number) => {
     const slot = data.settings.slot_minutes
     const rounded = Math.floor(minute / slot) * slot
-    setDialog({ mode: 'create', date, time: timeOf(Math.min(rounded, 23 * 60 + 55)), professionalId: columnId && columnId !== UNASSIGNED ? columnId : null })
+    const targetProfId = columnId && columnId !== UNASSIGNED ? columnId : (selectedProfessionalId || null)
+    setDialog({ mode: 'create', date, time: timeOf(Math.min(rounded, 23 * 60 + 55)), professionalId: targetProfId })
   }
 
   return (
@@ -167,7 +229,7 @@ export function AgendaBoard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Turnos del día por profesional. Tocá un horario libre para agendar.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{experience.walkInOnly?'Registrá las atenciones del día por profesional.':'Turnos del día por profesional. Tocá un horario libre para agendar.'} {experience.attentionLabel}.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Lo que hicieron los clientes desde la tienda; si llega algo nuevo, se recarga el tablero. */}
@@ -179,9 +241,29 @@ export function AgendaBoard() {
           ) : data.canConfigure && (
             <Button variant="outline" size="sm" asChild><Link href="/dashboard/agenda/configuracion"><Globe className="h-4 w-4" /> Activar reservas online</Link></Button>
           )}
+          {data.canConfigure && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSettlementOpen(true)}
+              className="gap-1.5 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Coins className="h-4 w-4" /> Liquidación
+            </Button>
+          )}
+          {data.canConfigure && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setProductivityOpen(true)}
+              className="gap-1.5 border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              <Trophy className="h-4 w-4 text-amber-500" /> Rendimiento
+            </Button>
+          )}
           {data.canConfigure && <Button variant="outline" size="sm" asChild><Link href="/dashboard/agenda/configuracion"><Settings2 className="h-4 w-4" /> Configurar</Link></Button>}
-          <Button size="sm" onClick={() => setDialog({ mode: 'create', date, time: timeOf(Math.max(frame.start, 9 * 60)), professionalId: null })}>
-            <Plus className="h-4 w-4" /> Nuevo turno
+          <Button size="sm" onClick={() => setDialog({ mode: 'create', date, time: experience.walkInOnly?utcToZoned(new Date().toISOString(),data.timeZone).time:timeOf(Math.max(frame.start, 9 * 60)), professionalId: selectedProfessionalId || null })}>
+            <Plus className="h-4 w-4" /> {experience.walkInOnly?'Registrar atención':'Nuevo turno'}
           </Button>
         </div>
       </div>
@@ -191,6 +273,22 @@ export function AgendaBoard() {
           Tenés <b>{data.pendingCount}</b> turno{data.pendingCount === 1 ? '' : 's'} por confirmar (los marcados en amarillo). Abrilos para confirmar por WhatsApp.
         </p>
       )}
+
+      {/* Tarjeta de Producción Diaria y Filtro de Barbero */}
+      <BarberDailySummaryCard
+        data={data}
+        date={date}
+        currentUserId={user?.id}
+        selectedProfessionalId={selectedProfessionalId}
+        onSelectProfessional={setSelectedProfessionalId}
+      />
+
+      {/* Disparador de Recordatorios Anti No-Show por WhatsApp */}
+      <AntiNoShowReminderCard
+        data={data}
+        date={date}
+        onAppointmentUpdated={replace}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -206,7 +304,12 @@ export function AgendaBoard() {
           {loading && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
         <div className="flex items-center gap-3">
-          {view === 'day' && <span className="text-xs text-muted-foreground">{active.length} turno{active.length === 1 ? '' : 's'} · {formatCurrency(dayTotal, { currency: data.currency })}</span>}
+          {view === 'day' && (
+            <span className="text-xs text-muted-foreground">
+              {selectedProfessional ? `${selectedProfessional.name.split(' ')[0]}: ` : ''}
+              {active.length} turno{active.length === 1 ? '' : 's'} · {formatCurrency(dayTotal, { currency: data.currency })}
+            </span>
+          )}
           <div className="inline-flex rounded-lg border p-0.5 text-sm">
             {(['day', 'week'] as const).map((mode) => (
               <button key={mode} type="button" aria-pressed={view === mode} onClick={() => setView(mode)} className={cn('rounded-md px-3 py-1', view === mode ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}>
@@ -278,7 +381,12 @@ export function AgendaBoard() {
       ) : (
         <div className="grid gap-3 md:grid-cols-7">
           {Array.from({ length: 7 }, (_, index) => addDays(date, index)).map((day) => {
-            const list = data.appointments.filter((appointment) => utcToZoned(appointment.starts_at, data.timeZone).date === day)
+            const list = data.appointments.filter((appointment) => {
+              const isDate = utcToZoned(appointment.starts_at, data.timeZone).date === day
+              if (!isDate) return false
+              if (selectedProfessionalId) return appointment.professional_id === selectedProfessionalId
+              return true
+            })
             return (
               <div key={day} className={cn('min-h-32 rounded-xl border bg-card p-2', day === today && 'ring-2 ring-primary')}>
                 <button type="button" className="mb-2 w-full text-left text-xs font-semibold hover:underline" onClick={() => { setDate(day); setView('day') }}>
@@ -322,11 +430,33 @@ export function AgendaBoard() {
         onClose={() => setDialog(null)}
         onEdit={(appointment) => setDialog({ mode: 'edit', appointment })}
         onSaved={(appointment) => {
+          if (currentScope.current !== scope) return
           replace(appointment)
           setDialog({ mode: 'view', appointment })
           if (appointment.status !== 'pending') void load(date, view)
         }}
       />
+
+      {settlementOpen && (
+        <BarberSettlementDialog
+          open={settlementOpen}
+          onOpenChange={setSettlementOpen}
+          professionals={data.professionals}
+          currency={data.currency}
+          timeZone={data.timeZone}
+        />
+      )}
+
+      {productivityOpen && (
+        <BarberProductivityModal
+          open={productivityOpen}
+          onOpenChange={setProductivityOpen}
+          professionals={data.professionals}
+          currency={data.currency}
+          timeZone={data.timeZone}
+          storeName={data.storeName}
+        />
+      )}
     </div>
   )
 }

@@ -1,5 +1,7 @@
 'use client'
 
+import {BusinessDataDownload} from './BusinessDataDownload'
+
 import { useEffect, useState, useMemo, type ElementType } from 'react'
 import Link from 'next/link'
 import {
@@ -289,7 +291,7 @@ function HowItWorksContent() {
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Pagos & Facturación</h4>
         </div>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          Pagás con tarjeta, QR o transferencia, o activás con un código; cada pago renueva el ciclo mensual. Si no pagás al vencer, la cuenta queda 7 días como pago pendiente y después pasa al plan Gratuito.
+          Pagás con tarjeta, QR o transferencia, o activás con un código; cada pago renueva el ciclo mensual. Si no renovás al vencer, se suspenden las operaciones. Podés consultar tu cuenta y renovar sin perder el historial.
         </p>
       </div>
 
@@ -503,6 +505,7 @@ export function SubscriptionsClientView({
 
         {/* TAB 1: OVERVIEW & USAGE (REDISEÑADA & LIMPIA) */}
         <TabsContent value="overview" className="space-y-6 border-t-2 border-indigo-200 pt-5 focus-visible:outline-none dark:border-indigo-500/30">
+          <BusinessDataDownload />
           {/* Cupos del plan */}
           <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

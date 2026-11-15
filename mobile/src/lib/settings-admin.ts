@@ -2,9 +2,19 @@ import { ApiError, apiFetch } from './api';
 import {
   fromSharedRow,
   toBusinessProfile,
+  toBusinessProfileDetails,
+  type AdminMfaPolicy,
   type BusinessProfile,
+  type BusinessProfileDetails,
+  type BusinessVertical,
   type ExchangeRatesState,
+  type OperatingModel,
   type OrgSettings,
+  type OrganizationModule,
+  type ServiceAppointmentMode,
+  type ServiceAttentionMode,
+  type ServiceSpecialty,
+  type SettingsSetupStatus,
 } from './settings-model';
 import { websiteErrorMessage } from './website-admin';
 
@@ -16,6 +26,10 @@ import { websiteErrorMessage } from './website-admin';
 /** Mensaje para la persona, nunca el error técnico. */
 export function settingsErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.status === 403) {
+    const code = error.body?.code;
+    if ((code === 'MFA_REQUIRED' || code === 'MFA_ENROLLMENT_REQUIRED') && error.message) {
+      return error.message;
+    }
     return 'Solo el dueño o un administrador del comercio pueden cambiar la configuración.';
   }
   return websiteErrorMessage(error, fallback);
@@ -46,9 +60,56 @@ export async function saveOrgSettings(changes: Partial<OrgSettings>, confirmCurr
   return res?.data ? fromSharedRow(res.data) : null;
 }
 
+export async function fetchSetupStatus(): Promise<SettingsSetupStatus | null> {
+  const res = await apiFetch<{ success?: boolean; data?: SettingsSetupStatus }>('/api/admin/settings/setup-status');
+  return res?.data ?? null;
+}
+
+export async function fetchAdminMfaPolicy(): Promise<AdminMfaPolicy> {
+  const res = await apiFetch<{ requireAdminMfa?: boolean; canChange?: boolean }>('/api/admin/security/mfa-policy');
+  return {
+    requireAdminMfa: res.requireAdminMfa === true,
+    canChange: res.canChange === true,
+  };
+}
+
+export async function updateAdminMfaPolicy(requireAdminMfa: boolean): Promise<AdminMfaPolicy> {
+  const res = await apiFetch<{ requireAdminMfa?: boolean; canChange?: boolean }>('/api/admin/security/mfa-policy', {
+    method: 'PUT',
+    body: JSON.stringify({ requireAdminMfa }),
+  });
+  return {
+    requireAdminMfa: res.requireAdminMfa === true,
+    canChange: res.canChange === true,
+  };
+}
+
 export async function fetchBusinessProfile(): Promise<BusinessProfile> {
   const res = await apiFetch<{ success: boolean; data?: Record<string, unknown> }>('/api/admin/organization-profile');
   return toBusinessProfile(res?.data);
+}
+
+export async function fetchBusinessProfileDetails(): Promise<BusinessProfileDetails> {
+  const res = await apiFetch<{ success: boolean; data?: Record<string, unknown> }>('/api/admin/organization-profile');
+  return toBusinessProfileDetails(res?.data);
+}
+
+export type SaveBusinessProfileInput = {
+  primaryActivity?: 'auto'|'pos'|'agenda'|'repairs';
+  businessVertical: BusinessVertical;
+  operatingModel: OperatingModel;
+  enabledModules: OrganizationModule[] | null;
+  serviceSpecialties?: ServiceSpecialty[];
+  attentionMode?: ServiceAttentionMode;
+  appointmentMode?: ServiceAppointmentMode;
+};
+
+export async function saveBusinessProfile(input: SaveBusinessProfileInput): Promise<BusinessProfileDetails> {
+  const res = await apiFetch<{ success: boolean; data?: Record<string, unknown> }>('/api/admin/organization-profile', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return toBusinessProfileDetails(res?.data);
 }
 
 // ─── Tipos de cambio ───────────────────────────────────────────────────────

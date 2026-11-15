@@ -29,6 +29,12 @@ export type AgendaProfessional = {
   specialty?: string | null
   /** Servicios que hace. Vacío = todos (así quedan las agendas de antes). */
   service_ids?: string[]
+  /** Modelo de comisiones para barberías y salones */
+  remuneration_type?: 'commission' | 'fixed' | 'hybrid' | 'chair_rental'
+  commission_rate_services?: number | null
+  commission_rate_products?: number | null
+  commission_fixed_deduction?: number | null
+  user_id?: string | null
 }
 
 /** Si el profesional hace el servicio: sin servicios asignados, hace todos. */
@@ -87,6 +93,7 @@ export function isMissingTable(error: { message?: string } | null | undefined) {
 }
 
 export const PROFESSIONAL_COLUMNS = 'id, name, color, phone, is_active, sort_order, photo_url, specialty'
+export const COMMISSION_PROFESSIONAL_COLUMNS = `${PROFESSIONAL_COLUMNS}, user_id, remuneration_type, commission_rate_services, commission_rate_products, commission_fixed_deduction`
 const LEGACY_PROFESSIONAL_COLUMNS = 'id, name, color, phone, is_active, sort_order'
 
 /** Only a missing relation/column qualifies for migration compatibility. */
@@ -102,14 +109,20 @@ export function isMissingBookingSchema(error: { code?: string; message?: string 
 async function loadProfessionals(client: SupabaseClient, organizationId: string) {
   const query = (columns: string) =>
     client.from('agenda_professionals').select(columns).eq('organization_id', organizationId).order('sort_order').order('name')
-  let result = await query(`${PROFESSIONAL_COLUMNS}, online_visible, opening_hours`)
+  let result = await query(`${COMMISSION_PROFESSIONAL_COLUMNS}, online_visible, opening_hours`)
   let bookingSchema = true
+  if (result.error && /remuneration_type|commission_rate|user_id/.test(result.error.message ?? '')) {
+    result = await query(`${PROFESSIONAL_COLUMNS}, online_visible, opening_hours`)
+  }
   if (isMissingBookingSchema(result.error) && /online_visible|opening_hours/.test(result.error?.message ?? '')) {
     bookingSchema = false
-    result = await query(PROFESSIONAL_COLUMNS)
+    result = await query(COMMISSION_PROFESSIONAL_COLUMNS)
+    if (result.error && /remuneration_type|commission_rate|user_id/.test(result.error.message ?? '')) {
+      result = await query(PROFESSIONAL_COLUMNS)
+    }
   }
   if (isMissingBookingSchema(result.error) && /photo_url|specialty/.test(result.error?.message ?? '')) {
-    return { ...await query(LEGACY_PROFESSIONAL_COLUMNS), bookingSchema: false }
+    return { ...(await query(LEGACY_PROFESSIONAL_COLUMNS)), bookingSchema: false }
   }
   return { ...result, bookingSchema }
 }
@@ -130,7 +143,7 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
       .from('products')
       .select('id, name, sale_price, hide_price, is_active, visibility, image_url, images')
       .eq('organization_id', organizationId)
-      .eq('unit_measure', 'servicio')
+      .or('unit_measure.eq.servicio,unit_measure.ilike.servicio')
       .eq('is_active', true)
       .order('name')
       .limit(500),
@@ -184,17 +197,19 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
   }))
   const org = (orgSettings.data ?? {}) as { timezone?: string | null; currency?: string | null }
   const foundationReady = 'professional_selection' in stored && !rates.error && professionals.bookingSchema
+  let homeAppointments = false
   let atomicReady = false
   if (foundationReady) {
     const version = await client.rpc('agenda_booking_version')
     if (version.error && !['PGRST202', '42883'].includes(version.error.code ?? '')) throw new Error(version.error.message)
       atomicReady = !version.error && Number(version.data) >= 3
+      homeAppointments = !version.error && Number(version.data) >= 4
   }
   return {
     /** Si el comercio ya tiene su fila de configuración (sin guardar nunca, no hay). */
     settingsSaved: Boolean(settings.data),
     settingsRevision: Number((stored as Partial<AgendaSettings> & { booking_revision?: number }).booking_revision ?? 0),
-    capabilities: { professionalBooking: atomicReady },
+    capabilities: { professionalBooking: atomicReady, homeAppointments },
     professionalRates: (rates.error ? [] : rates.data ?? []) as AgendaProfessionalRate[],
     professionalCount: allProfessionals.length,
     settings: config,
@@ -206,22 +221,23 @@ export async function loadAgendaConfig(client: SupabaseClient, organizationId: s
 }
 
 /** Turnos que ocupan agenda (pendientes o confirmados) entre dos instantes. `excludeId`: el turno que se está moviendo no se cuenta a sí mismo. */
-export async function busyIntervals(client: SupabaseClient, organizationId: string, from: number, to: number, excludeId?: string, professionalBooking = false): Promise<BusyInterval[]> {
+export async function busyIntervals(client: SupabaseClient, organizationId: string, from: number, to: number, excludeId?: string, professionalBooking = false, homeAppointments = false): Promise<BusyInterval[]> {
   let query = client
     .from('appointments')
-    .select(`id, starts_at, ${professionalBooking ? 'occupied_until' : 'ends_at'}, professional_id`)
+    .select(homeAppointments ? 'id,starts_at,occupied_from,occupied_until,professional_id' : professionalBooking ? 'id,starts_at,occupied_until,professional_id' : 'id,starts_at,ends_at,professional_id')
     .eq('organization_id', organizationId)
     .in('status', ['pending', 'confirmed'])
-    .lt('starts_at', new Date(to).toISOString())
+    .lt(homeAppointments ? 'occupied_from' : 'starts_at', new Date(to).toISOString())
     .gt(professionalBooking ? 'occupied_until' : 'ends_at', new Date(from).toISOString())
   if (excludeId) query = query.neq('id', excludeId)
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  const occupied = ((data ?? []) as Array<{ starts_at: string; ends_at?: string; occupied_until?: string; professional_id: string | null }>).map((row) => ({
-    start: Date.parse(row.starts_at),
+  const occupied = ((data ?? []) as unknown as Array<{ starts_at: string; occupied_from?:string; ends_at?: string; occupied_until?: string; professional_id: string | null }>).map((row) => ({
+    start: Date.parse(homeAppointments ? row.occupied_from! : row.starts_at),
     end: Date.parse((professionalBooking ? row.occupied_until : row.ends_at)!),
     professionalId: row.professional_id,
   }))
+  if(occupied.some(interval=>!Number.isFinite(interval.start)||!Number.isFinite(interval.end)||interval.end<=interval.start))throw new Error('No se pudo validar la disponibilidad de la agenda.')
   if (!professionalBooking) return occupied
   const blocks = await client.from('agenda_time_off').select('starts_at, ends_at, professional_id')
     .eq('organization_id', organizationId).lt('starts_at', new Date(to).toISOString()).gt('ends_at', new Date(from).toISOString())

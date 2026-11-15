@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import type { ControlLine } from '@/lib/finance/control-model'
 import type { AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { normalizeRole } from '@/lib/auth/role-utils'
 import { resolveBranchScopeForUser } from '@/lib/branches/server'
@@ -529,12 +531,21 @@ function businessDay(value: string | null | undefined, timeZone: string | undefi
 
 async function loadOrganizationTimezone(organizationId: string): Promise<string> {
   const admin = createAdminSupabase()
-  const { data } = await admin
+  const { data, error } = await admin
     .from('organization_settings')
     .select('timezone')
     .eq('organization_id', organizationId)
     .maybeSingle()
+  if (error) throw toFinanceApiError(error)
   return data?.timezone || DEFAULT_FINANCE_TIMEZONE
+}
+
+async function loadOrganizationFinanceCurrency(organizationId: string): Promise<string> {
+  const { data, error } = await createAdminSupabase().from('organization_settings').select('currency').eq('organization_id', organizationId).maybeSingle()
+  if (error) throw toFinanceApiError(error)
+  const currency = data?.currency ?? 'PYG'
+  if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) throw new FinanceApiError('La moneda de la empresa no es válida.', 422, 'INVALID_CURRENCY')
+  return currency
 }
 
 /** Hoy segun el calendario del negocio, para decidir si algo esta vencido. */
@@ -615,7 +626,7 @@ export async function createObligation(params: {
     recurrence_period: null,
     concept,
     amount: input.amount,
-    currency: 'PYG',
+    currency: await loadOrganizationFinanceCurrency(organizationId),
     vendor: input.vendor ?? null,
     accounting_date: input.accountingDate,
     due_date: input.dueDate ?? null,
@@ -631,7 +642,7 @@ export async function createObligation(params: {
       .select('*, finance_categories(id, name, code)')
       .single()
 
-  let { data, error } = await insertObligation(
+  const { data, error } = await insertObligation(
     creationKey ? { ...row, creation_idempotency_key: creationKey } : row,
   )
   // Dos envíos simultáneos con la misma clave: el índice único frena al segundo.
@@ -639,9 +650,9 @@ export async function createObligation(params: {
     const existing = await findObligationByCreationKey(organizationId, creationKey)
     if (existing) return replayCreatedObligation(existing, input, concept)
   }
-  // Sin la migración 20261109120000 la columna no existe todavía: se guarda igual.
+  // Never drop the idempotency key: a retry after a lost response could duplicate the expense.
   if (error && creationKey && isMissingCreationKeyColumn(error)) {
-    ;({ data, error } = await insertObligation(row))
+    throw new FinanceApiError('Falta habilitar la protección contra gastos duplicados. Contactá con soporte antes de reintentar.', 503, 'FINANCE_IDEMPOTENCY_UNAVAILABLE')
   }
 
   if (error || !data) throw toFinanceApiError(error)
@@ -1673,14 +1684,15 @@ export async function listPayrollRuns(
   if (runsError) throw toFinanceApiError(runsError)
 
   const runIds = (runs ?? []).map((run) => run.id)
-  const { data: entries, error: entriesError } = runIds.length
-    ? await admin
+  const { data: entries, error: entriesError, count: entriesCount } = runIds.length
+    ? await allFinanceRows(admin
         .from('payroll_entries')
-        .select('id, payroll_run_id, employee_id, employee_role, base_amount, commission_amount, adjustment_amount, gross_amount, net_amount, paid_amount, payment_status')
+        .select('id, payroll_run_id, employee_id, employee_role, base_amount, commission_amount, adjustment_amount, gross_amount, net_amount, paid_amount, payment_status', {count:'exact'})
         .eq('organization_id', organizationId)
-        .in('payroll_run_id', runIds)
-    : { data: [], error: null }
+        .in('payroll_run_id', runIds).order('id'))
+    : { data: [], error: null, count: 0 }
   if (entriesError) throw toFinanceApiError(entriesError)
+  assertBoundedFinanceRows(entries, 'detalle de liquidaciones', entriesCount)
 
   const employeeIds = [...new Set((entries ?? []).map((e) => e.employee_id))]
   const { data: profiles } = employeeIds.length
@@ -2096,6 +2108,8 @@ type FinancePayrollEntryRecord = {
 }
 
 type FinancePaymentRecord = {
+  id?: string
+  obligationId?: string
   branchId: string | null
   paymentDate: string
   direction: 'payment' | 'reversal'
@@ -2262,6 +2276,7 @@ export interface FinanceSummaryReport extends FinanceSummary {
   comparison: FinanceSummary
   /** Opcional: un despliegue sin créditos ni reparaciones no lo trae. */
   receivables?: FinanceReceivables
+  receivablesStatus?: 'available' | 'unavailable'
   upcomingDue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
   overdue: Array<{ id: string; dueDate: string; amount: number; concept?: string | null }>
 }
@@ -2481,6 +2496,7 @@ function itemDirectCost(item: FinanceSaleItemRecord): number {
 function buildFinancialSummary(
   records: FinanceSummaryRecords,
   filters: FinanceFilters,
+  trace?: ControlLine[],
 ): FinanceSummary {
   const repairPortions = repairPortionBySale(records.repairPayments)
   const saleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
@@ -2876,6 +2892,35 @@ function buildFinancialSummary(
       sourceType: 'sale' as const,
     }))
   const extraWarnings = [...cashTimingWarnings, ...unpricedRepairWarnings, ...rejectedPaymentWarnings]
+  if (trace) {
+    const add = (metric: ControlLine['metric'], id: string, label: string, amount: number, sourceType?: string, sourceId?: string, aggregated = false) => trace.push({metric,id:metric+':'+id+':'+trace.length,label,amount:roundMoneyValue(amount),sourceType,sourceId,aggregated})
+    for (const line of revenue) add('revenue',line.id,line.label ?? 'Ingreso '+line.id,line.amount,'sourceType' in line ? line.sourceType : undefined,line.id.startsWith('repair-retained:')?line.id.slice('repair-retained:'.length):line.id)
+    for (const line of refunds) add('revenue','refund-'+line.id,'Devolución '+line.id,-line.amount)
+    for (const line of directCosts) add('directCosts',line.id,'Costo histórico '+line.id,line.amount)
+    for (const line of refunds) add('directCosts','refund-cost-'+line.id,'Costo recuperado en devolución '+line.id,-line.recoveredCost)
+    for (const line of [...expenses,...paymentFees,...cashShortages]) {
+      const original=periodObligations.find(row=>row.id===line.id)
+      add('operatingExpenses',line.id,original?.concept ?? (line.id.startsWith('payment-fee')?'Comisión de cobro':'Diferencia de caja'),line.amount,original?'expense':undefined,original?.id)
+    }
+    for (const line of payrollWithTechnicians) add('payrollCost',line.id,'Sueldo o comisión '+line.id,line.amount)
+    const profitLines=trace.filter(row=>['revenue','directCosts','operatingExpenses','payrollCost'].includes(row.metric))
+    for(const line of profitLines)add('netProfit',line.id,line.label,line.metric==='revenue'?line.amount:-line.amount,line.sourceType,line.sourceId)
+
+    const periodPayment=(payment:{branchId:string|null;paymentDate:string})=>isInBranch(payment.branchId,filters)&&isInPeriod(payment.paymentDate,filters)
+    for(const [index,payment]of [...(records.salePayments??[]),...(records.creditPayments??[])].entries())if(periodPayment(payment)&&isCompletedNonCreditSalePayment(payment))add('collected','sale-payment-'+index,'Cobro de venta '+payment.saleId+' · '+payment.paymentDate,money(payment.amount),'sale',payment.saleId)
+    if(records.orderPayments){for(const [index,payment]of records.orderPayments.entries())if(periodPayment(payment))add('collected','order-payment-'+index,'Cobro de pedido '+payment.orderId+' · '+payment.paymentDate,money(payment.amount),'order',payment.orderId)}else if(orderCollected)add('collected','legacy-orders','Pedidos pagados sin historial de cobro disponible',orderCollected,undefined,undefined,true)
+    for(const [index,payment]of (records.repairPayments??[]).entries())if(!payment.saleId&&periodPayment(payment)&&['cash','card','transfer'].includes(payment.paymentMethod))add('collected','repair-payment-'+index,'Cobro de reparación '+payment.repairId+' · '+payment.paymentDate,money(payment.amount),'repair',payment.repairId)
+    for(const closure of periodClosures)if(closure.discrepancy>0)add('collected','overage-'+closure.id,'Sobrante de caja '+closure.id,closure.discrepancy)
+    for(const [index,payment]of records.financePayments.entries())if(periodPayment(payment))add('paid',payment.id??'expense-payment-'+index,(payment.direction==='reversal'?'Anulación de pago de gasto ':'Pago de gasto ')+(payment.id??payment.obligationId??'')+' · '+payment.paymentDate,(payment.direction==='reversal'?-1:1)*money(payment.amount),'expense',payment.obligationId)
+    for(const [index,payment]of records.payrollPayments.entries())if(periodPayment(payment))add('paid',payment.id??'payroll-payment-'+index,(payment.direction==='reversal'?'Anulación de nómina ':'Pago de nómina ')+(payment.id??'')+' · '+payment.paymentDate,(payment.direction==='reversal'?-1:1)*money(payment.amount))
+    for(const refund of refunds)add('paid','refund-'+refund.id,'Devolución '+refund.id,refund.cashAmount)
+    if(technicianPaid)add('paid','technicians','Pagos a técnicos menos anulaciones',technicianPaid,undefined,undefined,true)
+    for(const closeout of records.repairCloseouts??[])if(closeout.refundAmount>0&&(closeout.refundMethod==='cash'||closeout.refundMethod==='transfer')&&isInBranch(closeout.branchId,filters)&&isInPeriod(closeout.createdAt,filters))add('paid','closeout-'+closeout.repairId,'Devolución de reparación '+closeout.repairId,closeout.refundAmount,'repair',closeout.repairId)
+    for(const [index,payment]of (records.salePayments??[]).entries())if(money(payment.feeAmount)>0&&periodPayment(payment)&&isCompletedNonCreditSalePayment(payment))add('paid','fee-'+index,'Comisión del cobro de venta '+payment.saleId,money(payment.feeAmount),'sale',payment.saleId)
+    for(const closure of periodClosures)if(closure.discrepancy<0)add('paid','shortage-'+closure.id,'Faltante de caja '+closure.id,-closure.discrepancy)
+    for(const line of trace.filter(row=>row.metric==='collected'||row.metric==='paid'))add('netCashFlow',line.id,line.label,line.metric==='collected'?line.amount:-line.amount,undefined,undefined,true)
+  }
+
 
   return {
     ...summary,
@@ -3015,6 +3060,9 @@ export function assertFinanceReportPage(input: {
   source: string
 }): void {
   const totalRows = input.totalRows ?? input.returnedRows
+  if (input.totalRows != null && input.returnedRows < input.totalRows && input.totalRows <= FINANCE_REPORT_QUERY_LIMIT) {
+    throw new FinanceApiError('La consulta financiera devolvió registros incompletos. Reintentá.', 503, 'FINANCE_REPORT_INCOMPLETE')
+  }
   if (
     totalRows > FINANCE_REPORT_QUERY_LIMIT ||
     (input.totalRows == null && input.returnedRows >= FINANCE_REPORT_QUERY_LIMIT)
@@ -3358,7 +3406,7 @@ async function loadFinanceSummaryRecords(
   const obligationsQuery = branch(
     admin
       .from('finance_obligations')
-      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, concept, notes, finance_categories(category_type)', { count: 'exact' })
+      .select('id, branch_id, accounting_date, due_date, status, amount, paid_amount, currency, concept, notes, finance_categories(category_type)', { count: 'exact' })
       .eq('organization_id', organizationId)
       // The result uses the selected accounting period; the action list also
       // needs older unpaid obligations. All values here are validated dates.
@@ -3380,7 +3428,7 @@ async function loadFinanceSummaryRecords(
   const financePaymentsQuery = branch(
     admin
       .from('finance_payments')
-      .select('branch_id, payment_date, direction, amount', { count: 'exact' })
+      .select('id, obligation_id, branch_id, payment_date, direction, amount, finance_obligations(currency)', { count: 'exact' })
       .eq('organization_id', organizationId)
       .gte('payment_date', startDate)
       .lte('payment_date', queryEndDate)
@@ -3389,7 +3437,7 @@ async function loadFinanceSummaryRecords(
   const payrollPaymentsQuery = branch(
     admin
       .from('payroll_payments')
-      .select('branch_id, payment_date, direction, amount', { count: 'exact' })
+      .select('id, branch_id, payment_date, direction, amount', { count: 'exact' })
       .eq('organization_id', organizationId)
       .gte('payment_date', startDate)
       .lte('payment_date', queryEndDate)
@@ -3408,6 +3456,19 @@ async function loadFinanceSummaryRecords(
   for (const result of [salesResult, repairsResult, obligationsResult, payrollResult, financePaymentsResult, payrollPaymentsResult]) {
     if (result.error) throw toFinanceApiError(result.error)
     assertBoundedFinanceRows(result.data as unknown[] | null, 'reporte financiero', result.count)
+  }
+
+  // No convertir ni sumar obligaciones históricas de distintas monedas.
+  const currencies = new Set<string>()
+  for (const row of obligationsResult.data ?? []) if (row.currency) currencies.add(row.currency)
+  for (const row of financePaymentsResult.data ?? []) {
+    const relation = (row as {finance_obligations?: {currency?: string} | {currency?: string}[] | null}).finance_obligations
+    const obligation = Array.isArray(relation) ? relation[0] : relation
+    if (obligation?.currency) currencies.add(obligation.currency)
+  }
+  if (currencies.size) {
+    const currency = await loadOrganizationFinanceCurrency(organizationId)
+    if ([...currencies].some(stored => stored !== currency)) throw new FinanceApiError('Hay gastos o pagos históricos con otra moneda. No se sumaron ni se convirtieron. Revisá la configuración monetaria con soporte.', 422, 'FINANCE_CURRENCY_MISMATCH')
   }
 
   const sales = (salesResult.data ?? []).map((sale) => ({
@@ -3536,6 +3597,8 @@ function nextDay(value: string): string {
 
 function toFinancePaymentRecords(rows: Array<Record<string, unknown>>): FinancePaymentRecord[] {
   return rows.map((payment) => ({
+    id: typeof payment.id === 'string' ? payment.id : undefined,
+    obligationId: typeof payment.obligation_id === 'string' ? payment.obligation_id : undefined,
     branchId: typeof payment.branch_id === 'string' ? payment.branch_id : null,
     paymentDate: String(payment.payment_date),
     direction: payment.direction === 'reversal' ? 'reversal' : 'payment',
@@ -4038,6 +4101,8 @@ export async function getFinanceReceivables(
   if (repairs.error) throw toFinanceApiError(repairs.error)
   if ((installments.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT || (repairs.count ?? 0) > FINANCE_REPORT_QUERY_LIMIT) return undefined
 
+  if (!installments.error) assertBoundedFinanceRows(installments.data, 'cuotas por cobrar', installments.count)
+  assertBoundedFinanceRows(repairs.data, 'reparaciones por cobrar', repairs.count)
   const customers = new Set<string>()
   let credits = 0
   let overdue = 0
@@ -4078,8 +4143,12 @@ export async function getFinanceSummary(
   const today = toOrganizationDay(new Date(), timeZone)
   const report = buildFinanceSummaryFromRecords(records, zonedFilters, today)
   // «Te deben» es un dato extra: si falla, el resumen se muestra igual.
-  const receivables = await getFinanceReceivables(organizationId, filters.branchId, today).catch(() => undefined)
-  return receivables ? { ...report, receivables } : report
+  try {
+    const receivables = await getFinanceReceivables(organizationId, filters.branchId, today)
+    return receivables ? { ...report, receivables, receivablesStatus: 'available' as const } : { ...report, receivablesStatus: 'unavailable' as const }
+  } catch {
+    return { ...report, receivablesStatus: 'unavailable' as const }
+  }
 }
 
 export async function getFinanceProfitability(
@@ -4240,3 +4309,20 @@ export function buildProfitabilityRows(
     })
     .sort((left, right) => right.revenue - left.revenue || left.label.localeCompare(right.label))
 }
+
+/** Uses exactly the same recognition/cost/cash rules as the summary. */
+export async function getFinanceControlBase(organizationId: string, filters: FinanceFilters) {
+  const timeZone=await loadOrganizationTimezone(organizationId)
+  const currency=await loadOrganizationFinanceCurrency(organizationId)
+  const scoped={...filters,timeZone}
+  const records=await loadFinanceSummaryRecords(organizationId,scoped)
+  const {lines,snapshot}=buildFinanceControlSnapshot(records,scoped)
+  const discrepancies=(records.cashClosures??[]).filter(row=>isInBranch(row.branchId,scoped)&&isInPeriod(row.closedAt,scoped)).map(row=>({id:row.id,date:row.closedAt,amount:row.discrepancy}))
+  return {sourceVersion:financeControlSourceVersion(lines),snapshot,lines,discrepancies,timeZone,currency,today:toOrganizationDay(new Date(),timeZone)}
+}
+
+export async function getFinanceBusinessCalendar(organizationId:string){const timeZone=await loadOrganizationTimezone(organizationId);return {timeZone,today:toOrganizationDay(new Date(),timeZone)}}
+
+export function buildFinanceControlSnapshot(records:FinanceSummaryRecords,filters:FinanceFilters){const lines:ControlLine[]=[];const snapshot=buildFinancialSummary(records,filters,lines);return {lines,snapshot}}
+
+export function financeControlSourceVersion(lines:ControlLine[]){const canonical=lines.map(row=>JSON.stringify([row.metric,row.sourceType??'',row.sourceId??'',row.label,row.amount])).sort();return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')}

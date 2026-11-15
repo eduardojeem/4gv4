@@ -9,6 +9,24 @@ vi.mock('@/contexts/branch-context', () => ({
   useBranch: () => ({ selectedBranchId: null, selectedBranch: null }),
 }))
 
+// Estos tests miran el cambio de organización y de período; la validación del
+// informe se prueba aparte (finance-integrity-mobile.test.ts).
+vi.mock('@/lib/finance/summary-integrity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/finance/summary-integrity')>()),
+  assertFinanceSummaryIntegrity: () => {},
+}))
+
+/** El hook consulta la zona horaria del negocio antes de usar la organización. */
+function withCalendar(fetchImpl: (url: string, init?: RequestInit) => Promise<Response>) {
+  return vi.fn((url: string, init?: RequestInit) => {
+    if (url.startsWith('/api/admin/finances/calendar')) {
+      const organizationId = new URL(url, 'http://localhost').searchParams.get('organizationId')
+      return Promise.resolve(response({ organizationId, timeZone: 'America/Asuncion' }))
+    }
+    return fetchImpl(url, init)
+  })
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -32,7 +50,7 @@ describe('admin finance scope transitions', () => {
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { pendingOrganization = resolve }))
       .mockResolvedValueOnce(response({ activeOrganization: { id: 'org-c' } }))
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { pendingSummary = resolve }))
-    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('fetch', withCalendar(fetchMock))
     const { result } = renderHook(() => useAdminFinances(), { wrapper })
     await waitFor(() => expect(result.current.summary).toEqual({ label: 'org-a' }))
 
@@ -48,7 +66,7 @@ describe('admin finance scope transitions', () => {
   })
 
   it('hides the previous period while the next summary is pending', async () => {
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
+    vi.stubGlobal('fetch', withCalendar((url: string) => {
       if (url === '/api/organizations') return Promise.resolve(response({ activeOrganization: { id: 'org-a' } }))
       if (url.includes('startDate=2026-01-01')) return new Promise(() => {})
       return Promise.resolve(response({ label: 'old-period' }))
@@ -70,7 +88,7 @@ describe('admin finance scope transitions', () => {
       }
       return Promise.resolve(response({ label: url.includes('organizationId=org-b') ? 'org-b' : 'org-a' }))
     })
-    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('fetch', withCalendar(fetchMock))
     const { result } = renderHook(() => useAdminFinances(), { wrapper })
     await waitFor(() => expect(result.current.summary).toEqual({ label: 'org-a' }))
     let rejectOrganization!: (error: Error) => void

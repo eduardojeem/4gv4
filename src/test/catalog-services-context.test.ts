@@ -1,0 +1,9 @@
+import {vi,it,expect} from 'vitest';import {NextRequest,NextResponse} from 'next/server';
+const state=vi.hoisted(()=>({modules:['services']}));
+vi.mock('@/lib/auth/request-auth',()=>({resolveRequestAuthUser:async()=>({user:{id:'u',role:'admin',aal:'aal2'}})}));
+vi.mock('@/lib/saas/context',()=>({getCurrentOrganizationContext:async()=>({id:'org',name:'Ejemplo',slug:'ejemplo',plan:'BASIC',role:'owner',logoUrl:null})}));
+vi.mock('@/lib/saas/subscription-service',()=>({getOrganizationPlanInfo:async()=>({modules:state.modules,entitledModules:['inventory','services'],moduleTrials:[],attentionMode:'local',appointmentMode:'walk_in'})}));
+vi.mock('@/lib/saas/subscription-operation-access',()=>({subscriptionOperationResponse:async()=>null}));
+import {withTenantAuth} from '@/lib/api/withTenantAuth';
+it('marks services-only catalog access inside the trusted middleware',async()=>{state.modules=['services'];const handler=withTenantAuth({permission:'products.read',module:['inventory','services']},async(_request,{organization})=>NextResponse.json(organization));const response=await handler(new NextRequest('http://localhost/api/products'));expect(response.status).toBe(200);expect(await response.json()).toMatchObject({id:'org',catalogServicesOnly:true,appointmentMode:'walk_in'})});
+it('does not restrict an inventory-enabled organization to services',async()=>{state.modules=['inventory','services'];const handler=withTenantAuth({permission:'products.read',module:['inventory','services']},async(_request,{organization})=>NextResponse.json(organization));expect(await (await handler(new NextRequest('http://localhost/api/products'))).json()).not.toHaveProperty('catalogServicesOnly')});

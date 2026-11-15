@@ -14,6 +14,7 @@ export function BottomSheet({
   footer,
   children,
   tall,
+  scrollEnabled = true,
 }: {
   visible: boolean;
   title: string;
@@ -23,6 +24,7 @@ export function BottomSheet({
   children: React.ReactNode;
   /** Para listas largas: la hoja arranca alta aunque tenga poco contenido. */
   tall?: boolean;
+  scrollEnabled?: boolean;
 }) {
   const colors = usePalette();
   const insets = useSafeAreaInsets();
@@ -41,7 +43,7 @@ export function BottomSheet({
               <Ionicons name="close" size={24} color={colors.muted} />
             </Pressable>
           </View>
-          <KeyboardFormScroll contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <KeyboardFormScroll scrollEnabled={scrollEnabled} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {children}
           </KeyboardFormScroll>
           {footer}

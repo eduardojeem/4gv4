@@ -15,7 +15,26 @@ const productionOrigin = 'https://cswtugmwazxdktntndpy.supabase.co';
 if (config.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '') !== productionOrigin || !config.NEXT_PUBLIC_SUPABASE_ANON_KEY || !config.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('La configuración debe corresponder al proyecto real conocido y tener sus credenciales completas.');
 }
-const host = Object.values(networkInterfaces()).flat().find(address => address?.family === 'IPv4' && !address.internal && /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(address.address))?.address;
+function resolveLanHost() {
+  const override = process.env.DEV_LAN_IP?.trim();
+  if (override) return override;
+  const candidates = Object.entries(networkInterfaces()).flatMap(([interfaceName, addresses]) =>
+    (addresses ?? [])
+      .filter(address => address?.family === 'IPv4' && !address.internal && /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(address.address))
+      .map(address => ({ address: address.address, interfaceName })),
+  );
+  candidates.sort((a, b) => {
+    const score = ({ address, interfaceName }) => {
+      const virtualPenalty = /(vEthernet|WSL|Hyper-V|Docker|VirtualBox|VMware)/i.test(interfaceName) ? 10 : 0;
+      const subnetPriority = address.startsWith('192.168.') ? 0 : address.startsWith('10.') ? 1 : 2;
+      return virtualPenalty + subnetPriority;
+    };
+    return score(a) - score(b);
+  });
+  return candidates[0]?.address;
+}
+
+const host = resolveLanHost();
 if (!host) throw new Error('No se encontró una dirección LAN para el teléfono.');
 const api = 'http://' + host + ':3000';
 const env = mode === 'web' ? { ...process.env, ...config, NODE_ENV: 'development', NEXT_PUBLIC_SITE_URL: api } : {
@@ -29,8 +48,8 @@ const env = mode === 'web' ? { ...process.env, ...config, NODE_ENV: 'development
 };
 const root = process.cwd();
 const args = mode === 'web'
-  ? [resolve(root, 'node_modules/next/dist/bin/next'), 'dev', '--webpack', '--hostname', '0.0.0.0', '--port', '3000']
-  : [resolve(root, 'mobile/node_modules/expo/bin/cli'), 'start', '--go', '--lan', '--port', '8081'];
+  ? ['--max-http-header-size=131072', resolve(root, 'node_modules/next/dist/bin/next'), 'dev', '--webpack', '--hostname', '0.0.0.0', '--port', '3000']
+  : [resolve(root, 'mobile/node_modules/expo/bin/cli'), 'start', '--go', '--lan', '--port', '8081', ...(process.argv.includes('--clear') ? ['--clear'] : [])];
 console.log('REAL DATA: lo que guardes afecta datos reales. No se ejecutan seeds ni migraciones.');
 console.log(mode === 'web' ? 'Web/API: ' + api : 'Expo Go: exp://' + host + ':8081; API: ' + api);
 const child = spawn(process.execPath, args, { cwd: mode === 'web' ? root : resolve(root, 'mobile'), env, stdio: 'inherit' });

@@ -1,3 +1,5 @@
+import { BusinessAgendaSummary } from '@/components/business-agenda-summary';
+import { mobileBusinessPresentation } from '@/lib/business-presentation';
 import { SubscriptionExpiryBanner } from '@/components/subscription-expiry-banner';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -140,12 +142,13 @@ export default function PanelOverview() {
 
   const firstName = (panel?.user.name ?? '').split(' ')[0];
   const focus = panel?.businessFocus ?? null;
+  const business = mobileBusinessPresentation(panel?.organization);
   // Primero lo que se crea a diario en el rubro, después sus secciones y el resto.
   const createLinks: QuickLink[] = [
-    ...(focus === 'repairs'
+    ...(panel?.organization.primaryActivity==='pos' && can('pos.sales.create') ? [{key:'new-sale',label:'Nueva venta',icon:'cart-outline' as const,route:'/panel/pos'}] : focus === 'repairs'
       ? (can('repairs.orders.create') ? [{ key: 'new-repair', label: 'Nueva reparación', icon: 'add-circle-outline' as const, route: '/panel/repairs/new' }] : [])
       : focus === 'agenda'
-        ? [{ key: 'new-appointment', label: 'Nuevo turno', icon: 'add-circle-outline' as const, route: '/panel/agenda/form' }]
+        ? (can('agenda.create') ? [{ key: 'new-appointment', label: business.walkInOnly ? 'Registrar atención' : 'Nuevo turno', icon: 'add-circle-outline' as const, route: '/panel/agenda/form' }] : [])
         : can('products.create') ? [{ key: 'new-product', label: 'Nuevo producto', icon: 'add-circle-outline' as const, route: '/panel/products/form' }] : []),
     ...(!focus && has('orders') && can('ecommerce.orders.manage')
       ? [{ key: 'new-order', label: 'Nuevo pedido', icon: 'bag-add-outline' as const, route: '/panel/orders/new' }]
@@ -176,7 +179,7 @@ export default function PanelOverview() {
         { key: 'sales', show: has('pos'), icon: 'cash-outline' as const, label: 'Ventas de hoy', value: formatGs(visibleSummary.salesToday.amount), help: `${visibleSummary.salesToday.count} ${visibleSummary.salesToday.count === 1 ? 'venta' : 'ventas'}`, route: has('pos') ? panelRoute('pos') : null, tone: '#16A34A' },
         { key: 'orders', show: has('orders'), icon: 'clipboard-outline' as const, label: 'Pedidos activos', value: String(visibleSummary.activeOrders), help: 'Por preparar o entregar', route: panelRoute('orders'), tone: '#2563EB' },
         { key: 'repairs', show: has('repairs'), icon: 'construct-outline' as const, label: 'Reparaciones', value: String(visibleSummary.repairs.active), help: `${visibleSummary.repairs.ready.count} listas para entregar`, route: panelRoute('repairs'), tone: '#7C3AED' },
-        { key: 'stock', show: has('products'), icon: 'alert-circle-outline' as const, label: 'Stock bajo', value: String(visibleSummary.catalog.lowStock), help: `de ${visibleSummary.catalog.total} en catálogo`, route: panelRoute('products'), tone: visibleSummary.catalog.lowStock > 0 ? '#DC2626' : '#64748B' },
+        { key: 'stock', show: has('products') && business.showInventory, icon: 'alert-circle-outline' as const, label: 'Stock bajo', value: String(visibleSummary.catalog.lowStock), help: `de ${visibleSummary.catalog.total} en catálogo`, route: panelRoute('products'), tone: visibleSummary.catalog.lowStock > 0 ? '#DC2626' : '#64748B' },
         { key: 'customers', show: has('customers'), icon: 'people-outline' as const, label: 'Clientes nuevos', value: String(visibleSummary.customersNew.count), help: 'Últimos 7 días', route: panelRoute('customers'), tone: '#0891B2' },
       ].filter((kpi) => kpi.show)
     : [];
@@ -204,6 +207,7 @@ export default function PanelOverview() {
       </View>
 
       <SubscriptionExpiryBanner />
+      {has('agenda') && focus === 'agenda' ? <BusinessAgendaSummary key={organizationId} refreshKey={attempt} /> : null}
       <FirstStepsCard />
 
       {!visibleSummary && !error && (

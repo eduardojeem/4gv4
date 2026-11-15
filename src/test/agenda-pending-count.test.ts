@@ -1,0 +1,6 @@
+import {it,expect,vi} from 'vitest';import {NextRequest} from 'next/server';
+vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:unknown,handler:(request:NextRequest,context:unknown)=>unknown)=>(request:NextRequest)=>handler(request,{organization:{id:'A',role:'owner',name:'Prueba',slug:'prueba'}})}));
+vi.mock('@/lib/agenda/agenda-server',()=>({APPOINTMENT_COLUMNS:'id',loadAgendaConfig:async()=>({timeZone:'America/Asuncion',capabilities:{professionalBooking:false}})}));
+vi.mock('@/lib/supabase/server',()=>({createClient:async()=>({from:()=>{let head=false;const q={select:(_columns:string,options?:{head?:boolean})=>{head=options?.head??false;return q},eq:()=>q,gte:()=>q,lt:()=>q,order:()=>q,limit:async()=>({data:[],error:null}),then:(resolve:(value:unknown)=>unknown)=>Promise.resolve(head?{count:null,error:{message:'count failed'}}:{data:[]}).then(resolve)};return q}})}));
+import {GET} from '@/app/api/agenda/route';
+it('reports a count failure instead of inventing zero pending appointments',async()=>{const response=await GET(new NextRequest('http://localhost/api/agenda'));expect(response.status).toBe(503);expect(await response.json()).not.toHaveProperty('pendingCount')});

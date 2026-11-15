@@ -83,6 +83,7 @@ export type CompanyInfo = {
   serviceWebsiteVariant?: ServiceWebsiteVariant;
   serviceSpecialties?: (ServiceSpecialty | (string & {}))[];
   showTopBar?: boolean;
+  productWhatsappEnabled?: boolean;
   whatsapp?: string;
   instagram?: string;
   facebook?: string;
@@ -608,6 +609,123 @@ export function publicationIssues(company: CompanyInfo, mode: CommerceMode = 'ca
   return issues;
 }
 
+export type VisibilityMode = 'both' | 'storefront_only' | 'private';
+
+export type VisibilitySummary = {
+  storefrontPublic: boolean;
+  marketplacePublic: boolean;
+  mode: VisibilityMode;
+  statusLabel: string;
+  statusTone: 'success' | 'primary' | 'warning';
+};
+
+export function visibilitySummary(
+  company: Pick<CompanyInfo, 'storefrontPublic' | 'marketplacePublic'>,
+): VisibilitySummary {
+  const storefrontPublic = company.storefrontPublic === true;
+  const marketplacePublic = storefrontPublic && company.marketplacePublic === true;
+  if (storefrontPublic && marketplacePublic) {
+    return {
+      storefrontPublic: true,
+      marketplacePublic: true,
+      mode: 'both',
+      statusLabel: 'Web + Marketplace',
+      statusTone: 'success',
+    };
+  }
+  if (storefrontPublic) {
+    return {
+      storefrontPublic: true,
+      marketplacePublic: false,
+      mode: 'storefront_only',
+      statusLabel: 'Solo enlace web',
+      statusTone: 'primary',
+    };
+  }
+  return {
+    storefrontPublic: false,
+    marketplacePublic: false,
+    mode: 'private',
+    statusLabel: 'No publicada',
+    statusTone: 'warning',
+  };
+}
+
+/** Calcula el parche al activar o desactivar «Tienda online» o «Marketplace». */
+export function buildVisibilityTogglePatch(
+  current: Pick<CompanyInfo, 'storefrontPublic' | 'marketplacePublic'>,
+  target: 'storefront' | 'marketplace' | 'all',
+  enabled: boolean,
+): Pick<CompanyInfo, 'storefrontPublic' | 'marketplacePublic'> {
+  const currentlyPublic = current.storefrontPublic === true;
+  const currentlyMarketplace = currentlyPublic && current.marketplacePublic === true;
+
+  if (target === 'all') {
+    return { storefrontPublic: enabled, marketplacePublic: enabled };
+  }
+  if (target === 'storefront') {
+    if (!enabled) return { storefrontPublic: false, marketplacePublic: false };
+    return {
+      storefrontPublic: true,
+      marketplacePublic: currentlyPublic ? currentlyMarketplace : false,
+    };
+  }
+  // target === 'marketplace'
+  if (enabled) {
+    return { storefrontPublic: true, marketplacePublic: true };
+  }
+  return {
+    storefrontPublic: currentlyPublic,
+    marketplacePublic: false,
+  };
+}
+
+export function publicationToggleCopy(
+  current: Pick<CompanyInfo, 'storefrontPublic' | 'marketplacePublic'>,
+  next: Pick<CompanyInfo, 'storefrontPublic' | 'marketplacePublic'>,
+): { title: string; message: string; confirmLabel: string; destructive: boolean } {
+  const wasPublic = current.storefrontPublic === true;
+  const wasMarketplace = wasPublic && current.marketplacePublic === true;
+  const willPublic = next.storefrontPublic === true;
+  const willMarketplace = willPublic && next.marketplacePublic === true;
+
+  if (willPublic && willMarketplace && (!wasPublic || !wasMarketplace)) {
+    return {
+      title: wasPublic ? '¿Activar en el Marketplace?' : '¿Activar web y Marketplace?',
+      message: wasPublic
+        ? 'Tu comercio y tus productos activos aparecerán en el catálogo público del Marketplace.'
+        : 'Tu tienda online quedará pública por enlace y también aparecerá en el Marketplace de MiTiendaPy.',
+      confirmLabel: 'Activar',
+      destructive: false,
+    };
+  }
+  if (willPublic && !wasPublic) {
+    return {
+      title: '¿Publicar tu tienda online?',
+      message:
+        'Cualquier persona con tu enlace va a poder ver tu página web y hacer pedidos o consultas. Podés sumar el Marketplace debajo cuando quieras.',
+      confirmLabel: 'Publicar',
+      destructive: false,
+    };
+  }
+  if (!willPublic && wasPublic) {
+    return {
+      title: '¿Desactivar tu tienda web?',
+      message:
+        'Tu tienda online dejará de verse por enlace y también se ocultará del Marketplace. Tus productos y diseño no se borran.',
+      confirmLabel: 'Desactivar',
+      destructive: true,
+    };
+  }
+  return {
+    title: '¿Ocultar del Marketplace?',
+    message:
+      'Tu tienda seguirá activa y accesible por enlace directo, pero no aparecerá en el directorio del Marketplace.',
+    confirmLabel: 'Ocultar',
+    destructive: true,
+  };
+}
+
 // ─── Validaciones base (espejo de src/lib/validation/website-settings.ts) ───
 
 export function isSafeLinkOrPath(value: string | null | undefined): boolean {
@@ -932,6 +1050,7 @@ export const STOREFRONT_STYLE_PREFERENCES = [
   'catalog-basic',
   'informatica-electronica',
   'barber',
+  'especial-para-barbero',
 ] as const;
 
 export type StorefrontStylePreference = (typeof STOREFRONT_STYLE_PREFERENCES)[number];
@@ -949,6 +1068,7 @@ export const STOREFRONT_STYLES: readonly { value: StorefrontStylePreference; lab
   { value: 'modern', label: 'Estudio Minimalista', description: 'Estilo contemporáneo con bordes suaves redondeados y atmósfera limpia.' },
   { value: 'services', label: 'Turnos & Servicios', description: 'Peluquerías, barberías y estética: servicios con precio y turnos al frente.' },
   { value: 'barber', label: 'Barbería Club', description: 'Carta de rituales, maestros barberos y reserva de turnos online.' },
+  { value: 'especial-para-barbero', label: 'Especial para barbero', description: 'Tienda profesional de barbería e insumos con mega menú, bandas oscuras, precios minoristas y mayoristas y colores adaptables a tu marca.' },
   { value: 'beauty', label: 'Cosmética & Perfumería', description: 'Compra por necesidad (rostro, cabello, maquillaje), marcas y rutinas.' },
   { value: 'catalog-basic', label: 'Vitrina sin Carrito', description: 'Vitrina simple para exhibir productos con foto y precio, sin carrito.' },
 ];
@@ -1099,6 +1219,20 @@ export const STOREFRONT_TEMPLATES_META: Record<StorefrontStyle, StorefrontTempla
       { id: 'barber-modern', name: 'Barber Modern Fade', tagline: 'Cortes urbanos y fades', badgeText: 'Modern' },
     ],
   },
+  'especial-para-barbero': {
+    id: 'especial-para-barbero',
+    name: 'Especial para barbero',
+    badge: 'Insumos & Mayorista',
+    tagline: 'Estética oscura, mega menú y venta minorista o mayorista',
+    recommendedColors: ['amber', 'orange', 'red', 'blue'],
+    features: [
+      'Mega menú y buscador protagonista',
+      'Bandas oscuras y tarjetas animadas',
+      'Precios minoristas, ofertas y mayorista',
+    ],
+    accentHex: '#18181B',
+    variants: [],
+  },
   beauty: {
     id: 'beauty',
     name: 'Cosmética & Perfumería',
@@ -1136,7 +1270,7 @@ export const STOREFRONT_TEMPLATE_GROUPS: readonly StorefrontTemplateGroup[] = [
   { id: 'general', title: 'Comercio general', label: 'Comercio', badge: 'Multirrubro', templateKeys: ['classic', 'modern', 'catalog-basic'] },
   { id: 'tech', title: 'Tecnología & Electrónica', label: 'Tecnología', badge: 'Celulares, PC y gadgets', templateKeys: ['tech', 'informatica-electronica'] },
   { id: 'fashion', title: 'Moda & Deportes', label: 'Moda', badge: 'Ropa y calzado', templateKeys: ['fashion', 'sport'] },
-  { id: 'beauty', title: 'Belleza & Estética', label: 'Belleza', badge: 'Productos y turnos', templateKeys: ['beauty', 'services', 'barber'] },
+  { id: 'beauty', title: 'Belleza & Estética', label: 'Belleza', badge: 'Productos y turnos', templateKeys: ['beauty', 'services', 'barber', 'especial-para-barbero'] },
   { id: 'food', title: 'Almacén & Mayoristas', label: 'Almacén', badge: 'Alto volumen', templateKeys: ['market', 'wholesale-pro'] },
 ];
 
@@ -1154,6 +1288,7 @@ export const STOREFRONT_TEMPLATE_TIER: Record<StorefrontStylePreference, 'base' 
   'informatica-electronica': 'premium',
   'wholesale-pro': 'premium',
   barber: 'premium',
+  'especial-para-barbero': 'premium',
 };
 
 export const TEMPLATE_TIER_LABEL: Record<'base' | 'rubro' | 'premium', string> = {
@@ -1199,7 +1334,7 @@ export const SERVICE_SPECIALTY_LABELS: Record<ServiceSpecialty, string> = {
 const SERVICE_VERTICALS = new Set<string>(['barbershop', 'beauty_services']);
 const PRODUCT_VERTICALS = new Set<string>(['clothing', 'electronics', 'food', 'hardware']);
 const STORE_STYLES_FOR_SERVICE_VERTICAL: Record<string, readonly StorefrontStyle[]> = {
-  barbershop: ['classic', 'modern'],
+  barbershop: ['classic', 'modern', 'especial-para-barbero'],
   beauty_services: ['classic', 'modern', 'beauty'],
 };
 const STYLE_BY_VERTICAL: Record<BusinessVertical, StorefrontStyle> = {
@@ -1300,19 +1435,30 @@ export function isTemplateInPlan(
   return allowed.includes(resolved);
 }
 
+export function plansWithTemplate(
+  style: StorefrontStylePreference,
+  plans: readonly PlanTemplateSummary[],
+  businessVertical?: unknown,
+  context: StorefrontStyleContext = {},
+): PlanTemplateSummary[] {
+  const ordered = [...plans].sort(
+    (a, b) => PLAN_CODE_ORDER.indexOf(a.code) - PLAN_CODE_ORDER.indexOf(b.code),
+  );
+  return ordered.filter((plan) =>
+    isTemplateInPlan(style, plan.templates, businessVertical, context),
+  );
+}
+
 export function cheapestPlanWithTemplate(
   style: StorefrontStylePreference,
   plans: readonly PlanTemplateSummary[],
   businessVertical?: unknown,
   context: StorefrontStyleContext = {},
 ): PlanTemplateSummary | null {
-  const ordered = [...plans].sort(
-    (a, b) => PLAN_CODE_ORDER.indexOf(a.code) - PLAN_CODE_ORDER.indexOf(b.code),
-  );
-  return ordered.find((plan) => isTemplateInPlan(style, plan.templates, businessVertical, context)) ?? null;
+  return plansWithTemplate(style, plans, businessVertical, context)[0] ?? null;
 }
 
-export type TemplateStatus = 'available' | 'locked_plan' | 'unavailable';
+export type TemplateStatus = 'available' | 'locked_plan' | 'coming_soon' | 'unavailable';
 
 export type TemplateCatalogOption = {
   value: StorefrontStylePreference;
@@ -1324,6 +1470,7 @@ export type TemplateCatalogOption = {
   status: TemplateStatus;
   reason?: string;
   upgradePlanName?: string;
+  enabledPlans?: string[];
   isSuggested: boolean;
   isRecommended: boolean;
 };
@@ -1372,7 +1519,7 @@ export function buildMobileTemplateCatalog(input: {
   const context = { businessVertical, ...input.context };
   const ownGroup = GROUP_BY_VERTICAL[String(businessVertical ?? '')] ?? 'general';
   const TIER_ORDER = { base: 0, rubro: 1, premium: 2 } as const;
-  const STATUS_ORDER = { available: 0, locked_plan: 1, unavailable: 2 } as const;
+  const STATUS_ORDER = { available: 0, locked_plan: 1, coming_soon: 2, unavailable: 3 } as const;
 
   const groups = STOREFRONT_TEMPLATE_GROUPS.map((group) => {
     const options = group.templateKeys.flatMap((key): TemplateCatalogOption[] => {
@@ -1384,15 +1531,20 @@ export function buildMobileTemplateCatalog(input: {
         !access ||
         key === savedValue ||
         isTemplateInPlan(key, access.allowed, businessVertical, context);
+      const enabledPlanList = access
+        ? plansWithTemplate(key, access.plans, businessVertical, context)
+        : [];
+      const upgradePlan =
+        !inPlan && fitsBusiness && access
+          ? enabledPlanList[0] ?? null
+          : null;
       const status: TemplateStatus = !fitsBusiness
         ? 'unavailable'
         : inPlan
           ? 'available'
-          : 'locked_plan';
-      const upgradePlan =
-        status === 'locked_plan' && access
-          ? cheapestPlanWithTemplate(key, access.plans, businessVertical, context)
-          : null;
+          : access && access.plans.length > 0 && !upgradePlan
+            ? 'coming_soon'
+            : 'locked_plan';
       return [
         {
           value: key,
@@ -1408,12 +1560,15 @@ export function buildMobileTemplateCatalog(input: {
           reason:
             status === 'unavailable'
               ? unavailableTemplateReason(key, context)
-              : status === 'locked_plan'
-                ? upgradePlan
-                  ? `Disponible en el plan ${upgradePlan.name}.`
-                  : `No está incluida en tu plan ${access?.planName ?? ''}.`.replace(' .', '.')
-                : undefined,
+              : status === 'coming_soon'
+                ? 'Próximamente disponible.'
+                : status === 'locked_plan'
+                  ? upgradePlan
+                    ? `Disponible en el plan ${upgradePlan.name}.`
+                    : `No está incluida en tu plan ${access?.planName ?? ''}.`.replace(' .', '.')
+                  : undefined,
           upgradePlanName: upgradePlan?.name,
+          enabledPlans: access ? enabledPlanList.map((plan) => plan.name) : undefined,
           isSuggested: key === suggestedStyle,
           isRecommended: context.commerceMode === 'catalog' && key === 'catalog-basic',
         },
@@ -1484,6 +1639,7 @@ const HEADER_BY_STYLE: Record<StorefrontStyle, 'solid' | 'accent' | 'dark'> = {
   services: 'dark',
   beauty: 'solid',
   barber: 'dark',
+  'especial-para-barbero': 'dark',
 };
 
 export function suggestStorefrontAppearance(input: {
@@ -1506,6 +1662,7 @@ export function suggestStorefrontAppearance(input: {
 
   const keywordRules: { style: StorefrontStyle; pattern: RegExp }[] = [
     { style: 'barber', pattern: /(varsovia|club de caballeros|afeitad\w* a navaja|toallas? calientes?)/i },
+    { style: 'especial-para-barbero', pattern: /(barber supply|insumos?(?: de| para)? barber\w*|clippers?|trimmers?|shavers?|distribuidora de barber\w*)/i },
     { style: 'informatica-electronica', pattern: /(inform[aá]tica|computaci[oó]n|hardware|perif[eé]ricos|componentes pc)/i },
     { style: 'services', pattern: /(peluquer|barber|sal[oó]n de belleza|u[nñ]as|manicur|pedicur|spa|masajes|est[eé]tica|pesta[nñ]as|cejas)/i },
     { style: 'sport', pattern: /(deport|fitness|gym|gimnasio|suplementos|zapatillas|sneakers|running)/i },
@@ -2220,6 +2377,9 @@ export type CarouselExampleSlide = {
   contentAlign?: 'left' | 'center' | 'right';
   textTone?: 'light' | 'dark';
   badge?: string;
+  titleSize?: 'compact' | 'normal' | 'large';
+  overlayIntensity?: 'none' | 'subtle' | 'medium' | 'strong';
+  overlayColor?: 'black' | 'white' | 'brand';
 };
 
 export type CarouselExample = {
@@ -2232,17 +2392,52 @@ export type CarouselExample = {
 
 export const CAROUSEL_EXAMPLES: readonly CarouselExample[] = [
   {
+    name: 'Reservá tu turno en Barbería',
+    category: 'Barbería',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: { badge: 'Turnos Online', title: 'Tu corte y estilo, en manos expertas', message: 'Elegí el servicio, tu barbero preferido y el horario en un minuto. Sin esperas.', imageUrl: '', imageAlt: 'Barbero profesional realizando un corte degradado fade', ctaText: 'Reservar turno', ctaHref: '/turnos', textTone: 'light', contentAlign: 'left', titleSize: 'normal', overlayIntensity: 'strong', overlayColor: 'black' },
+  },
+  {
+    name: 'Combo Corte + Barba',
+    category: 'Barbería',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: { badge: 'Experiencia Club', title: 'Combo Corte de Autor + Barba', message: 'Corte fade o clásico más ritual completo de barba a navaja, toalla caliente y styling final.', imageUrl: '', imageAlt: 'Estación de barbería clásica lista para corte y barba', ctaText: 'Reservar combo', ctaHref: '/turnos', textTone: 'light', contentAlign: 'left', titleSize: 'normal', overlayIntensity: 'medium', overlayColor: 'black' },
+  },
+  {
+    name: 'Ritual de Barba & Vapor',
+    category: 'Barbería',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: { badge: 'Toalla Caliente', title: 'Ritual de Barba a Navaja y Vapor', message: 'Perfilado de precisión con vapor aromático, aceites esenciales y aftershave hidratante.', imageUrl: '', imageAlt: 'Barbero realizando afeitado tradicional a navaja con toalla caliente', ctaText: 'Ver servicios', ctaHref: '/servicios', textTone: 'light', contentAlign: 'right', titleSize: 'normal', overlayIntensity: 'strong', overlayColor: 'black' },
+  },
+  {
+    name: 'Spa Facial & Black Mask',
+    category: 'Barbería',
+    needs: 'services',
+    verticals: ['barbershop'],
+    slide: { badge: 'Cuidado Facial', title: 'Tratamiento Capilar & Black Mask', message: 'Limpieza facial profunda con vaporizador y mascarilla de carbón activado para renovar tu piel.', imageUrl: '', imageAlt: 'Tratamiento facial masculino con mascarilla black mask', ctaText: 'Reservar turno', ctaHref: '/turnos', textTone: 'light', contentAlign: 'left', titleSize: 'normal', overlayIntensity: 'medium', overlayColor: 'black' },
+  },
+  {
+    name: 'Máquinas & Insumos Pro',
+    category: 'Barbería',
+    needs: 'catalog',
+    verticals: ['barbershop'],
+    slide: { badge: 'Minorista & Mayorista', title: 'Clippers, Trimmers & Pomadas Pro', message: 'Equipamiento profesional original y productos para el cuidado del cabello y la barba.', imageUrl: '', imageAlt: 'Máquinas clippers, tijeras y pomada para barbería', ctaText: 'Ver catálogo', ctaHref: '/productos', textTone: 'light', contentAlign: 'left', titleSize: 'normal', overlayIntensity: 'strong', overlayColor: 'black' },
+  },
+  {
     name: 'Reservá tu turno',
     category: 'Servicios',
     needs: 'services',
-    verticals: ['barbershop', 'beauty_services', 'cosmetics', 'general', 'other'],
+    verticals: ['beauty_services', 'cosmetics', 'general', 'other'],
     slide: { title: 'Reservá tu turno online', message: 'Elegí el servicio, el día y el horario en un minuto. Sin llamadas ni esperas.', imageUrl: '', imageAlt: '', ctaText: 'Reservar turno', ctaHref: '/turnos', textTone: 'light', contentAlign: 'left' },
   },
   {
     name: 'Promo de la semana',
     category: 'Servicios',
     needs: 'services',
-    verticals: ['barbershop', 'beauty_services', 'cosmetics', 'general', 'other'],
+    verticals: ['beauty_services', 'cosmetics', 'general', 'other'],
     slide: { title: 'Precio especial de lunes a jueves', message: 'Aprovechá la promo de la semana: reservá tu lugar antes de que se llenen los horarios.', imageUrl: '', imageAlt: '', ctaText: 'Reservar ahora', ctaHref: '/turnos', textTone: 'light', contentAlign: 'center' },
   },
   {

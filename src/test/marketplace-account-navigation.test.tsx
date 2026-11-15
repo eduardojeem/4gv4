@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,26 +11,33 @@ import {
   canOpenBusinessPanel,
 } from '../../mobile/src/lib/marketplace-account-model'
 
-const state = vi.hoisted(() => ({ pathname: '/marketplace', user: null as null | { id: string; role: string } }))
+const state = vi.hoisted(() => ({
+  pathname: '/marketplace',
+  search: '',
+  push: vi.fn(),
+  user: null as null | { id: string; role: string; organization?: { id: string; name: string; slug: string; role: string } | null },
+}))
 
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: state.user }) }))
 vi.mock('next/navigation', () => ({
   usePathname: () => state.pathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: state.push, replace: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(state.search),
 }))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
 }))
-vi.mock('@/components/public/AuthModal', () => ({ AuthModal: () => null }))
+vi.mock('@/components/public/AuthModal', () => ({ AuthModal: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Auth Modal" /> : null) }))
 
 import { MarketplaceMobileBottomNav } from '@/components/public/MarketplaceMobileBottomNav'
 
 const read = (path: string) => readFileSync(join(__dirname, '../../mobile/src', path), 'utf8')
 
-describe('web móvil: pestaña Perfil del marketplace', () => {
+describe('web móvil: pestaña Perfil y menú Bento + del marketplace', () => {
   beforeEach(() => {
     state.pathname = '/marketplace'
+    state.search = ''
+    state.push.mockReset()
     state.user = { id: 'u1', role: 'cliente' }
   })
 
@@ -51,6 +58,51 @@ describe('web móvil: pestaña Perfil del marketplace', () => {
     state.user = { id: 'u2', role: 'admin' }
     render(<MarketplaceMobileBottomNav />)
     expect(screen.getByRole('link', { name: /panel/i })).toHaveAttribute('href', '/dashboard')
+  })
+
+  it('muestra Ofertas en la barra inferior en lugar de Tiendas y marca activa ?ofertas=1', () => {
+    state.pathname = '/marketplace/productos'
+    state.search = 'ofertas=1'
+    render(<MarketplaceMobileBottomNav />)
+
+    const offersLink = screen.getByRole('link', { name: /ofertas/i })
+    expect(offersLink).toHaveAttribute('href', '/marketplace/productos?ofertas=1&country=all&city=all#catalogo')
+    expect(offersLink).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /productos/i })).not.toHaveAttribute('aria-current')
+    expect(screen.queryByRole('link', { name: /tiendas/i })).not.toBeInTheDocument()
+  })
+
+  it('abre el menú Bento al presionar + en modo visitante sin mostrar pedidos ni reparaciones', () => {
+    state.user = null
+    render(<MarketplaceMobileBottomNav />)
+
+    fireEvent.click(screen.getByRole('button', { name: /abrir accesos rápidos/i }))
+    expect(screen.getByRole('dialog', { name: /accesos rápidos del marketplace/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /ver tiendas/i })).toHaveAttribute('href', '/marketplace/empresas?country=all&city=all')
+    expect(screen.getByRole('link', { name: /buscar productos/i })).toHaveAttribute('href', '/marketplace/productos?country=all&city=all')
+    expect(screen.queryByRole('link', { name: /mis pedidos/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /mis reparaciones/i })).not.toBeInTheDocument()
+
+    const input = screen.getByPlaceholderText(/buscar productos, marcas/i)
+    fireEvent.change(input, { target: { value: 'taladro' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(state.push).toHaveBeenCalledWith('/marketplace/buscar?q=taladro&country=all&city=all')
+  })
+
+  it('muestra Mis pedidos y Mis reparaciones al abrir + con sesión iniciada', () => {
+    state.search = 'country=PY&city=PY:asuncion'
+    state.user = {
+      id: 'u3',
+      role: 'cliente',
+      organization: { id: 'o1', name: 'Tienda Sur', slug: 'tienda-sur', role: 'owner' },
+    }
+    render(<MarketplaceMobileBottomNav />)
+
+    fireEvent.click(screen.getByRole('button', { name: /abrir accesos rápidos/i }))
+    expect(screen.getByText('Asuncion')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /mis pedidos/i })).toHaveAttribute('href', '/marketplace/perfil#pedidos')
+    expect(screen.getByRole('link', { name: /mis reparaciones/i })).toHaveAttribute('href', '/marketplace/mis-reparaciones')
+    expect(screen.getByRole('link', { name: /panel de tienda sur/i })).toHaveAttribute('href', '/dashboard')
   })
 })
 

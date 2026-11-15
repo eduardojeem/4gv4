@@ -28,8 +28,10 @@ describe('dashboard products loading contract', () => {
 
   it('enforces tenant scope before using the server database client', () => {
     expect(productsRoute).toContain(
-      "withTenantAuth({ permission: 'products.read', module: 'inventory' }"
+      "withTenantAuth({ permission: 'products.read', module: ['inventory', 'services'] }"
     )
+    // Una cuenta solo de servicios ve únicamente sus servicios, nunca el inventario.
+    expect(productsRoute).toContain("if(organization.catalogServicesOnly)queryBuilder=queryBuilder.eq('unit_measure','servicio')")
     expect(productsRoute).toContain(
       ".eq('organization_id', organization.id)"
     )

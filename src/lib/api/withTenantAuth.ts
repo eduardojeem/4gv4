@@ -1,3 +1,4 @@
+import {subscriptionOperationResponse} from '@/lib/saas/subscription-operation-access'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import {
@@ -30,6 +31,9 @@ export interface TenantAuthContext {
     name: string
     slug: string
     plan: string
+    attentionMode?: 'local'|'home'|'both'
+    appointmentMode?: 'booking'|'walk_in'|'both'
+    catalogServicesOnly?: boolean
     logoUrl: string | null
     role: string
   }
@@ -118,9 +122,13 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
         }
       }
 
+      const serviceDetails:Pick<TenantAuthContext['organization'],'attentionMode'|'appointmentMode'>={}
+      let catalogServicesOnly = false
       if (options.module) {
         const anyOf: readonly OrganizationModule[] = typeof options.module === 'string' ? [options.module] : options.module
         const planInfo = await getOrganizationPlanInfo(organization.id)
+        if(anyOf.includes('services')){if(planInfo.attentionMode)serviceDetails.attentionMode=planInfo.attentionMode;if(planInfo.appointmentMode)serviceDetails.appointmentMode=planInfo.appointmentMode}
+        catalogServicesOnly = anyOf.includes('services') && anyOf.includes('inventory') && !planInfo.modules.includes('inventory') && planInfo.modules.includes('services')
         if (!anyOf.some((module) => planInfo.modules.includes(module))) {
           const commerciallyAvailable = anyOf.some((module) => planInfo.entitledModules.includes(module)
             || planInfo.moduleTrials.some(trial => trial.module === module))
@@ -159,6 +167,8 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
         )
       }
 
+      if(auth.user.role!=='super_admin'){const blocked=await subscriptionOperationResponse(request,organization.id);if(blocked)return blocked}
+
       return handler(request, {
         user: {
           id: auth.user.id,
@@ -166,7 +176,7 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
           role: auth.user.role,
           aal: auth.user.aal,
         },
-        organization,
+        organization: catalogServicesOnly || Object.keys(serviceDetails).length ? {...organization,...serviceDetails,...(catalogServicesOnly?{catalogServicesOnly:true}:{})} : organization,
       }, routeContext)
     } catch (error) {
       logger.error('Tenant auth middleware error', { error })

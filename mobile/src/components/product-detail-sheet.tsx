@@ -1,3 +1,4 @@
+import {productWhatsappInquiryHref} from '../../../src/lib/public/product-whatsapp';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -5,6 +6,7 @@ import * as Linking from 'expo-linking';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -129,28 +131,11 @@ export function ProductDetailSheet({
     }
   };
 
+  const whatsappHref=productWhatsappInquiryHref({company:{whatsapp:product.store.whatsapp??store?.whatsapp,phone:product.store.phone??store?.phone,productWhatsappEnabled:product.store.productWhatsappEnabled===false||store?.productWhatsappEnabled===false?false:undefined},product:{name:whatsappProductLine(product.name,variant),url:SITE_URL.replace(/\/$/,'')+productPath(product),priceHidden:hidePrice}});
   const handleWhatsApp = async () => {
+    if(!whatsappHref)return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const priceText = finalPrice ? formatGs(finalPrice) : '';
-    const message = encodeURIComponent(
-      `¡Hola! Vi en Mi tiendaPY su producto *${whatsappProductLine(product.name, variant)}*${priceText ? ` (${priceText})` : ''} en ${product.store.name}. ¿Tienen disponibilidad?`
-    );
-
-    // Si la tienda tiene WhatsApp registrado, abrimos directo a su chat
-    const rawNumber = store?.whatsapp ? store.whatsapp.replace(/\D/g, '') : null;
-    if (rawNumber && rawNumber.length >= 8) {
-      // Si el número no tiene código de país (Paraguay 595), lo agregamos si arranca con 09
-      let phoneWithCountry = rawNumber;
-      if (rawNumber.startsWith('09')) {
-        phoneWithCountry = `595${rawNumber.slice(1)}`;
-      } else if (rawNumber.startsWith('9')) {
-        phoneWithCountry = `595${rawNumber}`;
-      }
-      await Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${message}`);
-    } else {
-      // Si no tiene número registrado, abrimos el producto en la web oficial
-      await openWeb(productPath(product));
-    }
+    try{await Linking.openURL(whatsappHref)}catch{Alert.alert('No se pudo abrir WhatsApp','Intentá nuevamente o consultá los datos de contacto de la tienda.')}
   };
 
   const handleAddToCart = async () => {
@@ -457,15 +442,15 @@ export function ProductDetailSheet({
         </ScrollView>
 
         {/* ── Barra fija de compra ── */}
-        <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable
+        {(whatsappHref||canBuy) && <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
+          {whatsappHref && <Pressable
             onPress={handleWhatsApp}
             accessibilityRole="button"
             accessibilityLabel="Consultar por WhatsApp"
             style={[styles.whatsappBtn, !canBuy && styles.whatsappBtnWide]}>
             <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
             {!canBuy ? <Text style={styles.primaryActionBtnText}>Consultar por WhatsApp</Text> : null}
-          </Pressable>
+          </Pressable>}
           {canBuy ? (
             <Pressable onPress={handleAddToCart} style={[styles.cartBtn, { backgroundColor: palette.primary }]}>
               <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
@@ -475,7 +460,7 @@ export function ProductDetailSheet({
               </View>
             </Pressable>
           ) : null}
-        </View>
+        </View>}
       </View>
     </Modal>
   );

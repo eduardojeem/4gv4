@@ -33,6 +33,7 @@ export type SubscriptionStatusData = {
   effectiveModules: OrganizationModule[]
   businessVertical: BusinessVertical
   serviceSpecialties?: import('@/lib/organization/service-specialties').ServiceSpecialty[]
+  primaryActivity?: 'auto' | 'pos' | 'agenda' | 'repairs'
   attentionMode?: 'local' | 'home' | 'both'
   appointmentMode?: 'booking' | 'walk_in' | 'both'
   operatingModel: OperatingModel

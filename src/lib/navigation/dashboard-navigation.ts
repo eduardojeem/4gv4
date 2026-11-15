@@ -1,6 +1,6 @@
 import type { OrganizationModule } from '@/lib/organization/business-profile'
 
-export type DashboardSearchType = 'productos' | 'clientes' | 'reparaciones' | 'todos'
+export type DashboardSearchType = 'productos' | 'servicios' | 'turnos' | 'clientes' | 'reparaciones' | 'todos'
 
 /** Con una lista alcanza con cualquiera de los módulos (ej.: Productos sirve al inventario y a los servicios). */
 export function isNavigationModuleAvailable(
@@ -18,7 +18,8 @@ export function getAvailableDashboardSearchTypes(
   return [
     'todos',
     ...(effectiveModules.includes('inventory') ? ['productos' as const] : []),
-    'clientes',
+    ...(effectiveModules.includes('services') ? ['servicios' as const,'turnos' as const] : []),
+    ...(effectiveModules.includes('crm') ? ['clientes' as const] : []),
     ...(effectiveModules.includes('repairs') ? ['reparaciones' as const] : []),
   ]
 }

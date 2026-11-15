@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/components/dashboard/agenda/AppointmentDialog', () => ({ AppointmentDialog: () => null, STATUS_COLORS: {} }))
 vi.mock('@/components/dashboard/agenda/AppointmentEventsBell', () => ({ AppointmentEventsBell: () => null }))
-const tenant = vi.hoisted(() => ({ scope: 'org', currentScope: { current: 'org' } }))
+const tenant = vi.hoisted(() => ({ scope: 'org', organizationId: 'org' as string | null, currentScope: { current: 'org' } }))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: { id: 'user' } }) }))
 vi.mock('@/hooks/use-tenant-scope', () => ({ useTenantScope: () => tenant }))
 import { AgendaBoard } from '@/components/dashboard/agenda/AgendaBoard'
 import { ExpirationsBoard } from '@/components/dashboard/expirations/ExpirationsBoard'

@@ -1,0 +1,10 @@
+import {it,expect} from 'vitest';
+import {nonrenewalState} from '@/lib/saas/nonrenewal-policy';
+const sub={status:'suspended',current_period_ends_at:'2026-01-01T00:00:00Z'};
+it('suspends without fabricating dates when notice is missing',()=>{const s=nonrenewalState(sub,new Date('2026-02-01'));expect(s.blocked).toBe(true);expect(s.phase).toBe('suspended');expect(s.deletionDueAt).toBeNull();expect(s.eligibleForDeletion).toBe(false);});
+it('keeps a complete 180 day period for previously overdue accounts',()=>{const s=nonrenewalState(sub,new Date('2026-11-12'),'2026-11-12T00:00:00Z');expect(s.archiveDueAt).toBe('2027-02-10T00:00:00.000Z');expect(s.deletionDueAt).toBe('2027-05-11T00:00:00.000Z');});
+it('archives at day 90, never deletes at day 90',()=>{const s=nonrenewalState(sub,new Date('2026-04-01'),'2026-01-01T00:00:00Z');expect(s.phase).toBe('archived');expect(s.eligibleForDeletion).toBe(false);expect(s.canRecover).toBe(true);});
+it('requires the full 180 days before becoming eligible',()=>{expect(nonrenewalState(sub,new Date('2026-06-29T23:59:59Z'),'2026-01-01').eligibleForDeletion).toBe(false);expect(nonrenewalState(sub,new Date('2026-06-30'),'2026-01-01').eligibleForDeletion).toBe(true);});
+it('renewal cancels dates and all deletion eligibility',()=>{const s=nonrenewalState({...sub,status:'active',current_period_ends_at:'2027-01-01'},new Date('2026-07-01'),'2026-01-01');expect(s.phase).toBe('active');expect(s.deletionDueAt).toBeNull();expect(s.eligibleForDeletion).toBe(false);});
+it('never purges without verified expiry or with a future notice',()=>{for(const value of [{status:'suspended'},{...sub,current_period_ends_at:'invalid'}])expect(nonrenewalState(value,new Date('2026-07-01'),'2026-01-01').eligibleForDeletion).toBe(false);expect(nonrenewalState(sub,new Date('2026-07-01'),'2027-01-01').deletionDueAt).toBeNull();});
+it('uses trial expiry for trials rather than a stale paid period',()=>{const s=nonrenewalState({status:'trialing',trial_ends_at:'2026-02-01',current_period_ends_at:'2020-01-01'},new Date('2026-02-02'),'2026-02-01');expect(s.deletionDueAt).toBe('2026-07-31T00:00:00.000Z');});

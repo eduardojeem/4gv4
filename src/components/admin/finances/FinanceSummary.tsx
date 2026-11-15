@@ -1,3 +1,5 @@
+import type { ControlMetric } from '@/lib/finance/control-model'
+import { useRouter } from 'next/navigation'
 import { useState, useMemo } from 'react'
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns'
 import {
@@ -152,6 +154,7 @@ function MetricCard({
   badgeText,
   previousValue,
   invertDeltaColor = false,
+  onDetail,
 }: {
   title: string
   value: number | null
@@ -160,6 +163,7 @@ function MetricCard({
   tone?: MetricTone
   badgeText?: string
   previousValue?: number | null
+  onDetail?: () => void
   invertDeltaColor?: boolean
 }) {
   const isNegative = value !== null && value < 0
@@ -213,6 +217,7 @@ function MetricCard({
             </span>
           )}
           <span>{description}</span>
+          {onDetail&&<button type="button" onClick={onDetail} className="min-h-10 underline font-medium" aria-label={'Ver origen: '+title}>Ver origen del importe</button>}
         </div>
       </CardContent>
     </Card>
@@ -660,16 +665,18 @@ function CashFlowInsights({
 export function FinanceSummary({
   summary,
   onViewExpenses,
-  onViewProfitability,
+  onViewControl,
   onViewPayroll,
   onOpenBusinessGuide,
 }: {
   summary: FinanceSummaryReport
+  onViewControl?: (metric: ControlMetric) => void
   onViewExpenses?: (action?: 'new' | 'overdue' | 'upcoming' | 'all') => void
   onViewProfitability?: () => void
   onViewPayroll?: () => void
   onOpenBusinessGuide?: () => void
 }) {
+  const router = useRouter()
   const [view, setView] = useState<'accrued' | 'cash'>('accrued')
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [exportPdfError, setExportPdfError] = useState<string | null>(null)
@@ -937,14 +944,14 @@ export function FinanceSummary({
             onClick={() => document.getElementById('finance-data-warnings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             icon={AlertTriangle}
           />
-          {summary.receivables && summary.receivables.total > 0 ? (
+          {summary.receivablesStatus === 'unavailable' ? <PriorityAction title="Saldo por cobrar no disponible" description="No pudimos consultar las deudas de clientes. No se interpretan como cero." action="Revisar cartera" onClick={() => { router.push('/dashboard/credits') }} icon={AlertTriangle} /> : summary.receivables && summary.receivables.total > 0 ? (
             <PriorityAction
               title="Te deben"
               description={`${formatCurrency(summary.receivables.total)} de ${summary.receivables.customers === 1 ? '1 cliente' : `${summary.receivables.customers} clientes`}${summary.receivables.overdue > 0 ? ` · ${formatCurrency(summary.receivables.overdue)} ya vencido` : ''}.`}
               count={summary.receivables.customers}
               tone={summary.receivables.overdue > 0 ? 'urgent' : 'default'}
               action="Ver quién te debe"
-              onClick={() => { window.location.href = '/dashboard/credits' }}
+              onClick={() => { router.push('/dashboard/credits') }}
               icon={Banknote}
             />
           ) : (
@@ -1022,6 +1029,7 @@ export function FinanceSummary({
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 title="Ingresos devengados"
+                onDetail={onViewControl?()=>onViewControl('revenue'):undefined}
                 value={summary.accrued.revenue}
                 description="Ventas, servicios, pedidos y reparaciones entregadas"
                 icon={TrendingUp}
@@ -1039,6 +1047,7 @@ export function FinanceSummary({
               />
               <MetricCard
                 title="Ganancia neta devengada"
+                onDetail={onViewControl?()=>onViewControl('netProfit'):undefined}
                 value={summary.accrued.netProfit}
                 description="Resultado final después de gastos y nómina"
                 icon={WalletCards}
@@ -1092,6 +1101,7 @@ export function FinanceSummary({
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <MetricCard
                 title="Cobrado"
+                onDetail={onViewControl?()=>onViewControl('collected'):undefined}
                 value={summary.cash.collected}
                 description="Cobros de dinero registrados, incluidos los medios de pago integrados"
                 icon={TrendingUp}
@@ -1100,6 +1110,7 @@ export function FinanceSummary({
               />
               <MetricCard
                 title="Pagos netos de anulaciones"
+                onDetail={onViewControl?()=>onViewControl('paid'):undefined}
                 value={summary.cash.paid}
                 description="Pagos registrados menos sus anulaciones; puede ser negativo"
                 icon={Landmark}
@@ -1109,6 +1120,7 @@ export function FinanceSummary({
               />
               <MetricCard
                 title="Flujo de caja neto"
+                onDetail={onViewControl?()=>onViewControl('netCashFlow'):undefined}
                 value={summary.cash.netCashFlow}
                 description="Cobrado menos pagado en el período"
                 icon={WalletCards}

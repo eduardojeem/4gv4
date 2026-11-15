@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// Suscripción activa: el bloqueo por suscripción vencida se prueba en subscription-operation-access.test.ts
+vi.mock('@/lib/saas/subscription-operation-access', () => ({ subscriptionOperationResponse: async () => null }))
 import { dispatchNotificationEvent } from '@/lib/notifications/server/dispatcher'
 import {
   sendExpoPushNotifications,

@@ -1,3 +1,5 @@
+import {BusinessDataDownload} from '@/components/subscription/business-data-download';
+import {evaluateSubscriptionStatus} from '../../../../src/lib/saas/subscription-status';
 import { BillingCard } from '@/components/subscription/billing-card';
 import { usePanel } from '@/lib/panel';
 import { navigationColor } from '@/lib/bottom-nav-model';
@@ -104,11 +106,12 @@ export default function SubscriptionsAdminScreen() {
   }, [reload, billingEditing]);
 
   const free = isFreePlan(data?.plan ?? null);
-  const planName = data?.plan?.name || data?.subscription?.plan || 'Gratis';
-  const status = subscriptionStatus(data?.subscription?.status ?? (free && data?.plan ? 'free' : null));
+  const planName = data?.plan?.name || data?.subscription?.plan || 'Plan sin verificar';
+  const evaluatedStatus=evaluateSubscriptionStatus({status:data?.subscription?.status,periodEndsAt:data?.subscription?.current_period_ends_at,trialEndsAt:data?.subscription?.trial_ends_at});
+  const status = evaluatedStatus.isBlocked ? {label:'Operaciones suspendidas',tone:'danger' as const} : subscriptionStatus(data?.subscription?.status ?? (free && data?.plan ? 'free' : null));
   const tone = TONES[status.tone];
   const periodEnd = subscriptionPeriodEnd(data?.subscription);
-  const expiry = loadedAt ? buildSubscriptionExpiryNotice(data?.subscription ?? null, loadedAt) : null;
+  const expiry = loadedAt ? buildSubscriptionExpiryNotice(data?.subscription ? {...data.subscription,monthlyPrice:data.plan?.price_verified===false?undefined:data.plan?.price_monthly}:null, loadedAt) : null;
   const cancelScheduled = data?.subscription?.cancel_at_period_end === true;
   const missingBilling = billingMissingFields(data?.billingProfile ?? null);
   const payments = data?.payments ?? [];
@@ -125,6 +128,7 @@ export default function SubscriptionsAdminScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} enabled={!billingEditing} tintColor={accent} />}>
+        <BusinessDataDownload />
         {!data ? (
           error ? (
             <View style={styles.centerBox}>
@@ -146,7 +150,7 @@ export default function SubscriptionsAdminScreen() {
                   <Text style={[styles.heroSub, { color: colors.muted }]}>Tu plan</Text>
                   <Text style={[styles.heroTitle, { color: colors.text }]}>{planName}</Text>
                   <Text style={[styles.small,{color:colors.muted}]}>Actualizado: {loadedAt ? new Date(loadedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'}) : 'Sin confirmar'}</Text>
-                  {!free && data.plan?.price_monthly ? (
+                  {data.plan?.price_verified === false ? <Text style={[styles.small,{color:colors.warningText}]}>Precio pendiente de verificar</Text> : !free && data.plan?.price_monthly ? (
                     <Text style={[styles.small, { color: colors.muted }]}>{formatGs(data.plan.price_monthly)} por mes</Text>
                   ) : null}
                 </View>
@@ -158,7 +162,7 @@ export default function SubscriptionsAdminScreen() {
               {/* El plan gratis no se renueva: no tiene fecha que mostrar. */}
               {periodEnd && !free && (
                 <Text style={[styles.renewalText, { color: colors.muted }]}>
-                  {cancelScheduled ? 'Pasa a Gratis el ' : status.tone === 'info' ? 'La prueba termina el ' : 'Vigente hasta el '}
+                  {cancelScheduled ? 'La renovación se cancela el ' : status.tone === 'info' ? 'La prueba termina el ' : 'Vigente hasta el '}
                   {new Date(periodEnd).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Asuncion' })}
                 </Text>
               )}

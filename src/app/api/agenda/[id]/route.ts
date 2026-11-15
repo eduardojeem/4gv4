@@ -1,3 +1,4 @@
+import { HOME_APPOINTMENT_COLUMNS } from '@/lib/agenda/home-visit'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,7 +27,7 @@ export const GET = withTenantAuth(guard, async (_request, { organization }, rout
   const supabase = (await createClient()) as unknown as SupabaseClient
   const config = await loadAgendaConfig(supabase, organization.id)
   const ready = Boolean(config?.capabilities.professionalBooking)
-  const { data, error } = await supabase.from('appointments').select(ready ? `${APPOINTMENT_COLUMNS},buffer_minutes,occupied_until` : APPOINTMENT_COLUMNS).eq('id', id).eq('organization_id', organization.id).maybeSingle()
+  const { data, error } = await supabase.from('appointments').select((ready ? `${APPOINTMENT_COLUMNS},buffer_minutes,occupied_until` : APPOINTMENT_COLUMNS)+(config?.capabilities.homeAppointments ? `,${HOME_APPOINTMENT_COLUMNS}` : '')).eq('id', id).eq('organization_id', organization.id).maybeSingle()
   if (error) return NextResponse.json({ error: 'No se pudo consultar el turno' }, { status: 503 })
   if (!data) return NextResponse.json({ error: 'Turno no encontrado' }, { status: 404 })
   return NextResponse.json({ appointment: data, professionalBookingAvailable: ready, publicUrl: siteUrl(`/turno/${(data as unknown as { public_token: string }).public_token}`) })
@@ -72,7 +73,8 @@ export const PATCH = withTenantAuth(guard, async (request, { organization, user 
   if (parsed.data.action === 'update') {
     const config = await loadAgendaConfigForBooking(supabase, organization.id, createAdminSupabase)
     if (config?.capabilities.professionalBooking) {
-      const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
+      if(parsed.data.appointment.attention_mode && !config.capabilities.homeAppointments)return NextResponse.json({error:'Falta aplicar la migración de atención a domicilio.'},{status:503})
+      const { data, error } = await createAdminSupabase().rpc(config.capabilities.homeAppointments ? 'save_agenda_home_appointment' : 'save_agenda_appointment', {
         p_org: organization.id, p_id: id, p_input: parsed.data.appointment, p_actor: user.id,
       })
       if (error || !data) {

@@ -1,4 +1,6 @@
 'use client'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
+import {ProductWhatsAppButton} from './ProductWhatsAppButton'
 
 import { useState, useMemo } from 'react'
 import { AppImage as Image } from '@/components/ui/app-image'
@@ -23,7 +25,7 @@ import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { WhatsAppIcon, SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import { cn } from '@/lib/utils'
-import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { getWhatsAppLink } from '@/lib/whatsapp'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
@@ -41,6 +43,7 @@ type Org = {
   instagram?: string | null
   facebook?: string | null
   tiktok?: string | null
+  productWhatsappEnabled?: boolean
   whatsapp?: string | null
   products_count: number
   featured_products: PublicProduct[]
@@ -84,6 +87,7 @@ function OrgProductCard({
           instagram: org.instagram ?? null,
           facebook: org.facebook ?? null,
           tiktok: org.tiktok ?? null,
+          productWhatsappEnabled: org.productWhatsappEnabled,
           whatsapp: org.whatsapp ?? null,
           phone: org.phone ?? null,
         }
@@ -94,24 +98,9 @@ function OrgProductCard({
   const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
   const hasDiscount = !precioOculto && Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price)
   const displayPrice = hasDiscount && product.offer_price ? product.offer_price : product.sale_price
-  const whatsappDigits = (org.whatsapp || org.phone || '').replace(/\D/g, '')
   const productHref = `/${org.slug}/productos/${product.id}`
   const fullProductUrl = siteUrl(productHref)
-  const whatsappHref = whatsappDigits.length >= 6
-    ? getWhatsAppLink({
-        phone: whatsappDigits,
-        message: buildProductWhatsAppMessage({
-          storeName: org.name,
-          productName: product.name,
-          price: precioOculto ? 0 : displayPrice,
-          originalPrice: !precioOculto && hasDiscount ? product.sale_price : null,
-          sku: product.sku,
-          productUrl: fullProductUrl,
-          imageUrl: imageSrc,
-          intent: precioOculto ? 'price' : 'inquiry',
-        }),
-      })
-    : null
+  const whatsappHref = productWhatsappInquiryHref({company:org,product:{name:product.name,url:fullProductUrl,priceHidden:precioOculto}})
 
   return (
     <div className="group relative flex w-52 sm:w-60 shrink-0 flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card p-3 text-left shadow-2xs transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/90">
@@ -259,6 +248,7 @@ function OrgProductCard({
               </Link>
             </Button>
           </div>
+          {!precioOculto && <ProductWhatsAppButton href={whatsappHref} productName={product.name} tabIndex={tabIndex} className="mt-2 w-full"/>}
         </div>
       </div>
     </div>

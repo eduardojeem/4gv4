@@ -1,4 +1,5 @@
 'use client'
+import { PRIMARY_ACTIVITIES, PRIMARY_ACTIVITY_LABELS, primaryActivityModule, readPrimaryActivity } from '@/lib/organization/primary-activity'
 
 import { useEffect, useMemo, useState, type ElementType, type MutableRefObject } from 'react'
 import { moduleDisplayHint, moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
@@ -113,6 +114,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
   const router = useRouter()
   const profile = useSubscriptionStatus()
   const [vertical, setVertical] = useState(profile.businessVertical)
+  const [primaryActivity, setPrimaryActivity] = useState(readPrimaryActivity(profile.primaryActivity))
   const [model, setModel] = useState(profile.operatingModel)
   const [enabled, setEnabled] = useState<OrganizationModule[]>(
     profile.enabledModules ?? profile.effectiveModules,
@@ -126,6 +128,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
   const [resetStorefrontStyleToAuto, setResetStorefrontStyleToAuto] = useState(false)
   const [serviceWebsiteOpen, setServiceWebsiteOpen] = useState(false)
   const isServiceBusiness = SERVICE_FIRST_VERTICALS.has(vertical)
+  const showServiceDetails = isServiceBusiness || model==='service' || enabled.includes('services')
   const entitled = useMemo(
     () => new Set([...profile.entitledModules, ...profile.moduleTrials.map(trial => trial.module)]),
     [profile.entitledModules, profile.moduleTrials],
@@ -201,8 +204,8 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
     setEnabled(autoChange.previous)
     setAutoChange(null)
   }
-  const dirty = vertical !== profile.businessVertical
-    || (isServiceBusiness && JSON.stringify(serviceDetails) !== JSON.stringify(readServiceBusinessDetails(profile)))
+  const dirty = primaryActivity !== readPrimaryActivity(profile.primaryActivity) || vertical !== profile.businessVertical
+    || (showServiceDetails && JSON.stringify(serviceDetails) !== JSON.stringify(readServiceBusinessDetails(profile)))
     || model !== profile.operatingModel
     || prepareWebsite
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
@@ -244,6 +247,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
           businessVertical: vertical,
           ...serviceDetails,
           operatingModel: model,
+          primaryActivity,
           enabledModules: enabled,
           prepareWebsite: prepareWebsite && !isServiceBusiness,
           overwriteCustomContent: overwriteCustomContent && prepareWebsite,
@@ -280,6 +284,7 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
   const reset = () => {
     setVertical(profile.businessVertical)
     setModel(profile.operatingModel)
+    setPrimaryActivity(readPrimaryActivity(profile.primaryActivity))
     setEnabled(profile.enabledModules ?? profile.effectiveModules)
     setServiceDetails(readServiceBusinessDetails(profile))
     setPrepareWebsite(false)
@@ -425,7 +430,14 @@ export function BusinessProfileCard({ onStateChange, actionsRef }: BusinessProfi
           </div>
         </div>
 
-        {SERVICE_FIRST_VERTICALS.has(vertical) && (
+        <div className="space-y-2">
+          <Label htmlFor="business-primary-activity">Actividad principal</Label>
+          <select id="business-primary-activity" value={primaryActivity} disabled={saving} onChange={event=>setPrimaryActivity(readPrimaryActivity(event.target.value))} className="h-11 w-full rounded-md border bg-background px-3 text-base">
+            {PRIMARY_ACTIVITIES.map(value=><option key={value} value={value} disabled={Boolean(primaryActivityModule(value)&&!enabled.includes(primaryActivityModule(value)!))}>{PRIMARY_ACTIVITY_LABELS[value]}</option>)}
+          </select>
+          <p className="text-xs text-muted-foreground">Ordena los accesos de web y app. No cambia tu plan ni tus permisos.</p>
+        </div>
+        {showServiceDetails && (
           <ServiceBusinessFields
             value={serviceDetails}
             onChange={value => setServiceDetails(readServiceBusinessDetails(value))}

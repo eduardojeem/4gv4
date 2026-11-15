@@ -21,8 +21,8 @@ export const POST = withTenantAuth({ permission: 'settings.manage', module: 'ser
   const before = await admin.rpc('agenda_service_policy_revision', { p_org: organization.id })
   if (before.error) return failure(before.error)
   const plan = await getOrganizationPlanInfo(organization.id)
-  if (!plan.modules.includes('services') || !plan.modules.includes('inventory')) {
-    return NextResponse.json({ error: 'Activá los módulos de servicios y productos para crear servicios.', code: 'INVENTORY_REQUIRED' }, { status: 403 })
+  if (!plan.modules.includes('services')) {
+    return NextResponse.json({ error: 'Activá el módulo de Servicios para crear servicios.', code: 'SERVICES_REQUIRED' }, { status: 403 })
   }
   const capacity = await canCreateResource(organization.id, 'services')
   if (capacity.blocked) return NextResponse.json({ error: 'La suscripción está bloqueada.', code: 'SUBSCRIPTION_BLOCKED' }, { status: 403 })

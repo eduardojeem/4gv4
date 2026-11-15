@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// Suscripción activa: el bloqueo por suscripción vencida se prueba en subscription-operation-access.test.ts
+vi.mock('@/lib/saas/subscription-operation-access', () => ({ subscriptionOperationResponse: async () => null }))
 import { NextRequest } from 'next/server'
 vi.mock('server-only', () => ({}))
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), org: vi.fn(), rpc: vi.fn(), plan: vi.fn(), publicAgenda: vi.fn() }))

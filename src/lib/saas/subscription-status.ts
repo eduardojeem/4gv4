@@ -23,7 +23,6 @@ export function evaluateSubscriptionStatus(
   const nowTime = now.getTime()
   const periodEndsAt = timestamp(input.periodEndsAt)
   const trialEndsAt = timestamp(input.trialEndsAt)
-  const isBlocked = status ? HARD_BLOCKED_STATUSES.has(status) : false
   const isTrialing = status === 'trialing'
   const hasActivePaidPeriod = status === 'active'
     && periodEndsAt !== null
@@ -44,7 +43,7 @@ export function evaluateSubscriptionStatus(
 
   return {
     status,
-    isBlocked,
+    isBlocked: (status ? HARD_BLOCKED_STATUSES.has(status) : false) || isExpired,
     isExpired,
     isTrialing,
     trialDaysLeft: isTrialing ? daysLeft(trialEndsAt) : null,

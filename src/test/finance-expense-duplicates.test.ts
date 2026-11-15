@@ -75,6 +75,11 @@ beforeEach(() => {
 })
 
 describe('gastos duplicados', () => {
+  it('conserva la moneda configurada al registrar un gasto', async () => {
+    db.tables.organization_settings = [{organization_id: ORG, currency: 'USD'}]
+    const created = await createObligation({organizationId: ORG, userId:'u1', input:rent, idempotencyKey:'usd-expense'})
+    expect((created as Row).currency).toBe('USD')
+  })
   it('el mismo envío dos veces (doble clic, reintento) crea un solo gasto', async () => {
     const first = await createObligation({ organizationId: ORG, userId: 'u1', input: rent, idempotencyKey: 'expense-abc' })
     const again = await createObligation({ organizationId: ORG, userId: 'u1', input: rent, idempotencyKey: 'expense-abc' })
@@ -97,11 +102,10 @@ describe('gastos duplicados', () => {
     expect(db.inserts).toBe(1)
   })
 
-  it('sin la migración aplicada, el gasto se guarda igual', async () => {
+  it('sin protección de idempotencia no guarda gastos que puedan duplicarse', async () => {
     db.missingKeyColumn = true
-    await createObligation({ organizationId: ORG, userId: 'u1', input: rent, idempotencyKey: 'expense-abc' })
-    expect(db.inserts).toBe(1)
-    expect(db.tables.finance_obligations[0]).not.toHaveProperty('creation_idempotency_key')
+    await expect(createObligation({ organizationId: ORG, userId: 'u1', input: rent, idempotencyKey: 'expense-abc' })).rejects.toMatchObject({ code: 'FINANCE_IDEMPOTENCY_UNAVAILABLE' })
+    expect(db.inserts).toBe(0)
   })
 
   it('no deja crear un segundo recurrente igual al que ya está activo', async () => {

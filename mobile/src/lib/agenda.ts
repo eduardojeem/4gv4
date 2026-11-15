@@ -49,6 +49,7 @@ export async function appointmentAction(id: string, action: AppointmentAction, e
     method: 'PATCH',
     body: JSON.stringify({ action, ...extra }),
   });
+  notifyAgendaChanged();
   return res.appointment;
 }
 

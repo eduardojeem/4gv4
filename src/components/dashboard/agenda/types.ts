@@ -1,7 +1,8 @@
+import type { HomeVisitFields } from '@/lib/agenda/home-visit'
 import type { AppointmentStatus } from '@/lib/agenda/agenda-api'
 import type { AgendaProfessional, AgendaProfessionalRate, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
 
-export type Appointment = {
+export type Appointment = HomeVisitFields & {
   buffer_minutes?: number
   occupied_until?: string
   id: string
@@ -27,7 +28,8 @@ export type Appointment = {
 }
 
 export type AgendaData = {
-  capabilities?: {professionalBooking:boolean}
+  attentionMode?: 'local'|'home'|'both'
+  capabilities?: {professionalBooking:boolean;homeAppointments?:boolean}
   professionalRates?: AgendaProfessionalRate[]
   available: boolean
   date: string

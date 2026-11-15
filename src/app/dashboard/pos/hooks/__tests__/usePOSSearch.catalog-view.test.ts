@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Product } from '@/types/product-unified'
 
+const business=vi.hoisted(()=>({businessVertical:'general',operatingModel:'retail',effectiveModules:['inventory','services']}))
+vi.mock('@/contexts/SubscriptionStatusContext',()=>({useSubscriptionStatus:()=>business}))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('../useSmartSearch', () => ({
   useSmartSearch: () => ({
@@ -35,7 +37,7 @@ const catalog = [
   item({ id: 's2', name: 'Diagnóstico general', sku: 'SRV-DIA', stock_quantity: 9999, category: { id: 'c4', name: 'Servicios' } as Product['category'] }),
 ]
 
-beforeEach(() => { localStorage.clear() })
+beforeEach(() => { localStorage.clear();business.businessVertical='general';business.operatingModel='retail' })
 
 describe('regla de servicio del POS', () => {
   it('usa la misma regla que el resto del sistema', () => {
@@ -92,3 +94,5 @@ describe('service-only businesses', () => {
   expect(result.current.catalogView).toBe('products')
  })
 })
+
+it('barbershops with merchandise still prioritize services and remember each company choice',()=>{business.businessVertical='barbershop';business.operatingModel='mixed';const {result,rerender}=renderHook(({scopeKey})=>usePOSSearch({products:catalog,scopeKey}),{initialProps:{scopeKey:'company-A'}});expect(result.current.catalogView).toBe('services');act(()=>result.current.setCatalogView('products'));expect(result.current.catalogView).toBe('products');expect(localStorage.getItem('pos.catalog-view:company-A')).toBe('products');rerender({scopeKey:'company-B'});expect(result.current.catalogView).toBe('services')});

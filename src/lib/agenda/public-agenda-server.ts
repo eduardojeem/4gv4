@@ -58,7 +58,7 @@ export async function publicSlotsFor(
     }
     if (professionalId && !resources.length) return null
     const range = dayRangeUtc(date, config.timeZone)
-    const busy = await busyIntervals(admin, organization.id, range.start, range.end, excludeAppointmentId, true)
+    const busy = await busyIntervals(admin, organization.id, range.start, range.end, excludeAppointmentId, true, config.capabilities.homeAppointments)
     const now = Date.now()
     const quotedSlots = quotedSlotsFor({ date, timeZone: config.timeZone, openingHours: config.settings.opening_hours,
       slotMinutes: config.settings.slot_minutes, now, minNoticeMinutes: config.settings.min_notice_minutes,

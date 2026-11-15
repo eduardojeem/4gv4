@@ -1,3 +1,4 @@
+import {canUseCatalogRecord} from '@/lib/organization/business-experience'
 import { fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { resolveOrganizationProductCostAccess, redactProductCosts, hasExplicitProductCost, prepareProductCostInput, changesForeignCostCurrency, ProductCostInputError, hydrateProductCostsFromService } from '@/lib/products/cost-access'
 import { productReferencesBelongToOrganization } from '@/lib/products/tenant-references'
@@ -27,7 +28,7 @@ import { summarizeVariantStock, type VariantBranchInventoryInput, type VariantSt
 type ProductRouteContext = { params: Promise<{ id: string }> }
 
 // GET /api/products/[id] - Obtener producto especifico (usuario autenticado)
-export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (
+export const GET = withTenantAuth({ permission: 'products.read', module: ['inventory', 'services'] }, async (
   request: NextRequest,
   { user, organization },
   routeContext?: unknown
@@ -64,6 +65,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       )
     }
 
+    if(!canUseCatalogRecord(organization.catalogServicesOnly,product)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
     const branchInventoryClient = supabase as unknown as BranchInventoryClient
     const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
       branchInventoryClient,
@@ -156,7 +158,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 })
 
 // PUT /api/products/[id] - Actualizar producto especifico (staff only)
-export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (
+export const PUT = withTenantAuth({ permission: 'products.update', module: ['inventory', 'services'] }, async (
   request: NextRequest,
   { user, organization },
   routeContext?: unknown
@@ -233,7 +235,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
-      .select('id, sale_price, offer_price, has_offer, installments_enabled, installments_plans')
+      .select('id, unit_measure, sale_price, offer_price, has_offer, installments_enabled, installments_plans')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -254,6 +256,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    if(!canUseCatalogRecord(organization.catalogServicesOnly,existingProduct,validated)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
     const fixedPlanIssues = fixedProductPlanErrors({ ...existingProduct, ...validated } as unknown as Parameters<typeof fixedProductPlanErrors>[0])
     if (fixedPlanIssues.length) return NextResponse.json({ success: false, error: 'Revisá los planes por monto: no son compatibles con el precio del producto.', details: fixedPlanIssues.map(issue => ({ field: 'installments_plans.' + issue.index + '.installmentAmount', message: issue.message })) }, { status: 400 })
 
@@ -515,7 +518,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 })
 
 // DELETE /api/products/[id] - Eliminar producto especifico (staff only)
-export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: ['inventory', 'services'] }, async (
   _request: NextRequest,
   { organization, user },
   routeContext?: unknown
@@ -528,7 +531,7 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
 
     const { data: existing, error: existingError } = await adminSupabase
       .from('products')
-      .select('id,name,sku')
+      .select('id,name,sku,unit_measure')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -545,6 +548,7 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       )
     }
 
+    if(!canUseCatalogRecord(organization.catalogServicesOnly,existing)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
     // Verificar si el producto tiene historial de transacciones (ventas, pedidos, repuestos de taller)
     const [
       { count: salesCount },

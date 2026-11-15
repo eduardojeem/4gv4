@@ -1,23 +1,21 @@
+import { financeBusinessToday } from '../../../src/lib/finance/calendar';
+import { isFinanceSummaryEmpty, validateFinanceDates, type FinanceDates } from '../../../src/lib/finance/summary-integrity';
 import type { FinanceSummaryData } from './admin';
 
-export type FinancePeriod = 'today' | 'month' | '30d' | 'year';
+export type FinancePeriod = 'today' | 'week' | 'month' | 'previousMonth' | '30d' | 'year' | 'custom';
 
 /** Días del negocio, sin depender del huso horario del teléfono ni de cambios de horario. */
 export function financePeriodDates(
   period: FinancePeriod,
   timeZone: string,
   now = new Date(),
+  custom?: FinanceDates,
 ) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const part = (name: string) =>
-    parts.find((item) => item.type === name)?.value ?? '';
-  const today = `${part('year')}-${part('month')}-${part('day')}`;
+  if (period === 'custom') { if (!custom) throw new Error('Elegí el rango de fechas.'); return validateFinanceDates(custom); }
+  const today = financeBusinessToday(timeZone, now);
   let startDate = today;
+  if (period === 'week') { const date = new Date(today + 'T12:00:00Z'); date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7); startDate = date.toISOString().slice(0, 10); }
+  if (period === 'previousMonth') { const date = new Date(today.slice(0,7) + '-01T12:00:00Z'); date.setUTCDate(0); return { startDate: date.toISOString().slice(0,7) + '-01', endDate: date.toISOString().slice(0,10) }; }
   if (period === 'month') startDate = `${today.slice(0, 7)}-01`;
   if (period === 'year') startDate = `${today.slice(0, 4)}-01-01`;
   if (period === '30d') {
@@ -33,7 +31,8 @@ export const financeReportKey = (
   epoch: number,
   period: FinancePeriod,
   branch: string,
-) => JSON.stringify([organizationId, epoch, period, branch]);
+  custom?: FinanceDates,
+) => JSON.stringify([organizationId, epoch, period, branch, custom]);
 export function financeResultState(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return 'No calculable';
   return value === 0
@@ -42,19 +41,7 @@ export function financeResultState(value: number | null | undefined) {
       ? 'Ganancia neta'
       : 'Pérdida neta';
 }
-export function isEmptyFinanceSummary(data: FinanceSummaryData) {
-  return (
-    data.complete !== false &&
-    !data.coverageWarnings?.length &&
-    // Solo los importes: la apertura de ingresos es un objeto y nunca es 0.
-    (['revenue', 'directCosts', 'grossProfit', 'operatingExpenses', 'payrollCost', 'netProfit'] as const)
-      .every((key) => data.accrued[key] === 0 || data.accrued[key] === null) &&
-    // Solo los totales: la apertura de cobros y pagos es un objeto.
-    (['collected', 'paid', 'netCashFlow'] as const).every((key) => data.cash[key] === 0) &&
-    !data.overdue.length &&
-    !data.upcomingDue.length
-  );
-}
+export function isEmptyFinanceSummary(data: FinanceSummaryData) { return isFinanceSummaryEmpty(data); }
 
 /**
  * Lo que la pantalla muestra en grande. El servidor no calcula la ganancia si

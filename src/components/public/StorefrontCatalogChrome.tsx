@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { ArrowRight, ChevronRight, Dumbbell } from 'lucide-react'
+import { ArrowRight, ChevronRight, Dumbbell, Scissors } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useStorefrontStyle } from './storefront-style-context'
+import '@/components/public/especial-para-barbero/especial-barbero.css'
 
 type CatalogCategory = { id: string; name: string; parent_id?: string | null }
 
@@ -29,7 +30,7 @@ export function StorefrontCatalogHero({
     ? `${total} ${total === 1 ? 'resultado' : 'resultados'} para “${query}”`
     : `${total} ${total === 1 ? 'producto disponible' : 'productos disponibles'}`
 
-  if (style !== 'fashion' && style !== 'sport') {
+  if (style !== 'fashion' && style !== 'sport' && style !== 'especial-para-barbero') {
     return (
       <div className="border-b border-border/60 bg-gradient-to-b from-primary/[0.04] via-card to-background py-6">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -45,6 +46,44 @@ export function StorefrontCatalogHero({
           </div>
         </div>
       </div>
+    )
+  }
+
+  if (style === 'especial-para-barbero') {
+    return (
+      <section className="relative overflow-hidden border-b border-primary/30 bg-[#0B0B0F] text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-25 blur-3xl"
+          style={{ background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)' }}
+        />
+        <div className="container relative mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          <CatalogBreadcrumb homeHref={homeHref} inverted />
+          <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)] lg:items-end">
+            <div className="max-w-3xl">
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-primary">
+                <Scissors className="h-3.5 w-3.5" />
+                Catálogo profesional · {storeName}
+              </p>
+              <h1 className="text-balance text-3xl font-black uppercase leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                Catálogo de Productos
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm">
+                <span className="text-zinc-300">{resultCopy}</span>
+                <Link
+                  href={`${productsHref}?ofertas=true`}
+                  className="inline-flex items-center gap-1 font-bold text-primary underline-offset-4 hover:underline"
+                >
+                  Ver ofertas <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+            <div className="w-full lg:justify-self-end [&_input]:rounded-full [&_input]:border-white/20 [&_input]:bg-[#14141B] [&_input]:text-white [&_input]:placeholder:text-zinc-400">
+              {children}
+            </div>
+          </div>
+        </div>
+      </section>
     )
   }
 
@@ -112,24 +151,46 @@ export function StorefrontCollections({
   productsHref: string
 }) {
   const style = useStorefrontStyle()
-  if (style !== 'fashion' && style !== 'sport') return null
+  if (style !== 'fashion' && style !== 'sport' && style !== 'especial-para-barbero') return null
 
   const visible = categories.filter((category) => !category.parent_id).slice(0, 8)
   if (visible.length === 0) return null
   const fashion = style === 'fashion'
+  const barberSupply = style === 'especial-para-barbero'
 
   return (
-    <section className={cn('border-b', fashion ? 'border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-950' : 'border-slate-800 bg-slate-900 text-white')}>
+    <section
+      className={cn(
+        'border-b',
+        fashion
+          ? 'border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-950'
+          : barberSupply
+          ? 'border-white/10 bg-[#14141B] text-white'
+          : 'border-slate-800 bg-slate-900 text-white'
+      )}
+    >
       <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className={cn('text-xs font-bold uppercase tracking-[0.18em]', fashion ? 'text-stone-700 dark:text-stone-200' : 'italic text-lime-300')}>
-            {fashion ? 'Explorar por colección' : 'Explorar disciplinas'}
+          <h2
+            className={cn(
+              'text-xs font-bold uppercase tracking-[0.18em]',
+              fashion
+                ? 'text-stone-700 dark:text-stone-200'
+                : barberSupply
+                ? 'text-primary'
+                : 'italic text-lime-300'
+            )}
+          >
+            {fashion ? 'Explorar por colección' : barberSupply ? 'Explorar líneas profesionales' : 'Explorar disciplinas'}
           </h2>
           <Link href={productsHref} className="hidden items-center gap-1 text-xs font-semibold opacity-70 hover:opacity-100 sm:inline-flex">
             Ver todo <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <nav aria-label={fashion ? 'Colecciones de productos' : 'Disciplinas deportivas'} className="flex snap-x gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <nav
+          aria-label={fashion ? 'Colecciones de productos' : barberSupply ? 'Categorías profesionales' : 'Disciplinas deportivas'}
+          className="flex snap-x gap-2 overflow-x-auto pb-1 scrollbar-hide"
+        >
           {visible.map((category) => (
             <Link
               key={category.id}
@@ -138,6 +199,8 @@ export function StorefrontCollections({
                 'shrink-0 snap-start px-4 py-2 text-xs font-bold transition-colors',
                 fashion
                   ? 'border border-stone-300 bg-[#f8f6f2] text-stone-900 hover:border-stone-950 hover:bg-stone-950 hover:text-white dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-white dark:hover:text-stone-950'
+                  : barberSupply
+                  ? 'rounded-full border border-white/15 bg-white/[0.04] uppercase tracking-wider text-zinc-100 hover:border-primary hover:bg-primary hover:text-primary-foreground'
                   : 'skew-x-[-4deg] rounded-sm border border-slate-600 bg-slate-950 uppercase italic tracking-wide text-white hover:border-lime-300 hover:text-lime-300',
               )}
             >
@@ -156,6 +219,7 @@ export function StorefrontCatalogToolbar({ children }: { children: ReactNode }) 
     <div className={cn(
       'sticky top-16 z-30 mb-5 space-y-2 p-2.5 backdrop-blur-xl transition-shadow sm:p-3',
       style === 'classic' && 'rounded-2xl border border-border/80 bg-background/95 shadow-md',
+      style === 'especial-para-barbero' && 'rounded-[16px] border border-border/80 bg-background/95 shadow-md',
       style === 'fashion' && 'border-y border-stone-300 bg-background/95 shadow-sm dark:border-stone-700',
       style === 'sport' && 'rounded-sm border-2 border-slate-900 bg-background/95 shadow-[4px_4px_0_0_hsl(var(--primary))] dark:border-slate-100',
     )}>

@@ -1,11 +1,15 @@
+import {ProductWhatsAppButton} from './ProductWhatsAppButton'
+import {productWhatsappInquiryHref,type ProductWhatsappContact} from '@/lib/public/product-whatsapp'
 import { MapPin, Check, XCircle, Phone } from 'lucide-react'
 import type { BranchStockInfo } from '@/lib/api/products-server'
 
 interface BranchAvailabilityProps {
   branches: BranchStockInfo[]
+  company?: ProductWhatsappContact | null
+  product?: {name:string;url:string}
 }
 
-export function BranchAvailability({ branches }: BranchAvailabilityProps) {
+export function BranchAvailability({ branches,company,product }: BranchAvailabilityProps) {
   if (branches.length === 0) return null
 
   // If only one branch exists, don't show the section (single-store mode)
@@ -36,7 +40,7 @@ export function BranchAvailability({ branches }: BranchAvailabilityProps) {
         {branches.map((branch) => (
           <div
             key={branch.branchId}
-            className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
+            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 transition-colors ${
               branch.isAvailable
                 ? 'border-emerald-200/60 bg-emerald-50/30 dark:border-emerald-900/40 dark:bg-emerald-950/10'
                 : 'border-border/50 bg-muted/20 opacity-60'
@@ -70,6 +74,7 @@ export function BranchAvailability({ branches }: BranchAvailabilityProps) {
               ) : (
                 <span className="text-xs text-muted-foreground">Agotado</span>
               )}
+              {product && <ProductWhatsAppButton compact href={productWhatsappInquiryHref({company,branch:{phone:branch.phone},product})} productName={product.name+' en '+branch.branchName} className="px-2 text-[10px]"/>}
               {branch.phone && branch.isAvailable && (
                 <a
                   href={`tel:${branch.phone.replace(/\D/g, '')}`}

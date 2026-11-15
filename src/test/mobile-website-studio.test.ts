@@ -21,6 +21,7 @@ import {
   fetchTemplateAccess,
   fetchWebsiteMedia,
   resolveMapsShortLink,
+  saveCompanyInfo,
   uploadBrandLogo,
   uploadWebsiteImage,
   uploadWebsiteMedia,
@@ -36,6 +37,7 @@ import {
   brandsSectionIssues,
   buildMobileTemplateCatalog,
   buildMobileWebsiteChecklist,
+  buildVisibilityTogglePatch,
   fillCartTextsFromCompany,
   galleryIssues,
   generateMobileWebsiteSuggestion,
@@ -45,6 +47,7 @@ import {
   normalizeCheckoutSettings,
   offersSectionIssues,
   processFlowIssues,
+  publicationToggleCopy,
   resolveMobileCapabilities,
   resolveMobileSectionAvailability,
   resolveWebsiteFocus,
@@ -53,6 +56,7 @@ import {
   suggestStorefrontAppearance,
   transferAccounts,
   trustBarIssues,
+  visibilitySummary,
   type TemplateAccessData,
   type WebsiteSettings,
 } from '../../mobile/src/lib/website-model'
@@ -214,11 +218,32 @@ describe('catálogo de plantillas, apariencia sugerida y asistente', () => {
     const servicesOpt = allOptions.find((o) => o.value === 'services')
 
     expect(classicOpt?.status).toBe('available')
+    expect(classicOpt?.enabledPlans).toEqual(['Básico', 'Pro'])
     expect(fashionOpt?.status).toBe('locked_plan')
     expect(fashionOpt?.upgradePlanName).toBe('Pro')
+    expect(fashionOpt?.enabledPlans).toEqual(['Pro'])
     expect(fashionOpt?.isSuggested).toBe(true)
     expect(catalogOpt?.status).toBe('unavailable')
     expect(servicesOpt?.status).toBe('unavailable')
+
+    const barberoGroups = buildMobileTemplateCatalog({
+      businessVertical: 'barbershop',
+      context: { servicesAvailable: true, catalogAvailable: true, commerceMode: 'cart' },
+      savedValue: 'barber',
+      access: {
+        ...access,
+        planCode: 'PRO',
+        planName: 'Pro',
+        allowed: ['auto', 'classic', 'modern', 'barber'],
+        plans: [
+          { code: 'BASIC', name: 'Básico', templates: ['auto', 'classic', 'modern'] },
+          { code: 'PRO', name: 'Pro', templates: ['auto', 'classic', 'modern', 'barber'] },
+        ],
+      },
+    })
+    const barberoOpt = barberoGroups.flatMap((g) => g.options).find((o) => o.value === 'especial-para-barbero')
+    expect(barberoOpt?.status).toBe('coming_soon')
+    expect(barberoOpt?.reason).toBe('Próximamente disponible.')
   })
 
   it('sugiere diseño por rubro o modalidad catálogo', () => {
@@ -509,5 +534,62 @@ describe('nuevos endpoints Studio en website-admin', () => {
       { id: 'b1', name: 'Samsung', logoUrl: 'https://cdn.test/samsung.png', productCount: 5, isFromBrandsTable: true },
     ])
     expect(JSON.stringify(brands)).not.toMatch(/purchase_price/)
+  })
+
+  it('visibilidad pública: activa y desactiva tienda online y marketplace coherentemente', async () => {
+    // Estado inicial: tienda apagada incluso si DB traía marketplacePublic: true
+    expect(visibilitySummary({ storefrontPublic: false, marketplacePublic: true })).toEqual({
+      storefrontPublic: false,
+      marketplacePublic: false,
+      mode: 'private',
+      statusLabel: 'No publicada',
+      statusTone: 'warning',
+    })
+
+    // Activar Marketplace con la tienda apagada prende ambos
+    expect(
+      buildVisibilityTogglePatch({ storefrontPublic: false, marketplacePublic: false }, 'marketplace', true),
+    ).toEqual({ storefrontPublic: true, marketplacePublic: true })
+
+    // Activar solo tienda online cuando estaba apagada no sorprende prendiendo Marketplace
+    expect(
+      buildVisibilityTogglePatch({ storefrontPublic: false, marketplacePublic: true }, 'storefront', true),
+    ).toEqual({ storefrontPublic: true, marketplacePublic: false })
+
+    // Desactivar tienda online también apaga Marketplace
+    expect(
+      buildVisibilityTogglePatch({ storefrontPublic: true, marketplacePublic: true }, 'storefront', false),
+    ).toEqual({ storefrontPublic: false, marketplacePublic: false })
+
+    // Copys de confirmación claros para cada transición
+    expect(
+      publicationToggleCopy({ storefrontPublic: false, marketplacePublic: false }, { storefrontPublic: true, marketplacePublic: true }),
+    ).toMatchObject({ title: '¿Activar web y Marketplace?', destructive: false })
+    expect(
+      publicationToggleCopy({ storefrontPublic: true, marketplacePublic: true }, { storefrontPublic: false, marketplacePublic: false }),
+    ).toMatchObject({ title: '¿Desactivar tu tienda web?', destructive: true })
+
+    // Llamada real a sync-company para activar ambos y luego desactivar
+    await saveCompanyInfo(
+      { name: 'Mi Tienda', phone: '0981123456', slug: 'mi-tienda', storefrontPublic: false, marketplacePublic: false },
+      buildVisibilityTogglePatch({ storefrontPublic: false, marketplacePublic: false }, 'all', true),
+      true,
+    )
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      storefrontPublic: true,
+      marketplacePublic: true,
+      publicationConfirmed: true,
+    })
+
+    await saveCompanyInfo(
+      { name: 'Mi Tienda', phone: '0981123456', slug: 'mi-tienda', storefrontPublic: true, marketplacePublic: true },
+      buildVisibilityTogglePatch({ storefrontPublic: true, marketplacePublic: true }, 'storefront', false),
+      false,
+    )
+    expect(JSON.parse(String(calls[1].init.body))).toMatchObject({
+      storefrontPublic: false,
+      marketplacePublic: false,
+      publicationConfirmed: false,
+    })
   })
 })

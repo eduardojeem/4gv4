@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Camera, Check, Loader2 } from 'lucide-react'
+import { Camera, Check, Coins, Loader2, Sparkles, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -28,17 +28,27 @@ export type NewProfessionalDraft = {
   allServices: boolean
   serviceIds: string[]
   onlineVisible: boolean
+  remunerationType: 'commission' | 'fixed' | 'hybrid' | 'chair_rental'
+  commissionRateServices: number
+  commissionRateProducts: number
+  commissionFixedDeduction: number
+  sendInvite?: boolean
+  inviteEmail?: string
 }
 
 /** Qué falta o qué está mal, en palabras: el formulario lo muestra y no deja enviar. */
 export function validateNewProfessional(draft: NewProfessionalDraft, existingNames: string[]) {
   const name = draft.name.trim()
+  const emailProblem = draft.sendInvite && (!draft.inviteEmail?.trim() || !draft.inviteEmail.includes('@'))
+    ? 'Ingresá un correo electrónico válido para la invitación.'
+    : null
   return {
     name: !name ? 'Poné el nombre.' : null,
     duplicate: name && existingNames.some((other) => other.trim().toLowerCase() === name.toLowerCase())
       ? 'Ya hay alguien con este nombre: agregá un apellido o inicial para distinguirlos en la agenda.'
       : null,
     services: !draft.allServices && draft.serviceIds.length === 0 ? 'Elegí al menos un servicio, o activá «Hace todos los servicios».' : null,
+    ...(draft.sendInvite ? { email: emailProblem } : {}),
   }
 }
 
@@ -56,7 +66,20 @@ type Props = {
   onCompleteProfile: (professional: AgendaProfessional) => void
 }
 
-const emptyDraft = (color: string): NewProfessionalDraft => ({ name: '', specialty: '', color, allServices: true, serviceIds: [], onlineVisible: true })
+const emptyDraft = (color: string): NewProfessionalDraft => ({
+  name: '',
+  specialty: '',
+  color,
+  allServices: true,
+  serviceIds: [],
+  onlineVisible: true,
+  remunerationType: 'commission',
+  commissionRateServices: 50,
+  commissionRateProducts: 10,
+  commissionFixedDeduction: 0,
+  sendInvite: false,
+  inviteEmail: '',
+})
 
 /**
  * Alta de un profesional en un solo paso: quién es, qué hace y si se reserva
@@ -85,7 +108,7 @@ export function AddProfessionalDialog({ open, onOpenChange, services, advanced, 
 
   const set = (patch: Partial<NewProfessionalDraft>) => setDraft((current) => ({ ...current, ...patch }))
   const problems = validateNewProfessional(draft, existingNames)
-  const blocked = Boolean(problems.name || problems.services)
+  const blocked = Boolean(problems.name || problems.services || problems.email)
   const name = draft.name.trim()
 
   const reset = (colors: string[] = usedColors) => {
@@ -114,6 +137,10 @@ export function AddProfessionalDialog({ open, onOpenChange, services, advanced, 
           name,
           color: draft.color,
           sort_order: nextOrder,
+          ...(draft.remunerationType !== 'commission' ? { remuneration_type: draft.remunerationType } : {}),
+          ...(draft.commissionRateServices !== 50 ? { commission_rate_services: draft.commissionRateServices } : {}),
+          ...(draft.commissionRateProducts !== 10 ? { commission_rate_products: draft.commissionRateProducts } : {}),
+          ...(draft.commissionFixedDeduction ? { commission_fixed_deduction: draft.commissionFixedDeduction } : {}),
           ...(draft.specialty.trim() ? { specialty: draft.specialty.trim() } : {}),
           ...(advanced ? { online_visible: draft.onlineVisible } : {}),
         }),
@@ -123,7 +150,15 @@ export function AddProfessionalDialog({ open, onOpenChange, services, advanced, 
         setError(body?.error || 'No se pudo agregar. Probá de nuevo.')
         return
       }
-      let professional: AgendaProfessional = { service_ids: [], ...body.professional }
+
+      let professional: AgendaProfessional = {
+        service_ids: [],
+        remuneration_type: draft.remunerationType,
+        commission_rate_services: draft.commissionRateServices,
+        commission_rate_products: draft.commissionRateProducts,
+        commission_fixed_deduction: draft.commissionFixedDeduction,
+        ...body.professional,
+      }
 
       // Todos marcados equivale a «todos»: se guarda vacío para que los servicios nuevos también le apliquen.
       const serviceIds = draft.allServices || draft.serviceIds.length === services.length ? [] : draft.serviceIds
@@ -150,11 +185,50 @@ export function AddProfessionalDialog({ open, onOpenChange, services, advanced, 
         else toast.warning(`${name} se agregó sin foto`, { description: 'error' in uploaded ? uploaded.error : 'Probá subirla desde «Editar».' })
       }
 
+      if (draft.sendInvite && draft.inviteEmail?.trim()) {
+        try {
+          const inviteResponse = await fetch('/api/agenda/professionals/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              professionalId: professional.id,
+              email: draft.inviteEmail.trim().toLowerCase(),
+              sendEmailInvite: true,
+            }),
+          })
+          const inviteData = (await inviteResponse.json().catch(() => null)) as {
+            userId?: string
+            emailSent?: boolean
+            error?: string
+            message?: string
+            whatsappUrl?: string
+          } | null
+          if (!inviteResponse.ok) throw new Error(inviteData?.error || 'No se pudo invitar')
+          if (inviteData?.emailSent === false) toast.warning(inviteData.message || 'El correo no se envió.')
+          if (inviteData?.userId) {
+            professional = { ...professional, user_id: inviteData.userId }
+          }
+          if (inviteData?.whatsappUrl) {
+            toast.success(`${name} agregado e invitado al sistema`, {
+              description: inviteData.emailSent ? 'Correo enviado. Podés compartirle el inicio de sesión por WhatsApp.' : 'Revisá el correo de activación antes de compartir el inicio de sesión.',
+              action: {
+                label: 'Enviar WhatsApp',
+                onClick: () => window.open(inviteData.whatsappUrl, '_blank'),
+              },
+            })
+          }
+        } catch {
+          toast.warning(`${name} se agregó, pero falló el envío de la invitación.`)
+        }
+      }
+
       onCreated(professional)
-      toast.success(`${name} agregado`, {
-        description: photo ? 'Podés sumarle un horario propio.' : 'Podés sumarle foto y horario propio.',
-        action: { label: 'Completar perfil', onClick: () => onCompleteProfile(professional) },
-      })
+      if (!draft.sendInvite) {
+        toast.success(`${name} agregado`, {
+          description: photo ? 'Podés sumarle un horario propio.' : 'Podés sumarle foto y horario propio.',
+          action: { label: 'Completar perfil', onClick: () => onCompleteProfile(professional) },
+        })
+      }
       if (another) {
         reset([...usedColors, draft.color])
         // Para cargar al equipo de corrido: el cursor vuelve al nombre.
@@ -304,6 +378,260 @@ export function AddProfessionalDialog({ open, onOpenChange, services, advanced, 
                 )}
               </fieldset>
             )}
+
+            {/* Comisiones y remuneración */}
+            <fieldset className="space-y-3 rounded-2xl border border-primary/20 bg-muted/20 p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Coins className="h-4 w-4" />
+                </div>
+                <div>
+                  <legend className="text-sm font-bold text-foreground">Comisiones y remuneración</legend>
+                  <p className="text-xs text-muted-foreground">Definí cómo cobra este barbero por sus servicios y ventas.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 pt-1">
+                {[
+                  { id: 'commission', label: 'Comisión (%)', desc: 'Porcentaje por corte' },
+                  { id: 'hybrid', label: 'Fijo + Com.', desc: 'Base + porcentaje' },
+                  { id: 'chair_rental', label: 'Alquiler sillón', desc: 'Cuota fija acordada' },
+                  { id: 'fixed', label: 'Sueldo fijo', desc: 'Sin porcentaje' },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => set({ remunerationType: mode.id as NewProfessionalDraft['remunerationType'] })}
+                    className={cn(
+                      'flex flex-col items-start justify-center rounded-xl border p-2 text-left transition-all',
+                      draft.remunerationType === mode.id
+                        ? 'border-primary bg-primary/10 text-primary font-semibold shadow-2xs'
+                        : 'border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    )}
+                  >
+                    <span className="text-xs font-bold leading-tight">{mode.label}</span>
+                    <span className="mt-0.5 text-[10px] leading-tight opacity-80">{mode.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {(draft.remunerationType === 'commission' || draft.remunerationType === 'hybrid') && (
+                <div className="space-y-3 rounded-xl border bg-card p-3 shadow-2xs">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="new-comm-services" className="text-xs font-semibold text-foreground">
+                        Comisión en Servicios (Cortes, barba)
+                      </Label>
+                      <div className="flex items-center gap-1">
+                        {[40, 50, 60, 70].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => set({ commissionRateServices: preset })}
+                            className={cn(
+                              'rounded-md px-1.5 py-0.5 text-[11px] font-bold transition-colors',
+                              draft.commissionRateServices === preset
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            )}
+                          >
+                            {preset}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="new-comm-services"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={draft.commissionRateServices}
+                        onChange={(e) => set({ commissionRateServices: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                        className="h-10 rounded-xl pr-8 font-bold tabular-nums"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="new-comm-products" className="text-xs font-semibold text-foreground">
+                        Comisión en Productos (Reventa en sillón)
+                      </Label>
+                      <div className="flex items-center gap-1">
+                        {[0, 5, 10, 15].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => set({ commissionRateProducts: preset })}
+                            className={cn(
+                              'rounded-md px-1.5 py-0.5 text-[11px] font-bold transition-colors',
+                              draft.commissionRateProducts === preset
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            )}
+                          >
+                            {preset}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="new-comm-products"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={draft.commissionRateProducts}
+                        onChange={(e) => set({ commissionRateProducts: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                        className="h-10 rounded-xl pr-8 font-bold tabular-nums"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5 text-xs">
+                    <p className="font-bold text-primary flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" />
+                      Ejemplo:
+                    </p>
+                    <p className="mt-0.5 text-foreground/90">
+                      En un corte de 40.000 Gs, el barbero cobra{' '}
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {((40000 * draft.commissionRateServices) / 100).toLocaleString('es-PY')} Gs
+                      </span>{' '}
+                      y el local retiene{' '}
+                      <span className="font-bold text-muted-foreground">
+                        {(40000 - (40000 * draft.commissionRateServices) / 100).toLocaleString('es-PY')} Gs
+                      </span>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {draft.remunerationType === 'chair_rental' && (
+                <div className="space-y-3 rounded-xl border border-primary/20 bg-card p-3.5 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm">
+                      💈
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Modalidad Alquiler de Sillón</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        El barbero se queda con el 100% de sus cortes y abona un canon fijo acordado al salón.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1 border-t">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="new-chair-rental" className="text-xs font-semibold text-foreground">
+                        Monto del alquiler de sillón acordado
+                      </Label>
+                      <div className="flex items-center gap-1">
+                        {[200000, 350000, 500000].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => set({ commissionFixedDeduction: preset })}
+                            className={cn(
+                              'rounded-md px-1.5 py-0.5 text-[10px] font-bold transition-colors',
+                              draft.commissionFixedDeduction === preset
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            )}
+                          >
+                            {(preset / 1000).toLocaleString('es-PY')}k
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="new-chair-rental"
+                        type="number"
+                        min={0}
+                        step={50000}
+                        value={draft.commissionFixedDeduction || ''}
+                        placeholder="ej: 350.000"
+                        onChange={(e) => set({ commissionFixedDeduction: Math.max(0, Number(e.target.value) || 0) })}
+                        className="h-10 rounded-xl pr-12 font-bold tabular-nums"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        Gs.
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Canon periódico (semanal o mensual). Se puede cobrar en la Caja del POS como ingreso o descontar al liquidar turnos.
+                    </p>
+                  </div>
+
+                  {draft.commissionFixedDeduction > 0 && (
+                    <div className="rounded-lg bg-primary/5 p-2.5 text-xs text-primary font-medium border border-primary/15">
+                      💰 <b>Ingreso fijo para el salón:</b> {draft.commissionFixedDeduction.toLocaleString('es-PY')} Gs por período acordado.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {draft.remunerationType === 'fixed' && (
+                <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">
+                  <p className="font-semibold text-foreground">Modalidad Sueldo Fijo</p>
+                  <p className="mt-1">
+                    El barbero percibe un salario fijo acordado periódicamente, sin comisión porcentual por cada corte.
+                  </p>
+                </div>
+              )}
+            </fieldset>
+
+            {/* Acceso al sistema e invitación */}
+            <div className="space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-primary" />
+                    <Label htmlFor="send-invite-toggle" className="text-sm font-bold text-foreground cursor-pointer">
+                      Dar acceso al sistema
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enviá una invitación para que el barbero cree su contraseña y use la app desde su celular.
+                  </p>
+                </div>
+                <Switch
+                  id="send-invite-toggle"
+                  checked={draft.sendInvite ?? false}
+                  onCheckedChange={(checked) => set({ sendInvite: checked })}
+                />
+              </div>
+
+              {draft.sendInvite && (
+                <div className="space-y-2 pt-2 border-t border-border/60">
+                  <Label htmlFor="new-prof-email" className="text-xs font-semibold text-foreground">
+                    Correo electrónico del barbero
+                  </Label>
+                  <Input
+                    id="new-prof-email"
+                    type="email"
+                    placeholder="ej: carlos.barber@gmail.com"
+                    value={draft.inviteEmail || ''}
+                    onChange={(e) => set({ inviteEmail: e.target.value })}
+                    className="h-10 rounded-xl"
+                  />
+                  {touched && problems.email && (
+                    <p className="text-xs text-destructive">{problems.email}</p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Recibirá un correo con su botón de acceso y podrás enviarle el link directo por WhatsApp.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {advanced && (
               <label className="flex items-start justify-between gap-3 rounded-xl border p-3 text-sm">

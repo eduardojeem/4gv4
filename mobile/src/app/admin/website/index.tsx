@@ -15,6 +15,7 @@ import { StorefrontLivePreview } from '@/components/website/storefront-preview';
 import { WebsiteAssistantSheet } from '@/components/website/website-assistant-sheet';
 import { OfflineNotice, WebsiteGate } from '@/components/website/website-gate';
 import { WebsiteMediaLibrarySheet } from '@/components/website/website-media-sheet';
+import { WebsiteVisibilityCard } from '@/components/website/website-visibility-card';
 import {
   Notice,
   ProgressBar,
@@ -32,6 +33,7 @@ import {
   isAnnouncementLive,
   normalizeAnnouncementList,
   sectionEnabled,
+  visibilitySummary,
 } from '@/lib/website-model';
 
 const go = (path: string) => router.push(`/admin/website/${path}` as never);
@@ -96,6 +98,7 @@ export default function WebsiteHome() {
         ).length;
         const mode = settings.checkout?.commerceMode ?? 'cart';
         const templateMeta = STOREFRONT_TEMPLATES_META[resolvedStyle];
+        const visibility = visibilitySummary(company);
 
         const openSection = (
           route: string,
@@ -259,6 +262,13 @@ export default function WebsiteHome() {
                 </Pressable>
               )}
             </View>
+
+            {/* Controles directos para activar/desactivar Tienda online y Marketplace */}
+            <WebsiteVisibilityCard
+              company={company}
+              commerceMode={mode}
+              mode="immediate"
+            />
 
             {/* Barra de herramientas del Studio */}
             <View style={styles.studioToolsRow}>
@@ -634,8 +644,8 @@ export default function WebsiteHome() {
               icon="globe-outline"
               title="Dirección y publicación"
               hint="Enlace público, requisitos y visibilidad"
-              badge={published ? 'Publicada' : 'Oculta'}
-              badgeTone={published ? 'success' : 'warning'}
+              badge={visibility.statusLabel}
+              badgeTone={visibility.statusTone}
               onPress={() => go('domain')}
             />
 

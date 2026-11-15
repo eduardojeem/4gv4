@@ -1,3 +1,4 @@
+import { homeVisitIssue } from './home-visit'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -14,6 +15,11 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
 
 /** Lo que manda el panel al crear o editar un turno. */
 export const appointmentInputSchema = z.object({
+  attention_mode: z.enum(['local','home']).optional(),
+  service_address: z.string().trim().max(500).nullable().optional(),
+  arrival_instructions: z.string().trim().max(1000).nullable().optional(),
+  travel_before_minutes: z.number().int().min(0).max(180).optional(),
+  travel_after_minutes: z.number().int().min(0).max(180).optional(),
   customer_id: z.string().uuid().nullable().optional(),
   customer_name: z.string().trim().min(1, 'Poné el nombre del cliente').max(160),
   customer_phone: z.string().trim().max(40).nullable().optional(),
@@ -28,7 +34,7 @@ export const appointmentInputSchema = z.object({
   accept_new_terms: z.boolean().optional(),
   accepted_terms: z.object({price:z.number().finite().min(0),duration_minutes:z.number().int().min(5).max(720),buffer_minutes:z.number().int().min(0).max(120)}).optional(),
   allow_outside_hours: z.boolean().optional(),
-})
+}).superRefine((value,context)=>{const issue=homeVisitIssue(value);if(issue)context.addIssue({code:'custom',message:issue,path:['service_address']})})
 
 export type AppointmentInput = z.infer<typeof appointmentInputSchema>
 

@@ -1,5 +1,7 @@
 'use client'
 
+import {ProductWhatsAppButton} from './ProductWhatsAppButton'
+import {productWhatsappInquiryHref} from '@/lib/public/product-whatsapp'
 import { WhatsAppIcon } from '@/components/public/SocialIcons'
 
 import { useMemo, useState } from 'react'
@@ -21,13 +23,14 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
-import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
 import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { siteUrl } from '@/lib/site-url'
 import { marketUnitLabel } from '@/lib/public/market'
+import '@/components/public/especial-para-barbero/especial-barbero.css'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -72,6 +75,7 @@ export function ProductCard(props: ProductCardProps) {
   const storefrontStyle = useStorefrontStyle()
   // Supermercado: compra rápida con cantidades en la misma tarjeta.
   const isMarket = storefrontStyle === 'market'
+  const isBarberSupply = storefrontStyle === 'especial-para-barbero'
   const unitLabel = isMarket ? marketUnitLabel(product.unit_measure) : null
 
   // Publicado sin precio: donde iba el precio va un boton que abre WhatsApp.
@@ -187,9 +191,10 @@ export function ProductCard(props: ProductCardProps) {
   const storeName = websiteSettings?.company_info.name || null
   const fullProductUrl = siteUrl(productHref)
 
-  const whatsappHref = contactPhone
-    ? getWhatsAppLink({
-        phone: contactPhone,
+  const inquiryHref=productWhatsappInquiryHref({company:websiteSettings?.company_info,product:{name:product.name,url:fullProductUrl}})
+  const whatsappHref = inquiryHref && contactPhone
+    ? productWhatsappInquiryHref({
+        company:websiteSettings?.company_info,product:{name:product.name,url:fullProductUrl},
         message: buildProductWhatsAppMessage({
           storeName,
           productName: product.name,
@@ -211,9 +216,9 @@ export function ProductCard(props: ProductCardProps) {
     ? Boolean(selectedVariant && selectedVariant.stock_quantity > 0)
     : isInStock
 
-  const modalWhatsappHref = contactPhone
-    ? getWhatsAppLink({
-        phone: contactPhone,
+  const modalWhatsappHref = inquiryHref && contactPhone
+    ? productWhatsappInquiryHref({
+        company:websiteSettings?.company_info,product:{name:product.name,url:fullProductUrl},
         message: buildProductWhatsAppMessage({
           storeName,
           productName: product.name,
@@ -283,6 +288,7 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
           storefrontStyle === 'beauty' && 'rounded-2xl border border-stone-200/80 shadow-xs hover:border-stone-400 hover:shadow-md dark:border-stone-800 dark:hover:border-stone-600',
           storefrontStyle === 'services' && 'rounded-2xl border border-border/50 shadow-xs hover:border-primary/40 hover:shadow-lg',
+          isBarberSupply && 'ebs-product-card rounded-[18px] border border-zinc-200/90 bg-white text-zinc-900 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100',
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
       >
@@ -294,14 +300,16 @@ export function ProductCard(props: ProductCardProps) {
           className={cn(
             'relative overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
             // Cosmética y súper: el envase sobre blanco, en cuadrado. En tecnología, dispositivo entero sobre superficie neutra.
-            storefrontStyle === 'beauty' || isMarket || storefrontStyle === 'wholesale-pro'
+            isBarberSupply
+              ? 'aspect-square bg-white dark:bg-zinc-950/60'
+              : storefrontStyle === 'beauty' || isMarket || storefrontStyle === 'wholesale-pro'
               ? 'aspect-square bg-white dark:bg-muted/10'
               : storefrontStyle === 'informatica-electronica'
               ? 'aspect-square bg-white dark:bg-muted/10'
               : storefrontStyle === 'tech'
               ? 'aspect-square bg-muted/15 dark:bg-muted/10'
               : 'bg-muted/30',
-            storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && !deviceMedia && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
+            !isBarberSupply && storefrontStyle !== 'beauty' && !isMarket && storefrontStyle !== 'wholesale-pro' && !deviceMedia && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
           aria-label={`Vista rápida de ${product.name}`}
         >
@@ -312,7 +320,9 @@ export function ProductCard(props: ProductCardProps) {
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
-                deviceMedia
+                isBarberSupply
+                  ? 'ebs-card-image object-contain p-3.5 sm:p-4'
+                  : deviceMedia
                   ? 'object-contain p-3.5 sm:p-4 transition-transform duration-500 group-hover:scale-[1.05]'
                   : coverImage && storefrontStyle !== 'wholesale-pro'
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
@@ -393,12 +403,13 @@ export function ProductCard(props: ProductCardProps) {
         <div className={cn(
           'flex flex-1 flex-col gap-1.5 px-3.5 pb-3.5 pt-3',
           isMarket && 'items-center gap-1 px-3 pb-3 pt-2 text-center',
-          storefrontStyle === 'wholesale-pro' && 'gap-1 px-3 pb-3 pt-2.5'
+          storefrontStyle === 'wholesale-pro' && 'gap-1 px-3 pb-3 pt-2.5',
+          isBarberSupply && 'items-center gap-1.5 px-3.5 pb-4 pt-3 text-center'
         )}>
           {/* Brand · Category */}
           {storefrontStyle === 'wholesale-pro' && product.sku && <p className="truncate font-mono text-[11px] text-muted-foreground" title={product.sku}>SKU: {product.sku}</p>}
           {!isMarket && (product.brand || product.category) && (
-            <p className="truncate text-[11px] font-medium text-muted-foreground">
+            <p className={cn('truncate text-[11px] font-medium text-muted-foreground', isBarberSupply && 'text-[10px] font-bold uppercase tracking-[0.14em]')}>
               {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
             </p>
           )}
@@ -433,7 +444,8 @@ export function ProductCard(props: ProductCardProps) {
             storefrontStyle === 'market' && 'font-bold text-xs sm:text-sm',
             storefrontStyle === 'modern' && 'font-bold tracking-tight text-foreground/90',
             storefrontStyle === 'services' && 'font-semibold',
-            storefrontStyle === 'beauty' && 'group-hover:text-primary transition-colors'
+            storefrontStyle === 'beauty' && 'group-hover:text-primary transition-colors',
+            isBarberSupply && 'font-black uppercase tracking-tight text-zinc-900 group-hover:text-primary transition-colors dark:text-white'
           )}>
             {product.name}
           </h3>
@@ -454,13 +466,20 @@ export function ProductCard(props: ProductCardProps) {
               </div>
             </div>
           ) : isMarket ? null : (
-          <div className="mt-2 min-w-0">
+          <div className={cn('mt-2 min-w-0', isBarberSupply && 'flex flex-col items-center gap-0.5')}>
+            {isBarberSupply && isWholesale && (
+              <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-primary">
+                Mayorista
+              </span>
+            )}
             <p
               className={cn(
                 'text-lg font-bold leading-tight',
                 // En deporte, con la misma tipografía de los títulos.
                 storefrontStyle === 'sport' && 'font-black italic tracking-tight',
-                hasOffer || isWholesaleDiscount
+                isBarberSupply
+                  ? 'text-lg font-black tabular-nums text-emerald-600 dark:text-emerald-400'
+                  : hasOffer || isWholesaleDiscount
                   ? 'text-rose-600 dark:text-rose-400'
                   : 'text-foreground'
               )}
@@ -527,7 +546,8 @@ export function ProductCard(props: ProductCardProps) {
           <div
             className={cn(
               'mt-3 flex items-center gap-2',
-              storefrontStyle === 'wholesale-pro' && 'mt-2 gap-1.5'
+              storefrontStyle === 'wholesale-pro' && 'mt-2 gap-1.5',
+              isBarberSupply && 'mt-2.5 w-full gap-1.5'
             )}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
@@ -536,12 +556,20 @@ export function ProductCard(props: ProductCardProps) {
               href={productHref}
               className={cn(
                 'relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-[0.98]',
-                storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold'
+                storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold',
+                isBarberSupply && (
+                  !precioOculto && commerceMode === 'catalog'
+                    ? 'ebs-card-cta ebs-card-cta-primary rounded-full border-transparent bg-zinc-900 text-white hover:border-transparent dark:bg-zinc-800'
+                    : 'ebs-card-cta rounded-full border-zinc-200 bg-zinc-50 text-zinc-900 hover:border-primary/50 hover:bg-primary/5 hover:text-primary dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-100'
+                )
               )}
               aria-label={`Ver detalle de ${product.name}`}
             >
-              <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <Eye className={cn('h-3.5 w-3.5 shrink-0', isBarberSupply && !precioOculto && commerceMode === 'catalog' ? 'text-current' : 'text-muted-foreground')} />
               <span>Ver detalle</span>
+              {isBarberSupply && !precioOculto && commerceMode === 'catalog' && (
+                <ArrowRight className="ebs-card-arrow h-3.5 w-3.5 shrink-0" />
+              )}
             </Link>
 
             {/* Sin precio publicado no se puede comprar: se pregunta. */}
@@ -553,7 +581,8 @@ export function ProductCard(props: ProductCardProps) {
                 suppressHydrationWarning
                 className={cn(
                   'relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20',
-                  storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold'
+                  storefrontStyle === 'wholesale-pro' && 'h-8 rounded-md text-xs font-semibold',
+                  isBarberSupply && 'rounded-full'
                 )}
                 aria-label={`Preguntar el precio de ${product.name} por WhatsApp`}
               >
@@ -568,11 +597,21 @@ export function ProductCard(props: ProductCardProps) {
                 onClick={() => addToCart(false)}
                 disabled={!isInStock}
                 className={cn(
-                  'relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                  'relative z-20 flex h-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
                   storefrontStyle === 'wholesale-pro' && 'h-8 w-8 rounded-md',
-                  justAdded
-                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'
+                  isBarberSupply
+                    ? cn(
+                        'gap-1 rounded-full px-3',
+                        justAdded
+                          ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                          : 'ebs-card-cta ebs-card-cta-primary bg-zinc-900 text-white dark:bg-zinc-800'
+                      )
+                    : cn(
+                        'w-9',
+                        justAdded
+                          ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'
+                      )
                 )}
                 aria-label={`Agregar ${product.name} al carrito`}
                 title={`Agregar ${product.name} al carrito`}
@@ -580,7 +619,10 @@ export function ProductCard(props: ProductCardProps) {
                 {justAdded ? (
                   <Check className="h-4 w-4 animate-in zoom-in" />
                 ) : (
-                  <ShoppingCart className="h-4 w-4 transition-transform hover:scale-110" />
+                  <>
+                    <ShoppingCart className="h-4 w-4 transition-transform hover:scale-110" />
+                    {isBarberSupply && <ArrowRight className="ebs-card-arrow h-3 w-3" />}
+                  </>
                 )}
               </button>
             )}
@@ -590,7 +632,10 @@ export function ProductCard(props: ProductCardProps) {
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
+                className={cn(
+                  'relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20',
+                  isBarberSupply && 'rounded-full'
+                )}
                 aria-label={`Consultar por ${product.name} en WhatsApp`}
                 title={`Consultar por ${product.name} en WhatsApp`}
               >
@@ -599,6 +644,7 @@ export function ProductCard(props: ProductCardProps) {
             )}
           </div>
           )}
+          {!precioOculto && commerceMode !== 'whatsapp' && <ProductWhatsAppButton href={inquiryHref} productName={product.name} className="mt-2 w-full px-2 text-[11px]"/>}
         </div>
       </article>
 

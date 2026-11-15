@@ -114,6 +114,7 @@ describe('la agenda sin la migración de fotos', () => {
       const builder: Record<string, unknown> = {}
       builder.select = (cols: string) => { columns = cols; calls.push(`${table}:${cols}`); return builder }
       builder.eq = () => builder
+      builder.or = () => builder
       builder.order = () => builder
       builder.limit = () => builder
       builder.maybeSingle = () => Promise.resolve(result(null))

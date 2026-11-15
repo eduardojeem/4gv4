@@ -1,0 +1,7 @@
+import {it,expect} from 'vitest'
+import {businessExperience,canUseCatalogRecord} from '@/lib/organization/business-experience'
+it('prioritizes services for barbers who also sell products',()=>{expect(businessExperience({businessVertical:'barbershop',operatingModel:'mixed',effectiveModules:['services','inventory','pos']}).defaultCatalogView).toBe('services')})
+it('preserves retail and workshop priorities',()=>{expect(businessExperience({businessVertical:'general',operatingModel:'retail',effectiveModules:['inventory']}).catalogLabel).toBe('Productos');expect(businessExperience({operatingModel:'repair',effectiveModules:['repairs','services']}).focus).toBe('repairs')})
+it('uses generic terminology for other service businesses',()=>{const profile=businessExperience({operatingModel:'service',effectiveModules:['services']});expect(profile.catalogLabel).toBe('Servicios');expect(profile.professionalsLabel).toBe('profesionales');expect(profile.focus).toBe('agenda')})
+it('does not enable modules based on the industry alone',()=>{expect(businessExperience({businessVertical:'barbershop',effectiveModules:['inventory']}).focus).toBeNull()})
+it('services-only access cannot modify goods or convert a service into goods',()=>{expect(canUseCatalogRecord(true,{unit_measure:'unidad',sku:'SRV-FAKE'})).toBe(false);expect(canUseCatalogRecord(true,{unit_measure:'servicio'},{unit_measure:'unidad'})).toBe(false);expect(canUseCatalogRecord(true,{unit_measure:'servicio'},{name:'Corte'})).toBe(true);expect(canUseCatalogRecord(false,{unit_measure:'unidad'})).toBe(true)})

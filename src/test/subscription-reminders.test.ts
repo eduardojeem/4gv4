@@ -13,6 +13,7 @@ function row(overrides: Record<string, unknown>) {
   return {
     organization_id: 'org',
     plan: 'PRO',
+    price_monthly: 200000,
     status: 'active',
     payment_status: 'paid',
     trial_ends_at: null,
@@ -32,7 +33,7 @@ describe('reminderFor', () => {
 
   it('no recuerda pagar a quien ya programó la baja ni a una cuenta Gratuita', () => {
     expect(reminderFor(row({ current_period_ends_at: inDays(3), cancel_at_period_end: true }), NOW)).toBeNull()
-    expect(reminderFor(row({ plan: 'FREE', current_period_ends_at: inDays(3) }), NOW)).toBeNull()
+    expect(reminderFor(row({ plan: 'FREE', price_monthly: 0, current_period_ends_at: inDays(3) }), NOW)).toBeNull()
   })
 
   it('avisa que termina la prueba gratis', () => {
@@ -44,7 +45,9 @@ describe('reminderFor', () => {
     const pending = reminderFor(row({ status: 'past_due', current_period_ends_at: inDays(-1) }), NOW)
     expect(pending).toMatchObject({ kind: 'past_due', periodKey: inDays(-1) })
 
-    expect(reminderFor(row({ plan: 'FREE', payment_status: 'unpaid', updated_at: inDays(-1) }), NOW)?.kind).toBe('downgraded')
-    expect(reminderFor(row({ plan: 'FREE', payment_status: 'unpaid', updated_at: inDays(-10) }), NOW)).toBeNull()
+    expect(reminderFor(row({ plan: 'FREE', price_monthly: 0, payment_status: 'unpaid', updated_at: inDays(-1) }), NOW)?.kind).toBe('downgraded')
+    expect(reminderFor(row({ plan: 'FREE', price_monthly: 0, payment_status: 'unpaid', updated_at: inDays(-10) }), NOW)).toBeNull()
   })
 })
+
+it('reminds a paid plan with the FREE legacy code without calling it a free downgrade',()=>{expect(reminderFor(row({plan:'FREE',price_monthly:50000,current_period_ends_at:inDays(3)}),NOW)?.kind).toBe('renewal_7');expect(reminderFor(row({plan:'FREE',price_monthly:50000,payment_status:'unpaid',updated_at:inDays(-1)}),NOW)).toBeNull();});

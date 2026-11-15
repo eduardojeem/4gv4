@@ -1,3 +1,4 @@
+import { primaryActivityModule } from '@/lib/organization/primary-activity'
 import { NextRequest, NextResponse } from 'next/server'
 import { withTenantAuth, type TenantAuthContext } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -65,6 +66,7 @@ async function prepareWebsite(
 
 function profileResponse(planInfo: Awaited<ReturnType<typeof getOrganizationPlanInfo>>) {
   return {
+    primaryActivity: planInfo.primaryActivity,
     serviceSpecialties: planInfo.serviceSpecialties,
     attentionMode: planInfo.attentionMode,
     appointmentMode: planInfo.appointmentMode,
@@ -123,8 +125,11 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     }, { status: 422 })
   }
 
+  const requiredModule = primaryActivityModule(validation.data.primaryActivity ?? 'auto')
+  if(requiredModule && !selectedModules.includes(requiredModule))return NextResponse.json({success:false,code:'PRIMARY_ACTIVITY_UNAVAILABLE',error:'Elegí una actividad principal incluida en las herramientas habilitadas.'},{status:422})
   const supabase = createAdminSupabase()
   const previous = {
+    primaryActivity: currentPlan.primaryActivity,
     serviceSpecialties: currentPlan.serviceSpecialties,
     attentionMode: currentPlan.attentionMode,
     appointmentMode: currentPlan.appointmentMode,
@@ -138,6 +143,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     .from('organizations')
     .update({
       ...serviceBusinessDetailsPatch(next),
+      ...(next.primaryActivity !== undefined && next.primaryActivity !== currentPlan.primaryActivity ? { primary_activity: next.primaryActivity } : {}),
       business_vertical: next.businessVertical,
       operating_model: next.operatingModel,
       enabled_modules: next.enabledModules,
@@ -145,6 +151,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     })
     .eq('id', context.organization.id)
 
+  if (updateError?.code==='42703')return NextResponse.json({success:false,code:'BUSINESS_PROFILE_MIGRATION_REQUIRED',error:'Falta aplicar la migración de actividad principal. No se guardaron los cambios.'},{status:503})
   if (updateError) {
     return NextResponse.json({ success: false, error: 'No se pudo guardar el perfil del negocio.' }, { status: 500 })
   }
@@ -163,6 +170,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
       .from('organizations')
       .update({
         ...serviceBusinessDetailsPatch(previous),
+        ...(next.primaryActivity !== undefined && next.primaryActivity !== currentPlan.primaryActivity ? { primary_activity: previous.primaryActivity } : {}),
         business_vertical: previous.businessVertical,
         operating_model: previous.operatingModel,
         enabled_modules: previous.enabledModules,

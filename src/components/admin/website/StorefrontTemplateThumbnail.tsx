@@ -284,6 +284,46 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
           </div>
         </>
       )}
+      {style === 'especial-para-barbero' && (
+        <>
+          <div className="overflow-hidden rounded-sm bg-[#0B0B0F]">
+            <span className="block h-0.5 w-full bg-primary" />
+            <div className="flex items-center justify-between px-1.5 py-1">
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+                <span className="block h-1 w-7 rounded-full bg-white/75" />
+              </div>
+              <div className="flex gap-1">
+                <span className="block h-1.5 w-4 rounded-full bg-primary/80" />
+                <span className="block h-1.5 w-2 rounded-full bg-white/30" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-primary/30 bg-[#111116] px-2 py-1.5">
+            <div className="space-y-1">
+              <span className="block text-[7px] font-black uppercase tracking-wider text-white">PRO BARBER</span>
+              <span className="block h-1 w-9 rounded-full bg-white/40" />
+            </div>
+            <span className="rounded-full bg-primary px-1.5 py-0.5 text-[6px] font-black uppercase text-primary-foreground">Mayorista</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-sm bg-[#111116] px-1.5 py-0.5">
+            <span className="h-2 w-0.5 rounded-full bg-primary" />
+            <span className="text-[6px] font-black uppercase tracking-wider text-white">Catálogo</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="overflow-hidden rounded-md border border-zinc-200 bg-white p-0.5 dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="aspect-square w-full rounded-xs bg-zinc-100 dark:bg-zinc-800" />
+                <div className="mt-0.5 space-y-0.5 px-0.5">
+                  <span className="block h-1 w-4/5 rounded-full bg-zinc-800/70 dark:bg-zinc-200/70" />
+                  <span className="block h-1 w-1/2 rounded-full bg-emerald-600" />
+                  <span className="block h-1.5 w-full rounded-full bg-zinc-900 dark:bg-primary" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

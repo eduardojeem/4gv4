@@ -33,15 +33,21 @@ function RootNavigator() {
   }, [isLoading]);
 
   useEffect(() => {
-    if (!sessionUserId) return;
+    if (!sessionUserId || locked) return;
     let active = true;
-    apiFetch<{ setupState?: { completed?: boolean } | null }>('/api/onboarding/status')
+    apiFetch<{blocked?:boolean;canRenew?:boolean}>('/api/subscription/access')
+      .catch(()=>null)
+      .then(async access=>{
+        if(!active)return null;
+        if(access?.blocked===true&&access.canRenew===true){router.replace('/admin/subscriptions');return null;}
+        return apiFetch<{ setupState?: { completed?: boolean } | null }>('/api/onboarding/status');
+      })
       .then((status) => {
-        if (active && status.setupState && !status.setupState.completed) router.replace('/onboarding' as never);
+        if (active && status?.setupState && !status.setupState.completed) router.replace('/onboarding' as never);
       })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [sessionUserId]);
+  }, [sessionUserId, locked]);
 
   if (isLoading) return null;
 

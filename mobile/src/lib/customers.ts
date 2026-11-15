@@ -1,3 +1,4 @@
+import { creditCollectionPayload,creditTotals } from './credit-model';
 import { apiFetch, ApiError } from './api';
 
 /**
@@ -224,10 +225,17 @@ export type InstallmentRow = {
 export type PaymentRow = { id: string; credit_id: string; installment_id?: string | null; amount: number; payment_method?: string | null; created_at: string; notes?: string | null };
 
 export async function fetchCustomerCredits(id: string) {
-  return apiFetch<{ credits: CreditRow[]; installments: InstallmentRow[]; payments: PaymentRow[] }>('/api/credits/batch', {
+  const result=await apiFetch<{ credits: CreditRow[]; installments: InstallmentRow[]; payments: PaymentRow[];timeZone:string;currency:string;organizationId:string }>('/api/credits/batch', {
     method: 'POST',
     body: JSON.stringify({ customerIds: [id] }),
   });
+  if(!Array.isArray(result.credits)||!Array.isArray(result.installments)||!Array.isArray(result.payments)||!/^[A-Z]{3}$/.test(result.currency)||typeof result.timeZone!=='string')throw new Error('La respuesta de créditos está incompleta. Reintentá.');
+  try{new Intl.DateTimeFormat('es-PY',{timeZone:result.timeZone}).format(new Date())}catch{throw new Error('No se pudo validar el calendario de la empresa.');}
+  creditTotals(result.installments);
+  for(const row of result.credits)if(!Number.isFinite(Number(row.principal))||Number(row.principal)<0)throw new Error('Un crédito tiene capital no verificable.');
+  for(const credit of result.credits)if(credit.status==='completed'&&creditTotals(result.installments.filter(row=>row.credit_id===credit.id)).pending>0.01)throw new Error('Un crédito marcado como pagado todavía tiene cuotas con saldo. Revisá el registro antes de cobrar.');
+  for(const row of result.payments)if(!Number.isFinite(Number(row.amount))||Number(row.amount)<0)throw new Error('Un pago tiene un importe no verificable.');
+  return result;
 }
 
 // ─── Cobro de deudas (cuotas y reparaciones) ───────────────────────────────
@@ -245,7 +253,7 @@ export type CollectInput = {
   branchId?: string | null;
 };
 
-export type CollectResult = { receiptNumber: string; totalApplied: number; excessToStoreCredit: number; appliedAllocations: { id: string; title: string; allocatedAmount: number; newPending: number; fullyPaid: boolean }[] };
+export type CollectResult = { collection?: { receipt?: unknown }; receiptNumber: string; totalApplied: number; excessToStoreCredit: number; appliedAllocations: { id: string; title: string; allocatedAmount: number; newPending: number; fullyPaid: boolean }[] };
 
 export function newCollectionKey() {
   return `app-collect-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -256,19 +264,7 @@ export async function collectPayment(customerId: string, input: CollectInput, id
     return await apiFetch<CollectResult>(`/api/customers/${customerId}/collect-payment`, {
       method: 'POST',
       headers: input.branchId ? { 'x-branch-id': input.branchId } : undefined,
-      body: JSON.stringify({
-        amount: Math.round(input.amount),
-        paymentMethod: input.method,
-        mode: input.allocations?.length ? 'manual' : 'auto',
-        ...(input.allocations?.length ? { allocations: input.allocations.map((row) => ({ ...row, amount: Math.round(row.amount) })) } : {}),
-        referenceNumber: input.referenceNumber?.trim() || undefined,
-        voucherNumber: input.voucherNumber?.trim() || undefined,
-        lastFourDigits: input.lastFourDigits?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-        creditExcessToStoreCredit: Boolean(input.excessToStoreCredit),
-        idempotencyKey,
-        ...(input.branchId ? { branchId: input.branchId } : {}),
-      }),
+      body: JSON.stringify(creditCollectionPayload(input,idempotencyKey)),
     });
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -292,15 +288,16 @@ export type PortfolioSummary = {
 
 export type PortfolioCredit = CreditRow & { customer_name?: string | null; customer_phone?: string | null };
 
-export type PortfolioStatus = '' | 'pending' | 'late' | 'paid';
+export type PortfolioStatus = '' | 'open' | 'pending' | 'late' | 'paid';
 
 /** Cuotas de la cartera ordenadas por vencimiento (la API filtra y pagina de a 100). */
-export async function fetchPortfolio(params: { status: PortfolioStatus; page: number; customerName?: string }) {
-  const query = new URLSearchParams({ page: String(params.page), per_page: '50' });
-  if (params.status) query.set('status', params.status);
+export async function fetchPortfolio(params: { status: PortfolioStatus; page: number; customerName?: string;view?:'installments'|'customers';fromDate?:string;toDate?:string;creditId?:string;branchId?:string }) {
+  const query = new URLSearchParams({ page: String(params.page), per_page: '25',compact:'1',view:params.view??'installments' });
+  if(params.status==='open')query.set('openOnly','1');else if (params.status) query.set('status', params.status);
   if (params.customerName?.trim()) query.set('customerName', params.customerName.trim());
+  for(const field of ['fromDate','toDate','creditId','branchId'] as const)if(params[field])query.set(field,params[field]);
   const result = await apiFetch<{
-    data: { credits: PortfolioCredit[]; installments: InstallmentRow[]; globalSummary: PortfolioSummary; filteredSummary: PortfolioSummary; pagination: { total: number; perPage: number } };
+    data: { currency:string;timeZone:string;organizationId:string;branchId:string|null;asOf:string;customerGroups?:import('../../../src/lib/credits/mobile-portfolio').PortfolioCustomerGroup[];credits: PortfolioCredit[]; installments: InstallmentRow[]; globalSummary: PortfolioSummary; filteredSummary: PortfolioSummary; pagination: { total: number; perPage: number } };
   }>(`/api/credits?${query.toString()}`);
   return result.data;
 }

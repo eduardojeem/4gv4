@@ -295,6 +295,7 @@ function AppointmentSheet({ appointment, data, professionalName, onClose, onChan
         <Info icon="cut-outline" text={`${appointment.service_name}${professionalName ? ` · con ${professionalName}` : ''}`} />
         <Info icon="cash-outline" text={`${formatMoney(appointment.price, data.currency)}${appointment.sale_id ? ' · cobrado' : ''}`} />
         {phone ? <Info icon="call-outline" text={phone} /> : null}
+        {appointment.attention_mode==='home'?<Info icon="location-outline" text={['A domicilio: '+appointment.service_address,appointment.arrival_instructions,'Traslados: '+(appointment.travel_before_minutes??0)+' min ida · '+(appointment.travel_after_minutes??0)+' min vuelta'].filter(Boolean).join(' · ')}/>:null}
         {appointment.notes ? <Info icon="document-text-outline" text={appointment.notes} /> : null}
         {appointment.source === 'online' ? <Info icon="globe-outline" text="Reservado por el cliente desde la tienda online" /> : null}
         {appointment.reminder_sent_at ? <Info icon="notifications-outline" text="Recordatorio enviado" /> : null}

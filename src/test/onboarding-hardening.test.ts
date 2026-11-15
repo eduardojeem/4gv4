@@ -71,8 +71,9 @@ describe('la pantalla del onboarding', () => {
   const cliente = leer('src/components/dashboard/onboarding/OnboardingClient.tsx')
 
   it('la barra de acciones queda por encima de la navegación del panel', () => {
-    // El panel dibuja su navegación fija abajo con z-50: antes tapaba el botón.
-    expect(leer('src/components/dashboard/mobile-nav.tsx')).toContain('fixed bottom-0 left-0 right-0 z-50')
+    // El panel dibuja su navegación fija abajo (z-30, y su hoja «Más» en z-50):
+    // antes tapaba el botón. La barra del onboarding va en z-[60], por encima de las dos.
+    expect(leer('src/components/dashboard/mobile-nav.tsx')).toContain('fixed bottom-0 left-0 right-0 z-30')
     expect(cliente).toContain('z-[60]')
     expect(cliente).toContain('bottom-[calc(4.25rem+env(safe-area-inset-bottom))]')
     expect(cliente).not.toContain('fixed inset-x-0 bottom-0 z-30')

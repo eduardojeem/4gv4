@@ -46,3 +46,5 @@ describe('buildFallbackPlan', () => {
     expect(buildFallbackPlan('PLAN_INVENTADO').limits.products).toBe(DEFAULT_LIMITS.FREE.products)
   })
 })
+
+it('does not disguise an unverified paid plan as Free with a verified zero price',()=>{const plan=buildFallbackPlan('BASIC');expect(plan.name).not.toBe('Free');expect(plan.slug).toBe('basic');expect(plan.price_verified).toBe(false);});

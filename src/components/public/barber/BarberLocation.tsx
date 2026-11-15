@@ -1,0 +1,9 @@
+import {MapPin,Navigation} from 'lucide-react'
+import {getCompanyMapsEmbedSrc,getDirectionsHref} from '@/lib/website/company-maps-url'
+import type {CompanyInfo} from '@/types/website-settings'
+export function BarberLocation({company}:{company:Partial<CompanyInfo>}){
+ const address=company.address?.trim(),name=company.name?.trim()||'la barbería'
+ const embed=getCompanyMapsEmbedSrc(company.mapsUrl,address),directions=getDirectionsHref(company.mapsUrl,address)
+ if(!embed&&!directions)return null
+ return <section id="ubicacion" className="scroll-mt-24 border-t border-border/60 bg-muted/20 py-12 sm:py-16"><div className="container mx-auto px-4 sm:px-6 lg:px-8"><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.6fr)]">{embed?<iframe title={`Ubicación de ${name}`} src={embed} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" className="h-72 w-full border-0 sm:h-96"/>:null}<div className="flex flex-col justify-center gap-4 p-6 sm:p-8"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><MapPin className="h-5 w-5"/></span><h2 className="text-2xl font-bold tracking-tight text-foreground">Encontranos acá</h2><p className="font-medium text-foreground">{company.name}</p>{address?<p className="text-sm leading-relaxed text-muted-foreground">{address}</p>:null}{directions?<a href={directions} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"><Navigation className="h-4 w-4"/>Cómo llegar</a>:null}</div></div></div></div></section>
+}

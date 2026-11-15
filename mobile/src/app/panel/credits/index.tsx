@@ -1,260 +1,60 @@
-import { PanelAccessState } from '@/components/panel-access-state';
-import { useListRequestScope } from '@/lib/use-list-request-scope';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {Ionicons} from '@expo/vector-icons';
+import {router} from 'expo-router';
+import {useCallback,useEffect,useRef,useState,useSyncExternalStore} from 'react';
+import {ActivityIndicator,FlatList,Pressable,RefreshControl,StyleSheet,Text,TextInput,View} from 'react-native';
+import {PanelAccessState} from '@/components/panel-access-state';
+import {BottomSheet} from '@/components/bottom-sheet';
+import {CollectSheet} from '@/components/collect-sheet';
+import {fetchPortfolio,creditCode,dateOnly,type InstallmentRow,type PortfolioCredit} from '@/lib/customers';
+import {formatCreditMoney,creditTotals} from '@/lib/credit-model';
+import {getPrivateCacheContext,subscribePrivateCacheContext} from '@/lib/private-cache-context';
+import {fetchBranches,type BranchItem} from '@/lib/admin';
+import {usePanel} from '@/lib/panel';
+import {usePalette,palette} from '@/lib/palette';
+import {financeBusinessToday} from '../../../../../src/lib/finance/calendar';
+import {validateFinanceDates} from '../../../../../src/lib/finance/summary-integrity';
+import type {PortfolioCustomerGroup} from '../../../../../src/lib/credits/mobile-portfolio';
+type Data=Awaited<ReturnType<typeof fetchPortfolio>>;
+type CreditRow=InstallmentRow&{credit?:PortfolioCredit};
+type ListRow={kind:'customer';group:PortfolioCustomerGroup}|{kind:'installment';row:CreditRow};
+type Filters={fromDate:string;toDate:string;creditId:string;branchId:string};
+const STATUS=[['open','Por cobrar'],['late','Vencidas'],['paid','Pagadas'],['','Todas']] as const;
+export default function CreditsScreen(){
+ const colors=usePalette(),scope=useSyncExternalStore(subscribePrivateCacheContext,getPrivateCacheContext);
+ const {data:panelData,findItem,loading:panelLoading,can}=usePanel();
+ const [view,setView]=useState<'customers'|'installments'>('customers'),[status,setStatus]=useState<'open'|'pending'|'late'|'paid'|''>('open');
+ const [query,setQuery]=useState(''),[search,setSearch]=useState(''),[filters,setFilters]=useState<Filters>({fromDate:'',toDate:'',creditId:'',branchId:'active'});
+ const [draft,setDraft]=useState<Filters>(filters),[filtersOpen,setFiltersOpen]=useState(false),[filterError,setFilterError]=useState<string|null>(null);
+ const [branches,setBranches]=useState<{epoch:number;items:BranchItem[]}|null>(null);
+ const [result,setResult]=useState<{key:string;data:Data;page:number}|null>(null),[failure,setFailure]=useState<{key:string;message:string}|null>(null);
+ const [loading,setLoading]=useState(true),[more,setMore]=useState(false),[collect,setCollect]=useState<CreditRow|null>(null);
+ const generation=useRef(0),moreLock=useRef<object|null>(null);
+ const allowed=Boolean(panelData&&findItem('credits')&&panelData.organization.id===scope.organizationId),allBranches=panelData?.organization.role==='owner'||panelData?.organization.role==='admin';
+ const branchId=filters.branchId==='active'?scope.branchId??undefined:filters.branchId;
+ const key=JSON.stringify([scope.epoch,scope.organizationId,view,status,search,filters,branchId]);
+ const searching=query.trim()!==search;
+ const data=result?.key===key&&!searching?result.data:null,error=failure?.key===key?failure.message:null;
+ const money=(value:number)=>formatCreditMoney(value,data?.currency??'');
+ const validate=useCallback((payload:Data)=>{if(payload.organizationId!==scope.organizationId||payload.branchId!==(branchId==='all'?null:branchId??null)||!/^[A-Z]{3}$/.test(payload.currency)||!Array.isArray(payload.installments)||!Array.isArray(payload.credits)||!Number.isInteger(payload.pagination.total)||payload.pagination.total<0)throw new Error('La cartera recibida está incompleta. Reintentá.');if(!Number.isFinite(Date.parse(payload.asOf)))throw new Error('Falta la fecha de consulta de la cartera.');try{new Intl.DateTimeFormat('es-PY',{timeZone:payload.timeZone}).format(new Date())}catch{throw new Error('El calendario de la cartera no es válido.');}creditTotals(payload.installments);for(const summary of [payload.globalSummary,payload.filteredSummary]){if(!summary)throw new Error('Falta el resumen de la cartera.');for(const field of ['outstanding','overdue','paid','dueToday','distinctCustomers','pendingCount','overdueCount','totalFinanced','recoveryRate'] as const){const value=summary[field as keyof typeof summary];if(typeof value!=='number'||!Number.isFinite(value)||value<0)throw new Error('La cartera contiene un saldo no verificable.')}if(summary.overdue>summary.outstanding+0.01||summary.recoveryRate>100.01)throw new Error('Los indicadores de la cartera no coinciden.');}if(view==='customers'&&!Array.isArray(payload.customerGroups))throw new Error('Falta el resumen por cliente.');for(const group of payload.customerGroups??[])if(!Number.isFinite(group.outstanding)||!Number.isFinite(group.overdue)||group.overdue>group.outstanding+0.01)throw new Error('Un cliente tiene saldos inconsistentes.');return payload},[scope.organizationId,view,branchId]);
+ const params={status,customerName:search,view,...filters,branchId};
+ const reload=useCallback(async()=>{if(!allowed)return;const seq=++generation.current,epoch=scope.epoch;moreLock.current=null;setLoading(true);setMore(false);setFailure(null);try{const next=validate(await fetchPortfolio({status,customerName:search,view,...filters,branchId,page:1}));if(seq===generation.current&&getPrivateCacheContext().epoch===epoch)setResult({key,data:next,page:1})}catch(error){if(seq===generation.current&&getPrivateCacheContext().epoch===epoch)setFailure({key,message:error instanceof Error?error.message:'No pudimos consultar la cartera.'})}finally{if(seq===generation.current)setLoading(false)}},[allowed,key,scope.epoch,status,search,view,filters,branchId,validate]);
+ useEffect(()=>{const timer=setTimeout(()=>setSearch(query.trim()),350);return()=>clearTimeout(timer)},[query]);
+ useEffect(()=>{let active=true;const requests=generation;void Promise.resolve().then(()=>{if(active)void reload()});return()=>{active=false;requests.current++}},[reload]);
+ useEffect(()=>{if(!allBranches||!scope.organizationId)return;let active=true;const epoch=scope.epoch;fetchBranches(scope.organizationId).then(items=>{if(active&&getPrivateCacheContext().epoch===epoch)setBranches({epoch,items})}).catch(()=>undefined);return()=>{active=false}},[allBranches,scope.organizationId,scope.epoch]);
+ async function loadMore(){if(!result||result.key!==key||loading||moreLock.current||error)return;const count=view==='customers'?data?.customerGroups?.length??0:data?.installments.length??0;if(count>=(data?.pagination.total??0))return;const token={},seq=generation.current;moreLock.current=token;setMore(true);try{const next=validate(await fetchPortfolio({...params,page:result.page+1}));if(seq!==generation.current||getPrivateCacheContext().epoch!==scope.epoch)return;setResult(current=>{if(current?.key!==key)return current;const credits=new Map([...current.data.credits,...next.credits].map(row=>[row.id,row]));const installments=new Map([...current.data.installments,...next.installments].map(row=>[row.id,row]));const groups=new Map([...(current.data.customerGroups??[]),...(next.customerGroups??[])].map(row=>[row.customerId,row]));return {key,page:current.page+1,data:{...next,credits:[...credits.values()],installments:[...installments.values()],customerGroups:[...groups.values()]}}})}catch(error){if(seq===generation.current)setFailure({key,message:error instanceof Error?error.message:'No se pudo cargar la siguiente página.'})}finally{if(moreLock.current===token){moreLock.current=null;setMore(false)}}}
+ function quickDates(days:number|null){if(!data)return;const today=financeBusinessToday(data.timeZone),end=new Date(today+'T12:00:00Z');end.setUTCDate(end.getUTCDate()+(days??1)-1);setFilters({...filters,fromDate:days?today:'',toDate:days?end.toISOString().slice(0,10):''})}
 
-import { CollectSheet } from '@/components/collect-sheet';
-import { creditCode, dateOnly, fetchPortfolio, type InstallmentRow, type PortfolioCredit, type PortfolioStatus, type PortfolioSummary } from '@/lib/customers';
-import { formatGs } from '@/lib/marketplace';
-import { palette, usePalette } from '@/lib/palette';
-import { usePanel } from '@/lib/panel';
-
-type Colors = ReturnType<typeof usePalette>;
-type Row = InstallmentRow & { credit?: PortfolioCredit };
-
-const FILTERS: { key: PortfolioStatus; label: string }[] = [
-  { key: 'pending', label: 'Pendientes' },
-  { key: 'late', label: 'Vencidas' },
-  { key: 'paid', label: 'Pagadas' },
-  { key: '', label: 'Todas' },
-];
-
-/** Cartera de créditos, como /dashboard/credits: KPIs, cuotas por vencimiento y cobro. */
-export default function CreditsScreen() {
-  const colors = usePalette();
-  const { data: panelData, findItem, loading: panelLoading } = usePanel();
-  const [status, setStatus] = useState<PortfolioStatus>('pending');
-  const [query, setQuery] = useState('');
-  const [search, setSearch] = useState('');
-  const [rows, setRows] = useState<Row[]>([]);
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [collect, setCollect] = useState<Row | null>(null);
-
-  const requestScope = useListRequestScope(JSON.stringify([panelData?.organization.id, panelData?.organization.role, panelData?.user.email,search,status,attempt]));
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(query), 400);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  useEffect(() => {
-    let active = true;
-    if (!panelData || !findItem('credits')) return () => { active = false; };
-    queueMicrotask(() => { if (active) { setLoading(true); setLoadingMore(false); } });
-    fetchPortfolio({ status, page: 1, customerName: search })
-      .then((data) => {
-        if (!active) return;
-        const credits = new Map(data.credits.map((credit) => [credit.id, credit]));
-        setRows(data.installments.map((row) => ({ ...row, credit: credits.get(row.credit_id) })));
-        setSummary(data.globalSummary);
-        setTotal(data.pagination.total);
-        setPage(1);
-        setError(null);
-      })
-      .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar la cartera.');
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoading(false);
-        setRefreshing(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [status, search, attempt, panelData, findItem]);
-
-  const reload = useCallback(() => {
-    setRefreshing(true);
-    setAttempt((n) => n + 1);
-  }, []);
-
-  const loadMore = () => {
-    if (loadingMore || loading || rows.length >= total) return;
-    const isCurrent = requestScope.capture();
-    setLoadingMore(true);
-    fetchPortfolio({ status, page: page + 1, customerName: search })
-      .then((data) => {
-        if (!isCurrent()) return;
-        setError(null);
-        const credits = new Map(data.credits.map((credit) => [credit.id, credit]));
-        setRows((list) => [...list, ...data.installments.filter((row) => !list.some((item) => item.id === row.id)).map((row) => ({ ...row, credit: credits.get(row.credit_id) }))]);
-        setPage(page + 1);
-      })
-      .catch((err) => { if (isCurrent()) setError(err instanceof Error ? err.message : 'No se pudo cargar la siguiente página.'); })
-      .finally(() => { if (isCurrent()) setLoadingMore(false); });
-  };
-
-  if (panelLoading || !findItem('credits')) return <PanelAccessState />;
-
-  return (
-    <View style={styles.flex}>
-      <FlatList
-        data={rows}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={palette.primary} />}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.4}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <View>
-              <Text style={[styles.title, { color: colors.text }]}>Créditos</Text>
-              <Text style={[styles.muted, { color: colors.muted }]}>
-                {summary ? `${summary.distinctCustomers} clientes · ${summary.pendingCount} cuotas pendientes` : 'Cargando…'}
-              </Text>
-            </View>
-            <View style={styles.kpis}>
-              <Kpi label="Por cobrar" value={summary ? formatGs(summary.outstanding) : '…'} colors={colors} />
-              <Kpi label="Vencido" value={summary ? formatGs(summary.overdue) : '…'} tone={summary?.overdue ? palette.danger : undefined} hint={summary?.overdueCount ? `${summary.overdueCount} cuotas` : undefined} colors={colors} />
-              <Kpi label="Vence hoy" value={summary ? formatGs(summary.dueToday) : '…'} tone={summary?.dueToday ? '#D97706' : undefined} colors={colors} />
-              <Kpi label="Recuperación" value={summary ? `${Math.round(summary.recoveryRate)}%` : '…'} tone={palette.success} hint={summary ? `Cobrado ${formatGs(summary.paid)}` : undefined} colors={colors} />
-            </View>
-            <View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="search" size={17} color={colors.muted} />
-              <TextInput value={query} onChangeText={setQuery} placeholder="Buscar por cliente" placeholderTextColor={colors.muted} autoCorrect={false} style={[styles.searchInput, { color: colors.text }]} />
-              {query ? (
-                <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                  <Ionicons name="close-circle" size={17} color={colors.muted} />
-                </Pressable>
-              ) : null}
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-              {FILTERS.map((item) => {
-                const selected = status === item.key;
-                return (
-                  <Pressable
-                    key={item.label}
-                    accessibilityState={{ selected }}
-                    onPress={() => {
-                      setStatus(item.key);
-                    }}
-                    style={[styles.chip, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? palette.primary : colors.card }]}>
-                    <Text style={[styles.chipText, { color: selected ? '#fff' : colors.text }]}>{item.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            {!loading && <Text style={[styles.small, { color: colors.muted }]}>{total} cuotas</Text>}
-          </View>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator style={styles.loading} color={palette.primary} />
-          ) : (
-            <View style={styles.empty}>
-              <Ionicons name="wallet-outline" size={36} color={colors.muted} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>{error ?? (status === 'late' ? 'No hay cuotas vencidas 🎉' : 'No hay cuotas')}</Text>
-              {error && (
-                <Pressable onPress={reload} style={[styles.outline, { borderColor: colors.border }]}>
-                  <Text style={[styles.bold, { color: colors.text }]}>Reintentar</Text>
-                </Pressable>
-              )}
-            </View>
-          )
-        }
-        ListFooterComponent={<View>{error && <Text accessibilityRole="alert" style={{ color: palette.danger, padding: 12 }}>{error}</Text>}{loadingMore ? <ActivityIndicator style={styles.more} color={palette.primary} /> : null}</View>}
-        renderItem={({ item }) => <InstallmentItem row={item} colors={colors} onCollect={() => setCollect(item)} />}
-      />
-
-      {collect?.credit && (
-        <CollectSheet
-          customerId={collect.credit.customer_id}
-          customerName={collect.credit.customer_name ?? 'Cliente'}
-          focusDebtId={collect.id}
-          onClose={() => setCollect(null)}
-          onDone={() => {
-            setCollect(null);
-            reload();
-          }}
-        />
-      )}
-    </View>
-  );
+ const rows:ListRow[]=!data?[]:view==='customers'?(data.customerGroups??[]).map(group=>({kind:'customer',group})):(()=>{const credits=new Map(data.credits.map(c=>[c.id,c]));return data.installments.map(row=>({kind:'installment' as const,row:{...row,credit:credits.get(row.credit_id)}}))})();
+ if(panelLoading||!allowed)return <PanelAccessState/>;
+ return <View style={{flex:1,backgroundColor:colors.background}}><FlatList data={rows} keyExtractor={row=>row.kind==='customer'?'customer-'+row.group.customerId:row.row.id} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={loading&&Boolean(data)} onRefresh={()=>void reload()}/>}
+ ListHeaderComponent={<View style={{gap:14}}><View style={styles.heading}><View style={{flex:1}}><Text accessibilityRole="header" style={{color:colors.text,fontSize:27,fontWeight:'800'}}>Créditos</Text><Text style={{color:colors.muted,fontSize:12,marginTop:3}}>Cartera, vencimientos y cobros</Text></View>{<CreditButton key={'Filtros'} label={'Filtros'} onPress={()=>{setDraft(filters);setFilterError(null);setFiltersOpen(true)}}/>}</View><Text style={{color:colors.muted,fontSize:12}}>Total de la cartera · {data?.branchId?'Sucursal seleccionada':'Todas las sucursales'}</Text><View style={styles.heading}><View style={[styles.card,styles.flex,{backgroundColor:colors.card,borderColor:colors.border}]}><Text style={{color:colors.muted,fontSize:12}}>Por cobrar</Text><Text adjustsFontSizeToFit numberOfLines={1} style={{color:colors.text,fontSize:24,fontWeight:'800'}}>{data?money(data.globalSummary.outstanding):'…'}</Text></View><View style={[styles.card,styles.flex,{backgroundColor:colors.card,borderColor:colors.border}]}><Text style={{color:colors.muted,fontSize:12}}>Vencido</Text><Text adjustsFontSizeToFit numberOfLines={1} style={{color:data?.globalSummary.overdue?palette.danger:colors.text,fontSize:24,fontWeight:'800'}}>{data?money(data.globalSummary.overdue):'…'}</Text></View></View>{data&&<Text style={{color:colors.muted,fontSize:12}}>Vence hoy: {money(data.globalSummary.dueToday)} · Recuperado {Math.round(data.globalSummary.recoveryRate)}% del total financiado</Text>}<View style={styles.heading}>{<CreditButton key={'Por cliente'} label={'Por cliente'} onPress={()=>setView('customers')} selected={view==='customers'}/>}{<CreditButton key={'Por cuota'} label={'Por cuota'} onPress={()=>setView('installments')} selected={view==='installments'}/>}</View><TextInput accessibilityLabel="Buscar cliente" placeholder="Buscar por nombre de cliente" placeholderTextColor={colors.muted} value={query} onChangeText={setQuery} maxLength={120} style={[styles.input,{color:colors.text,borderColor:colors.border,backgroundColor:colors.card}]}/><View style={styles.wrap}>{STATUS.map(([value,label])=><CreditButton key={label} label={label} onPress={()=>setStatus(value)} selected={status===value}/>)}</View><View style={styles.wrap}>{<CreditButton key={'Todas las fechas'} label={'Todas las fechas'} onPress={()=>quickDates(null)} selected={!filters.fromDate&&!filters.toDate} disabled={!data}/>}{<CreditButton key={'Vencen hoy'} label={'Vencen hoy'} onPress={()=>quickDates(1)} selected={false} disabled={!data}/>}{<CreditButton key={'Próximos 7 días'} label={'Próximos 7 días'} onPress={()=>quickDates(7)} selected={false} disabled={!data}/>}</View>{(filters.fromDate||filters.toDate||filters.creditId)&&<Text style={{color:colors.muted,fontSize:12}}>Vencimientos {filters.fromDate||'sin inicio'} a {filters.toDate||'sin fin'}{filters.creditId?' · Crédito '+filters.creditId:''}</Text>}{data&&<View style={[styles.result,{borderColor:colors.border}]}><Text style={{color:colors.text,fontWeight:'700'}}>Resultados de estos filtros</Text><Text style={{color:colors.muted,fontSize:12}}>{data.filteredSummary.distinctCustomers} clientes · {data.pagination.total} {view==='customers'?'clientes en la lista':'cuotas'} · Por cobrar {money(data.filteredSummary.outstanding)}</Text></View>}{error&&<View style={[styles.card,{borderColor:palette.danger}]}><Text accessibilityRole="alert" style={{color:palette.danger}}>{error}</Text>{data&&<Text style={{color:colors.muted}}>Última consulta; el cobro está deshabilitado hasta actualizar.</Text>}{<CreditButton key={'Reintentar'} label={'Reintentar'} onPress={()=>void reload()}/>}</View>}{(loading||searching||(!data&&!error))&&<ActivityIndicator color={palette.primary}/>}</View>}
+ ListEmptyComponent={!loading&&!searching&&Boolean(data)&&!error?<View style={styles.card}><Text style={{color:colors.text}}>No hay resultados con estos filtros.</Text><Text style={{color:colors.muted}}>Probá con Todas o cambiá las fechas.</Text></View>:null}
+ ListFooterComponent={<View style={{gap:12,paddingTop:12}}>{more?<ActivityIndicator color={palette.primary}/>:null}{data&&rows.length<data.pagination.total&&<CreditButton key={'Cargar más'} label={'Cargar más'} onPress={()=>{void loadMore()}} selected={false} disabled={more||loading||Boolean(error)}/>}{data&&<Text style={{color:colors.muted,fontSize:11}}>Consulta: {new Date(data.asOf).toLocaleString('es-PY',{timeZone:data.timeZone})}</Text>}</View>}
+ renderItem={({item})=>item.kind==='customer'?<Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/panel/customers/[id]',params:{id:item.group.customerId,tab:'credits'}})} style={[styles.card,{backgroundColor:colors.card,borderColor:colors.border}]}><View style={styles.heading}><Text style={[styles.flex,{color:colors.text,fontSize:17,fontWeight:'800'}]}>{item.group.name}</Text><Ionicons name="chevron-forward" size={18} color={colors.muted}/></View><Text style={{color:colors.muted,fontSize:12}}>{item.group.creditCount} créditos · {item.group.installmentCount} cuotas de estos filtros</Text><Text style={{color:colors.text,fontSize:24,fontWeight:'800'}}>{money(item.group.outstanding)}</Text><Text style={{color:item.group.overdue?palette.danger:colors.muted,fontSize:12}}>Vencido {money(item.group.overdue)}{item.group.nextDueDate?' · Próxima '+dateOnly(item.group.nextDueDate):''}</Text></Pressable>:<View style={[styles.card,{backgroundColor:colors.card,borderColor:item.row.status==='late'?palette.danger+'55':colors.border}]}><Pressable accessibilityRole="button" disabled={!item.row.credit} onPress={()=>item.row.credit&&router.push({pathname:'/panel/customers/[id]',params:{id:item.row.credit.customer_id,tab:'credits'}})}><Text style={{color:colors.text,fontSize:16,fontWeight:'800'}}>{item.row.credit?.customer_name??'Cliente'}</Text><Text style={{color:colors.muted,fontSize:12,marginTop:4}}>{item.row.credit?creditCode(item.row.credit):'Crédito'} · Cuota {item.row.installment_number}</Text></Pressable><View style={styles.heading}><View style={styles.flex}><Text style={{color:colors.text,fontSize:24,fontWeight:'800'}}>{money(item.row.status==='paid'?Number(item.row.amount):Math.max(0,Number(item.row.amount)-Number(item.row.amount_paid??0)))}</Text><Text style={{color:item.row.status==='late'?palette.danger:colors.muted,fontSize:12}}>{item.row.status==='paid'?'Pagada':item.row.status==='late'?'Vencida':'Pendiente'} · {dateOnly(item.row.due_date)}</Text></View>{item.row.status!=='paid'&&item.row.credit&&can('crm.customers.manage')&&<CreditButton key={'Cobrar'} label={'Cobrar'} onPress={()=>setCollect(item.row)} selected={false} disabled={loading||Boolean(error)}/>}</View></View>}/>
+ <BottomSheet visible={filtersOpen} title="Filtros de Créditos" subtitle="Las fechas corresponden al vencimiento de las cuotas." onClose={()=>setFiltersOpen(false)} footer={<CreditButton key={'Aplicar filtros'} label={'Aplicar filtros'} onPress={()=>{try{if(draft.fromDate)validateFinanceDates({startDate:draft.fromDate,endDate:draft.fromDate});if(draft.toDate)validateFinanceDates({startDate:draft.toDate,endDate:draft.toDate});if(draft.fromDate&&draft.toDate)validateFinanceDates({startDate:draft.fromDate,endDate:draft.toDate});setFilters(draft);setFiltersOpen(false)}catch(error){setFilterError(error instanceof Error?error.message:'Revisá las fechas.')}}}/>}>{filterError&&<Text accessibilityRole="alert" style={{color:palette.danger}}>{filterError}</Text>}{(['fromDate','toDate','creditId'] as const).map((field,index)=><View key={field} style={{gap:5}}><Text style={{color:colors.text}}>{['Desde (AAAA-MM-DD)','Hasta (AAAA-MM-DD)','Código o identificador del crédito'][index]}</Text><TextInput accessibilityLabel={['Vencimiento desde','Vencimiento hasta','Código de crédito'][index]} value={draft[field]} onChangeText={value=>setDraft({...draft,[field]:value})} maxLength={field==='creditId'?100:10} style={[styles.input,{borderColor:colors.border,color:colors.text}]}/></View>)}<Text style={{color:colors.text,fontWeight:'700'}}>Sucursal</Text><View style={styles.wrap}>{<CreditButton key={'Sucursal activa'} label={'Sucursal activa'} onPress={()=>setDraft({...draft,branchId:'active'})} selected={draft.branchId==='active'}/>}{allBranches&&<CreditButton key={'Todas'} label={'Todas'} onPress={()=>setDraft({...draft,branchId:'all'})} selected={draft.branchId==='all'}/>}{branches?.epoch===scope.epoch&&branches.items.map(branch=><CreditButton key={branch.name} label={branch.name} onPress={()=>setDraft({...draft,branchId:branch.id})} selected={draft.branchId===branch.id}/>)}</View>{<CreditButton key={'Limpiar filtros'} label={'Limpiar filtros'} onPress={()=>setDraft({fromDate:'',toDate:'',creditId:'',branchId:'active'})}/>}</BottomSheet>
+ {collect?.credit&&result?.key===key&&!error&&<CollectSheet customerId={collect.credit.customer_id} customerName={collect.credit.customer_name??'Cliente'} focusDebtId={collect.id} onClose={()=>setCollect(null)} onDone={()=>{setCollect(null);void reload()}}/>}
+ </View>;
 }
+const styles=StyleSheet.create({content:{padding:16,gap:14,paddingBottom:40},heading:{flexDirection:'row',alignItems:'center',gap:12},flex:{flex:1,minWidth:0},wrap:{flexDirection:'row',flexWrap:'wrap',gap:8},card:{borderWidth:1,borderRadius:19,padding:16,gap:8},result:{padding:12,borderWidth:1,borderRadius:13,gap:4},button:{borderWidth:1,borderRadius:12,paddingHorizontal:12,paddingVertical:10,minHeight:44,justifyContent:'center'},input:{borderWidth:1,borderRadius:13,padding:12,fontSize:15}});
 
-function InstallmentItem({ row, colors, onCollect }: { row: Row; colors: Colors; onCollect: () => void }) {
-  const paid = row.status === 'paid';
-  const late = row.status === 'late';
-  const rest = Math.max(0, Number(row.amount) - Number(row.amount_paid ?? 0));
-  const color = paid ? palette.success : late ? palette.danger : colors.muted;
-  const credit = row.credit;
-  return (
-    <Pressable
-      onPress={() => credit && router.push(`/panel/customers/${credit.customer_id}?tab=credits` as never)}
-      style={({ pressed }) => [styles.row, { backgroundColor: colors.card, borderColor: late ? '#DC262655' : colors.border, opacity: pressed ? 0.85 : 1 }]}>
-      <View style={[styles.dot, { backgroundColor: `${color}1A` }]}>
-        <Ionicons name={paid ? 'checkmark' : late ? 'alert' : 'time-outline'} size={18} color={color} />
-      </View>
-      <View style={styles.flex}>
-        <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>{credit?.customer_name ?? 'Cliente'}</Text>
-        <Text numberOfLines={1} style={[styles.small, { color: colors.muted }]}>
-          {credit ? creditCode(credit) : '—'} · cuota {row.installment_number}
-          {credit?.term_months ? `/${credit.term_months}` : ''}
-        </Text>
-        <Text style={[styles.small, { color, fontWeight: '700' }]}>
-          {paid ? `Pagada${row.paid_at ? ` ${dateOnly(row.paid_at)}` : ''}` : `${late ? 'Venció' : 'Vence'} ${dateOnly(row.due_date)}`}
-        </Text>
-      </View>
-      <View style={styles.right}>
-        <Text style={[styles.name, { color: paid ? colors.muted : colors.text }]}>{formatGs(paid ? Number(row.amount) : rest)}</Text>
-        {!paid && credit && (
-          <Pressable onPress={onCollect} hitSlop={6} style={styles.collect}>
-            <Text style={styles.collectText}>Cobrar</Text>
-          </Pressable>
-        )}
-      </View>
-    </Pressable>
-  );
-}
-
-function Kpi({ label, value, hint, tone, colors }: { label: string; value: string; hint?: string; tone?: string; colors: Colors }) {
-  return (
-    <View style={[styles.kpi, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.tiny, { color: colors.muted }]}>{label}</Text>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.kpiValue, { color: tone ?? colors.text }]}>{value}</Text>
-      {hint ? <Text style={[styles.tiny, { color: colors.muted }]}>{hint}</Text> : null}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
-  content: { padding: 16, gap: 8, paddingBottom: 32 },
-  header: { gap: 12, marginBottom: 4 },
-  title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3 },
-  muted: { fontSize: 13 },
-  small: { fontSize: 12 },
-  tiny: { fontSize: 11 },
-  bold: { fontSize: 14, fontWeight: '700' },
-  kpis: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  kpi: { width: '48%', flexGrow: 1, borderWidth: 1, borderRadius: 14, padding: 12, gap: 2 },
-  kpiValue: { fontSize: 18, fontWeight: '800' },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 46 },
-  searchInput: { flex: 1, fontSize: 15, height: '100%' },
-  chips: { gap: 8, paddingRight: 8 },
-  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
-  chipText: { fontSize: 13, fontWeight: '700' },
-  loading: { paddingVertical: 40 },
-  more: { paddingVertical: 16 },
-  empty: { alignItems: 'center', paddingVertical: 40, gap: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  outline: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 14, padding: 12 },
-  dot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  name: { fontSize: 15, fontWeight: '800' },
-  right: { alignItems: 'flex-end', gap: 6 },
-  collect: { backgroundColor: palette.success, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  collectText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-});
+function CreditButton({label,onPress,selected=false,disabled=false}:{label:string;onPress:()=>void;selected?:boolean;disabled?:boolean}){const colors=usePalette();return <Pressable accessibilityRole="button" accessibilityState={{selected}} disabled={disabled} onPress={onPress} style={[styles.button,{borderColor:selected?palette.primary:colors.border,backgroundColor:selected?palette.primary+'12':colors.card,opacity:disabled?0.4:1}]}><Text style={{color:colors.text,fontWeight:'600',fontSize:12}}>{label}</Text></Pressable>}

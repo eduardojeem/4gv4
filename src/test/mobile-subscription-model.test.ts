@@ -71,3 +71,5 @@ it('uses monthly repair usage rather than historical repairs and does not fabric
  expect(quotas.find(row=>row.key==='branches')?.max).toBeNull()
  expect(visibleQuotas(normalizeSubscription(RESPONSE)).find(row=>row.key==='repairs')?.current).toBeNull()
 })
+
+it('uses the verified price, not the legacy code, to identify free plans',()=>{expect(isFreePlan(normalizeSubscription({...RESPONSE,currentPlan:{...RESPONSE.currentPlan,code:'FREE',name:'BASIC',price_monthly:50000}}).plan)).toBe(false);expect(isFreePlan(normalizeSubscription({...RESPONSE,currentPlan:{...RESPONSE.currentPlan,code:'BASIC',price_monthly:0}}).plan)).toBe(true);expect(isFreePlan(null)).toBe(false);expect(isFreePlan(normalizeSubscription({...RESPONSE,currentPlan:{...RESPONSE.currentPlan,price_monthly:undefined}}).plan)).toBe(false);});
