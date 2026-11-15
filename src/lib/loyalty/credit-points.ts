@@ -28,12 +28,12 @@ export async function awardCreditInstallmentLoyaltyPoints(
 
   const { data, error } = await client
     .from('credit_installments')
-    .select('id, amount_paid, customer_credits(customer_id, organization_id)')
+    .select('id, amount_paid, customer_credits(customer_id, organization_id, sale_id)')
     .eq('id', input.installmentId)
     .maybeSingle()
   if (error) return { points: 0, error }
 
-  const row = data as { amount_paid?: number | null; customer_credits?: { customer_id?: string; organization_id?: string } | Array<{ customer_id?: string; organization_id?: string }> | null } | null
+  const row = data as { amount_paid?: number | null; customer_credits?: { customer_id?: string; organization_id?: string; sale_id?: string | null } | Array<{ customer_id?: string; organization_id?: string; sale_id?: string | null }> | null } | null
   const credit = Array.isArray(row?.customer_credits) ? row?.customer_credits[0] : row?.customer_credits
   if (!credit?.customer_id || credit.organization_id !== input.organizationId) return { points: 0, error: null }
 
@@ -42,7 +42,7 @@ export async function awardCreditInstallmentLoyaltyPoints(
     p_organization_id: input.organizationId,
     p_customer_id: credit.customer_id,
     p_amount: paid,
-    p_sale_id: null,
+    p_sale_id: credit.sale_id ?? null,
     p_idempotency_key: input.paymentId ? `credit-payment:${input.paymentId}` : `credit-installment:${input.installmentId}:${paidSoFar}`,
   })
   if (awardError) return { points: 0, error: awardError }

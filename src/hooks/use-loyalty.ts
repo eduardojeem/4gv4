@@ -2,77 +2,21 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
 
-export interface LoyaltySettingsRow {
-  organization_id: string
-  enabled: boolean
-  currency_per_point: number
-  points_per_unit: number
-  rounding: 'floor' | 'round'
-  max_points_per_customer_per_day: number | null
-  points_expiration_months: number | null
-  /** Cuánto vale un punto al canjearlo por saldo a favor. null = canje apagado. */
-  redemption_value?: number | null
-  /** Desde cuántos puntos se puede canjear. */
-  min_redemption_points?: number | null
-}
-
-export interface PointRuleRow {
-  id: string
-  name: string
-  description: string | null
-  starts_at: string
-  ends_at: string
-  kind: 'multiplier' | 'bonus_per_purchase' | 'visit_milestone'
-  /** En «cada N visitas»: cada cuántas compras se regalan los puntos. */
-  visit_interval?: number | null
-  multiplier: number
-  bonus_points: number
-  max_bonus_points_per_customer: number | null
-  max_bonus_points_total: number | null
-  awarded_bonus_points: number
-  min_purchase_amount: number | null
-  is_active: boolean
-}
-
-export interface RaffleRow {
-  id: string
-  name: string
-  description: string | null
-  prizes: Array<{ position: number; title: string; details?: string }>
-  requirements: string | null
-  terms: string | null
-  min_purchase_amount: number | null
-  auto_entry_on_sale: boolean
-  allow_point_purchase: boolean
-  point_purchase_price: number | null
-  starts_at: string
-  ends_at: string
-  points_per_ticket: number
-  max_tickets_per_customer: number | null
-  max_tickets_total: number
-  status: 'draft' | 'published' | 'closed' | 'completed' | 'cancelled'
-  min_age: number
-  drawn_at: string | null
-  draw_seed: string | null
-  tickets?: Array<{ count: number }>
-  winners?: Array<{ count: number }>
-  participants_count?: number
-}
-
-export const DEFAULT_LOYALTY_SETTINGS: Omit<LoyaltySettingsRow, 'organization_id'> = {
-  enabled: false,
-  currency_per_point: 10_000,
-  points_per_unit: 1,
-  rounding: 'floor',
-  max_points_per_customer_per_day: null,
-  points_expiration_months: null,
-  redemption_value: null,
-  min_redemption_points: null,
-}
+import { type LoyaltySettingsRow, type PointRuleRow, type RaffleRow } from '@/lib/loyalty/contracts'
+export { DEFAULT_LOYALTY_SETTINGS } from '@/lib/loyalty/contracts'
+export type { LoyaltySettingsRow, PointRuleRow, RaffleRow } from '@/lib/loyalty/contracts'
 
 async function readJson(response: Response) {
   return response.json().catch(() => ({}))
+}
+
+/** Las mutaciones conservan el borrador y muestran un error también sin conexión. */
+async function mutationFetch(input: string, options: RequestInit) {
+  try { return await fetch(input, options) } catch {
+    return new Response(JSON.stringify({ error: 'No se pudo conectar. Revisá tu conexión e intentá de nuevo.' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+  }
 }
 
 /** Toma el primer mensaje útil de una respuesta de error de la API. */
@@ -89,20 +33,28 @@ function errorMessage(payload: unknown, fallback: string): string {
  * sección lo dice en vez de mostrar un error genérico.
  */
 export function useLoyalty() {
+  const { organizationId } = useTenantScope()
+  const scopedFetch = useCallback((input: string, options: RequestInit = {}) => mutationFetch(input, {
+    ...options,
+    headers: { ...options.headers, ...(organizationId ? { 'x-organization-id': organizationId } : {}) },
+  }), [organizationId])
   const [settings, setSettings] = useState<LoyaltySettingsRow | null>(null)
   const [rules, setRules] = useState<PointRuleRow[]>([])
   const [raffles, setRaffles] = useState<RaffleRow[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [serviceVisitsReady, setServiceVisitsReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [moduleInstalled, setModuleInstalled] = useState(true)
   const [moduleMessage, setModuleMessage] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const [settingsRes, rulesRes, rafflesRes] = await Promise.all([
-        fetch('/api/loyalty/settings', { cache: 'no-store' }),
-        fetch('/api/loyalty/rules', { cache: 'no-store' }),
-        fetch('/api/raffles', { cache: 'no-store' }),
+        scopedFetch('/api/loyalty/settings', { cache: 'no-store' }),
+        scopedFetch('/api/loyalty/rules', { cache: 'no-store' }),
+        scopedFetch('/api/raffles', { cache: 'no-store' }),
       ])
 
       const [settingsBody, rulesBody, rafflesBody] = await Promise.all([
@@ -111,6 +63,8 @@ export function useLoyalty() {
         readJson(rafflesRes),
       ])
 
+      const failed = [settingsRes, rulesRes, rafflesRes].findIndex((res) => !res.ok)
+      if (failed >= 0) throw new Error(errorMessage([settingsBody, rulesBody, rafflesBody][failed], 'No se pudo cargar el programa. Intentá de nuevo.'))
       const missing = [settingsBody, rulesBody, rafflesBody].find(
         (body) => body && body.moduleInstalled === false
       )
@@ -126,23 +80,25 @@ export function useLoyalty() {
 
       setModuleInstalled(true)
       setModuleMessage(null)
+      setServiceVisitsReady(settingsBody?.capabilities?.serviceVisits === true)
       setSettings(settingsBody?.settings ?? null)
       setRules(rulesBody?.rules ?? [])
       setRaffles(rafflesBody?.raffles ?? [])
     } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el programa')
       console.error('No se pudo cargar puntos y sorteos', error)
       toast.error('No se pudo cargar puntos y sorteos')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [scopedFetch])
 
   useEffect(() => {
     void refresh()
-  }, [refresh])
+  }, [refresh, scopedFetch])
 
   const saveSettings = useCallback(async (values: Omit<LoyaltySettingsRow, 'organization_id'>) => {
-    const response = await fetch('/api/loyalty/settings', {
+    const response = await scopedFetch('/api/loyalty/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
@@ -157,10 +113,10 @@ export function useLoyalty() {
     setSettings(body.settings)
     toast.success('Configuración de puntos guardada')
     return true
-  }, [])
+  }, [scopedFetch])
 
   const createRule = useCallback(async (values: Record<string, unknown>) => {
-    const response = await fetch('/api/loyalty/rules', {
+    const response = await scopedFetch('/api/loyalty/rules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
@@ -175,10 +131,10 @@ export function useLoyalty() {
     setRules((current) => [body.rule, ...current])
     toast.success('Promoción de puntos creada')
     return true
-  }, [])
+  }, [scopedFetch])
 
   const toggleRule = useCallback(async (id: string, isActive: boolean) => {
-    const response = await fetch(`/api/loyalty/rules/${id}`, {
+    const response = await scopedFetch(`/api/loyalty/rules/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: isActive }),
@@ -192,10 +148,10 @@ export function useLoyalty() {
 
     setRules((current) => current.map((rule) => (rule.id === id ? body.rule : rule)))
     return true
-  }, [])
+  }, [scopedFetch])
 
   const deleteRule = useCallback(async (id: string) => {
-    const response = await fetch(`/api/loyalty/rules/${id}`, { method: 'DELETE' })
+    const response = await scopedFetch(`/api/loyalty/rules/${id}`, { method: 'DELETE' })
 
     if (!response.ok) {
       toast.error(errorMessage(await readJson(response), 'No se pudo eliminar la promoción'))
@@ -205,10 +161,10 @@ export function useLoyalty() {
     setRules((current) => current.filter((rule) => rule.id !== id))
     toast.success('Promoción eliminada')
     return true
-  }, [])
+  }, [scopedFetch])
 
   const createRaffle = useCallback(async (values: Record<string, unknown>) => {
-    const response = await fetch('/api/raffles', {
+    const response = await scopedFetch('/api/raffles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
@@ -223,10 +179,10 @@ export function useLoyalty() {
     setRaffles((current) => [body.raffle, ...current])
     toast.success('Sorteo creado')
     return true
-  }, [])
+  }, [scopedFetch])
 
   const updateRaffleStatus = useCallback(async (id: string, status: RaffleRow['status']) => {
-    const response = await fetch(`/api/raffles/${id}`, {
+    const response = await scopedFetch(`/api/raffles/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -240,10 +196,10 @@ export function useLoyalty() {
 
     setRaffles((current) => current.map((raffle) => (raffle.id === id ? { ...raffle, ...body.raffle } : raffle)))
     return true
-  }, [])
+  }, [scopedFetch])
 
   const drawRaffle = useCallback(async (id: string) => {
-    const response = await fetch(`/api/raffles/${id}/draw`, {
+    const response = await scopedFetch(`/api/raffles/${id}/draw`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -258,7 +214,7 @@ export function useLoyalty() {
     toast.success('Sorteo realizado')
     await refresh()
     return body.winners as Array<{ prize_position: number; prize_title: string; customer_id: string }>
-  }, [refresh])
+  }, [refresh, scopedFetch])
 
   return {
     settings,
@@ -267,6 +223,8 @@ export function useLoyalty() {
     loading,
     moduleInstalled,
     moduleMessage,
+    loadError,
+    serviceVisitsReady,
     refresh,
     saveSettings,
     createRule,

@@ -19,6 +19,7 @@ interface PointRulesCardProps {
   onToggle: (id: string, isActive: boolean) => Promise<boolean>
   onDelete: (id: string) => Promise<boolean>
   canManage: boolean
+  earningMode?: 'amount' | 'visits' | 'both'
 }
 
 const EMPTY_RULE = {
@@ -48,7 +49,8 @@ function ruleState(rule: PointRuleRow, now: Date) {
   return { label: 'En curso', variant: 'default' as const }
 }
 
-export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage }: PointRulesCardProps) {
+export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage, earningMode = 'amount' }: PointRulesCardProps) {
+  const frequencyUnit = earningMode === 'amount' ? 'acreditaciones' : 'turnos atendidos y cobrados'
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState(EMPTY_RULE)
@@ -111,7 +113,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
       inAYear.setFullYear(today.getFullYear() + 1)
       setDraft({
         ...EMPTY_RULE,
-        name: 'Cada 10 visitas, puntos de regalo',
+        name: `Cada 10 ${frequencyUnit}, puntos de regalo`,
         kind: 'visit_milestone',
         visit_interval: 10,
         bonus_points: 100,
@@ -214,7 +216,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                         {rule.kind === 'multiplier'
                           ? `x${rule.multiplier} Puntos`
                           : rule.kind === 'visit_milestone'
-                            ? `+${rule.bonus_points} pts cada ${rule.visit_interval} visitas`
+                            ? `+${rule.bonus_points} pts cada ${rule.visit_interval} ${frequencyUnit}`
                             : `+${rule.bonus_points} pts de regalo`}
                       </Badge>
                     </div>
@@ -315,7 +317,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                 className="rounded-xl text-[11px] h-7 px-2.5 font-semibold"
                 onClick={() => applyPreset('visits10')}
               >
-                🔁 Cada 10 visitas
+                🔁 Cada 10 {frequencyUnit}
               </Button>
             </div>
           </div>
@@ -345,7 +347,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                   <SelectContent className="rounded-xl">
                     <SelectItem value="multiplier">Multiplicador (ej: x2, x3)</SelectItem>
                     <SelectItem value="bonus_per_purchase">Puntos fijos de regalo</SelectItem>
-                    <SelectItem value="visit_milestone">Cada N visitas (premia volver)</SelectItem>
+                    <SelectItem value="visit_milestone">Cada N {frequencyUnit} (premia volver)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -353,7 +355,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
               {draft.kind === 'visit_milestone' ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="rule-visits" className="text-xs font-semibold">Cada cuántas visitas</Label>
+                    <Label htmlFor="rule-visits" className="text-xs font-semibold">Frecuencia del beneficio ({frequencyUnit})</Label>
                     <Input
                       id="rule-visits"
                       type="number"
@@ -376,7 +378,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                     />
                   </div>
                   <p className="col-span-2 text-[11px] text-muted-foreground">
-                    En la visita {draft.visit_interval || 'N'}, {Number(draft.visit_interval) * 2 || '2N'}… el cliente suma {draft.bonus_points || 0} puntos extra. Se cuentan las compras desde el inicio de la promoción.
+                    Al completar {draft.visit_interval || 'N'}, {Number(draft.visit_interval) * 2 || '2N'}… {frequencyUnit}, el cliente suma {draft.bonus_points || 0} puntos extra. En el modo por monto se cuentan acreditaciones de puntos, que pueden incluir cuotas. En el modo por turnos se cuentan turnos atendidos y cobrados desde el inicio de la promoción.
                   </p>
                 </div>
               ) : draft.kind === 'multiplier' ? (

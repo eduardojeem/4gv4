@@ -16,6 +16,8 @@ export type PointsRounding = 'floor' | 'round'
 
 export interface LoyaltySettings {
   enabled: boolean
+  earningMode?: 'amount' | 'visits' | 'both'
+  pointsPerVisit?: number
   /** Cuánta moneda hace falta para ganar `pointsPerUnit` puntos. */
   currencyPerPoint: number
   pointsPerUnit: number
@@ -88,6 +90,7 @@ function toTime(value: string | Date): number {
 
 /** Puntos base, sin promociones ni topes. */
 export function calculateBasePoints(amount: number, settings: LoyaltySettings): number {
+  if (settings.earningMode === 'visits') return 0
   const total = toNumber(amount)
   const per = toNumber(settings?.currencyPerPoint)
 

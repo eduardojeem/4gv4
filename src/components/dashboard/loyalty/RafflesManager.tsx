@@ -696,7 +696,7 @@ export function RafflesManager({
                         </span>
                         <span className="flex items-center gap-1.5 font-medium">
                           <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                          <strong className="text-slate-900 dark:text-slate-100 font-bold">{raffle.participants_count ?? 0}</strong> clientes ({issued} / {raffle.max_tickets_total} números)
+                          <strong className="text-slate-900 dark:text-slate-100 font-bold">{raffle.participants_count == null ? 'Participación sin confirmar' : raffle.participants_count + ' clientes'}</strong> ({issued} / {raffle.max_tickets_total} números)
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Trophy className="h-3.5 w-3.5 text-amber-500" />
@@ -736,7 +736,7 @@ export function RafflesManager({
                         onClick={() => handleViewParticipants(raffle)}
                       >
                         <Users className="h-3.5 w-3.5 text-cyan-600" />
-                        Participantes ({raffle.participants_count ?? 0})
+                        Participantes ({raffle.participants_count ?? 'Sin confirmar'})
                       </Button>
 
                       {/* Ver Ganadores si ya fue sorteado */}

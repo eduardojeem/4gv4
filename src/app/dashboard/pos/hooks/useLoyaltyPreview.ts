@@ -5,6 +5,8 @@ import { estimatePointsForSale, type LoyaltySettings, type PointRule } from '@/l
 
 type SettingsRow = {
   enabled?: boolean
+  earning_mode?: 'amount' | 'visits' | 'both'
+  points_per_visit?: number
   currency_per_point?: number | string | null
   points_per_unit?: number | string | null
   rounding?: string | null
@@ -33,6 +35,8 @@ export function settingsFromRow(row: SettingsRow | null | undefined): LoyaltySet
   if (!row?.enabled) return null
   return {
     enabled: true,
+    earningMode: row.earning_mode ?? 'amount',
+    pointsPerVisit: Number(row.points_per_visit) || 1,
     currencyPerPoint: Number(row.currency_per_point) || 0,
     pointsPerUnit: Number(row.points_per_unit) || 1,
     rounding: row.rounding === 'round' ? 'round' : 'floor',
@@ -72,6 +76,8 @@ export function pointsPreviewText(input: {
   onCredit: boolean
 }): string | null {
   if (!input.settings) return null
+  if (input.settings.earningMode === 'visits') return 'Los puntos por turno se confirman cuando el turno atendido termina de pagarse.'
+  if (input.settings.earningMode === 'both') return 'Suma puntos por el monto pagado; el beneficio por turno se confirma al terminar de pagarse el turno atendido.'
   if (input.onCredit && input.pointsBase <= 0) return 'Suma puntos a medida que se paguen las cuotas'
   const breakdown = estimatePointsForSale(input.pointsBase, input.settings, input.rules)
   if (breakdown.totalPoints <= 0) return null

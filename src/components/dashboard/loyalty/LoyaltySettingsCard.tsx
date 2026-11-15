@@ -30,12 +30,13 @@ interface LoyaltySettingsCardProps {
   settings: LoyaltySettingsRow | null
   onSave: (values: Omit<LoyaltySettingsRow, 'organization_id'>) => Promise<boolean>
   canManage: boolean
+  serviceVisitsReady?: boolean
 }
 
 /** Una compra cualquiera, para que la tasa deje de ser un número abstracto. */
 const COMPRA_DE_EJEMPLO = 150_000
 
-export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySettingsCardProps) {
+export function LoyaltySettingsCard({ settings, onSave, canManage, serviceVisitsReady = false }: LoyaltySettingsCardProps) {
   const [draft, setDraft] = useState(() => settings ?? DEFAULT_LOYALTY_SETTINGS)
   const [saving, setSaving] = useState(false)
 
@@ -55,6 +56,7 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
     rounding: draft.rounding,
   })
 
+  const mode = draft.earning_mode ?? 'amount'
   const regla = explainEarning(draft)
 
   // Lo que la tienda devuelve de cada compra si el cliente canjea todo: es el
@@ -63,12 +65,14 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
   const porcentajeDevuelto = valorDelPunto > 0 && Number(draft.currency_per_point) > 0
     ? (valorDelPunto * (Number(draft.points_per_unit) || 1) * 100) / Number(draft.currency_per_point)
     : 0
-  const puntosDeEjemploCanje = Math.max(Number(draft.min_redemption_points) || 0, 100)
+  const puntosDeEjemploCanje = Number(draft.min_redemption_points) || 100
 
   const handleSave = async () => {
     setSaving(true)
+    try {
     await onSave({
       enabled: draft.enabled,
+      ...(serviceVisitsReady ? { earning_mode: mode, points_per_visit: Number(draft.points_per_visit ?? 1) } : {}),
       currency_per_point: Number(draft.currency_per_point),
       points_per_unit: Number(draft.points_per_unit),
       rounding: draft.rounding,
@@ -81,7 +85,7 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
       redemption_value: draft.redemption_value ? Number(draft.redemption_value) : null,
       min_redemption_points: draft.min_redemption_points ? Number(draft.min_redemption_points) : null,
     })
-    setSaving(false)
+    } finally { setSaving(false) }
   }
 
   return (
@@ -94,11 +98,11 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
             </div>
             <div>
               <CardTitle className="text-base font-bold text-slate-900 sm:text-lg dark:text-slate-50">
-                Puntos por compra
+                Cómo ganan puntos tus clientes
               </CardTitle>
               <CardDescription className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                 {draft.enabled
-                  ? 'Cada venta a un cliente con ficha le suma puntos sola, en caja y en la tienda.'
+                  ? 'Asociá el cliente al cobrar para acreditar sus puntos automáticamente.'
                   : 'Mientras esté apagado, ninguna venta suma puntos.'}
               </CardDescription>
             </div>
@@ -111,18 +115,33 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
             <Switch
               id="loyalty-enabled"
               checked={draft.enabled}
-              disabled={!canManage}
+              disabled={!canManage || saving}
               onCheckedChange={(enabled) => setDraft((d) => ({ ...d, enabled }))}
             />
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5 pt-5">
+      <CardContent className="pt-5"><fieldset disabled={saving} className="min-w-0 space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="earning-mode">¿Qué querés premiar?</Label>
+          <Select value={mode} disabled={!canManage || saving || !serviceVisitsReady} onValueChange={(value) => setDraft((d) => ({ ...d, earning_mode: value as 'amount' | 'visits' | 'both' }))}>
+            <SelectTrigger id="earning-mode" className="h-11 w-full"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="amount">El monto pagado</SelectItem><SelectItem value="visits">Los turnos atendidos y cobrados</SelectItem><SelectItem value="both">Monto pagado y turnos</SelectItem></SelectContent>
+          </Select>
+          {!serviceVisitsReady && <p className="text-xs text-muted-foreground">El programa por monto sigue disponible. El modo por turnos requiere habilitar la nueva migración.</p>}
+        </div>
+        {mode !== 'amount' && <div className="space-y-2 rounded-xl border border-sky-200 bg-sky-50/50 p-4 dark:border-sky-900 dark:bg-sky-950/20">
+          <Label htmlFor="points-per-visit">Puntos por turno atendido y cobrado</Label>
+          <Input id="points-per-visit" type="number" min={1} max={100000} value={draft.points_per_visit ?? 1} disabled={!canManage || saving || !serviceVisitsReady} onChange={(e) => setDraft((d) => ({ ...d, points_per_visit: Number(e.target.value) }))} />
+          <p className="text-xs text-muted-foreground">Un turno suma una sola visita, aunque incluya varios servicios. Reservar, reprogramar o pagar una cuota no suma otra visita. Los turnos financiados suman una visita al terminar de pagarse.</p>
+          <p className="text-sm">Ejemplo: 5 turnos pagados suman {5 * Number(draft.points_per_visit ?? 1)} puntos, antes de bonificaciones y topes.</p>
+        </div>}
+        {mode !== 'visits' && <div>
         {/* La única decisión que hay que tomar para arrancar. */}
         <div className="space-y-2">
           <Label htmlFor="currency-per-point" className="text-sm font-semibold">
-            ¿Cada cuánto gasto das un punto?
+            ¿Cuánto debe pagar para sumar puntos?
           </Label>
           <div className="flex flex-wrap items-center gap-3">
             <Input
@@ -151,6 +170,8 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
             .
           </p>
         </div>
+
+        </div>}
 
         {/* Para qué sirven: canje por saldo a favor, que el POS acepta como pago. */}
         <div className="space-y-2 rounded-xl border border-emerald-200/70 bg-emerald-50/50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
@@ -189,8 +210,8 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
           {valorDelPunto > 0 && (
             <p className="text-xs text-slate-700 tabular-nums dark:text-slate-300">
               {puntosDeEjemploCanje} puntos = <strong className="font-semibold">{formatCurrency(puntosDeEjemploCanje * valorDelPunto)}</strong> de saldo a favor.
-              {' '}Equivale a devolver el <strong className="font-semibold">{porcentajeDevuelto.toLocaleString('es-PY', { maximumFractionDigits: 1 })}%</strong> de cada compra.
-              {porcentajeDevuelto > 10 && (
+              {mode !== 'visits' && <>{' '}Por el monto pagado, equivale a devolver el <strong className="font-semibold">{porcentajeDevuelto.toLocaleString('es-PY', { maximumFractionDigits: 1 })}%</strong> del monto pagado.</>}
+              {mode !== 'visits' && porcentajeDevuelto > 10 && (
                 <span className="mt-1 block text-amber-700 dark:text-amber-400">Es un porcentaje alto: revisá que el margen lo aguante.</span>
               )}
             </p>
@@ -283,11 +304,11 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
           <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
             <Button size="sm" onClick={handleSave} disabled={saving} className="h-9 rounded-xl px-5 text-xs font-semibold">
               {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-              Guardar
+              Guardar programa
             </Button>
           </div>
         )}
-      </CardContent>
+      </fieldset></CardContent>
     </Card>
   )
 }

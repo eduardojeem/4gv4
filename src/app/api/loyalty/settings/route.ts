@@ -8,6 +8,8 @@ import { logger } from '@/lib/logger'
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
+  earning_mode: z.enum(['amount', 'visits', 'both']).optional(),
+  points_per_visit: z.number().int().min(1).max(100000).optional(),
   currency_per_point: z.number().positive('La tasa de conversión debe ser mayor a 0'),
   points_per_unit: z.number().int().positive('Los puntos por unidad deben ser mayores a 0'),
   rounding: z.enum(['floor', 'round']),
@@ -42,7 +44,12 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
     return NextResponse.json({ error: 'No se pudo cargar la configuración de puntos' }, { status: 500 })
   }
 
-  return NextResponse.json({ moduleInstalled: true, settings: data ?? null })
+  const capability = await supabase.rpc('loyalty_service_program_version')
+  const missingCapability = capability.error && ['PGRST202', '42883'].includes(capability.error.code)
+  if (capability.error && !missingCapability) {
+    return NextResponse.json({ error: 'No se pudo verificar la configuración de fidelización' }, { status: 503 })
+  }
+  return NextResponse.json({ moduleInstalled: true, settings: data ?? null, capabilities: { serviceVisits: capability.data === 1 } })
 })
 
 export const PUT = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization, user }) => {
@@ -62,6 +69,10 @@ export const PUT = withTenantAuth({ permission: 'promotions.manage', module: 'pr
 
   const supabase = await createOrgScopedClient(organization.id)
 
+  if (parsed.data.earning_mode !== undefined || parsed.data.points_per_visit !== undefined) {
+    const capability = await supabase.rpc('loyalty_service_program_version')
+    if (capability.error || capability.data !== 1) return NextResponse.json({ error: 'Falta habilitar la migración de fidelización por turnos. No se guardaron cambios.', code: 'SERVICE_VISITS_NOT_READY' }, { status: 503 })
+  }
   const row = {
     organization_id: organization.id,
     ...parsed.data,
@@ -75,13 +86,7 @@ export const PUT = withTenantAuth({ permission: 'promotions.manage', module: 'pr
   const save = (values: Record<string, unknown>) =>
     supabase.from('loyalty_settings').upsert(values, { onConflict: 'organization_id' }).select().single()
 
-  let { data, error } = await save(row)
-  // Sin la migración del canje todavía no existen esas columnas: se guarda el
-  // resto para que la tienda no se quede sin poder cambiar su configuración.
-  if (error && /redemption_value|min_redemption_points/.test(error.message ?? '')) {
-    const { redemption_value: _value, min_redemption_points: _min, ...withoutRedemption } = row
-    ;({ data, error } = await save(withoutRedemption))
-  }
+  const { data, error } = await save(row)
 
   if (error) {
     return loyaltyErrorResponse(error, 'guardar la configuración de puntos', {

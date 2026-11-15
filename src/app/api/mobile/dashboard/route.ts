@@ -62,7 +62,8 @@ export async function GET() {
       subscriptionNotice: showSubscription && !subscription.error ? buildSubscriptionExpiryNotice(subscription.data) : null,
       capabilities: {...Object.fromEntries(([
         'products.create','products.update','products.delete','inventory.stock.manage',
-        'crm.customers.manage','ecommerce.orders.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
+        'promotions.read','promotions.create','promotions.update','promotions.delete','promotions.manage',
+        'crm.customers.read','crm.customers.manage','ecommerce.orders.manage','pos.sales.create','repairs.orders.create','repairs.orders.update','repairs.orders.assign','repairs.orders.deliver',
       ] as const).map(permission => [permission, role === 'super_admin' || roleHasPermission(organization.role, permission)])), 'orders.delivery': planInfo.effectiveModules.includes('delivery'), 'agenda.create': groups.some(group => group.items.some(item => item.key === 'agenda')) && (role === 'super_admin' || roleHasPermission(organization.role, 'pos.sales.read')), 'products.read_cost':costAccess.canReadCost, 'products.update_cost':costAccess.canWriteCost},
       user: {
         email: auth.user.email ?? null,

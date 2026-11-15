@@ -17,6 +17,8 @@ import { formatCurrency } from '@/lib/currency'
 
 export type ExplainSettings = {
   enabled: boolean
+  earning_mode?: 'amount' | 'visits' | 'both'
+  points_per_visit?: number
   currency_per_point: number | string
   points_per_unit: number | string
 }
@@ -36,7 +38,9 @@ export function explainEarning(settings: ExplainSettings | null | undefined): st
   const gana = Number(settings.points_per_unit)
   if (!Number.isFinite(gasto) || gasto <= 0 || !Number.isFinite(gana) || gana <= 0) return null
 
-  return `Cada ${formatCurrency(gasto)} de compra suma ${puntos(gana)}`
+  const amount = `Cada ${formatCurrency(gasto)} de compra suma ${puntos(gana)}`
+  const visits = `Cada turno atendido y pagado por completo suma ${puntos(Number(settings.points_per_visit) || 1)}`
+  return settings.earning_mode === 'visits' ? visits : settings.earning_mode === 'both' ? amount + '. ' + visits : amount
 }
 
 /** Para qué sirven los puntos. Sin sorteo abierto, no sirven para nada todavía. */
@@ -58,7 +62,7 @@ export function explainTicketCost(
   settings: ExplainSettings | null | undefined,
   raffle: ExplainRaffle | null | undefined,
 ): string | null {
-  if (!settings) return null
+  if (!settings || settings.earning_mode === 'visits' || settings.earning_mode === 'both') return null
   const gasto = Number(settings.currency_per_point)
   const gana = Number(settings.points_per_unit)
   const porTicket = Number(raffle?.points_per_ticket)

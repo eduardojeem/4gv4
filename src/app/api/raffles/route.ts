@@ -46,7 +46,7 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
       .order('created_at', { ascending: false }),
     supabase
       .from('raffle_tickets')
-      .select('raffle_id, customer_id')
+      .select('raffle_id, customer_id', { count: 'exact' })
       .eq('organization_id', organization.id)
   ])
 
@@ -59,6 +59,8 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
     return NextResponse.json({ error: 'No se pudieron cargar los sorteos' }, { status: 500 })
   }
 
+  if (ticketsRes.error) return NextResponse.json({ error: 'No se pudo consultar la participación de los sorteos' }, { status: 500 })
+
   // Agrupamos clientes únicos por sorteo
   const participantMap: Record<string, Set<string>> = {}
   if (ticketsRes.data) {
@@ -70,7 +72,7 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
 
   const enhancedRaffles = (rafflesRes.data ?? []).map((raffle) => ({
     ...raffle,
-    participants_count: participantMap[raffle.id]?.size ?? 0,
+    participants_count: ticketsRes.count !== null && ticketsRes.count === (ticketsRes.data?.length ?? 0) ? (participantMap[raffle.id]?.size ?? 0) : null,
   }))
 
   return NextResponse.json({ moduleInstalled: true, raffles: enhancedRaffles })

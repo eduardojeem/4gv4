@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import type { PromotionType } from '@/types/promotion'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
@@ -112,6 +113,7 @@ function getDatabaseErrorResponse(error: unknown) {
 export const GET = withTenantAuth({ permission: 'promotions.read', module: 'promotions' }, async (request: NextRequest, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
+    const search = sanitizeSearchTerm(searchParams.get('q'))
     const active = searchParams.get('active')
     const type = searchParams.get('type')
     const category = searchParams.get('category')
@@ -126,6 +128,8 @@ export const GET = withTenantAuth({ permission: 'promotions.read', module: 'prom
       .select('*', { count: 'exact' })
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: false }).order('id', { ascending: false })
+
+    if (search) query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%`)
 
     if (active !== null) {
       query = query.eq('is_active', active === 'true')

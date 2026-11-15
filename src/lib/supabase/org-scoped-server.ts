@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getRequestBearerToken } from './server'
 
 /**
  * Cliente de Supabase que le dice a la base en qué organización se está
@@ -23,13 +24,14 @@ import { cookies } from 'next/headers'
  */
 export async function createOrgScopedClient(organizationId: string) {
   const cookieStore = await cookies()
+  const bearer = await getRequestBearerToken()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       global: {
-        headers: { 'x-organization-id': organizationId },
+        headers: { 'x-organization-id': organizationId, ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
       },
       cookies: {
         getAll() {

@@ -38,7 +38,7 @@ describe('la API y la tarjeta de promociones', () => {
     expect(api).toContain("kind: z.enum(['multiplier', 'bonus_per_purchase', 'visit_milestone'])")
     expect(api).toContain("data.kind !== 'visit_milestone' || (Boolean(data.visit_interval) && data.bonus_points > 0)")
     const tarjeta = readFileSync(resolve(process.cwd(), 'src/components/dashboard/loyalty/PointRulesCard.tsx'), 'utf8')
-    expect(tarjeta).toContain('<SelectItem value="visit_milestone">Cada N visitas (premia volver)</SelectItem>')
+    expect(tarjeta).toContain('<SelectItem value="visit_milestone">Cada N {frequencyUnit} (premia volver)</SelectItem>')
     expect(tarjeta).toContain("applyPreset('visits10')")
   })
 })
