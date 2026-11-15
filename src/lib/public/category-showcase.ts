@@ -16,6 +16,8 @@ export type ShowcaseRubroId =
   | 'moda'
   | 'electronica'
   | 'servicios'
+  | 'alimentos'
+  | 'salud'
 
 /**
  * En orden de prioridad: una categoría va al primer rubro que la reconoce.
@@ -27,6 +29,8 @@ const RUBRO_KEYWORDS: [ShowcaseRubroId, string[]][] = [
   ['computacion', ['computacion', 'computadora', 'computadoras', 'notebook', 'notebooks', 'laptop', 'teclado', 'teclados', 'mouse', 'impresora', 'impresoras', 'tinta', 'tintas', 'toner', 'almacenamiento', 'red', 'redes', 'internet', 'router', 'monitor', 'monitores', 'pendrive', 'memoria', 'memorias']],
   ['electrodomesticos', ['electrodomestico', 'electrodomesticos', 'heladera', 'heladeras', 'lavarropa', 'lavarropas', 'climatizacion', 'aire', 'aires', 'cocina', 'cocinas', 'cosina', 'utensilio', 'utensilios', 'microondas', 'ventilador', 'ventiladores', 'freezer']],
   ['belleza', ['belleza', 'estetica', 'perfume', 'perfumes', 'perfumeria', 'maquillaje', 'cosmetica', 'cosmeticos', 'cabello', 'peluqueria', 'barberia', 'skincare']],
+  ['alimentos', ['alimento', 'alimentos', 'bebida', 'bebidas', 'almacen', 'comida', 'comidas', 'snack', 'snacks', 'golosina', 'golosinas']],
+  ['salud', ['salud', 'farmacia', 'bienestar', 'suplemento', 'suplementos', 'vitamina', 'vitaminas', 'ortopedia']],
   ['muebles', ['hogar', 'mueble', 'muebles', 'limpieza', 'pileta', 'piletas', 'cesped', 'jardin', 'jardineria', 'decoracion', 'colchon', 'colchones', 'bazar']],
   ['moda', ['moda', 'ropa', 'remera', 'remeras', 'indumentaria', 'reloj', 'relojes', 'relojeria', 'calzado', 'calzados', 'joya', 'joyas', 'bijou']],
   ['electronica', ['electronica', 'electronico', 'celular', 'celulares', 'pantalla', 'pantallas', 'lcd', 'oled', 'cctv', 'alarma', 'alarmas', 'camara', 'camaras', 'cargador', 'cargadores', 'cable', 'cables', 'tablet', 'tablets', 'smartwatch']],
