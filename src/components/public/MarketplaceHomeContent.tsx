@@ -1,5 +1,6 @@
 import { MarketplaceBusinessBanner } from '@/components/public/MarketplaceBusinessBanner'
-import { getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
+import { getLocationCatalog, getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
+import { buildCategoryShowcase } from '@/lib/public/category-showcase'
 import type { Metadata } from 'next'
 import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import Link from './MarketplaceLink'
@@ -56,6 +57,12 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
     scoped?Promise.resolve(scoped.products.filter(product=>product.has_offer&&!product.hide_price).slice(0,MARKETPLACE_HOME_OFFER_LIMIT)):duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), []),
     getPlatformAnnouncements().catch(() => []),
   ])
+  // Productos reales por rubro para «Categorías destacadas». Si el catálogo no
+  // responde, la sección muestra los rubros con búsqueda por texto, como antes.
+  const showcaseProducts = scoped
+    ? scoped.products
+    : await duringBuild(getLocationCatalog().then((catalog) => catalog.products), null).catch(() => null)
+  const categoryShowcase = showcaseProducts ? buildCategoryShowcase(showcaseProducts) : null
   // Both client sections share these objects; neither displays more than four
   // products per store. Trim once to preserve RSC reference deduplication.
   const organizations = organizationRows.map(organization => ({
@@ -163,7 +170,7 @@ export async function MarketplaceHomeContent({scoped=null}:{scoped?:Awaited<Retu
       </section>
 
       {/* ── Carrusel Showcase de Categorías ── */}
-      <MarketplaceCategoriesShowcase />
+      <MarketplaceCategoriesShowcase stats={categoryShowcase} />
 
       {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups.slice(0, 6)} />}
 

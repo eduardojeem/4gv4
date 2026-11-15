@@ -88,6 +88,14 @@ export async function resolveCategoryIds(
   supabase: ReturnType<typeof createAdminSupabase>,
   categoria: string
 ): Promise<string[] | null> {
+  // Varias categorías separadas por coma: la vidriera de rubros junta las de
+  // distintas tiendas («Electrónica» de una y «Electronica» de otra).
+  if (categoria.includes(',')) {
+    const parts = [...new Set(categoria.split(',').map((part) => part.trim()).filter(isUuid))].slice(0, 40)
+    if (parts.length === 0) return null
+    const resolved = await Promise.all(parts.map((part) => resolveCategoryIds(supabase, part)))
+    return [...new Set(resolved.flatMap((ids) => ids ?? []))]
+  }
   if (!isUuid(categoria)) return null
 
   const id = categoria.trim()
