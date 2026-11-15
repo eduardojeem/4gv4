@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import { MarketplaceStoresProductsCarousel } from '../MarketplaceStoresProductsCarousel'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
@@ -111,48 +111,21 @@ describe('MarketplaceStoresProductsCarousel', () => {
     expect(link.getAttribute('href')).toBe('#directorio')
   })
 
-  it('filters stores interactively using the search bar', () => {
-    render(<MarketplaceStoresProductsCarousel organizations={mockOrganizations} />)
-
-    const searchInput = screen.getByPlaceholderText(/Buscar tiendas o comercios/i)
-    expect(searchInput).toBeDefined()
-
-    // Ambas tiendas están visibles al inicio
-    expect(screen.getByText('Mega Store Cell')).toBeDefined()
-    expect(screen.getByText('Moda Urbana')).toBeDefined()
-
-    // Filtrar por término que solo coincide con Moda Urbana
-    fireEvent.change(searchInput, { target: { value: 'Moda' } })
-    expect(screen.getByText('Moda Urbana')).toBeDefined()
-    expect(screen.queryByText('Mega Store Cell')).toBeNull()
-
-    // Filtrar por término de producto de Mega Store Cell (iPhone)
-    fireEvent.change(searchInput, { target: { value: 'iPhone' } })
-    expect(screen.getByText('Mega Store Cell')).toBeDefined()
-    expect(screen.queryByText('Moda Urbana')).toBeNull()
-
-    // Limpiar campo con el botón X
-    const clearBtn = screen.getByLabelText(/Limpiar búsqueda/i)
-    fireEvent.click(clearBtn)
-    expect(screen.getByText('Mega Store Cell')).toBeDefined()
-    expect(screen.getByText('Moda Urbana')).toBeDefined()
+  it('shows the rating only with enough reviews and a clean city name', () => {
+    const orgs = [
+      { ...mockOrganizations[0], review_count: 15, review_rating_avg: 4.8, city: 'asuncion' },
+      { ...mockOrganizations[1], review_count: 1, review_rating_avg: 5 },
+    ] as MarketplaceOrganization[]
+    render(<MarketplaceStoresProductsCarousel organizations={orgs} />)
+    expect(screen.getByText('4.8')).toBeDefined()
+    expect(screen.queryByText('5.0')).toBeNull()
+    expect(screen.getByText('Asunción')).toBeDefined()
   })
 
-  it('shows empty state when no store matches search and allows resetting', () => {
+  it('no longer has its own search bar or autoplay', () => {
     render(<MarketplaceStoresProductsCarousel organizations={mockOrganizations} />)
-
-    const searchInput = screen.getByPlaceholderText(/Buscar tiendas o comercios/i)
-    fireEvent.change(searchInput, { target: { value: 'inexistenteXYZ' } })
-
-    expect(screen.getByText(/No encontramos tiendas para "inexistenteXYZ"/i)).toBeDefined()
-    expect(screen.queryByText('Mega Store Cell')).toBeNull()
-
-    // Click en botón restablecer búsqueda
-    const resetBtn = screen.getByRole('button', { name: /Restablecer búsqueda/i })
-    fireEvent.click(resetBtn)
-
-    expect(screen.getByText('Mega Store Cell')).toBeDefined()
-    expect(screen.getByText('Moda Urbana')).toBeDefined()
+    expect(screen.queryByPlaceholderText(/Buscar tiendas/i)).toBeNull()
+    expect(screen.queryByLabelText(/avance automático/i)).toBeNull()
   })
 
   it('renders side navigation buttons for moving the carousel', () => {

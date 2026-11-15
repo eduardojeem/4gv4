@@ -89,7 +89,6 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
           organizations={organizations}
           exploreAllHref="#directorio"
           exploreAllLabel="Volver al directorio"
-          showSearch={false}
         />
       )}
 
