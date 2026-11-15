@@ -36,10 +36,17 @@ type Info = {
 
 const ANY = 'any'
 
-function Step({ number, title, children, done }: { number: number; title: string; children: React.ReactNode; done?: boolean }) {
+function Step({ number, title, children, done, highlight }: { number: number; title: string; children: React.ReactNode; done?: boolean; highlight?: boolean }) {
   return (
-    <section className="space-y-3 rounded-2xl border bg-card p-4 sm:p-5">
-      <h2 className="flex items-center gap-2 text-base font-semibold">
+    <section
+      data-step-highlight={highlight ? 'true' : undefined}
+      className={cn(
+        'space-y-3 rounded-2xl border p-4 sm:p-5',
+        // El último paso (datos y confirmación) se distingue del resto con el color de la tienda.
+        highlight ? 'border-2 border-primary bg-primary/10 shadow-lg shadow-primary/10 dark:bg-primary/15' : 'bg-card'
+      )}
+    >
+      <h2 className={cn('flex items-center gap-2 font-semibold', highlight ? 'text-lg text-primary' : 'text-base')}>
         <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', done ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground')}>{number}</span>
         {title}
       </h2>
@@ -309,7 +316,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       )}
 
       {startsAt && service && (
-        <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos">
+        <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos" highlight>
           {service.promotions?.[0] && <ServicePromotionNote promotion={service.promotions[0]} price={quoted.quote?.price ?? service.price} currency={info.currency} />}
           {/* Con «Cualquiera» se avisa quiénes pueden atender; si eligió a alguien, ya está decidido. */}
           {professionalId === ANY && selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
@@ -333,11 +340,11 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="booking-name">Nombre</Label>
-              <Input id="booking-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
+              <Input id="booking-name" className="bg-background" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="booking-phone">WhatsApp</Label>
-              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="booking-phone-help" aria-invalid={usingAccount && !phone.trim() ? true : undefined} className={cn(usingAccount && !phone.trim() && 'border-amber-500 ring-1 ring-amber-500/40')} />
+              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="booking-phone-help" aria-invalid={usingAccount && !phone.trim() ? true : undefined} className={cn('bg-background', usingAccount && !phone.trim() && 'border-amber-500 ring-1 ring-amber-500/40')} />
               <p id="booking-phone-help" className="text-xs text-muted-foreground">
                 {info.requireConfirmation ? 'La tienda te escribe a este número para confirmar el turno.' : 'La tienda te avisa a este número si hay algún cambio en tu turno.'}
               </p>
@@ -345,7 +352,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
           </div>
           <div className="space-y-1">
             <Label htmlFor="booking-notes">Detalles o motivo de la visita (opcional)</Label>
-            <Textarea id="booking-notes" rows={2} placeholder="Ej: el estilo de corte que buscás o alguna indicación para tu visita." value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Textarea id="booking-notes" className="bg-background" rows={2} placeholder="Ej: el estilo de corte que buscás o alguna indicación para tu visita." value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
           {/* Trampa para bots: invisible para las personas. */}
           <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" value={website} onChange={(event) => setWebsite(event.target.value)} />
