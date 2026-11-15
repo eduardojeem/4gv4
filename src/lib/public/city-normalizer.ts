@@ -208,6 +208,20 @@ export function normalizeCity(rawCity: string | null | undefined): { display: st
 
   if (!text) return null
 
+  // 3-4. Ciudad conocida (diccionario, o incluida en el texto)
+  const known = findCanonicalCity(text)
+  if (known) return known
+
+  const searchKey = removeAccents(text)
+
+  // 5. Fallback: Formatear nombre en Title Case y generar slug seguro
+  const display = toTitleCase(text)
+  const key = searchKey.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+  return { display, key }
+}
+
+function findCanonicalCity(text: string): { display: string; key: string } | null {
   // 3. Normalizar para búsqueda en diccionario
   const searchKey = removeAccents(text)
 
@@ -227,12 +241,35 @@ export function normalizeCity(rawCity: string | null | undefined): { display: st
       }
     }
   }
+  return null
+}
 
-  // 5. Fallback: Formatear nombre en Title Case y generar slug seguro
-  const display = toTitleCase(text)
-  const key = searchKey.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+/**
+ * La ciudad reconocida de Paraguay, o null si no está en la lista. Sirve para
+ * deducir el país de una tienda que todavía no lo confirmó: «encarnacion» es
+ * Encarnación, Paraguay.
+ */
+export function knownParaguayCity(rawCity: string | null | undefined): { display: string; key: string } | null {
+  if (!rawCity || typeof rawCity !== 'string') return null
+  let text = rawCity.trim()
+  for (const pattern of STRIP_PATTERNS) text = text.replace(pattern, '')
+  text = text.replace(/^[,\s.-]+|[,\s.-]+$/g, '').trim()
+  return text ? findCanonicalCity(text) : null
+}
 
-  return { display, key }
+/** Nombres bien escritos de las ciudades conocidas, para sugerirlos al cargar la ciudad. */
+export const KNOWN_CITY_NAMES: string[] = [...new Set(Object.values(CANONICAL_CITIES).map((city) => city.display))]
+  .sort((a, b) => a.localeCompare(b, 'es'))
+
+/**
+ * Cómo se guarda la ciudad que escribió el negocio: la forma correcta si es
+ * una ciudad conocida («encarnacion» → «Encarnación»), o lo escrito sin
+ * espacios de más. Vacío queda vacío.
+ */
+export function cityForSaving(rawCity: string): string {
+  const text = rawCity.replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return knownParaguayCity(text)?.display ?? text
 }
 
 /**
