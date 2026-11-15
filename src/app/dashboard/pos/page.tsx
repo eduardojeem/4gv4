@@ -1012,9 +1012,13 @@ function POSPageContent() {
     }
 
     const isEligible = (item: typeof cartItems[number]) => {
-      const matchesProduct = !promotion.applicable_products?.length || promotion.applicable_products.includes(item.product_id)
-      const matchesCategory = !promotion.applicable_categories?.length || (!!item.category_id && promotion.applicable_categories.includes(String(item.category_id)))
-      return matchesProduct && matchesCategory
+      const hasProducts = Boolean(promotion.applicable_products?.length)
+      const hasCategories = Boolean(promotion.applicable_categories?.length)
+      if (!hasProducts && !hasCategories) return true
+      // Productos y categorías elegidos suman (p. ej. "Aplicar a reparaciones" + productos sueltos)
+      const matchesProduct = Boolean(promotion.applicable_products?.includes(item.product_id))
+      const matchesCategory = !!item.category_id && Boolean(promotion.applicable_categories?.includes(String(item.category_id)))
+      return matchesProduct || matchesCategory
     }
 
     const eligibleItems = cartItems.filter(isEligible)

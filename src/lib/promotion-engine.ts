@@ -93,20 +93,13 @@ export class PromotionEngine {
       return false
     }
 
-    // Verificar productos aplicables
-    if (promotion.applicable_products && promotion.applicable_products.length > 0) {
-      const hasApplicableProduct = context.cart_items.some(item => 
-        promotion.applicable_products!.includes(item.product_id)
+    // Productos y categorías elegidos suman: alcanza con un ítem de cualquiera de los dos
+    if (promotion.applicable_products?.length || promotion.applicable_categories?.length) {
+      const hasApplicableItem = context.cart_items.some(item =>
+        Boolean(promotion.applicable_products?.includes(item.product_id))
+        || Boolean(item.category_id && promotion.applicable_categories?.includes(item.category_id))
       )
-      if (!hasApplicableProduct) return false
-    }
-
-    // Verificar categorías aplicables
-    if (promotion.applicable_categories && promotion.applicable_categories.length > 0) {
-      const hasApplicableCategory = context.cart_items.some(item => 
-        item.category_id && promotion.applicable_categories!.includes(item.category_id)
-      )
-      if (!hasApplicableCategory) return false
+      if (!hasApplicableItem) return false
     }
 
     return true
@@ -155,16 +148,13 @@ export class PromotionEngine {
   ): number {
     let baseAmount = context.order_total
 
-    // Si es específico para productos, calcular solo sobre esos productos
-    if (promotion.applicable_products && promotion.applicable_products.length > 0) {
+    // Si es específica, calcular solo sobre los ítems de los productos O categorías elegidos
+    if (promotion.applicable_products?.length || promotion.applicable_categories?.length) {
       baseAmount = context.cart_items
-        .filter(item => promotion.applicable_products!.includes(item.product_id))
-        .reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
-    }
-    // Si es específico para categorías
-    else if (promotion.applicable_categories && promotion.applicable_categories.length > 0) {
-      baseAmount = context.cart_items
-        .filter(item => item.category_id && promotion.applicable_categories!.includes(item.category_id))
+        .filter(item =>
+          Boolean(promotion.applicable_products?.includes(item.product_id))
+          || Boolean(item.category_id && promotion.applicable_categories?.includes(item.category_id))
+        )
         .reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
     }
 
