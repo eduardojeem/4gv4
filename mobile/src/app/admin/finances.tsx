@@ -18,7 +18,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -47,6 +46,7 @@ import {
 import { FinanceOperations, type FinanceTab } from '@/components/finance-operations';
 import { FinanceMobileToolbar } from '@/components/finance-navigation';
 import { BottomSheet } from '@/components/bottom-sheet';
+import { DateField } from '@/components/date-field';
 import { shareFinanceSummary } from '@/lib/finance-export';
 import type { FinanceScope } from '@/lib/finance-admin';
 import { validateFinanceDates, type FinanceDates } from '../../../../src/lib/finance/summary-integrity';
@@ -634,8 +634,8 @@ export default function FinancesAdminScreen() {
         <Action label={period==='custom'?'Cambiar fechas personalizadas':'Elegir fechas personalizadas'} color={accent} onPress={()=>{setDateFrom(shown?.dates.startDate??'');setDateTo(shown?.dates.endDate??'');setDateEditor(true)}}/>
         {dateEditor&&<View style={{gap:10,padding:14,borderRadius:16,borderWidth:1,borderColor:colors.border,backgroundColor:colors.background}}>
           <Text style={{color:colors.muted}}>Ingresá las fechas y tocá Aplicar fechas.</Text>
-          <Text style={{color:colors.text,fontWeight:'600'}}>Desde (AAAA-MM-DD)</Text><TextInput accessibilityLabel="Desde" value={dateFrom} onChangeText={setDateFrom} placeholder="2026-11-01" placeholderTextColor={colors.muted} style={{color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:10,padding:12}}/>
-          <Text style={{color:colors.text,fontWeight:'600'}}>Hasta (AAAA-MM-DD)</Text><TextInput accessibilityLabel="Hasta" value={dateTo} onChangeText={setDateTo} placeholder="2026-11-30" placeholderTextColor={colors.muted} style={{color:colors.text,borderWidth:1,borderColor:colors.border,borderRadius:10,padding:12}}/>
+          <DateField label="Desde" value={dateFrom} onChange={setDateFrom}/>
+          <DateField label="Hasta" value={dateTo} onChange={setDateTo}/>
         </View>}
         {branches.length > 1 && <View style={{gap:10}}>
         <Text style={[styles.bold,{color:colors.text}]}>Sucursal</Text>

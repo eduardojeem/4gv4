@@ -14,7 +14,14 @@ describe('native finance data boundaries',()=>{
  it('requires a currency and unambiguous entered amounts',()=>{
   const bad=page();bad.obligations[0].currency='';expect(()=>assertExpensePage(bad)).toThrow()
   expect(parseFinanceAmount('1500,50')).toBe(1500.5)
-  for(const value of ['1.500.000','-1','0','NaN','1e4'])expect(()=>parseFinanceAmount(value)).toThrow()
+  // Con separador de miles, como se escribe en guaraníes.
+  expect(parseFinanceAmount('1.500.000')).toBe(1500000)
+  expect(parseFinanceAmount('150.000')).toBe(150000)
+  expect(parseFinanceAmount('1.500.000,50')).toBe(1500000.5)
+  expect(parseFinanceAmount('1,500,000.50')).toBe(1500000.5)
+  expect(parseFinanceAmount('1500.5')).toBe(1500.5)
+  expect(parseFinanceAmount(' 25 000 ')).toBe(25000)
+  for(const value of ['-1','0','NaN','1e4','1.50.0','15.0000','1.500,500','1,5.0','','1234567890123'])expect(()=>parseFinanceAmount(value)).toThrow()
  })
  it('exports actual values, preserves decimals and marks unavailable balances',()=>{
   const data={accrued:{revenue:100.25,directCosts:0,grossProfit:null,operatingExpenses:0,payrollCost:0,netProfit:null},cash:{collected:50.25,paid:0,netCashFlow:50.25},overdue:[],upcomingDue:[]} as unknown as FinanceSummaryData

@@ -1,5 +1,6 @@
 export type FinanceAttemptContext = { userId: string; organizationId: string };
-export type FinanceAttempt = { kind: 'expense' | 'payment'; targetId?: string; payload: Record<string, unknown> };
+/** expense: gasto nuevo · payment: pago de un gasto · payroll_payment: pago de un sueldo liquidado. */
+export type FinanceAttempt = { kind: 'expense' | 'payment' | 'payroll_payment'; targetId?: string; payload: Record<string, unknown> };
 export type PendingFinanceAttempt = FinanceAttempt & { context: FinanceAttemptContext; idempotencyKey: string };
 type Storage = { getItem(key: string): string | null | Promise<string | null>; setItem(key: string, value: string): void | Promise<void>; removeItem(key: string): void | Promise<void> };
 const keyFor = (context: FinanceAttemptContext) => `finance-attempt-v1.${context.userId}.${context.organizationId}`;
@@ -10,7 +11,7 @@ export async function readPendingFinanceAttempt(context: FinanceAttemptContext, 
   if (!raw) return null;
   let row: PendingFinanceAttempt;
   try { row = JSON.parse(raw); } catch { throw new Error('No se puede leer la operación pendiente. Revisá Finanzas antes de registrar otra.'); }
-  if (row.context?.userId !== context.userId || row.context?.organizationId !== context.organizationId || !['expense', 'payment'].includes(row.kind) || typeof row.idempotencyKey !== 'string' || !row.payload || typeof row.payload !== 'object') throw new Error('No se puede validar la operación pendiente. Contactá con soporte antes de repetirla.');
+  if (row.context?.userId !== context.userId || row.context?.organizationId !== context.organizationId || !['expense', 'payment', 'payroll_payment'].includes(row.kind) || typeof row.idempotencyKey !== 'string' || !row.payload || typeof row.payload !== 'object') throw new Error('No se puede validar la operación pendiente. Contactá con soporte antes de repetirla.');
   return row;
 }
 /** Persist before sending; uncertainty always keeps the same immutable operation and key. */
