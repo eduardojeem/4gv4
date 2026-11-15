@@ -31,6 +31,7 @@ import { cn, formatPrice } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
+import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 import {
   buildServiceMenu,
   useNextFreeSlot,
@@ -280,11 +281,23 @@ export function BarberHome({ settings, branches = [], capabilities }: BarberHome
     ]
   }, [settings.trust_bar])
 
+  // Los banners de inicio que cargó el dueño (Sitio web → Carrusel) van primero;
+  // la portada del club queda debajo con la reserva, el próximo turno libre y el h1.
+  const hasConfiguredSlides =
+    settings.promotional_carousel?.enabled !== false &&
+    Boolean(settings.promotional_carousel?.slides?.some((slide) => slide.active))
+
   // 4. Profesionales Reales de la Agenda
   const realProfessionals = effectiveAgenda?.professionals ?? []
 
   return (
     <div className="bg-background text-foreground dark:bg-zinc-950 dark:text-zinc-100 min-h-screen selection:bg-primary selection:text-primary-foreground">
+      {hasConfiguredSlides && settings.promotional_carousel && (
+        <PromotionalCarousel
+          settings={{ ...settings.promotional_carousel, enabled: settings.promotional_carousel.enabled ?? true }}
+        />
+      )}
+
       {/* ── 1. PORTADA HERO (Color de marca adaptativo + elegancia de salón) ── */}
       <section
         className={cn(
