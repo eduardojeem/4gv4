@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import { MarketplaceCategoriesShowcase } from '../MarketplaceCategoriesShowcase'
 
@@ -26,28 +26,28 @@ describe('MarketplaceCategoriesShowcase', () => {
     expect(link).toHaveAttribute('href', '/marketplace/categorias')
   })
 
-  it('filters slides interactively using the search input', () => {
+  it('has no search box of its own', () => {
     render(<MarketplaceCategoriesShowcase />)
-
-    const searchInput = screen.getByPlaceholderText(/Buscar categoría.../i)
-    fireEvent.change(searchInput, { target: { value: 'belleza' } })
-
-    expect(screen.getByText('Belleza & Estética')).toBeInTheDocument()
-    expect(screen.queryByText('Computación')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Buscar categor/i)).toBeNull()
   })
 
-  it('shows empty state when no slide matches and allows resetting search', () => {
-    render(<MarketplaceCategoriesShowcase />)
-
-    const searchInput = screen.getByPlaceholderText(/Buscar categoría.../i)
-    fireEvent.change(searchInput, { target: { value: 'categorianoinventada123' } })
-
-    expect(screen.getByText(/No encontramos categorías para/i)).toBeInTheDocument()
-
-    const resetBtn = screen.getByRole('button', { name: /Restablecer búsqueda/i })
-    fireEvent.click(resetBtn)
-
-    expect(screen.getByText('Belleza & Estética')).toBeInTheDocument()
+  it('with real stats shows only rubros with products, sorted, linking to their categories', () => {
+    render(
+      <MarketplaceCategoriesShowcase
+        stats={{
+          belleza: { count: 87, categoryIds: ['c-1', 'c-2'], products: [{ id: 'p1', name: 'Perfume Blue', image: null, href: '/tienda/productos/p1' }] },
+          electronica: { count: 156, categoryIds: ['c-3'], products: [] },
+        }}
+      />,
+    )
+    expect(screen.queryByText('Servicios')).toBeNull()
+    expect(screen.queryByText('Muebles & Hogar')).toBeNull()
+    const titles = screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
+    expect(titles).toEqual(['Electrónica', 'Belleza & Estética'])
+    expect(screen.getByRole('link', { name: /Ver 87 productos/ })).toHaveAttribute('href', '/marketplace/productos?categoria=c-1,c-2')
+    expect(screen.getByText('156 productos')).toBeInTheDocument()
+    expect(screen.getByTitle('Perfume Blue')).toHaveAttribute('href', '/tienda/productos/p1')
+    expect(screen.getByText(/2 rubros · 243 productos/)).toBeInTheDocument()
   })
 
   it('renders navigation arrows and slide dot buttons', () => {

@@ -149,7 +149,9 @@ export function MarketplaceStoresProductsCarousel({
         </div>
 
         {stores.length > 1 && (
-          <div className="mt-4 flex items-center justify-center gap-1.5">
+          // Solo en pantallas grandes: en el celular se desliza con el dedo, y el
+          // tamaño mínimo de toque convertía cada puntito en un círculo grande.
+          <div className="mt-4 hidden items-center justify-center gap-1.5 sm:flex">
             {stores.map((org, index) => (
               <button
                 key={org.id}
