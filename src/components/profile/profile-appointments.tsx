@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { CalendarCheck2, CalendarClock, ChevronRight, User } from 'lucide-react'
+import { CalendarCheck2, CalendarClock, ChevronRight, Store, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { APPOINTMENT_STATUS_LABELS } from '@/lib/agenda/agenda-api'
 import { appointmentWhen } from '@/lib/agenda/messages'
-import type { CustomerAppointments } from '@/lib/agenda/customer-appointments'
+import type { CustomerAppointment, CustomerAppointments } from '@/lib/agenda/customer-appointments'
 
 const STATUS_TONE: Record<string, string> = {
   pending: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
@@ -16,24 +16,28 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 /**
- * Los turnos del cliente en esta tienda: los próximos, con su enlace para
- * cambiarlos o cancelarlos, y los últimos que tuvo.
+ * Los turnos del cliente: los próximos, con su enlace para cambiarlos o
+ * cancelarlos, y los últimos que tuvo. En una tienda, los de esa tienda; en el
+ * marketplace («Mis reservas»), los de todas, con el nombre de cada tienda.
  */
-export function ProfileAppointments({ appointments, bookingHref }: { appointments: CustomerAppointments; bookingHref: string }) {
+export function ProfileAppointments({ appointments, bookingHref, title = 'Mis turnos' }: { appointments: CustomerAppointments; bookingHref?: string; title?: string }) {
   const { upcoming, past, timeZone } = appointments
+  const zoneOf = (appointment: CustomerAppointment) => appointment.store?.timeZone ?? timeZone
 
   return (
     <section id="turnos" aria-labelledby="profile-appointments-title" className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <div>
-          <h2 id="profile-appointments-title" className="text-sm font-semibold text-foreground">Mis turnos</h2>
+          <h2 id="profile-appointments-title" className="text-sm font-semibold text-foreground">{title}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {upcoming.length === 0 ? 'No tenés turnos próximos.' : `${upcoming.length} ${upcoming.length === 1 ? 'turno próximo' : 'turnos próximos'}`}
           </p>
         </div>
-        <Button asChild size="sm" className="min-h-9">
-          <Link href={bookingHref}><CalendarCheck2 className="h-4 w-4" /> Reservar turno</Link>
-        </Button>
+        {bookingHref && (
+          <Button asChild size="sm" className="min-h-9">
+            <Link href={bookingHref}><CalendarCheck2 className="h-4 w-4" /> Reservar turno</Link>
+          </Button>
+        )}
       </div>
 
       {upcoming.length > 0 && (
@@ -45,7 +49,12 @@ export function ProfileAppointments({ appointments, bookingHref }: { appointment
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{appointment.serviceName}</p>
-                <p className="text-xs capitalize text-muted-foreground">{appointmentWhen(appointment.startsAt, timeZone)}</p>
+                {appointment.store && (
+                  <Link href={`/${appointment.store.slug}/inicio`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                    <Store aria-hidden="true" className="h-3 w-3" />{appointment.store.name}
+                  </Link>
+                )}
+                <p className="text-xs capitalize text-muted-foreground">{appointmentWhen(appointment.startsAt, zoneOf(appointment))}</p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span className={cn('rounded-full px-2 py-0.5 font-semibold', STATUS_TONE[appointment.status])}>{APPOINTMENT_STATUS_LABELS[appointment.status]}</span>
                   {appointment.professionalName && <span className="inline-flex items-center gap-1"><User aria-hidden="true" className="h-3 w-3" />{appointment.professionalName}</span>}
@@ -74,8 +83,8 @@ export function ProfileAppointments({ appointments, bookingHref }: { appointment
             {past.map((appointment) => (
               <li key={appointment.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm sm:px-5">
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-foreground">{appointment.serviceName}</span>
-                  <span className="block text-xs capitalize text-muted-foreground">{appointmentWhen(appointment.startsAt, timeZone)}</span>
+                  <span className="block truncate font-medium text-foreground">{appointment.serviceName}{appointment.store && <span className="font-normal text-muted-foreground"> · {appointment.store.name}</span>}</span>
+                  <span className="block text-xs capitalize text-muted-foreground">{appointmentWhen(appointment.startsAt, zoneOf(appointment))}</span>
                 </span>
                 <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', STATUS_TONE[appointment.status])}>{APPOINTMENT_STATUS_LABELS[appointment.status]}</span>
               </li>
@@ -85,7 +94,7 @@ export function ProfileAppointments({ appointments, bookingHref }: { appointment
       )}
 
       {upcoming.length === 0 && past.length === 0 && (
-        <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-5">Cuando reserves, tus turnos aparecen acá con su enlace para cambiarlos o cancelarlos.</p>
+        <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-5">{bookingHref ? 'Cuando reserves, tus turnos aparecen acá con su enlace para cambiarlos o cancelarlos.' : 'Cuando reserves un turno en una tienda del marketplace, aparece acá con su enlace para cambiarlo o cancelarlo.'}</p>
       )}
     </section>
   )

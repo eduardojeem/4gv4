@@ -11,6 +11,8 @@ export type CustomerAppointment = {
   professionalName: string | null
   /** Enlace propio del turno (/turno/[token]) para cambiarlo o cancelarlo. */
   token: string | null
+  /** En el marketplace (turnos de varias tiendas): de qué tienda es y su zona horaria. */
+  store?: { name: string; slug: string; timeZone: string } | null
 }
 
 export type CustomerAppointments = {
@@ -91,6 +93,55 @@ export async function loadCustomerAppointments(admin: SupabaseClient, organizati
       ...splitCustomerAppointments(rows),
       timeZone: (settings as { timezone?: string | null } | null)?.timezone || 'America/Asuncion',
     }
+  } catch {
+    return EMPTY_CUSTOMER_APPOINTMENTS
+  }
+}
+
+type StoreRow = Row & { organization_id: string }
+
+/**
+ * «Mis reservas» del marketplace: los turnos del cliente en todas las tiendas
+ * donde tiene ficha vinculada a su cuenta. Mismo criterio que el perfil de
+ * cada tienda (ficha con su `profile_id`), así no aparecen turnos de otros.
+ */
+export async function loadCustomerAppointmentsAcrossStores(admin: SupabaseClient, userId: string): Promise<CustomerAppointments> {
+  try {
+    const { data: customers } = await admin.from('customers').select('id, organization_id').eq('profile_id', userId)
+    const fichas = (customers ?? []) as Array<{ id: string; organization_id: string }>
+    if (fichas.length === 0) return EMPTY_CUSTOMER_APPOINTMENTS
+    const organizationIds = [...new Set(fichas.map((ficha) => ficha.organization_id))]
+    const [{ data, error }, { data: organizations }, { data: settings }] = await Promise.all([
+      admin
+        .from('appointments')
+        .select('id, organization_id, service_name, starts_at, ends_at, status, price, public_token, agenda_professionals(name)')
+        .in('customer_id', fichas.map((ficha) => ficha.id))
+        .in('organization_id', organizationIds)
+        .order('starts_at', { ascending: false })
+        .limit(50),
+      admin.from('organizations').select('id, name, slug').in('id', organizationIds),
+      admin.from('organization_settings').select('organization_id, timezone').in('organization_id', organizationIds),
+    ])
+    if (error || !data) return EMPTY_CUSTOMER_APPOINTMENTS
+    const orgById = new Map(((organizations ?? []) as Array<{ id: string; name: string; slug: string }>).map((org) => [org.id, org]))
+    const zoneById = new Map(((settings ?? []) as Array<{ organization_id: string; timezone?: string | null }>).map((row) => [row.organization_id, row.timezone || 'America/Asuncion']))
+    const rows = (data as StoreRow[]).flatMap((row): CustomerAppointment[] => {
+      const org = orgById.get(row.organization_id)
+      if (!org) return []
+      const professional = Array.isArray(row.agenda_professionals) ? row.agenda_professionals[0] : row.agenda_professionals
+      return [{
+        id: row.id,
+        serviceName: row.service_name,
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
+        status: row.status,
+        price: row.price == null ? null : Number(row.price),
+        professionalName: professional?.name ?? null,
+        token: row.public_token,
+        store: { name: org.name, slug: org.slug, timeZone: zoneById.get(row.organization_id) ?? 'America/Asuncion' },
+      }]
+    })
+    return { ...splitCustomerAppointments(rows), timeZone: 'America/Asuncion' }
   } catch {
     return EMPTY_CUSTOMER_APPOINTMENTS
   }

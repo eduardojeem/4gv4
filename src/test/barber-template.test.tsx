@@ -298,7 +298,8 @@ describe('Plantilla Barbería Premium (Club Varsovia Style)', () => {
       expect(screen.getByText('Eduardo Galeano')).toBeInTheDocument()
       expect(screen.getByText('cliente@clubvarsovia.com')).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: /ver mi perfil/i })).toBeInTheDocument()
-      expect(screen.getByRole('menuitem', { name: /mis turnos & reservas/i })).toBeInTheDocument()
+      // Lleva a la lista de sus turnos, no a reservar uno nuevo.
+      expect(screen.getByRole('menuitem', { name: /^mis turnos$/i })).toHaveAttribute('href', expect.stringMatching(/\/perfil#turnos$/))
       expect(screen.getByRole('menuitem', { name: /mis compras \/ pedidos/i })).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: /cerrar sesión/i })).toBeInTheDocument()
     })

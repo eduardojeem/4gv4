@@ -51,6 +51,8 @@ interface ProfileClientProps {
   storeFeatures?: { services: boolean; orders: boolean; credits: boolean; catalog: boolean }
   /** Turnos del cliente en esta tienda (solo si toma turnos). */
   appointments?: CustomerAppointments
+  /** 'store': los de esta tienda; 'marketplace': «Mis reservas» de todas las tiendas. */
+  appointmentsScope?: 'store' | 'marketplace' | null
   loyaltyPoints?: CustomerPoints | null
   initialData: ProfileData
   userId: string
@@ -105,6 +107,7 @@ export function ProfileClient({
   repairsAvailable = true,
   storeFeatures = { services: false, orders: true, credits: true, catalog: true },
   appointments,
+  appointmentsScope,
   loyaltyPoints = null,
 }: ProfileClientProps) {
   const router = useRouter()
@@ -337,8 +340,11 @@ export function ProfileClient({
             />
             {loyaltyPoints && <ProfilePoints points={loyaltyPoints} />}
 
-            {storeFeatures.services && appointments && (
+            {appointmentsScope === 'store' && appointments && (
               <ProfileAppointments appointments={appointments} bookingHref={`${linkPrefix}/turnos`} />
+            )}
+            {appointmentsScope === 'marketplace' && appointments && (
+              <ProfileAppointments appointments={appointments} title="Mis reservas" />
             )}
             {storeFeatures.catalog && <ProfileFavoritesWidget linkPrefix={linkPrefix} />}
             {storeFeatures.catalog && <ProfileStoreCarts />}

@@ -8,6 +8,7 @@ import {
   Grid3X3,
   Heart,
   Home,
+  CalendarCheck2,
   LayoutDashboard,
   MapPin,
   Package,
@@ -405,6 +406,23 @@ export function MarketplaceMobileBottomNav() {
                         </div>
                         <span className="mt-1 inline-flex w-fit items-center rounded-full bg-white px-2.5 py-0.5 text-[11px] font-extrabold text-cyan-700 shadow-2xs dark:bg-cyan-500/30 dark:text-cyan-200">
                           Rastrear ›
+                        </span>
+                      </Link>
+
+                      <Link
+                        href="/marketplace/perfil#turnos"
+                        onClick={closeMenu}
+                        className="col-span-2 flex items-center gap-3 rounded-[20px] border border-amber-200/90 bg-amber-50/90 p-3.5 transition-transform active:scale-[0.98] dark:border-amber-500/35 dark:bg-amber-500/15"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-amber-500 text-white shadow-sm">
+                          <CalendarCheck2 className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-extrabold tracking-tight text-foreground">Mis reservas</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">Turnos en barberías y servicios</p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center rounded-full bg-white px-2.5 py-0.5 text-[11px] font-extrabold text-amber-700 shadow-2xs dark:bg-amber-500/30 dark:text-amber-200">
+                          Ver turnos ›
                         </span>
                       </Link>
                     </div>
