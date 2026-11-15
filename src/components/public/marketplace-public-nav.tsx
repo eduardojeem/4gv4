@@ -9,6 +9,7 @@ import { PublicFavorites } from './Favorites'
 import { useState, useEffect } from 'react'
 import {
   Building2,
+  CalendarCheck2,
   ChevronRight,
   Grid3X3,
   Heart,
@@ -337,6 +338,12 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#turnos" className="cursor-pointer">
+                          <CalendarCheck2 className="mr-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          Mis Reservas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
                         <Link href="/marketplace/favoritos" className="cursor-pointer">
                           <Heart className="mr-2 h-4 w-4 text-rose-500 fill-rose-500/20" />
                           Mis Favoritos
@@ -365,6 +372,12 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                         <Link href="/marketplace/perfil#pedidos" className="cursor-pointer">
                           <Package className="mr-2 h-4 w-4 text-muted-foreground" />
                           Mis Compras en Tiendas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#turnos" className="cursor-pointer">
+                          <CalendarCheck2 className="mr-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          Mis Reservas
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
@@ -543,6 +556,12 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                       <Link href="/marketplace/perfil#pedidos" onClick={() => setMobileDrawerOpen(false)}>
                         <Package className="h-3.5 w-3.5 text-muted-foreground" />
                         Mis Compras
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/perfil#turnos" onClick={() => setMobileDrawerOpen(false)}>
+                        <CalendarCheck2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        Mis Reservas
                       </Link>
                     </Button>
                     <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">

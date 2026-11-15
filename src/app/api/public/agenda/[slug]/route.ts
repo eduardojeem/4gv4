@@ -10,6 +10,9 @@ import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/ag
 import { bookingWriteError, quoteReservationSchema, reserveQuote } from '@/lib/agenda/booking-writes'
 import { resolveServiceTerms } from '@/lib/agenda/service-terms'
 import { CLOSURE_NOTICE_DAYS, type PublicClosure } from '@/lib/agenda/closures'
+import { createClient } from '@/lib/supabase/server'
+import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
+import { SERVICE_PROMOTION_COLUMNS, servicePromotionsByService, type ServicePromotion } from '@/lib/public/service-promotions'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +82,51 @@ async function publicClosures(agenda: PublicAgenda): Promise<PublicClosure[]> {
   return (data as Array<{ starts_at: string; ends_at: string; public_message: string }>).map((row) => ({ startsAt: row.starts_at, endsAt: row.ends_at, message: row.public_message }))
 }
 
+/**
+ * Promos vigentes de la tienda que nombran cada servicio online. Si la consulta
+ * falla, la reserva sigue funcionando sin promos.
+ */
+async function servicePromotions(agenda: PublicAgenda): Promise<Record<string, ServicePromotion[]>> {
+  const serviceIds = agenda.config.services.filter((service) => service.online).map((service) => service.product_id)
+  if (serviceIds.length === 0) return {}
+  try {
+    const { data, error } = await agenda.admin
+      .from('promotions')
+      .select(SERVICE_PROMOTION_COLUMNS)
+      .eq('organization_id', agenda.organization.id)
+      .eq('is_active', true)
+      .in('public_mode', ['coupon', 'automatic'])
+    if (error) throw new Error(error.message)
+    return servicePromotionsByService((data ?? []) as Array<Record<string, unknown>>, serviceIds)
+  } catch (error) {
+    logger.warn('No se pudieron leer las promos de servicios', { organizationId: agenda.organization.id, error: error instanceof Error ? error.message : String(error) })
+    return {}
+  }
+}
+
+/**
+ * «Reservar para mí»: los datos de contacto de quien inició sesión, para
+ * completar el formulario. Solo los suyos (la sesión la lee el servidor) y
+ * preferentemente los de su ficha en esta tienda.
+ */
+async function accountContact(agenda: PublicAgenda) {
+  const noStore = { 'Cache-Control': 'no-store' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Iniciá sesión' }, { status: 401, headers: noStore })
+  const [{ data: customer }, { data: profile }] = await Promise.all([
+    agenda.admin.from('customers').select('name, phone').eq('organization_id', agenda.organization.id).eq('profile_id', user.id).maybeSingle(),
+    agenda.admin.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle(),
+  ])
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const ficha = customer as { name?: unknown; phone?: unknown } | null
+  const perfil = profile as { full_name?: unknown; phone?: unknown } | null
+  return NextResponse.json({
+    name: text(ficha?.name) || text(perfil?.full_name) || text(user.user_metadata?.full_name) || text(user.user_metadata?.name),
+    phone: text(ficha?.phone) || text(perfil?.phone) || text(user.user_metadata?.phone) || text(user.phone),
+  }, { headers: noStore })
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const agenda = await resolveAgenda(slug)
@@ -89,6 +137,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const serviceId = searchParams.get('service')
 
   if (searchParams.get('next') === '1') return NextResponse.json({ next: await nextFreeSlot(agenda) })
+  if (searchParams.get('me') === '1') return accountContact(agenda)
 
   if (date && serviceId) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !z.string().uuid().safeParse(serviceId).success) {
@@ -106,6 +155,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
+  const promotionsByService = await servicePromotions(agenda)
   return NextResponse.json({
     storeName: organization.name,
     timeZone: config.timeZone,
@@ -130,6 +180,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           const terms=resolveServiceTerms({price:service.price,durationMinutes:service.duration_minutes,bufferMinutes:service.buffer_minutes??0},rate?{price:rate.price,durationMinutes:rate.duration_minutes,bufferMinutes:rate.buffer_minutes}:null)
           return {professionalId:professional.id,price:service.hide_price?null:terms.price,duration:terms.durationMinutes}
         })}:{}),
+        // Promos que el local aplica al cobrar este servicio (la reserva no cobra).
+        promotions: promotionsByService[service.product_id] ?? [],
         // Quién lo hace: la reserva solo ofrece a esos profesionales.
         professionalIds: professionalsForService(config.professionals.filter(p => p.online_visible !== false), service.product_id).map((professional) => professional.id),
       })),
@@ -152,7 +204,56 @@ const bookingSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
   // Campo trampa: las personas no lo ven ni lo llenan; los bots sí.
   website: z.string().max(0).optional(),
+  /** «Reservar para mí» con la sesión iniciada: el turno va a la ficha de esa cuenta. */
+  for_self: z.boolean().optional(),
 })
+
+/**
+ * «Reservar para mí»: la cuenta se vincula como cliente de la tienda (o se
+ * reutiliza su ficha) y el turno queda en esa ficha, así aparece en «Mis
+ * turnos» del perfil aunque el teléfono no coincida. La sesión se lee en el
+ * servidor: el navegador solo dice «es para mí», nunca qué cliente es.
+ * Si algo falla, el turno ya está reservado y sigue enlazado por teléfono.
+ */
+async function linkBookingToAccount(
+  agenda: PublicAgenda,
+  appointmentId: string,
+  booking: { name: string; phone: string },
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const linked = await linkPublicCustomerAccount(agenda.admin, {
+      organizationId: agenda.organization.id,
+      profileId: user.id,
+      fullName: String(user.user_metadata?.full_name || user.user_metadata?.name || booking.name),
+      email: user.email,
+      // Solo el teléfono de la cuenta: con el del formulario, alguien podría
+      // escribir el de otra persona y quedarse con su ficha (la vinculación
+      // reutiliza una ficha sin cuenta con el mismo teléfono).
+      phone: String(user.user_metadata?.phone || user.phone || '').trim() || null,
+    })
+    const { error } = await agenda.admin
+      .from('appointments')
+      .update({ customer_id: linked.customerId })
+      .eq('id', appointmentId)
+      .eq('organization_id', agenda.organization.id)
+    if (error) throw error
+    // Si su propia ficha no tenía teléfono, queda el que escribió para el turno:
+    // la próxima vez «Reservar para mí» ya lo completa. Nunca pisa uno cargado.
+    const { error: phoneError } = await agenda.admin
+      .from('customers')
+      .update({ phone: booking.phone })
+      .eq('id', linked.customerId)
+      .eq('organization_id', agenda.organization.id)
+      .eq('profile_id', user.id)
+      .or('phone.is.null,phone.eq.')
+    if (phoneError) throw phoneError
+  } catch (error) {
+    logger.warn('No se pudo enlazar la reserva con la cuenta del cliente', { organizationId: agenda.organization.id, error: error instanceof Error ? error.message : String(error) })
+  }
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -180,6 +281,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }, { timeZone: config.timeZone, notifyEmail: config.settings.notify_email !== false })
       } catch { logger.error('No se pudo emitir el aviso de una reserva confirmada') }
     }
+    if (verified.data.for_self) await linkBookingToAccount(agenda, data.id, verified.data)
     return NextResponse.json({ token: data.public_token, status: data.status }, { status: data.idempotent ? 200 : 201, headers: { 'Cache-Control': 'no-store' } })
   }
   const parsed = bookingSchema.safeParse(raw)
@@ -222,6 +324,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!error?.message?.includes('APPOINTMENT_OVERLAP')) logger.error('No se pudo reservar el turno online', { error: error?.message })
     return NextResponse.json({ error: appointmentErrorMessage(error, 'No se pudo reservar. Probá de nuevo.') }, { status: 409 })
   }
+  if (parsed.data.for_self) await linkBookingToAccount(agenda, (data as { id: string }).id, parsed.data)
   // La tienda se entera: campanita de la Agenda y, si lo pidió, email.
   await notifyAppointmentEvent(admin, {
     organizationId: organization.id,

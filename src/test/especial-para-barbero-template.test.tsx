@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { CompanyInfoSchema } from '@/lib/validation/website-settings'
 import {
   STOREFRONT_STYLE_OPTIONS,
@@ -22,6 +23,7 @@ import type { WebsiteSettings } from '@/types/website-settings'
 
 const mockState = vi.hoisted(() => ({
   pathname: '/mitienda/inicio',
+  authUser: null as null | { id: string; email: string; profile?: { name: string } },
   searchParams: new URLSearchParams(),
   push: vi.fn(),
   refresh: vi.fn(),
@@ -125,7 +127,7 @@ vi.mock('@/hooks/usePublicCategories', () => ({
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({ user: null, signOut: vi.fn() }),
+  useAuth: () => ({ user: mockState.authUser, signOut: vi.fn() }),
 }))
 
 vi.mock('@/contexts/theme-context', () => ({
@@ -245,6 +247,7 @@ beforeEach(() => {
   mockState.addProduct.mockClear()
   mockState.products = sampleProducts(false)
   mockState.agenda = null
+  mockState.authUser = null
 })
 
 describe('Especial para barbero: registro, validación y planes', () => {
@@ -333,6 +336,56 @@ describe('EspecialBarberoHeader', () => {
     expect(megaBtn).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Clippers Inalámbricas')).toBeInTheDocument()
     expect(screen.getByText('Minorista & Mayorista')).toBeInTheDocument()
+  })
+})
+
+describe('EspecialBarberoHeader: volver al marketplace', () => {
+  it('en la tienda de una organización, también desde ofertas, lleva al marketplace', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    // Botón para computadora y franja para el celular.
+    expect(screen.getByRole('link', { name: 'Volver al marketplace' })).toHaveAttribute('href', '/marketplace')
+    expect(screen.getByRole('link', { name: 'Volver al Marketplace' })).toHaveAttribute('href', '/marketplace')
+  })
+
+  it('en el dominio propio de la tienda no lo muestra', () => {
+    mockState.pathname = '/ofertas'
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    expect(screen.queryByRole('link', { name: /volver al marketplace/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('EspecialBarberoHeader: reservas, ofertas y servicios', () => {
+  it('con agenda online muestra «Reservar turno» hacia /turnos', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    mockState.agenda = { currency: 'PYG', services: [{ id: 's1', name: 'Corte', duration: 30, price: 50000 }], professionals: [] }
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    expect(screen.getByRole('link', { name: 'Reservar turno' })).toHaveAttribute('href', '/mitienda/turnos')
+  })
+
+  it('el menú de perfil ofrece «Mis turnos» si la tienda toma reservas', async () => {
+    mockState.pathname = '/mitienda/inicio'
+    mockState.agenda = { currency: 'PYG', services: [{ id: 's1', name: 'Corte', duration: 30, price: 50000 }], professionals: [] }
+    mockState.authUser = { id: 'u1', email: 'cliente@test.com', profile: { name: 'Cliente' } }
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    await userEvent.click(screen.getByRole('button', { name: /Cliente|cliente@test.com/i }))
+    expect(await screen.findByRole('menuitem', { name: 'Mis turnos' })).toHaveAttribute('href', '/mitienda/perfil#turnos')
+  })
+
+  it('sin agenda online no ofrece reservar', () => {
+    mockState.agenda = null
+    renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} servicesModuleEnabled />)
+    expect(screen.queryByRole('link', { name: 'Reservar turno' })).not.toBeInTheDocument()
+  })
+
+  it('Ofertas va adelante en la tira, con su color, y se resalta en su página', () => {
+    mockState.pathname = '/mitienda/ofertas'
+    const { container } = renderWithStyle(<EspecialBarberoHeader settings={mockState.settings} />)
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal de la tienda' })
+    const links = Array.from(nav.querySelectorAll('a')).map((link) => link.textContent?.trim())
+    expect(links.slice(0, 2)).toEqual(['Inicio', 'Ofertas'])
+    const ofertas = container.querySelector('[data-nav-accent="ofertas"]')
+    expect(ofertas?.className).toContain('bg-amber-400')
   })
 })
 

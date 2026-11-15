@@ -45,6 +45,7 @@ import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { siteUrl } from '@/lib/site-url'
 import { resolveProductImageUrl } from '@/lib/images'
 import { OfferDetailModal, type OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
+import { ServicePromotionsSection } from '@/components/public/offers/ServicePromotionsSection'
 import type { PublicProduct } from '@/types/public'
 import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 
@@ -673,6 +674,9 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
           )}
         </div>
       </section>
+
+      {/* ── Promos de servicios: las mismas que muestra la reserva ── */}
+      <ServicePromotionsSection tenantSlug={tenantSlug} tenantPrefix={tenantPrefix} />
 
       {/* ── Marquesina Opcional de Marcas en Ofertas ── */}
       {Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnOffers) && (

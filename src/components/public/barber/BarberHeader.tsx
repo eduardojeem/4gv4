@@ -99,7 +99,6 @@ export function BarberHeader({ settings: initialSettings = null, catalogEnabled 
 
   const bookingEnabled = effectiveSettings?.booking_section?.enabled !== false
   const dedicatedBookingHref = `${prefix}/reservas`
-  const bookingHref = dedicatedBookingHref
 
   // Datos reales de la organización
   const name = companyInfo?.name?.trim() || 'Barbería'
@@ -544,9 +543,10 @@ export function BarberHeader({ settings: initialSettings = null, catalogEnabled 
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href={bookingHref || `${prefix}/turnos`} className="flex items-center gap-2.5 cursor-pointer font-medium py-2">
+                      {/* Lleva a la lista de sus turnos (antes abría la página para reservar uno nuevo). */}
+                      <Link href={`${prefix}/perfil#turnos`} className="flex items-center gap-2.5 cursor-pointer font-medium py-2">
                         <CalendarCheck2 className="h-4 w-4 text-primary" />
-                        <span>Mis Turnos & Reservas</span>
+                        <span>Mis turnos</span>
                       </Link>
                     </DropdownMenuItem>
                     {catalogEnabled && (

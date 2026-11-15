@@ -106,11 +106,83 @@ describe('booking for the signed-in account',()=>{
   account.user={id:'u1',email:'ana@example.test',profile:{name:'Ana Pérez',phone:'0981123456'}}
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional'}))))
   render(<PublicBooking slug="store" initialServiceId="service"/> )
-  fireEvent.click(await screen.findByRole('button',{name:'Reservar para mí'}))
   fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
   fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  // La elección está junto a los datos y no completa nada hasta pedirlo.
+  expect(screen.getByLabelText('Nombre')).toHaveValue('')
+  fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
+  expect(screen.getByText(/Mis turnos/)).toBeInTheDocument()
   expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
   expect(screen.getByLabelText('WhatsApp')).toHaveValue('0981123456')
+ })
+})
+
+describe('account name from sign-up data',()=>{
+ it('completes name and phone from the account metadata when the profile lacks them',async()=>{
+  account.user={id:'u1',email:'ana@example.test',profile:{name:'',phone:''},user_metadata:{full_name:'Ana Registro',phone:'0991222333'}} as never
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional'}))))
+  render(<PublicBooking slug="store" initialServiceId="service"/> )
+  fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+  fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
+  expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Registro')
+  expect(screen.getByLabelText('WhatsApp')).toHaveValue('0991222333')
+ })
+})
+
+describe('account phone from the store customer record',()=>{
+ it('fills the missing phone from the customer record of this store',async()=>{
+  account.user={id:'u1',email:'ana@example.test',profile:{name:'Ana Pérez',phone:''}}
+  const api=vi.fn(async(input:RequestInfo|URL)=>{
+   const url=String(input)
+   if(url.includes('me=1')) return new Response(JSON.stringify({name:'Ana Pérez',phone:'0982 333 444'}))
+   return new Response(JSON.stringify(url.includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional'}))
+  })
+  vi.stubGlobal('fetch',api)
+  render(<PublicBooking slug="store" initialServiceId="service"/> )
+  fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+  fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
+  await waitFor(()=>expect(screen.getByLabelText('WhatsApp')).toHaveValue('0982 333 444'))
+  expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
+  expect(screen.queryByText(/no tiene un WhatsApp cargado/)).not.toBeInTheDocument()
+ })
+})
+
+describe('professional cards',()=>{
+ it('shows photo, specialty or initials so the customer recognizes the barber',async()=>{
+  const services=[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof','prof2']}]
+  const pros=[{id:'prof',name:'Ana Gómez',color:'#000000',photoUrl:'https://cdn.test/ana.webp',specialty:'Fade y barba'},{id:'prof2',name:'Beto Ruiz',color:'#123456'}]
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({...info,professionalBookingAvailable:false,professionalSelection:'optional',services,professionals:pros}))))
+  const { container }=render(<PublicBooking slug="store" initialServiceId="service"/> )
+  const ana=await screen.findByRole('button',{name:'Ana Gómez'})
+  expect(ana.querySelector('img')).toHaveAttribute('src','https://cdn.test/ana.webp')
+  expect(ana).toHaveTextContent('Fade y barba')
+  expect(screen.getByRole('button',{name:'Beto Ruiz'})).toHaveTextContent('BR')
+  expect(screen.getByRole('button',{name:'Cualquiera'})).toHaveTextContent('El primero que esté libre')
+  expect(container.querySelectorAll('img')).toHaveLength(1)
+ })
+})
+
+describe('chosen professional message',()=>{
+ const services=[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof','prof2']}]
+ const pros=[{id:'prof',name:'Ana',color:'#000000'},{id:'prof2',name:'Beto',color:'#111111'}]
+ const api=()=>vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00',professionalIds:['prof','prof2']}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional',services,professionals:pros})))
+ it('with a chosen barber it does not say anyone may attend',async()=>{
+  vi.stubGlobal('fetch',api())
+  render(<PublicBooking slug="store" initialServiceId="service"/> )
+  fireEvent.click(await screen.findByRole('button',{name:'Ana'}))
+  fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+  fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  expect(screen.queryByText(/Disponibles para este horario/)).not.toBeInTheDocument()
+  expect(screen.getByText('Te atiende Ana.')).toBeInTheDocument()
+ })
+ it('with «Cualquiera» it lists who may attend',async()=>{
+  vi.stubGlobal('fetch',api())
+  render(<PublicBooking slug="store" initialServiceId="service"/> )
+  fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+  fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  expect(screen.getByText(/Disponibles para este horario: Ana, Beto/)).toBeInTheDocument()
  })
 })
 
@@ -119,10 +191,11 @@ describe('account contact safeguards',()=>{
   account.user={id:'u1',email:'ana@example.test',profile:{name:'Ana Pérez',phone:''}}
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('?')?{slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}:{...info,professionalBookingAvailable:false,professionalSelection:'optional'}))))
   const view=render(<PublicBooking slug="store" initialServiceId="service"/> )
-  fireEvent.click(await screen.findByRole('button',{name:'Reservar para mí'}))
-  expect(screen.getByText(/Completá los campos faltantes/)).toBeInTheDocument()
   fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
   fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+  fireEvent.click(screen.getByRole('button',{name:'Reservar para mí'}))
+  expect(screen.getByText(/no tiene un WhatsApp cargado/)).toBeInTheDocument()
+  expect(screen.getByText('La tienda te escribe a este número para confirmar el turno.')).toBeInTheDocument()
   expect(screen.getByLabelText('Nombre')).toHaveValue('Ana Pérez')
   expect(screen.getByLabelText('WhatsApp')).toHaveValue('')
   expect(screen.getByRole('button',{name:'Pedir el turno'})).toBeDisabled()

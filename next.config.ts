@@ -1,3 +1,4 @@
+import { PROMOTIONAL_TEMPLATE_ALIASES } from './src/lib/website/promotional-images'
 import type { NextConfig } from "next";
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -295,6 +296,10 @@ const nextConfig: NextConfig = {
         : []),
     ]
   },
+  async redirects() {
+    return Object.entries(PROMOTIONAL_TEMPLATE_ALIASES).map(([source, destination]) => ({ source, destination, permanent: false }))
+  },
+
   async rewrites() {
     return [
       {

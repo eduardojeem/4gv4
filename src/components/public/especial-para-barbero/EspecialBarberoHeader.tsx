@@ -4,8 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
+  ArrowLeft,
   ArrowRight,
   Briefcase,
+  CalendarCheck2,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -21,6 +23,7 @@ import {
   Search,
   Shield,
   Sparkles,
+  Store,
   Tag,
   Truck,
   User,
@@ -54,6 +57,7 @@ import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-c
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/contexts/auth-context'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { canOpenDashboard, loginHrefWithReturn } from '@/lib/auth/dashboard-access'
@@ -185,6 +189,11 @@ export function EspecialBarberoHeader({
   const repairsEnabled =
     repairsModuleEnabled &&
     isPublicRepairsAvailable(companyInfo, effectiveSettings?.services)
+  // «Reservar turno» solo si la tienda toma turnos online (la agenda se conoce
+  // en el navegador: hasta hidratar se dibuja lo mismo que en el servidor).
+  const { agenda } = usePublicAgenda(servicesModuleEnabled, slug)
+  const bookingHref = hydrated && agenda ? `${prefix}/turnos` : null
+  const onBooking = pathname.startsWith(`${prefix}/turnos`)
 
   const canAccessDashboard = canOpenDashboard(user)
   const customerLoginHref = slug
@@ -487,6 +496,35 @@ export function EspecialBarberoHeader({
 
           {/* Derecha: Cuenta (Minorista / Mayorista) + Tema + Carrito */}
           <div className="flex items-center gap-2 shrink-0">
+            {bookingHref && (
+              <Link
+                href={bookingHref}
+                aria-label="Reservar turno"
+                aria-current={onBooking ? 'page' : undefined}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wide text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-95"
+              >
+                <CalendarCheck2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Reservar turno</span>
+                <span className="sm:hidden">Reservar</span>
+              </Link>
+            )}
+            {slug && (
+              <Link
+                href="/marketplace"
+                aria-label="Volver al marketplace"
+                className={cn(
+                  'hidden lg:inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors',
+                  isDarkChrome
+                    ? 'border-white/15 bg-white/5 text-white hover:border-primary hover:text-primary'
+                    : isAccent
+                    ? 'border-white/25 bg-white/15 text-primary-foreground hover:bg-white/25'
+                    : 'border-border bg-background text-foreground hover:border-primary hover:text-primary'
+                )}
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>Marketplace</span>
+              </Link>
+            )}
             {hydrated && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -528,6 +566,14 @@ export function EspecialBarberoHeader({
                       Mi Perfil
                     </Link>
                   </DropdownMenuItem>
+                  {bookingHref && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`${prefix}/perfil#turnos`} className="flex items-center gap-2">
+                        <CalendarCheck2 className="h-4 w-4" />
+                        Mis turnos
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <Link href={`${prefix}/perfil?tab=orders`} className="flex items-center gap-2">
                       <Package className="h-4 w-4" />
@@ -666,6 +712,40 @@ export function EspecialBarberoHeader({
             >
               Inicio
             </Link>
+
+            {/* Ofertas y Servicios van adelante y con color propio: con muchas
+                categorías quedaban al final de la tira, cortados. */}
+            {offersEnabled && (
+              <Link
+                href={`${prefix}/ofertas`}
+                data-nav-accent="ofertas"
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 transition-colors',
+                  pathname.startsWith(`${prefix}/ofertas`)
+                    ? 'bg-amber-400 text-zinc-950 ring-amber-400'
+                    : 'bg-amber-400/10 text-amber-300 ring-amber-400/40 hover:bg-amber-400/20 hover:text-amber-200'
+                )}
+              >
+                <Tag className="h-3 w-3" />
+                <span>Ofertas</span>
+              </Link>
+            )}
+
+            {servicesEnabled && (
+              <Link
+                href={`${prefix}/servicios`}
+                data-nav-accent="servicios"
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 transition-colors',
+                  pathname.startsWith(`${prefix}/servicios`)
+                    ? 'bg-sky-400 text-zinc-950 ring-sky-400'
+                    : 'bg-sky-400/10 text-sky-300 ring-sky-400/40 hover:bg-sky-400/20 hover:text-sky-200'
+                )}
+              >
+                <Briefcase className="h-3 w-3" />
+                <span>Servicios</span>
+              </Link>
+            )}
             <Link
               href={catalogHref}
               className={cn(
@@ -695,31 +775,6 @@ export function EspecialBarberoHeader({
                 </Link>
               )
             })}
-
-            {offersEnabled && (
-              <Link
-                href={`${prefix}/ofertas`}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold transition-colors',
-                  pathname.startsWith(`${prefix}/ofertas`)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-primary hover:bg-primary/15'
-                )}
-              >
-                <Tag className="h-3 w-3" />
-                <span>Ofertas</span>
-              </Link>
-            )}
-
-            {servicesEnabled && (
-              <Link
-                href={`${prefix}/servicios`}
-                className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/10 hover:text-white"
-              >
-                <Briefcase className="h-3 w-3" />
-                <span>Servicios</span>
-              </Link>
-            )}
 
             {repairsEnabled && (
               <Link
@@ -866,11 +921,20 @@ export function EspecialBarberoHeader({
                 >
                   Catálogo
                 </Link>
+                {bookingHref && (
+                  <Link
+                    href={bookingHref}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="col-span-full rounded-xl bg-primary px-3 py-2.5 text-center text-xs font-black uppercase tracking-wide text-primary-foreground"
+                  >
+                    Reservar turno
+                  </Link>
+                )}
                 {offersEnabled && (
                   <Link
                     href={`${prefix}/ofertas`}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2.5 text-xs font-bold text-primary"
+                    className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2.5 text-xs font-bold text-amber-300"
                   >
                     Ofertas
                   </Link>
@@ -886,7 +950,7 @@ export function EspecialBarberoHeader({
                   <Link
                     href={`${prefix}/servicios`}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-xl border border-white/10 bg-[#16161e] px-3 py-2.5 text-xs font-bold text-zinc-200"
+                    className="rounded-xl border border-sky-400/40 bg-sky-400/10 px-3 py-2.5 text-xs font-bold text-sky-300"
                   >
                     Servicios
                   </Link>
@@ -1030,6 +1094,21 @@ export function EspecialBarberoHeader({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* En el celular, la vuelta al marketplace va en una franja propia, como en las demás plantillas. */}
+      {slug && (
+        <div className="border-t border-primary-foreground/15 bg-primary text-primary-foreground lg:hidden">
+          <Link
+            href="/marketplace"
+            aria-label="Volver al Marketplace"
+            className="container mx-auto flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-sm font-bold transition-colors hover:bg-primary-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/70"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Volver al Marketplace</span>
+          </Link>
+        </div>
+      )}
     </header>
   )
 }

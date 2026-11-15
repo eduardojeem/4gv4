@@ -16,6 +16,8 @@ export const quoteReservationSchema = z.object({
   quote_id: z.string().uuid(), idempotency_key: z.string().uuid(),
   name: z.string().trim().min(2).max(120), phone: z.string().trim().min(6).max(40),
   notes: z.string().trim().max(500).nullable().optional(), website: z.string().max(0).optional(),
+  /** «Reservar para mí» con la sesión iniciada: el turno va a la ficha de esa cuenta. */
+  for_self: z.boolean().optional(),
 })
 export const BOOKING_ERRORS: Record<string, string> = {
   HOME_TRAVEL_OUTSIDE_HOURS: 'El servicio y los traslados deben quedar dentro del horario de atención.',

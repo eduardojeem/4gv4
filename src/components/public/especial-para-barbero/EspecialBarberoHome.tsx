@@ -262,7 +262,9 @@ export function EspecialBarberoHome({
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
 
-  const productList = useMemo(() => (Array.isArray(products) ? products : []), [products])
+  // Misma regla que las categorías: la caché de SWR puede tener los productos
+  // antes de hidratar este bloque; hasta entonces se dibuja lo del servidor.
+  const productList = useMemo(() => (hydrated && Array.isArray(products) ? products : []), [hydrated, products])
 
   // El backend solo envía wholesale_price cuando la sesión tiene acceso mayorista habilitado
   const isWholesaleAccount = useMemo(
@@ -801,14 +803,14 @@ export function EspecialBarberoHome({
               ctaHref={`${prefix}/productos`}
             />
 
-            {productsError ? (
+            {hydrated && productsError ? (
               <div role="status" className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
                 No pudimos cargar el catálogo en este momento.{' '}
                 <Link href={`${prefix}/productos`} className="font-bold text-primary underline">
                   Ir a productos
                 </Link>
               </div>
-            ) : isLoadingProducts ? (
+            ) : !hydrated || isLoadingProducts ? (
               <div role="status" className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
                 {Array.from({ length: 4 }, (_, i) => (
                   <div

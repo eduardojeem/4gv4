@@ -1,6 +1,6 @@
 'use client'
 
-import { AppImage } from '@/components/ui/app-image'
+import { PromotionalImage as AppImage } from '@/components/public/PromotionalImage'
 import Link from 'next/link'
 
 import { useEffect, useRef, useState } from 'react'
@@ -1298,7 +1298,7 @@ export function PromotionalCarouselEditor({
               <div key={slide.id} className="grid gap-4 p-4 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
                 <div className="relative aspect-[16/7] overflow-hidden rounded-lg bg-muted">
                   { }
-                  <AppImage src={slide.imageUrl} alt={slide.imageAlt} className="h-full w-full object-cover" />
+                  <AppImage src={slide.imageUrl} alt={slide.imageAlt} compactFailure fill sizes="(max-width: 640px) 100vw, 160px" className="h-full w-full object-cover" />
                   {!slide.active && <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold text-white">Oculta</span>}
                 </div>
                 <div className="min-w-0">
@@ -1997,7 +1997,7 @@ export function PromotionalCarouselEditor({
                         { }
                         <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
                           {example.slide.imageUrl ? (
-                            <AppImage src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                            <AppImage src={example.slide.imageUrl} compactFailure alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
                           ) : (
                             // Sin foto propia del rubro: completa los textos y la imagen la sube el dueño.
                             <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/15 to-muted text-[11px] font-semibold text-muted-foreground">

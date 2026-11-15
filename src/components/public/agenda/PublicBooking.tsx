@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarCheck2, CheckCircle2, Clock, Loader2 } from 'lucide-react'
+import { CalendarCheck2, CheckCircle2, Clock, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils'
 import { addDays, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { useBookingQuote } from './use-booking-quote'
 import { BookingQuoteSummary } from './BookingQuoteSummary'
+import { ServicePromotionBadge, ServicePromotionNote } from './ServicePromotionNote'
+import type { ServicePromotion } from '@/lib/public/service-promotions'
 
 type DisplaySlot = { startsAt: string; time: string; professionalIds?: string[] }
 
@@ -28,16 +30,37 @@ type Info = {
   message: string | null
   openDays: number[]
   /** professionalIds: quién hace el servicio (vacío si no hay profesionales). */
-  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}> }>
-  professionals: Array<{ id: string; name: string; color: string }>
+  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}>; promotions?: ServicePromotion[] }>
+  professionals: Array<{ id: string; name: string; color: string; photoUrl?: string | null; specialty?: string | null }>
 }
 
 const ANY = 'any'
 
-function Step({ number, title, children, done }: { number: number; title: string; children: React.ReactNode; done?: boolean }) {
+/** Foto del profesional o, sin foto, sus iniciales sobre su color. */
+function ProfessionalAvatar({ person }: { person: { name: string; color: string; photoUrl?: string | null } }) {
+  if (person.photoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={person.photoUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-background" />
+  }
+  const initials = person.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '').join('')
   return (
-    <section className="space-y-3 rounded-2xl border bg-card p-4 sm:p-5">
-      <h2 className="flex items-center gap-2 text-base font-semibold">
+    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ring-2 ring-background" style={{ backgroundColor: person.color || 'var(--primary)' }}>
+      {initials || '?'}
+    </span>
+  )
+}
+
+function Step({ number, title, children, done, highlight }: { number: number; title: string; children: React.ReactNode; done?: boolean; highlight?: boolean }) {
+  return (
+    <section
+      data-step-highlight={highlight ? 'true' : undefined}
+      className={cn(
+        'space-y-3 rounded-2xl border p-4 sm:p-5',
+        // El último paso (datos y confirmación) se distingue del resto con el color de la tienda.
+        highlight ? 'border-2 border-primary bg-primary/10 shadow-lg shadow-primary/10 dark:bg-primary/15' : 'bg-card'
+      )}
+    >
+      <h2 className={cn('flex items-center gap-2 font-semibold', highlight ? 'text-lg text-primary' : 'text-base')}>
         <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', done ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground')}>{number}</span>
         {title}
       </h2>
@@ -64,8 +87,11 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
   const [website, setWebsite] = useState('')
-  const accountName = user?.profile?.name?.trim() || ''
-  const accountPhone = user?.profile?.phone?.trim() || user?.phone?.trim() || ''
+  // El perfil puede no tener todo: se completa con lo que guardó al registrarse.
+  const metadata = (user?.user_metadata ?? {}) as { full_name?: unknown; name?: unknown; phone?: unknown }
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const accountName = text(user?.profile?.name) || text(metadata.full_name) || text(metadata.name)
+  const accountPhone = text(user?.profile?.phone) || text(metadata.phone) || text(user?.phone)
   useEffect(() => {
     if (authLoading || !accountContactOwner.current || accountContactOwner.current === user?.id) return
     accountContactOwner.current = null
@@ -79,6 +105,17 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
     setPhone(accountPhone)
     accountContactOwner.current = user.id
     setUsingAccount(true)
+    if (accountName && accountPhone) return
+    // Lo que falta puede estar en su ficha de cliente de esta tienda.
+    const owner = user.id
+    fetch(`/api/public/agenda/${encodeURIComponent(slug)}?me=1`, { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((contact: { name?: string; phone?: string } | null) => {
+        if (!contact || accountContactOwner.current !== owner) return
+        if (contact.name) setName((current) => current || contact.name || '')
+        if (contact.phone) setPhone((current) => current || contact.phone || '')
+      })
+      .catch(() => {})
   }
 
   const sendLock = useRef(false)
@@ -155,6 +192,8 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
           phone,
           notes: notes || null,
           website,
+          // El servidor lee la sesión; acá solo se dice que el turno es para la cuenta.
+          ...(usingAccount && user ? { for_self: true } : {}),
         }),
       })
       const body = await response.json().catch(() => ({}))
@@ -199,11 +238,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
     <div className="space-y-4">
       {error && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
       <fieldset disabled={sending} className="min-w-0 space-y-4 border-0 p-0">
-      {!authLoading && user && <section aria-label="Reservar con mi cuenta" className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-        <div><p className="font-semibold">{usingAccount ? 'Estás reservando para vos' : '¿Querés reservar para vos?'}</p><p className="text-sm text-muted-foreground">Sesión iniciada como {accountName || user.email || 'usuario'}. Podés usar los datos de tu cuenta y revisarlos antes de confirmar.</p></div>
-        <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={useAccountContact}>{usingAccount ? 'Volver a usar mis datos' : 'Reservar para mí'}</Button>{usingAccount && <Button type="button" variant="ghost" onClick={() => { accountContactOwner.current=null; setUsingAccount(false); setName(''); setPhone('') }}>Reservar para otra persona</Button>}</div>
-        {usingAccount && (!accountName || !accountPhone) && <p role="status" className="text-sm text-muted-foreground">Tu cuenta no tiene todos los datos de contacto. Completá los campos faltantes en el paso final.</p>}
-      </section>}
+
       {info.message && <p className="rounded-xl bg-primary/5 p-3 text-sm">{info.message}</p>}
 
       <Step number={1} title="¿Qué servicio?" done={Boolean(serviceId)}>
@@ -222,6 +257,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
                   <Clock className="h-3 w-3" /> {item.duration} min
                   {item.price === null ? ' · Precio a consultar' : item.price === 0 ? ' · Sin costo (Asesoramiento gratuito)' : <> · {formatCurrency(item.price, { currency: info.currency })}{info.professionalBookingAvailable && ' (tarifa base)'}</>}
                 </p>
+                {item.promotions?.[0] && <ServicePromotionBadge promotion={item.promotions[0]} currency={info.currency} className="mt-1.5" />}
               </button>
             ))}
           </div>
@@ -232,19 +268,30 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
         <Step number={2} title="¿Con quién?" done={!needsProfessional}>
             {serviceProfessionals.length===0&&<p role="alert">No hay profesionales disponibles para este servicio. Consultá con la tienda.</p>}
           <p className="text-xs text-muted-foreground">Solo se ofrecen horarios donde el profesional esté libre durante todo el servicio y su tiempo de preparación.</p>
-          <div className="flex flex-wrap gap-2">
-            {[...(mode==='required'?[]:[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }]), ...serviceProfessionals].map((professional) => (
-              <button
-                key={professional.id}
-                type="button"
-                aria-pressed={professionalId === professional.id}
-                onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
-                className={cn('flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-base', professionalId === professional.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: professional.color }} /> {professional.name}
-                  {service?.professionalTerms?.filter(row=>row.professionalId===professional.id).map(row=><span key={row.professionalId} className="text-sm">· {row.duration} min · {row.price===null?'Precio a consultar':row.price===0?'Sin costo':formatCurrency(row.price,{currency:info.currency})}</span>)}
-              </button>
-            ))}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[...(mode==='required'?[]:[{ id: ANY, name: 'Cualquiera', color: '#94a3b8', photoUrl: null as string | null, specialty: 'El primero que esté libre' as string | null }]), ...serviceProfessionals].map((professional) => {
+              const terms = service?.professionalTerms?.find(row=>row.professionalId===professional.id)
+              const selected = professionalId === professional.id
+              return (
+                <button
+                  key={professional.id}
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={professional.name}
+                  onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
+                  className={cn('flex min-h-16 items-center gap-3 rounded-xl border p-2.5 text-left transition-colors', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
+                >
+                  {professional.id === ANY
+                    ? <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><Users className="h-5 w-5" /></span>
+                    : <ProfessionalAvatar person={professional} />}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{professional.name}</span>
+                    {professional.specialty && <span className="block truncate text-xs text-muted-foreground">{professional.specialty}</span>}
+                    {terms && <span className="block text-xs text-muted-foreground">{terms.duration} min · {terms.price===null?'Precio a consultar':terms.price===0?'Sin costo':formatCurrency(terms.price,{currency:info.currency})}</span>}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </Step>
       )}
@@ -294,25 +341,43 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       )}
 
       {startsAt && service && (
-        <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos">
-          {selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
+        <Step number={showProfessionals ? 4 : 3} title="Revisá tu reserva y completá tus datos" highlight>
+          {service.promotions?.[0] && <ServicePromotionNote promotion={service.promotions[0]} price={quoted.quote?.price ?? service.price} currency={info.currency} />}
+          {/* Con «Cualquiera» se avisa quiénes pueden atender; si eligió a alguien, ya está decidido. */}
+          {professionalId === ANY && selectedSlotProfessionals.length>0 && <p className="text-sm text-muted-foreground">Disponibles para este horario: {selectedSlotProfessionals.join(', ')}. El profesional asignado se confirma en el resumen.</p>}
+          {professionalId !== ANY && selectedProfessional && !info.professionalBookingAvailable && <p className="text-sm text-muted-foreground">Te atiende {selectedProfessional.name}.</p>}
           {info.professionalBookingAvailable && (quoted.loading ? <p role="status">Confirmando tarifa y disponibilidad…</p> : quoted.quote ?
             <BookingQuoteSummary serviceName={service.name} timeZone={info.timeZone} quote={quoted.quote} currency={info.currency} accepted={quoted.accepted} onAccept={quoted.accept} expired={quoted.expired} /> : <p role="alert">{quoted.error}</p>)}
           {quoted.unavailable && <div className="space-y-2 rounded-xl border border-amber-300 p-3 text-sm"><p>No hay disponibilidad para esta selección. El profesional puede tener otro turno o una pausa. Elegí otro horario o cambiá de profesional. Tus datos se conservan.</p><Button variant="outline" onClick={() => { setStartsAt(null); setSlots(null); setRefresh(value=>value+1) }}>Ver horarios disponibles</Button></div>}
           {info.professionalBookingAvailable && !quoted.unavailable && (quoted.error || quoted.expired) && <Button variant="outline" onClick={()=>setRefresh(value=>value+1)}>Actualizar cotización</Button>}
+          {/* Para quién es el turno: al lado de los datos que completa. */}
+          {!authLoading && user && <section aria-label="Reservar con mi cuenta" className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">¿Para quién es el turno?</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant={usingAccount ? 'default' : 'outline'} aria-pressed={usingAccount} onClick={useAccountContact}>Reservar para mí</Button>
+              <Button type="button" size="sm" variant={usingAccount ? 'outline' : 'ghost'} aria-pressed={!usingAccount} onClick={() => { accountContactOwner.current=null; setUsingAccount(false); setName(''); setPhone('') }}>Para otra persona</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{usingAccount
+              ? <>Usamos los datos de tu cuenta ({accountName || user.email || 'usuario'}). Este turno va a quedar en <strong>Mis turnos</strong> de tu perfil.</>
+              : <>Sesión iniciada como {accountName || user.email || 'usuario'}. Si el turno es para vos, completamos tus datos.</>}</p>
+            {usingAccount && (!name.trim() || !phone.trim()) && <p role="status" className="text-xs font-medium text-amber-700 dark:text-amber-300">{!phone.trim() ? 'Tu cuenta no tiene un WhatsApp cargado. Escribilo abajo una vez: queda guardado para tus próximas reservas.' : 'Completá tu nombre abajo.'}</p>}
+          </section>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="booking-name">Nombre</Label>
-              <Input id="booking-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
+              <Input id="booking-name" className="bg-background" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="booking-phone">WhatsApp</Label>
-              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="booking-phone-help" aria-invalid={usingAccount && !phone.trim() ? true : undefined} className={cn('bg-background', usingAccount && !phone.trim() && 'border-amber-500 ring-1 ring-amber-500/40')} />
+              <p id="booking-phone-help" className="text-xs text-muted-foreground">
+                {info.requireConfirmation ? 'La tienda te escribe a este número para confirmar el turno.' : 'La tienda te avisa a este número si hay algún cambio en tu turno.'}
+              </p>
             </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="booking-notes">Detalles o motivo de la visita (opcional)</Label>
-            <Textarea id="booking-notes" rows={2} placeholder="Ej: el estilo de corte que buscás o alguna indicación para tu visita." value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Textarea id="booking-notes" className="bg-background" rows={2} placeholder="Ej: el estilo de corte que buscás o alguna indicación para tu visita." value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
           {/* Trampa para bots: invisible para las personas. */}
           <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" value={website} onChange={(event) => setWebsite(event.target.value)} />
