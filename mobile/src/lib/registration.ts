@@ -9,6 +9,7 @@ import { SITE_URL } from './marketplace';
 import { captchaEnvironmentError } from './customer-registration-model';
 import { parseCaptchaReturn, parseRegistrationReturn, registerCtaLabel, registrationUrl, type ownCompanyPayload, type registerPayload } from './registration-model';
 import { supabase } from './supabase';
+import { refreshMarketplaceAccount } from './marketplace-account';
 
 /**
  * Abre el registro de la web y vuelve a la app al terminar: la web redirige a
@@ -119,6 +120,7 @@ export async function createOwnCompany(payload: ReturnType<typeof ownCompanyPayl
     body: JSON.stringify(payload),
   });
   await supabase.auth.refreshSession().catch(() => undefined);
+  refreshMarketplaceAccount();
   if (!res.data?.organization) throw new Error('No pudimos confirmar el alta del comercio. Revisá tu panel en unos segundos.');
   return res.data;
 }
