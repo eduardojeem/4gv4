@@ -36,6 +36,18 @@ export async function GET(request: NextRequest) {
 
   const next = sanitizeRedirect(requestUrl.searchParams.get('next'), '/dashboard')
 
+  // 0) Google (u otro proveedor) volvió con error: la persona canceló o el
+  // proveedor falló. Sin esto caía al flujo implícito y terminaba en una
+  // página en blanco de /auth/confirm.
+  const providerError = requestUrl.searchParams.get('error')
+  if (!code && providerError) {
+    const back = new URL('/login', request.url)
+    back.searchParams.set('error', providerError === 'access_denied' ? 'oauth_cancelled' : 'oauth_error')
+    if (next !== '/dashboard') back.searchParams.set('redirect', next)
+    console.warn('[auth/callback] provider returned error', { error: providerError })
+    return NextResponse.redirect(back)
+  }
+
   const supabase = await createClient()
 
   // 1) PKCE flow (resetPasswordForEmail / signUp desde el navegador) → ?code=

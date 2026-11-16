@@ -31,6 +31,7 @@ import { createClient } from '@/lib/supabase/client'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { isValidEmail } from '@/lib/auth/password-validation'
 import { describeAuthError } from '@/lib/auth/auth-error-messages'
 import { ALL_STORE_CUSTOMER_FEATURES, customerAccessCopy, type CustomerAccessItemKey, type StoreCustomerFeatures } from '@/lib/public/customer-access-copy'
@@ -353,6 +354,13 @@ export default function TenantCustomerLoginClient({ features = ALL_STORE_CUSTOME
             <div className="flex items-center gap-3 rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground animate-pulse">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               Verificando tu sesión en esta tienda...
+            </div>
+          )}
+          {!checkingSession && !canLinkCustomer && !isStaffMember && (
+            <div className="space-y-4">
+              {/* Vuelve a esta misma página: la validación de la tienda corre al cargar y vincula la cuenta. */}
+              <GoogleSignInButton next={`/${organizationSlug}/cliente/login?next=${encodeURIComponent(nextHref)}`} disabled={loading} />
+              <AuthMethodDivider />
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>

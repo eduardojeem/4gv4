@@ -7,6 +7,7 @@ import { AppState, Platform } from 'react-native';
 
 import { apiFetch } from './api';
 import { supabase } from './supabase';
+import { startGoogleSignIn } from './google-sign-in';
 import { describeMfaError, isSessionMfaPending } from './mfa-model';
 import { unregisterDeviceFromPush } from './push-notifications';
 import {
@@ -28,6 +29,8 @@ type SessionContextValue = {
   verifyMfa: (code: string) => Promise<string | null>;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
+  /** Entra o crea la cuenta con Google. Devuelve el error, 'cancelled' o null si entró. */
+  signInWithGoogle: () => Promise<string | 'cancelled' | null>;
   signOut: () => Promise<void>;
   /** Hay sesión guardada pero falta Face ID / huella para mostrarla. */
   locked: boolean;
@@ -141,6 +144,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   };
 
+  // Google no pasa por el servidor: no hay captcha en OAuth. Los tokens se
+  // guardan igual que con contraseña y el 2FA, si está activo, sigue después.
+  const signInWithGoogle = async () => {
+    const result = await startGoogleSignIn();
+    if (result.status === 'cancelled') return 'cancelled' as const;
+    if (result.status === 'error') return result.message;
+    const { error } = await supabase.auth.setSession(result.tokens);
+    return error ? 'No se pudo guardar la sesión en el teléfono. Probá de nuevo.' : null;
+  };
+
   const verifyMfa = useCallback(async (code: string) => {
     try {
       const { data, error } = await supabase.auth.mfa.listFactors();
@@ -177,7 +190,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const visibleSession = mfaPending ? null : session;
 
   return (
-    <SessionContext.Provider value={{ session: visibleSession, mfaPending, verifyMfa, isLoading, signIn, signOut, locked, unlock, biometric, setBiometricEnabled }}>
+    <SessionContext.Provider value={{ session: visibleSession, mfaPending, verifyMfa, isLoading, signIn, signInWithGoogle, signOut, locked, unlock, biometric, setBiometricEnabled }}>
       {children}
     </SessionContext.Provider>
   );

@@ -7,12 +7,14 @@ import { customerIssues, customerPayload, type CustomerForm } from '@/lib/custom
 import { palette } from '@/lib/palette';
 import { requestCaptchaToken } from '@/lib/registration';
 import { useSession } from '@/lib/session';
+import { GoogleSignInButton } from '@/components/google-sign-in-button';
 export default function CustomerRegistration() {
   const { signIn } = useSession();
   const [form,setForm]=useState<CustomerForm>({fullName:'',email:'',password:'',confirmPassword:''});
   const [busy,setBusy]=useState(false);
   const [submitted,setSubmitted]=useState(false);
   const [showPassword,setShowPassword]=useState(false);
+  const [googleError,setGoogleError]=useState<string|null>(null);
   const pending=useRef(false);
   const issues=submitted ? customerIssues(form) : {};
   const set=(key:keyof CustomerForm,value:string)=>setForm(current=>({...current,[key]:value}));
@@ -37,6 +39,9 @@ export default function CustomerRegistration() {
   };
   return <WebsiteScreen title="Tu cuenta personal" subtitle="Comprá y gestioná tus pedidos" saving={busy} footer={<Pressable accessibilityRole="button" accessibilityState={{disabled:busy,busy}} disabled={busy} onPress={()=>void submit()} style={[websiteStyles.primaryButton,{opacity:busy?0.6:1}]}>{busy?<ActivityIndicator color="#fff"/>:null}<Text style={websiteStyles.primaryText}>{busy?'Creando tu cuenta…':'Crear mi cuenta'}</Text></Pressable>}>
     <Notice text="No necesitás un comercio ni un plan. Esta cuenta no habilita herramientas de administración." />
+    <GoogleSignInButton label="Registrarme con Google" disabled={busy} onError={setGoogleError} onDone={()=>router.replace('/' as never)}/>
+    {googleError ? <Text accessibilityRole="alert" style={{color:palette.danger,fontWeight:'600'}}>{googleError}</Text> : null}
+    <Text style={{textAlign:'center',color:'#64748B',fontWeight:'600'}}>o con tu correo</Text>
     <Section title="Tus datos" icon="person-outline">
       <Field label="Nombre y apellido" value={form.fullName} onChangeText={value=>set('fullName',value)} maxLength={160} autoCapitalize="words" error={issues.fullName}/>
       <Field label="Correo electrónico" value={form.email} onChangeText={value=>set('email',value)} maxLength={254} keyboardType="email-address" autoCapitalize="none" error={issues.email}/>

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getPasswordChecks, sanitizeRedirectPath, validatePassword } from '@/lib/auth/password-validation'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 
 function MarketplaceCustomerRegisterForm() {
   const router = useRouter()
@@ -111,6 +112,10 @@ function MarketplaceCustomerRegisterForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 space-y-4">
+            <GoogleSignInButton next={redirectTo} label="Registrarme con Google" />
+            <AuthMethodDivider />
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="fullName">Nombre completo</Label>

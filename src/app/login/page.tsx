@@ -5,6 +5,8 @@ import { AppImage } from '@/components/ui/app-image'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { describeOAuthCallbackError } from '@/lib/auth/google-oauth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -79,10 +81,15 @@ export default function LoginPage() {
 
   const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
   const esperaConfirmacion = registeredCompany !== null && searchParams.get('confirmar') === '1'
+  const callbackErrorCode = searchParams.get('error')
   const callbackError =
-    searchParams.get('error') === 'auth_callback_error'
+    callbackErrorCode === 'auth_callback_error'
       ? 'No se pudo completar la verificación del enlace. Solicitá uno nuevo o iniciá sesión nuevamente.'
-      : ''
+      : callbackErrorCode === 'oauth_cancelled'
+        ? describeOAuthCallbackError('access_denied', null)
+        : callbackErrorCode === 'oauth_error'
+          ? describeOAuthCallbackError('server_error', null)
+          : ''
   const visibleError = error || callbackError
 
   const rawRedirect = sanitizeRedirectPath(searchParams.get('redirect'), '')
@@ -448,6 +455,12 @@ export default function LoginPage() {
                 </div>
               </div>
             )}
+
+            {/* Google: entra o crea la cuenta en un paso */}
+            <div className="mb-4 space-y-4">
+              <GoogleSignInButton next={rawRedirect || '/dashboard'} disabled={loading || passkeyLoading} />
+              <AuthMethodDivider />
+            </div>
 
             {/* Form */}
             <form onSubmit={handleLogin} className="space-y-4" noValidate>
