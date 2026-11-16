@@ -40,6 +40,7 @@ export const STOREFRONT_TEMPLATE_TIER: Record<StorefrontStylePreference, Templat
   'wholesale-pro': 'premium',
   barber: 'premium',
   'especial-para-barbero': 'premium',
+  'especial-cosmeticos': 'premium',
 }
 
 export const TEMPLATE_TIER_LABEL: Record<TemplateTier, string> = {

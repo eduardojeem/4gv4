@@ -1,3 +1,5 @@
+import { buildShowcaseCards } from '@/lib/public/marketplace-showcase-content'
+import { buildCategoryShowcase } from '@/lib/public/category-showcase'
 import { NextResponse } from 'next/server'
 import { getScopedLocationCatalog } from '@/lib/public/marketplace-location-catalog'
 import { parseMarketplaceLocation } from '@/lib/public/marketplace-location'
@@ -32,7 +34,7 @@ export async function GET(request:Request){
   const categories=new Map<string,{id:string;name:string;count:number}>(),brands=new Map<string,{name:string;logo:string|null;count:number}>()
   for(const product of products){if(product.category){const item=categories.get(product.category.id)??{id:product.category.id,name:product.category.name,count:0};item.count++;categories.set(item.id,item)}if(product.brand){const item=brands.get(product.brand)??{name:product.brand,logo:absolute(brandMetadata.get(product.brand.toLowerCase())),count:0};item.count++;brands.set(item.name,item)}}
   const {items:pp,...pmeta}=productPage,{items:op,...ometa}=offerPage,{items:sp,...smeta}=storePage
-  return NextResponse.json({products:pp,offers:op,stores:sp,storeOptions:stores,categories:[...categories.values()],brands:[...brands.values()],stats:[{key:'stores',value:stores.length},{key:'products',value:products.length},{key:'cities',value:catalog.facets.cities.length}],location:{selection,...catalog.facets},priceFilteringAvailable,currency:currencies.length===1?currencies[0]:null,home:{products:filterMarketProducts(products,{q:params.get('homeQ')??''}).slice(0,8),total:filterMarketProducts(products,{q:params.get('homeQ')??''}).length,offers:filterMarketProducts(products,{onlyOffers:true}).slice(0,20),stores:stores.slice(0,4)},pagination:{products:pmeta,offers:ometa,stores:smeta}},{headers:{'Cache-Control':'no-store'}})
+  return NextResponse.json({showcase:buildShowcaseCards(buildCategoryShowcase(catalog.products)).map(card=>({...card,image:absolute(card.image)})),products:pp,offers:op,stores:sp,storeOptions:stores,categories:[...categories.values()],brands:[...brands.values()],stats:[{key:'stores',value:stores.length},{key:'products',value:products.length},{key:'cities',value:catalog.facets.cities.length}],location:{selection,...catalog.facets},priceFilteringAvailable,currency:currencies.length===1?currencies[0]:null,home:{products:filterMarketProducts(products,{q:params.get('homeQ')??''}).slice(0,8),total:filterMarketProducts(products,{q:params.get('homeQ')??''}).length,offers:filterMarketProducts(products,{onlyOffers:true}).slice(0,20),stores:stores.slice(0,4)},pagination:{products:pmeta,offers:ometa,stores:smeta}},{headers:{'Cache-Control':'no-store'}})
  }catch(error){logger.error('[marketplace-location] Consulta pública no disponible',error);return NextResponse.json({error:'No pudimos cargar el marketplace. Reintentá en unos momentos.'},{status:503})}
 }
 

@@ -33,6 +33,7 @@ export const STOREFRONT_STYLE_PREFERENCES = [
   'informatica-electronica',
   'barber',
   'especial-para-barbero',
+  'especial-cosmeticos',
 ] as const
 
 export type StorefrontStylePreference = (typeof STOREFRONT_STYLE_PREFERENCES)[number]
@@ -84,7 +85,7 @@ const PRODUCT_VERTICALS = new Set<string>(['clothing', 'electronics', 'food', 'h
  */
 const STORE_STYLES_FOR_SERVICE_VERTICAL: Record<string, readonly StorefrontStyle[]> = {
   barbershop: ['classic', 'modern', 'especial-para-barbero'],
-  beauty_services: ['classic', 'modern', 'beauty'],
+  beauty_services: ['classic', 'modern', 'beauty', 'especial-cosmeticos'],
 }
 
 /** Lo que muestra una barbería sin agenda: limpio y con fotos, sin reserva al frente. */
@@ -134,7 +135,8 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     preference === 'catalog-basic' ||
     preference === 'informatica-electronica' ||
     preference === 'barber' ||
-    preference === 'especial-para-barbero'
+    preference === 'especial-para-barbero' ||
+    preference === 'especial-cosmeticos'
   )
 
   const chosen: StorefrontStyle = isExplicit
@@ -196,6 +198,8 @@ export function getTemplateCompatibility(input: {
     ? ['barbershop', 'beauty_services'].includes(String(vertical))
     : storefrontStyle === 'especial-para-barbero'
     ? ['barbershop', 'general', 'cosmetics'].includes(String(vertical))
+    : storefrontStyle === 'especial-cosmeticos'
+    ? ['cosmetics', 'beauty_services', 'general'].includes(String(vertical))
     : storefrontStyle === recommendedStyle
   const resolvedCurrent = currentStyle === 'auto'
     ? resolveStorefrontStyle('auto', businessVertical, { servicesAvailable })
@@ -267,6 +271,7 @@ export const STOREFRONT_STYLE_LABELS: Record<StorefrontStyle, string> = {
   'informatica-electronica': 'Mega Tienda Tech',
   barber: 'Barbería Club',
   'especial-para-barbero': 'Especial para barbero',
+  'especial-cosmeticos': 'Especial Cosméticos Premium',
 }
 
 export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
@@ -274,6 +279,7 @@ export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
+  { value: 'especial-cosmeticos', label: 'Especial Cosméticos Premium', description: 'Boutique de cosmética y skincare de alta gama: paleta suave alabastro y rosa empolvado, tipografía serif editorial, rutinas de cuidado, ofertas con cuenta regresiva, perfil con fotos del local y mapa interactivo.' },
   { value: 'especial-para-barbero', label: 'Especial para barbero', description: 'Tienda profesional de barbería e insumos con mega menú, bandas oscuras, precios minoristas y mayoristas y colores adaptables a tu marca.' },
   { value: 'barber', label: 'Barbería Club', description: 'Inspirada en exclusivos clubes de caballeros como Club Varsovia: carta de rituales, atención personalizada, café o bebidas de cortesía, maestros barberos y turnos online.' },
   { value: 'wholesale-pro', label: 'Mayorista & Distribuidora', description: 'Catálogo moderno para ventas minoristas y mayoristas, ideal para negocios con muchos productos y compradores frecuentes.' },
@@ -344,7 +350,7 @@ export const STOREFRONT_TEMPLATE_GROUPS: ReadonlyArray<StorefrontTemplateGroup> 
     label: 'Belleza',
     badge: 'Productos y turnos',
     description: 'Cosmética y perfumería, peluquerías, barberías y centros de estética con reserva de turnos.',
-    templateKeys: ['beauty', 'services', 'barber', 'especial-para-barbero'],
+    templateKeys: ['beauty', 'services', 'barber', 'especial-para-barbero', 'especial-cosmeticos'],
   },
   {
     id: 'food',
@@ -571,6 +577,25 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
     badgeColorClass: 'bg-primary/15 text-primary border-primary/30',
     variants: [],
   },
+  'especial-cosmeticos': {
+    id: 'especial-cosmeticos',
+    name: 'Especial Cosméticos Premium',
+    badge: 'Skincare & Boutique',
+    tagline: 'Cosmética de alta gama, rutinas de cuidado y estética editorial',
+    description: 'Inspirada en las mejores boutiques de cosmética y skincare: paleta suave alabastro y rubor, tipografía serif editorial, vitrina de rutinas completas, ofertas con descuento directo, mapa interactivo y perfil del local.',
+    recommendedVerticals: ['Cosmética', 'Skincare', 'Maquillaje', 'Perfumería', 'Estética'],
+    recommendedColors: ['rose', 'amber', 'purple', 'teal'],
+    features: [
+      'Portada editorial con tipografía serif y badges botánicos',
+      'Categorías en tarjetas suaves con conteo de productos',
+      'Sección de ofertas con descuentos destacados y precios en Gs.',
+      'Perfil del local con fotos, horarios, redes y mapa interactivo',
+      'Barra de confianza y botón flotante de asesoramiento por WhatsApp',
+    ],
+    accentGradient: 'from-rose-400 via-rose-300 to-amber-200',
+    badgeColorClass: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25',
+    variants: [],
+  },
 }
 
 export type StorefrontHeaderStyle = 'glass' | 'solid' | 'accent' | 'dark'
@@ -632,6 +657,7 @@ const words = (alternatives: string) => new RegExp(`(?<!\\p{L})(?:${alternatives
 const STYLE_KEYWORDS: ReadonlyArray<{ style: StorefrontStyle; pattern: RegExp }> = [
   { style: 'barber', pattern: words('varsovia|club de caballeros?|afeitad\\p{L}* a navaja|toallas? calientes?|fade master') },
   { style: 'especial-para-barbero', pattern: words('barber supply|insumos?(?: de| para)? barber\\p{L}*|clippers?|trimmers?|shavers?|distribuidora de barber\\p{L}*') },
+  { style: 'especial-cosmeticos', pattern: words('glowora|cosm[eé]ticos? premium|skincare premium|alta cosm[eé]tica') },
   { style: 'informatica-electronica', pattern: words('inform[aá]tica|computaci[oó]n|hardware|perif[eé]ricos?|electr[oó]nica tech|componentes? pc') },
   { style: 'services', pattern: words('peluquer\\p{L}*|barber\\p{L}*|sal[oó]n de belleza|u[nñ]as|manicur\\p{L}*|pedicur\\p{L}*|spa|masajes?|est[eé]tica|tatuajes?|tattoo|pesta[nñ]as|cejas') },
   { style: 'sport', pattern: words('deport\\p{L}*|fitness|gym|gimnasio|suplementos?|zapatillas?|sneakers?|running') },
@@ -656,6 +682,7 @@ const HEADER_BY_STYLE: Record<StorefrontStyle, Exclude<StorefrontHeaderStyle, 'g
   beauty: 'solid',
   barber: 'dark',
   'especial-para-barbero': 'dark',
+  'especial-cosmeticos': 'solid',
 }
 
 /**
@@ -740,6 +767,7 @@ export const STOREFRONT_HEADING_CLASS: Record<StorefrontStyle, string> = {
   beauty: 'font-serif tracking-tight',
   barber: 'font-serif tracking-tight',
   'especial-para-barbero': 'font-black uppercase tracking-tight',
+  'especial-cosmeticos': 'font-serif tracking-tight',
 }
 
 /** Etiqueta chica sobre los titulos. */
@@ -757,6 +785,7 @@ export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
   beauty: 'inline-block rounded-full bg-pink-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-pink-700 dark:text-pink-300',
   barber: 'inline-block tracking-[0.2em] uppercase text-xs font-bold text-amber-600 dark:text-amber-400',
   'especial-para-barbero': 'inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/35 px-3 py-0.5 text-[11px] font-black uppercase tracking-[0.18em] text-primary',
+  'especial-cosmeticos': 'inline-block rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300',
 }
 
 /** Esquinas de fotos y botones. */
@@ -774,4 +803,5 @@ export const STOREFRONT_RADIUS_CLASS: Record<StorefrontStyle, string> = {
   beauty: 'rounded-3xl',
   barber: 'rounded-2xl',
   'especial-para-barbero': 'rounded-[18px]',
+  'especial-cosmeticos': 'rounded-2xl',
 }

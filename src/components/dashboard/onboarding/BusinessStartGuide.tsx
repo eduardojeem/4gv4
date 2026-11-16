@@ -44,9 +44,32 @@ export function BusinessStartGuide() {
 }
 
 function SetupChecklist({ checklist }: { checklist: NonNullable<BusinessStartGuidePayload['setupChecklist']> }) {
-  return <section className="space-y-3 rounded-xl border bg-card p-4" aria-label="Lista opcional de configuración">
-    <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Configurá tu negocio a tu ritmo</h2><p className="text-sm text-muted-foreground">{checklist.percent}% listo · estos pasos son opcionales y no bloquean el uso del sistema.</p></div><span aria-label={`${checklist.percent}% configurado`} className="rounded-full bg-muted px-3 py-1 text-sm font-semibold">{checklist.percent}%</span></div>
-    {checklist.needsCountryConfirmation && <p className="rounded-md bg-muted px-3 py-2 text-sm">Tu organización todavía no tiene país confirmado. <Link className="font-medium underline underline-offset-4" href="/admin/settings#fiscal">Confirmar país</Link></p>}
-    <details><summary className="min-h-11 cursor-pointer font-medium">Ver configuración pendiente y completada</summary><ul className="mt-2 grid gap-2 sm:grid-cols-2">{checklist.items.filter(item => item.key !== 'country' || checklist.needsCountryConfirmation).map(item => <li key={item.key} className="rounded-md border p-3 text-sm"><Link href={item.href} className="font-medium underline underline-offset-4">{item.done ? '✓ ' : '○ '}{item.label}</Link></li>)}</ul></details>
-  </section>
+  return (
+    <section aria-label="Lista opcional de configuración" className="rounded-lg border border-border/60 bg-muted/20">
+      <details className="group">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-lg px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-medium">Tu negocio, cada vez más completo</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Detalles opcionales para cuando tengas tiempo.</p>
+          </div>
+          <span aria-label={`${checklist.percent}% configurado`} className="shrink-0 text-xs tabular-nums text-muted-foreground">{checklist.percent}%</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-muted-foreground group-open:rotate-180"><path d="m6 9 6 6 6-6" /></svg>
+        </summary>
+        <div className="space-y-3 border-t border-border/60 px-4 py-3">
+          <p className="text-xs text-muted-foreground">Podés seguir usando el sistema. Este recordatorio desaparece al completar los pasos.</p>
+          {checklist.needsCountryConfirmation && <p className="text-sm">Confirmá el país de tu negocio. <Link className="underline underline-offset-4" href="/admin/settings#fiscal">Revisar país</Link></p>}
+          <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+            {checklist.items.filter(item => item.key !== 'country' || checklist.needsCountryConfirmation).map(item => (
+              <li key={item.key}>
+                <Link href={item.href} className="flex min-h-11 items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span aria-hidden="true" className={item.done ? 'text-muted-foreground' : 'text-primary'}>{item.done ? '✓' : '○'}</span>
+                  <span className={item.done ? 'text-muted-foreground' : undefined}>{item.label}<span className="sr-only">{item.done ? ': completado' : ': pendiente'}</span></span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    </section>
+  )
 }

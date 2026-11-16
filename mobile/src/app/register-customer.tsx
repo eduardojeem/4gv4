@@ -39,7 +39,7 @@ export default function CustomerRegistration() {
   };
   return <WebsiteScreen title="Tu cuenta personal" subtitle="Comprá y gestioná tus pedidos" saving={busy} footer={<Pressable accessibilityRole="button" accessibilityState={{disabled:busy,busy}} disabled={busy} onPress={()=>void submit()} style={[websiteStyles.primaryButton,{opacity:busy?0.6:1}]}>{busy?<ActivityIndicator color="#fff"/>:null}<Text style={websiteStyles.primaryText}>{busy?'Creando tu cuenta…':'Crear mi cuenta'}</Text></Pressable>}>
     <Notice text="No necesitás un comercio ni un plan. Esta cuenta no habilita herramientas de administración." />
-    <GoogleSignInButton label="Registrarme con Google" disabled={busy} onError={setGoogleError} onDone={()=>router.replace('/' as never)}/>
+    <GoogleSignInButton label="Registrarme con Google" disabled={busy} onError={setGoogleError} afterSignIn={{pathname:'/'}}/>
     {googleError ? <Text accessibilityRole="alert" style={{color:palette.danger,fontWeight:'600'}}>{googleError}</Text> : null}
     <Text style={{textAlign:'center',color:'#64748B',fontWeight:'600'}}>o con tu correo</Text>
     <Section title="Tus datos" icon="person-outline">

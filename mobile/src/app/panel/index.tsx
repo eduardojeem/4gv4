@@ -63,7 +63,7 @@ function timeAgo(iso: string) {
 
 export default function PanelOverview() {
   const colors = usePalette();
-  const { data: panel, error: panelError, reload: reloadPanel, findItem, can } = usePanel();
+  const { data: panel, error: panelError, noBusiness, reload: reloadPanel, findItem, can } = usePanel();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [scopedError, setScopedError] = useState<{ scope: string; message: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -183,6 +183,23 @@ export default function PanelOverview() {
         { key: 'customers', show: has('customers'), icon: 'people-outline' as const, label: 'Clientes nuevos', value: String(visibleSummary.customersNew.count), help: 'Últimos 7 días', route: panelRoute('customers'), tone: '#0891B2' },
       ].filter((kpi) => kpi.show)
     : [];
+
+  // Entró con Google o como cliente y todavía no creó su comercio: no es un error.
+  if (noBusiness && !panel) {
+    return (
+      <View style={styles.center}>
+        <Ionicons name="storefront-outline" size={32} color={palette.primary} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Todavía no tenés un comercio</Text>
+        <Text style={[styles.muted, { color: colors.muted }]}>Creá tu comercio con esta cuenta para usar el panel: ventas, productos, caja y más.</Text>
+        <Pressable onPress={() => router.replace('/create-company' as never)} accessibilityRole="button" style={[styles.outlineBtn, { borderColor: palette.primary, backgroundColor: palette.primary }]}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Crear mi comercio</Text>
+        </Pressable>
+        <Pressable onPress={() => router.replace('/' as never)} accessibilityRole="button" style={styles.outlineBtn}>
+          <Text style={{ color: colors.muted, fontWeight: '600' }}>Volver al marketplace</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (panelError && !panel) {
     return (

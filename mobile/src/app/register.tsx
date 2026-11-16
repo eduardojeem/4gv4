@@ -115,7 +115,7 @@ export default function RegisterScreen() {
           label="Crear mi comercio con Google"
           disabled={Boolean(busy) || Boolean(registrationOptions && !registrationOptions.companyRegistrationEnabled)}
           onError={setGoogleError}
-          onDone={() => router.replace({ pathname: '/create-company', params: form.plan ? { plan: form.plan } : {} } as never)}
+          afterSignIn={{ pathname: '/create-company', params: form.plan ? { plan: form.plan } : {} }}
         />
         {googleError ? <Text accessibilityRole="alert" style={[styles.small, { color: palette.danger }]}>{googleError}</Text> : null}
         <Text style={[styles.small, styles.centerText, { color: colors.muted }]}>o con tu correo y contraseña</Text>

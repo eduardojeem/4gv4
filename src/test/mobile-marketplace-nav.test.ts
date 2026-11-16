@@ -53,7 +53,7 @@ describe('barra inferior y menú + del marketplace móvil', () => {
 
   it('muestra Mis pedidos y Mis reparaciones solo cuando hay sesión iniciada', () => {
     expect(marketplaceQuickActivityKeys(false)).toEqual([])
-    expect(marketplaceQuickActivityKeys(true)).toEqual(['orders', 'repairs'])
+    expect(marketplaceQuickActivityKeys(true)).toEqual(['orders', 'appointments', 'repairs'])
   })
 
   it('formatea el chip de ubicación activa desde facetas reales o fallback seguro', () => {

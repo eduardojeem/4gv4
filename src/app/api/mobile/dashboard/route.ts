@@ -31,7 +31,7 @@ export async function GET() {
 
     const organization = await getCurrentOrganizationContext(auth.user.id)
     if (!organization) {
-      return NextResponse.json({ error: 'Tu usuario no pertenece a ningún comercio activo.' }, { status: 403 })
+      return NextResponse.json({ error: 'Tu usuario no pertenece a ningún comercio activo.', code: 'NO_ACTIVE_ORGANIZATION' }, { status: 403 })
     }
 
     const showSubscription = canSeeSubscriptionExpiry(organization.role, auth.user.role === 'super_admin')

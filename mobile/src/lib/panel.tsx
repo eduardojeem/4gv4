@@ -4,7 +4,8 @@ import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, panelTransiti
 import type { Ionicons } from '@expo/vector-icons';
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from 'react';
 
-import { apiFetch } from './api';
+import { ApiError, apiFetch } from './api';
+import { isNoBusinessError } from './post-auth-route';
 
 export type PanelItem = { key: string; label: string; mobileLabel: string | null; href: string; description: string };
 export type PanelGroup = { id: string; label: string; items: PanelItem[] };
@@ -64,6 +65,8 @@ export const panelRoute = (key: string) => (key === 'overview' ? '/panel' : `/pa
 type PanelContextValue = {
   data: PanelData | null;
   error: string | null;
+  /** La cuenta no tiene comercio: el panel ofrece crearlo en vez de «Reintentar». */
+  noBusiness: boolean;
   loading: boolean;
   reload: () => void;
   findItem: (key: string) => PanelItem | undefined;
@@ -82,6 +85,7 @@ export function usePanel() {
 export function PanelProvider({ children }: PropsWithChildren) {
   const [data, setData] = useState<PanelData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [noBusiness, setNoBusiness] = useState(false);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
@@ -95,9 +99,12 @@ export function PanelProvider({ children }: PropsWithChildren) {
         setPrivateCacheOrganization(panel.organization.id, JSON.stringify([panel.organization.role, panel.organization.plan, panel.capabilities, panel.groups]));
         setData(panel);
         setError(null);
+        setNoBusiness(false);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'No se pudo cargar el panel.');
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el panel.');
+        setNoBusiness(err instanceof ApiError && isNoBusinessError(err.status, err.body, err.message));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -130,7 +137,7 @@ export function PanelProvider({ children }: PropsWithChildren) {
     [data]
   );
 
-  return <PanelContext.Provider value={{ data, error, loading, reload, findItem, can: permission => data?.capabilities?.[permission] === true }}>{children}</PanelContext.Provider>;
+  return <PanelContext.Provider value={{ data, error, noBusiness, loading, reload, findItem, can: permission => data?.capabilities?.[permission] === true }}>{children}</PanelContext.Provider>;
 }
 
 const NATIVE_SECTIONS = new Set(['overview','agenda','products','categories','brands','customers','credits','orders','quotes','repair-inventory','repairs','pos','cash-register','suppliers','inventory-count','after-sales','promotions','administration','technician']);
