@@ -69,6 +69,7 @@ function RootNavigator() {
           <Stack.Screen name="feedback" />
           <Stack.Screen name="mis-pedidos" />
           <Stack.Screen name="mi-cuenta" />
+          <Stack.Screen name="create-company" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" options={{ presentation: 'modal' }} />

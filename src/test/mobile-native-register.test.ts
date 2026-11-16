@@ -100,7 +100,8 @@ describe('la app usa el registro nativo', () => {
 
   it('las entradas de la app abren la pantalla nativa (la versión web sigue con la web)', () => {
     const lib = read('mobile/src/lib/registration.ts')
-    expect(lib).toMatch(/Platform\.OS !== 'web'[\s\S]*router\.push\(\{ pathname: '\/register'/)
+    // Sin sesión, el registro completo; con sesión ya hay cuenta y solo falta el comercio.
+    expect(lib).toMatch(/Platform\.OS !== 'web'[\s\S]*router\.push\(\{ pathname: data\.session \? '\/create-company' : '\/register'/)
   })
 
   it('el registro solo se ve sin sesión iniciada', () => {

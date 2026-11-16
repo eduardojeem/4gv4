@@ -7,6 +7,8 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 
 const PAGINA = leer('src/app/register/page.tsx')
 const RUTA = leer('src/app/api/auth/register-company/route.ts')
+// El plan y el alta del comercio viven en un módulo compartido con el alta de quien ya tiene cuenta.
+const ALTA = leer('src/lib/organization/provision-company.ts')
 
 const baseValida = {
   fullName: 'Maria Gonzalez',
@@ -91,22 +93,24 @@ describe('el servidor resuelve el plan real', () => {
     // Los enlaces que circulan usan el slug; la API no debería depender de que
     // el navegador ya lo hubiera traducido. La precedencia entre ambos se
     // verifica en plan-slug-resolution.test.ts.
-    expect(RUTA).toContain("buscarPlan('public_slug')")
-    expect(RUTA).toContain("buscarPlan('tier')")
+    expect(RUTA).toContain('findSignupPlan(admin, selectedPlanTier)')
+    expect(ALTA).toContain("lookup('public_slug')")
+    expect(ALTA).toContain("lookup('tier')")
   })
 
   it('guarda el tier de la fila, no lo que llegó', () => {
-    expect(RUTA).toContain('const resolvedPlanTier = String(subscriptionPlan.tier).toUpperCase()')
-    expect(RUTA).toMatch(/plan: resolvedPlanTier/)
+    expect(ALTA).toContain('tier: String(data.tier).toUpperCase()')
+    expect(ALTA).toMatch(/plan: input\.plan\.tier/)
+    expect(RUTA).toContain('const resolvedPlanTier = signupPlan.tier')
   })
 
   it('solo considera planes activos', () => {
-    const consulta = RUTA.slice(RUTA.indexOf("from('subscription_plans')"))
+    const consulta = ALTA.slice(ALTA.indexOf("from('subscription_plans')"))
     expect(consulta.slice(0, 400)).toContain("eq('is_active', true)")
   })
 
   it('el error de plan no disponible dice qué hacer', () => {
-    const bloque = RUTA.slice(RUTA.indexOf('if (!subscriptionPlan)'))
+    const bloque = RUTA.slice(RUTA.indexOf('if (!signupPlan)'))
     expect(bloque.slice(0, 600)).toContain('Elegí uno de los planes vigentes')
     expect(bloque.slice(0, 600)).toContain("field: 'plan'")
   })

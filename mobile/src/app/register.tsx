@@ -1,20 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Field, Notice, Section, WebsiteScreen, websiteStyles } from '@/components/website/website-ui';
-import { ApiError, apiFetch } from '@/lib/api';
-import { formatGs } from '@/lib/marketplace';
+import { ApiError } from '@/lib/api';
 import { palette, usePalette } from '@/lib/palette';
-import { checkStoreSlug, registerCompany, registerFieldErrors, requestCaptchaToken, type SlugCheck } from '@/lib/registration';
+import { registerCompany, registerFieldErrors, requestCaptchaToken } from '@/lib/registration';
 import { emptyRegisterForm, passwordChecks, registerIssues, registerPayload, storeSlugOf, type RegisterField, type RegisterForm } from '@/lib/registration-model';
 import { useSession } from '@/lib/session';
-import { VERTICAL_LABELS } from '@/lib/settings-model';
 import { websiteErrorMessage } from '@/lib/website-admin';
-
-type Plan = { tier: string; public_slug: string | null; name: string; price: number; price_note?: string | null; trial_days: number };
+import { CompanySignupFields, useSignupCatalog, useSlugAvailability } from '@/components/company-signup-fields';
+import { GoogleSignInButton } from '@/components/google-sign-in-button';
 
 /**
  * Registro de un comercio nuevo desde la app, con la misma API que /register
@@ -26,16 +24,12 @@ export default function RegisterScreen() {
   const { signIn } = useSession();
   const params = useLocalSearchParams<{ plan?: string }>();
   const [form, setForm] = useState<RegisterForm>(() => emptyRegisterForm(params.plan ?? ''));
-  const [catalogAttempt, setCatalogAttempt] = useState(0);
-  const [registrationOptions, setRegistrationOptions] = useState<{ companyRegistrationEnabled: boolean; companyPasswordMinLength: number } | null>(null);
-  const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [plansError, setPlansError] = useState<string | null>(null);
-  const [slugState, setSlugState] = useState<{ slug: string; check: SlugCheck } | null>(null);
+  const { plans, options: registrationOptions, error: plansError, retry: retryCatalog } = useSignupCatalog(setForm);
   const [serverErrors, setServerErrors] = useState<Partial<Record<RegisterField, string>>>({});
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState<null | 'captcha' | 'saving' | 'signin'>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const slugRequest = useRef(0);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   const set = (next: Partial<RegisterForm>) => {
     setForm((current) => ({ ...current, ...next }));
@@ -47,45 +41,8 @@ export default function RegisterScreen() {
     });
   };
 
-  // Los planes vigentes, con sus días de prueba reales.
-  useEffect(() => {
-    let alive = true;
-    Promise.all([apiFetch<{ plans?: Plan[] }>('/api/mobile/saas', { auth: false }), apiFetch<{ companyRegistrationEnabled: boolean; companyPasswordMinLength: number }>('/api/mobile/registration-options', { auth: false })])
-      .then(([catalog, options]) => {
-        if (!alive) return;
-        setRegistrationOptions(options);
-        setPlansError(null);
-        const list = catalog.plans ?? [];
-        setPlans(list);
-        // El plan del enlace puede venir por su slug público o por el tier.
-        setForm((current) => {
-          const match = list.find((plan) => plan.public_slug === current.plan || plan.tier === current.plan);
-          return { ...current, plan: match ? match.public_slug || match.tier : list.length === 1 ? list[0].public_slug || list[0].tier : '' };
-        });
-      })
-      .catch((cause) => {
-        if (alive) setPlansError(websiteErrorMessage(cause, 'No pudimos cargar los planes. Revisá tu conexión.'));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [catalogAttempt]);
-
-  // Si la dirección de la tienda está libre, mientras se escribe (solo vale la última consulta).
   const slug = storeSlugOf(form);
-  useEffect(() => {
-    if (slug.length < 3) return;
-    const id = ++slugRequest.current;
-    const timer = setTimeout(() => {
-      checkStoreSlug(slug)
-        .then((check) => {
-          if (id === slugRequest.current) setSlugState({ slug, check });
-        })
-        .catch(() => undefined);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [slug]);
-  const slugCheck = slugState?.slug === slug ? slugState.check : null;
+  const slugCheck = useSlugAvailability(slug);
 
   const localIssues = registerIssues(form, registrationOptions?.companyPasswordMinLength ?? 8);
   const issues = useMemo(() => ({ ...(submitted ? localIssues : {}), ...serverErrors }), [submitted, localIssues, serverErrors]);
@@ -152,6 +109,17 @@ export default function RegisterScreen() {
           <Text style={websiteStyles.primaryText}>{busyLabel ?? 'Crear mi comercio'}</Text>
         </Pressable>
       }>
+      <View style={styles.googleBlock}>
+        {/* Con Google no hay contraseña ni captcha: la cuenta queda creada y se completan los datos del comercio. */}
+        <GoogleSignInButton
+          label="Crear mi comercio con Google"
+          disabled={Boolean(busy) || Boolean(registrationOptions && !registrationOptions.companyRegistrationEnabled)}
+          onError={setGoogleError}
+          onDone={() => router.replace({ pathname: '/create-company', params: form.plan ? { plan: form.plan } : {} } as never)}
+        />
+        {googleError ? <Text accessibilityRole="alert" style={[styles.small, { color: palette.danger }]}>{googleError}</Text> : null}
+        <Text style={[styles.small, styles.centerText, { color: colors.muted }]}>o con tu correo y contraseña</Text>
+      </View>
       <Section title="Tu cuenta" icon="person-outline">
         <Field label="Nombre completo" value={form.fullName} onChangeText={(value) => set({ fullName: value })} placeholder="Ej. María González" autoCapitalize="words" maxLength={120} error={issues.fullName} />
         <Field label="Email" value={form.email} onChangeText={(value) => set({ email: value.trim() })} placeholder="nombre@tucomercio.com" keyboardType="email-address" autoCapitalize="none" maxLength={254} error={issues.email} />
@@ -170,48 +138,18 @@ export default function RegisterScreen() {
         </Pressable>
       </Section>
 
-      <Section title="Tu comercio" icon="storefront-outline">
-        <Field label="Nombre del comercio" value={form.companyName} onChangeText={(value) => set({ companyName: value })} placeholder="Ej. Comercial San Miguel" maxLength={120} error={issues.companyName} />
-        <Field label="Dirección de tu tienda" value={form.companySlug || slug} onChangeText={(value) => set({ companySlug: value })} placeholder="comercial-san-miguel" autoCapitalize="none" maxLength={48}
-          error={issues.companySlug ?? slugTaken ?? undefined}
-          help={slug.length >= 3 ? (slugCheck?.available ? `Libre: tu tienda va a estar en …/${slug}` : slugCheck ? undefined : 'Revisando si está libre…') : 'Sale del nombre; podés cambiarla.'} />
-        {slugCheck && !slugCheck.available && slugCheck.suggestion ? (
-          <Pressable onPress={() => set({ companySlug: slugCheck.suggestion ?? '' })} accessibilityRole="button">
-            <Text style={[styles.link, { color: palette.primary }]}>Usar «{slugCheck.suggestion}»</Text>
-          </Pressable>
-        ) : null}
-        <Text style={[styles.label, { color: colors.text }]}>Rubro (opcional)</Text>
-        <View style={styles.chips}>
-          {Object.entries(VERTICAL_LABELS).map(([value, label]) => (
-            <Chip key={value} label={label} selected={form.businessVertical === value} onPress={() => set({ businessVertical: form.businessVertical === value ? '' : value })} />
-          ))}
-        </View>
-      </Section>
-
-      <Section title="Plan" icon="pricetags-outline" hint="Podés cambiarlo más adelante.">
-        {plansError ? <View style={{gap:10}}><Notice tone="danger" text={plansError} /><Pressable accessibilityRole="button" onPress={() => { setPlansError(null); setCatalogAttempt(value => value + 1); }}><Text style={{color:palette.primary,fontWeight:'700'}}>Reintentar planes y requisitos</Text></Pressable></View> : null}
-        {registrationOptions && !registrationOptions.companyRegistrationEnabled ? <Notice tone="warning" text="El registro de empresas está cerrado por el momento. Podés crear una cuenta personal o volver más tarde." /> : null}
-        {!plans && !plansError ? <ActivityIndicator color={palette.primary} /> : null}
-        {plans?.length === 0 ? <Notice tone="warning" text="No hay planes disponibles en este momento. Probá más tarde." /> : null}
-        {plans?.map((plan) => {
-          const value = plan.public_slug || plan.tier;
-          const selected = form.plan === value;
-          return (
-            <Pressable key={value} onPress={() => set({ plan: value })} accessibilityRole="radio" accessibilityState={{ selected }}
-              style={[styles.plan, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? `${palette.primary}10` : 'transparent' }]}>
-              <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? palette.primary : colors.muted} />
-              <View style={styles.flex}>
-                <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
-                <Text style={[styles.small, { color: colors.muted }]}>
-                  {Number(plan.price) > 0 ? `${formatGs(Number(plan.price))}${plan.price_note ? ` ${plan.price_note}` : ''}` : 'Gratis'}
-                  {plan.trial_days > 0 ? ` · ${plan.trial_days} días de prueba` : ''}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-        {issues.plan ? <Text style={[styles.small, { color: palette.danger }]}>{issues.plan}</Text> : null}
-      </Section>
+      <CompanySignupFields
+        form={form}
+        onChange={set}
+        issues={issues}
+        slug={slug}
+        slugCheck={slugCheck}
+        slugTaken={slugTaken}
+        plans={plans}
+        plansError={plansError}
+        onRetryPlans={retryCatalog}
+        registrationClosed={Boolean(registrationOptions && !registrationOptions.companyRegistrationEnabled)}
+      />
 
       <Notice text="Al crear tu comercio se abre un momento la verificación de seguridad y volvés solo a la app." />
       <Pressable onPress={() => router.replace('/sign-in' as never)} accessibilityRole="button" style={styles.center}>
@@ -221,26 +159,13 @@ export default function RegisterScreen() {
   );
 }
 
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const colors = usePalette();
-  return (
-    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }}
-      style={[websiteStyles.chip, { borderColor: selected ? palette.primary : colors.border, backgroundColor: selected ? `${palette.primary}12` : 'transparent' }]}>
-      <Text style={[websiteStyles.chipText, { color: selected ? palette.primary : colors.text }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  googleBlock: { gap: 10 },
+  centerText: { textAlign: 'center' },
   checks: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   check: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   small: { fontSize: 12 },
   link: { fontSize: 13, fontWeight: '700' },
-  label: { fontSize: 13, fontWeight: '700' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  plan: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
-  planName: { fontSize: 15, fontWeight: '800' },
   disabled: { opacity: 0.7 },
   center: { alignItems: 'center', paddingVertical: 8 },
 });

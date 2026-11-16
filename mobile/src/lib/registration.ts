@@ -7,7 +7,8 @@ import { Alert, Platform } from 'react-native';
 import { ApiError, apiFetch } from './api';
 import { SITE_URL } from './marketplace';
 import { captchaEnvironmentError } from './customer-registration-model';
-import { parseCaptchaReturn, parseRegistrationReturn, registerCtaLabel, registrationUrl, type registerPayload } from './registration-model';
+import { parseCaptchaReturn, parseRegistrationReturn, registerCtaLabel, registrationUrl, type ownCompanyPayload, type registerPayload } from './registration-model';
+import { supabase } from './supabase';
 
 /**
  * Abre el registro de la web y vuelve a la app al terminar: la web redirige a
@@ -18,7 +19,9 @@ export async function openRegistration(path = '/register') {
   // En la app el registro es nativo; en la versión web el captcha no puede volver, sigue la web.
   if (Platform.OS !== 'web') {
     const plan = new URL(path, 'https://x.invalid').searchParams.get('plan');
-    router.push({ pathname: '/register', params: plan ? { plan } : {} } as never);
+    // Con sesión iniciada ya hay cuenta: solo falta el comercio.
+    const { data } = await supabase.auth.getSession();
+    router.push({ pathname: data.session ? '/create-company' : '/register', params: plan ? { plan } : {} } as never);
     return;
   }
   await openWebRegistration(path);
@@ -102,4 +105,20 @@ export async function registerCompany(payload: ReturnType<typeof registerPayload
 export function registerFieldErrors(error: unknown): Record<string, string> {
   const list = error instanceof ApiError ? (error.body?.fieldErrors as { field?: string; message?: string }[] | undefined) : undefined;
   return Object.fromEntries((list ?? []).filter((item) => item.field && item.message).map((item) => [item.field as string, item.message as string]));
+}
+
+export type OwnCompanyResult = { organization: { id: string; name: string; slug: string } };
+
+/**
+ * Crea el comercio de quien ya inició sesión (con Google o como cliente). Al
+ * terminar renueva la sesión para que el panel ya lo vea como dueño.
+ */
+export async function createOwnCompany(payload: ReturnType<typeof ownCompanyPayload>): Promise<OwnCompanyResult> {
+  const res = await apiFetch<{ success?: boolean; data?: OwnCompanyResult }>('/api/auth/create-company', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  await supabase.auth.refreshSession().catch(() => undefined);
+  if (!res.data?.organization) throw new Error('No pudimos confirmar el alta del comercio. Revisá tu panel en unos segundos.');
+  return res.data;
 }

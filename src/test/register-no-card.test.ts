@@ -6,6 +6,7 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 
 const PAGINA = leer('src/app/register/page.tsx')
 const RUTA = leer('src/app/api/auth/register-company/route.ts')
+const ALTA = leer('src/lib/organization/provision-company.ts')
 
 describe('el registro no pide tarjeta', () => {
   it('lo dice donde se elige el plan y también antes de enviar', () => {
@@ -42,7 +43,8 @@ describe('el registro no pide tarjeta', () => {
   it('la suscripción nace en prueba, no cobrada', () => {
     // Es lo que hace cierta la promesa: se crea `trialing` con los días del
     // plan, y el cobro recién aparece en /admin/subscriptions.
-    const suscripcion = RUTA.slice(RUTA.indexOf("from('subscriptions')"))
+    expect(RUTA).toContain('provisionCompanyRows(admin')
+    const suscripcion = ALTA.slice(ALTA.indexOf("from('subscriptions')"))
     expect(suscripcion.slice(0, 400)).toContain("status: 'trialing'")
     expect(suscripcion.slice(0, 400)).toContain('trial_ends_at')
   })

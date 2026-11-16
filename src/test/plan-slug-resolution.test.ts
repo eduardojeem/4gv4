@@ -6,6 +6,8 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 
 const PAGINA = leer('src/app/register/page.tsx')
 const RUTA = leer('src/app/api/auth/register-company/route.ts')
+// La consulta del plan es compartida con el alta de quien ya tiene cuenta.
+const ALTA = leer('src/lib/organization/provision-company.ts')
 const MIGRACION = leer('supabase/migrations_legacy/20260902160000_fix_plan_public_slugs.sql')
 
 /**
@@ -27,13 +29,14 @@ describe('precedencia al resolver el plan', () => {
   it('el servidor tampoco los mezcla en un or con limit(1)', () => {
     // Un `or` con limit(1) devuelve lo que la base quiera primero.
     expect(RUTA).not.toMatch(/or\(`tier\.eq\.\$\{selectedPlanTier\},public_slug/)
-    expect(RUTA).toContain("buscarPlan('public_slug')")
-    expect(RUTA).toContain("buscarPlan('tier')")
+    expect(ALTA).not.toMatch(/\.or\(/)
+    expect(ALTA).toContain("lookup('public_slug')")
+    expect(ALTA).toContain("lookup('tier')")
   })
 
   it('el servidor no consulta por tier si el slug ya resolvió o falló', () => {
     // Si la primera consulta erró, encadenar la segunda ocultaría el error.
-    expect(RUTA).toMatch(/porSlug\.data \|\| porSlug\.error/)
+    expect(ALTA).toMatch(/bySlug\.data \|\| bySlug\.error/)
   })
 })
 
