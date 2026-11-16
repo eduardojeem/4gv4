@@ -37,3 +37,23 @@ export const registerCompanySchema = z.object({
 }))
 
 export type RegisterCompanyInput = z.infer<typeof registerCompanySchema>
+
+/**
+ * Alta de un comercio para quien ya inició sesión (por ejemplo, con Google):
+ * los mismos datos del comercio que el registro, sin email, contraseña ni
+ * captcha, porque la cuenta ya existe y está verificada.
+ */
+export const createOwnCompanySchema = z.object({
+  fullName: z.string().trim().max(120, 'El nombre completo no puede superar 120 caracteres.').optional(),
+  companyName: z.string({ error: 'Ingresá el nombre de la empresa.' }).trim().min(2, 'El nombre de la empresa es requerido').max(120, 'El nombre de la empresa no puede superar 120 caracteres.'),
+  companySlug: z.string({ error: 'Ingresá una dirección válida para tu empresa.' }).trim().max(64, 'La dirección de la empresa no puede superar 64 caracteres.').optional(),
+  plan: z.string({ error: 'Elegí un plan para continuar.' })
+    .trim()
+    .toLowerCase()
+    .min(1, 'Elegí un plan para continuar')
+    .max(48, 'El identificador del plan no puede superar 48 caracteres.')
+    .regex(/^[a-z0-9][a-z0-9-]*$/, 'Plan invalido'),
+  businessVertical: z.enum(BUSINESS_VERTICALS, { error: 'Elegí un rubro válido.' }).optional(),
+})
+
+export type CreateOwnCompanyInput = z.infer<typeof createOwnCompanySchema>

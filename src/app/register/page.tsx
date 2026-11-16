@@ -33,6 +33,7 @@ import { slugifyTenantName } from '@/lib/saas/tenant'
 import { appReturnWithResult, safeAppReturnUrl } from '@/lib/mobile-app-return'
 import { useSlugAvailability } from '@/hooks/use-slug-availability'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { createClient } from '@/lib/supabase/client'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import { useTheme } from '@/contexts/theme-context'
@@ -571,6 +572,18 @@ function RegisterForm() {
                           No hay planes disponibles en este momento. Escribinos y te ayudamos a activar tu cuenta.
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {/* Con Google: la cuenta queda creada y se completan solo los datos del comercio. La app usa su registro nativo. */}
+                  {planState === 'ok' && !appReturn && (
+                    <div className="space-y-4">
+                      <GoogleSignInButton
+                        next={`/register/comercio?plan=${encodeURIComponent(planParam || selectedPlan?.toLowerCase() || '')}`}
+                        label="Registrarme con Google"
+                        disabled={loading}
+                      />
+                      <AuthMethodDivider />
                     </div>
                   )}
 

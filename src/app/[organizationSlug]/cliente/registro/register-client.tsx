@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getPasswordChecks, isValidEmail, validatePassword } from '@/lib/auth/password-validation'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { ALL_STORE_CUSTOMER_FEATURES, customerAccessCopy, type StoreCustomerFeatures } from '@/lib/public/customer-access-copy'
 
 /** El aviso que va debajo del dato equivocado, no arriba de todo el formulario. */
@@ -169,6 +170,11 @@ export default function TenantCustomerRegisterClient({ features = ALL_STORE_CUST
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 space-y-4">
+            {/* Pasa por el login de la tienda, que vincula la cuenta de Google como cliente. */}
+            <GoogleSignInButton next={`/${organizationSlug}/cliente/login`} label="Registrarme con Google" />
+            <AuthMethodDivider />
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="fullName">Nombre completo</Label>

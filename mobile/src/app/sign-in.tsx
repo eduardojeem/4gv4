@@ -31,6 +31,7 @@ import { useSession } from '@/lib/session';
 import { isSessionMfaPending } from '@/lib/mfa-model';
 import { supabase } from '@/lib/supabase';
 import { MfaCodeCard } from '@/components/mfa-code-card';
+import { GoogleSignInButton } from '@/components/google-sign-in-button';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -138,6 +139,12 @@ export default function SignInScreen() {
 
   // Después del primer login en este teléfono se ofrece Face ID / huella una vez.
   // Lo que se protege es la sesión guardada; la contraseña no se guarda.
+  // Después de Google: con 2FA la pantalla sigue con el código; si no, Face ID.
+  const offerAfterGoogle = async () => {
+    if (isSessionMfaPending((await supabase.auth.getSession()).data.session)) return;
+    void offerBiometricUnlock();
+  };
+
   const offerBiometricUnlock = async () => {
     if (await wasBiometricUnlockOffered()) return;
     const support = await getBiometricSupport(Platform.OS);
@@ -470,6 +477,13 @@ export default function SignInScreen() {
                 </Pressable>
 
                 {hint && <Text style={[styles.formHint, { color: colors.muted }]}>{hint}</Text>}
+
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.dividerLabel, { color: colors.muted }]}>o</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                </View>
+                <GoogleSignInButton disabled={busy} onError={setError} onDone={() => { void offerAfterGoogle(); }} />
               </View>
               )}
 

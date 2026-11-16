@@ -2041,9 +2041,10 @@ export default function MarketplaceScreen() {
                   <Text style={[styles.quickCardSub, styles.accountWebText, { color: colors.muted }]}>No pudimos cargar todos tus datos de cuenta. Tocá para reintentar.</Text>
                 </Pressable>
               ) : !session || account.business.state === 'none' ? (
-                /* Anuncio de planes, compacto: no desplaza la actividad del comprador. */
+                /* Anuncio de planes, compacto: no desplaza la actividad del comprador.
+                   Con sesión ya hay cuenta: va directo a crear el comercio. */
                 <Pressable
-                  onPress={() => router.push('/saas' as never)}
+                  onPress={() => router.push((session ? '/create-company' : '/saas') as never)}
                   accessibilityRole="button"
                   style={[styles.accountWebRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <Ionicons name="storefront-outline" size={18} color={palette.primary} />

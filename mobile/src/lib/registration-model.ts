@@ -101,10 +101,30 @@ export function registerIssues(form: RegisterForm, minimum = 8): Partial<Record<
   const failed = passwordChecks(form.password, minimum).find((check) => !check.ok);
   if (failed) issues.password = `La contraseña necesita: ${failed.label.toLowerCase()}.`;
   if (!form.confirmPassword || form.confirmPassword !== form.password) issues.confirmPassword = 'Las contraseñas no coinciden.';
+  return { ...issues, ...companyIssues(form) };
+}
+
+/** Los datos del comercio (sin la cuenta): los comparte el registro y el alta con sesión iniciada. */
+export type CompanyForm = Pick<RegisterForm, 'companyName' | 'companySlug' | 'businessVertical' | 'plan'>;
+
+export const emptyCompanyForm = (plan = ''): CompanyForm => ({ companyName: '', companySlug: '', businessVertical: '', plan });
+
+export function companyIssues(form: CompanyForm): Partial<Record<keyof CompanyForm, string>> {
+  const issues: Partial<Record<keyof CompanyForm, string>> = {};
   if (form.companyName.trim().length < 2) issues.companyName = 'Escribí el nombre de tu comercio.';
   if (storeSlugOf(form).length < 3) issues.companySlug = 'La dirección de tu tienda necesita al menos 3 letras o números.';
   if (!form.plan) issues.plan = 'Elegí un plan para continuar.';
   return issues;
+}
+
+/** Lo que espera POST /api/auth/create-company: la cuenta sale de la sesión, no del pedido. */
+export function ownCompanyPayload(form: CompanyForm) {
+  return {
+    companyName: form.companyName.trim(),
+    companySlug: storeSlugOf(form),
+    ...(form.businessVertical ? { businessVertical: form.businessVertical } : {}),
+    plan: form.plan,
+  };
 }
 
 /** Lo que espera POST /api/auth/register-company, igual que la web. */
