@@ -64,7 +64,9 @@ export async function POST(request: Request) {
     }
 
     const [membership, owned, profile, roleRow] = await Promise.all([
-      admin.from('organization_members').select('organization_id').eq('user_id', user.id).eq('status', 'active').limit(1).maybeSingle(),
+      // Ser cliente de una tienda (rol customer) no es tener comercio: antes eso
+      // rechazaba a quien compró en una tienda y después quiso abrir el suyo.
+      admin.from('organization_members').select('organization_id').eq('user_id', user.id).eq('status', 'active').neq('role', 'customer').limit(1).maybeSingle(),
       admin.from('organizations').select('id').eq('owner_id', user.id).limit(1).maybeSingle(),
       admin.from('profiles').select('full_name, email, role').eq('id', user.id).maybeSingle(),
       admin.from('user_roles').select('role, is_active').eq('user_id', user.id).maybeSingle(),

@@ -86,6 +86,14 @@ export default function RegisterScreen() {
       const fields = registerFieldErrors(cause);
       if (Object.keys(fields).length) setServerErrors(fields as Partial<Record<RegisterField, string>>);
       const pending = cause instanceof ApiError && cause.body?.code === 'REGISTRATION_PENDING_CONFIRMATION';
+      // Ya era cliente con este correo: entra con su cuenta y crea el comercio con ella.
+      if (cause instanceof ApiError && cause.body?.code === 'ACCOUNT_EXISTS') {
+        Alert.alert('Ya tenés una cuenta', cause.message, [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ingresar y crear mi comercio', onPress: () => router.replace({ pathname: '/sign-in', params: { email: form.email.trim(), next: 'create-company', ...(form.plan ? { plan: form.plan } : {}) } } as never) },
+        ]);
+        return;
+      }
       Alert.alert(
         pending ? 'Ya empezaste el registro' : 'No pudimos crear tu comercio',
         cause instanceof ApiError && cause.status >= 400 && cause.status < 500 && cause.message ? cause.message : websiteErrorMessage(cause, 'Revisá tu conexión e intentá nuevamente.'),
