@@ -130,6 +130,11 @@ export default function BuyerProfileEditScreen() {
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Pressable accessibilityRole="button" accessibilityLabel="Mis turnos" onPress={()=>router.push('/mis-turnos' as never)} style={{flexDirection:'row',alignItems:'center',gap:10,borderWidth:1,borderColor:colors.border,backgroundColor:colors.card,padding:15,borderRadius:14}}>
+            <Ionicons name="calendar-outline" size={22} color={palette.primary}/>
+            <View style={{flex:1}}><Text style={{color:colors.text,fontSize:15,fontWeight:'700'}}>Mis turnos</Text><Text style={{color:colors.muted,fontSize:12,marginTop:3}}>Próximas reservas e historial</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted}/>
+          </Pressable>
           {loadState === 'loading' && <ActivityIndicator color={palette.primary} style={styles.loading} />}
           {loadState === 'error' && (
             <View style={styles.center}>

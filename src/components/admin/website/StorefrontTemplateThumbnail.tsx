@@ -324,6 +324,47 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
           </div>
         </>
       )}
+      {style === 'especial-cosmeticos' && (
+        <>
+          <div className="overflow-hidden rounded-sm bg-[#FFFBF8] dark:bg-zinc-900 border-b border-rose-200/60 dark:border-rose-900/30">
+            <div className="flex items-center justify-between px-1.5 py-1">
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-rose-400" />
+                <span className="block h-1 w-7 rounded-full bg-stone-700 dark:bg-stone-200" />
+              </div>
+              <div className="flex gap-1">
+                <span className="block h-1 w-3 rounded-full bg-rose-400/80" />
+                <span className="block h-1.5 w-1.5 rounded-full bg-rose-500" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg bg-gradient-to-r from-rose-100/80 via-pink-50 to-amber-50/60 dark:from-zinc-900 dark:to-rose-950/40 p-1.5 border border-rose-200/50 dark:border-rose-900/40">
+            <div className="space-y-0.5">
+              <span className="block font-serif text-[7px] font-semibold text-stone-800 dark:text-stone-100">Boutique Glow</span>
+              <span className="block h-0.5 w-8 rounded-full bg-rose-400/70" />
+            </div>
+            <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[5px] font-medium text-white shadow-2xs">Rutinas</span>
+          </div>
+          <div className="flex justify-between gap-1 px-0.5">
+            {['Sérum', 'Crema', 'Solar'].map((label) => (
+              <span key={label} className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[5px] font-medium text-rose-700 dark:text-rose-300">
+                {label}
+              </span>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="overflow-hidden rounded-xl border border-rose-100 bg-[#FFFDFB] p-0.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="aspect-[3/4] w-full rounded-lg bg-gradient-to-b from-rose-50 to-pink-100/50 dark:from-zinc-800 dark:to-zinc-850" />
+                <div className="mt-0.5 space-y-0.5 px-0.5 text-center">
+                  <span className="block h-0.5 w-3/4 mx-auto rounded-full bg-stone-700/70 dark:bg-stone-300/70" />
+                  <span className="block h-1 w-1/2 mx-auto rounded-full bg-rose-600" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

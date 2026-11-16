@@ -3,6 +3,7 @@
 import { WholesaleFooter } from '@/components/public/wholesale/WholesaleFooter'
 import { CatalogBasicFooter } from '@/components/public/catalog-basic/CatalogBasicFooter'
 import { EspecialBarberoFooter } from '@/components/public/especial-para-barbero/EspecialBarberoFooter'
+import { EspecialCosmeticosFooter } from '@/components/public/especial-cosmeticos/EspecialCosmeticosFooter'
 
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
@@ -79,6 +80,9 @@ export function PublicFooter({
         servicesModuleEnabled={servicesModuleEnabled}
       />
     )
+  }
+  if (style === 'especial-cosmeticos') {
+    return <EspecialCosmeticosFooter initialSettings={effectiveSettings} />
   }
 
   return (
