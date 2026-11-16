@@ -28,6 +28,7 @@ import { createClient } from '@/lib/supabase/client'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { siteUrl } from '@/lib/site-url'
 import { toast } from 'sonner'
 
@@ -210,6 +211,9 @@ function LoginTab({
 
   return (
     <div className="animate-in fade-in-0 duration-150 space-y-4">
+      {/* Google vuelve a esta misma página con la sesión iniciada. */}
+      <GoogleSignInButton disabled={loading} className="h-11 w-full rounded-lg font-semibold" />
+      <AuthMethodDivider />
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="modal-email" className="text-xs font-semibold">
@@ -533,6 +537,8 @@ function RegisterTab({
       </div>
 
       <div className="space-y-2.5">
+        {/* Con Google la cuenta queda creada en un paso y vuelve a esta página. */}
+        <GoogleSignInButton label="Crear cuenta con Google" disabled={loading} className="h-11 w-full rounded-lg font-semibold" />
         <button
           type="button"
           onClick={() => {

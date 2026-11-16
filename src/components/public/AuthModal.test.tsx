@@ -9,6 +9,7 @@ const resetPasswordForEmail = vi.fn()
 const signInWithPassword = vi.fn()
 const routerPush = vi.fn()
 const routerRefresh = vi.fn()
+const signInWithOAuth = vi.fn()
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/marketplace',
@@ -22,6 +23,7 @@ vi.mock('@/lib/supabase/client', () => ({
     auth: {
       signInWithPassword,
       resetPasswordForEmail,
+      signInWithOAuth,
     },
   }),
 }))
@@ -133,5 +135,28 @@ describe('AuthModal password recovery', () => {
     })
 
     expect(screen.getByText(/Si existe una cuenta con ese correo/i)).toBeInTheDocument()
+  })
+})
+
+describe('AuthModal con Google', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInWithOAuth.mockResolvedValue({ error: null })
+    window.history.replaceState(null, '', '/marketplace/producto/abc?talle=m')
+  })
+
+  it('ofrece Google al ingresar y vuelve a la misma página', async () => {
+    render(<AuthModal open onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /continuar con google/i }))
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledTimes(1))
+    const options = signInWithOAuth.mock.calls[0][0]
+    expect(options.provider).toBe('google')
+    expect(options.options.redirectTo).toBe(`${window.location.origin}/auth/callback?next=${encodeURIComponent('/marketplace/producto/abc?talle=m')}`)
+  })
+
+  it('ofrece Google también al crear la cuenta', async () => {
+    render(<AuthModal open onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('tab', { name: /registr/i }))
+    expect(await screen.findByRole('button', { name: /crear cuenta con google/i })).toBeInTheDocument()
   })
 })

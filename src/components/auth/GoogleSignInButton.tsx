@@ -12,7 +12,8 @@ import { buildGoogleCallbackUrl } from '@/lib/auth/google-oauth'
  * si el correo no tiene cuenta, Supabase la crea y el trigger `handle_new_user`
  * arma el perfil, igual que un registro con contraseña.
  *
- * `next` es la ruta interna a la que se vuelve después de Google.
+ * `next` es la ruta interna a la que se vuelve después de Google. Sin `next`
+ * (los modales) vuelve a la página donde estaba la persona.
  */
 export function GoogleSignInButton({
   next,
@@ -20,7 +21,7 @@ export function GoogleSignInButton({
   disabled,
   className,
 }: {
-  next: string
+  next?: string
   label?: string
   disabled?: boolean
   className?: string
@@ -35,7 +36,7 @@ export function GoogleSignInButton({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: buildGoogleCallbackUrl(window.location.origin, next),
+          redirectTo: buildGoogleCallbackUrl(window.location.origin, next ?? `${window.location.pathname}${window.location.search}`),
           // Deja elegir la cuenta: en una PC compartida no entra con la última que usó.
           queryParams: { prompt: 'select_account' },
         },
