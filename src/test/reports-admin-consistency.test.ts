@@ -22,7 +22,23 @@ const EXPORTADOR_SECCIONES = leer('src/lib/reports/section-pdf-exporter.ts')
 describe('las dos secciones se pueden cuadrar', () => {
   it('admin dice que incluye su total', () => {
     expect(ADMIN).toContain("label: 'Facturación total (POS + taller)'")
-    expect(ADMIN).toContain('helper: `POS ${formatMoney(selectedPosRevenue)} · Taller ${formatMoney(selectedRepairRevenue)}`')
+    expect(ADMIN).toContain('helper: `POS ${formatMoney(selectedPosRevenue)} · Cobrado del taller fuera del POS ${formatMoney(repairCollectedOutsidePos)}`')
+  })
+
+  it('el total no cuenta dos veces lo cobrado en el POS ni suma presupuestos', () => {
+    // Las reparaciones cobradas en el POS ya están en la venta: el taller suma solo
+    // lo cobrado fuera del POS (repair_payments sin sale_id).
+    expect(ADMIN).toContain('const currentGrossRevenue = selectedPosRevenue + repairCollectedOutsidePos')
+    expect(ADMIN).toMatch(/from\('repair_payments'\)[\s\S]{0,200}\.is\('sale_id', null\)/)
+    // El taller factura lo ENTREGADO en el período, no lo que ingresó.
+    expect(ADMIN).toContain('const selectedRepairRevenue = deliveredRepairsInPeriod.reduce(')
+    expect(ADMIN).not.toContain('const selectedRepairRevenue = revenueRepairs.reduce(')
+  })
+
+  it('pagina las consultas en vez de cortar en 1000 filas', () => {
+    expect(ADMIN).toMatch(/fetchAllPages\(\(\) => supabase\s+\.from\('sales'\)/)
+    expect(ADMIN).not.toContain('.limit(2000)')
+    expect(ADMIN).toContain("partialErrors.push('movimientos de caja')")
   })
 
   it('admin publica la cifra de POS, que es la que compara con reportes', () => {
