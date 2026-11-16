@@ -16,11 +16,13 @@ const state = vi.hoisted(() => ({
 
 function builder(table: string) {
   const filters: Record<string, unknown> = {}
+  const excluded: Record<string, unknown> = {}
   const api: Record<string, unknown> = {}
   const chain = () => api
   Object.assign(api, {
     select: chain, order: chain, limit: chain,
     eq: (column: string, value: unknown) => { filters[column] = value; return api },
+    neq: (column: string, value: unknown) => { excluded[column] = value; return api },
     insert: (row: unknown) => { state.inserted.push({ table, row }); return api },
     upsert: (row: unknown) => {
       state.upserted.push({ table, row })
@@ -31,7 +33,7 @@ function builder(table: string) {
     single: async () => ({ data: { id: 'org-1', name: 'Barbería Ana', slug: 'barberia-ana', plan: 'BASIC' }, error: null }),
     maybeSingle: async () => {
       if (table === 'subscription_plans') return { data: filters.public_slug === 'basic' ? { tier: 'basic', name: 'BASIC', is_active: true, trial_days: 7 } : null, error: null }
-      if (table === 'organization_members') return { data: state.membership, error: null }
+      if (table === 'organization_members') return { data: state.membership && excluded.role !== undefined && state.membership.role === excluded.role ? null : state.membership, error: null }
       if (table === 'organizations') return { data: 'slug' in filters ? state.slugTaken : state.ownedBy, error: null }
       if (table === 'profiles') return { data: state.profile, error: null }
       return { data: null, error: null }
@@ -92,11 +94,17 @@ describe('alta de comercio con la sesión iniciada', () => {
   })
 
   it('un comercio por persona', async () => {
-    state.membership = { organization_id: 'org-existente' }
+    state.membership = { organization_id: 'org-existente', role: 'owner' }
     const response = await post(valid)
     expect(response.status).toBe(409)
     expect((await response.json()).code).toBe('ALREADY_HAS_COMPANY')
     expect(state.inserted).toHaveLength(0)
+  })
+
+  it('ser cliente de una tienda no impide abrir el comercio propio', async () => {
+    // Se registró como cliente, compró en una tienda y después quiso vender.
+    state.membership = { organization_id: 'tienda-donde-compra', role: 'customer' }
+    expect((await post(valid)).status).toBe(201)
   })
 
   it('una cuenta del equipo de otro comercio no se vuelve administradora', async () => {
@@ -141,5 +149,19 @@ describe('alta con sesión en la app', () => {
     const layout = readFileSync(resolve(process.cwd(), 'mobile/src/app/_layout.tsx'), 'utf8')
     const guarded = layout.slice(layout.indexOf('<Stack.Protected guard={!!session}>'), layout.indexOf('<Stack.Protected guard={!session}>'))
     expect(guarded).toContain('name="create-company"')
+  })
+})
+
+describe('cliente que después registra su comercio con el mismo correo', () => {
+  it('el registro con contraseña responde ACCOUNT_EXISTS y la web y la app ofrecen ingresar y crear el comercio', () => {
+    expect(readFileSync(resolve(process.cwd(), 'src/app/api/auth/register-company/route.ts'), 'utf8')).toContain("code: 'ACCOUNT_EXISTS'")
+    const web = readFileSync(resolve(process.cwd(), 'src/app/register/page.tsx'), 'utf8')
+    expect(web).toContain("result.code === 'ACCOUNT_EXISTS'")
+    expect(web).toContain('/register/comercio')
+    const app = readFileSync(resolve(process.cwd(), 'mobile/src/app/register.tsx'), 'utf8')
+    expect(app).toContain("cause.body?.code === 'ACCOUNT_EXISTS'")
+    expect(app).toContain("next: 'create-company'")
+    const signIn = readFileSync(resolve(process.cwd(), 'mobile/src/app/sign-in.tsx'), 'utf8')
+    expect(signIn).toContain('setPostAuthRoute(afterSignIn ?? null)')
   })
 })

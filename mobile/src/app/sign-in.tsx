@@ -32,6 +32,7 @@ import { isSessionMfaPending } from '@/lib/mfa-model';
 import { supabase } from '@/lib/supabase';
 import { MfaCodeCard } from '@/components/mfa-code-card';
 import { GoogleSignInButton } from '@/components/google-sign-in-button';
+import { setPostAuthRoute, type PostAuthRoute } from '@/lib/post-auth-route';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -47,7 +48,9 @@ export default function SignInScreen() {
   const isDark = colorScheme === 'dark';
   const passwordRef = useRef<TextInput>(null);
   // Al volver del registro en la web: cuenta creada y, si hace falta, confirmar el email.
-  const registrationParams = useLocalSearchParams<{ registered?: string; confirmar?: string; account?: string; email?: string }>();
+  const registrationParams = useLocalSearchParams<{ registered?: string; confirmar?: string; account?: string; email?: string; next?: string; plan?: string }>();
+  // Cliente que quiso registrar su comercio: después de entrar va a «Crear mi comercio».
+  const afterSignIn: PostAuthRoute | undefined = registrationParams.next === 'create-company' ? { pathname: '/create-company', params: registrationParams.plan ? { plan: registrationParams.plan } : {} } : undefined;
   const registered = registrationNotice(parseRegistrationReturn(registrationParams), registrationParams.account === 'customer' ? 'customer' : 'company');
 
   const [email, setEmail] = useState(registrationParams.email ?? '');
@@ -106,7 +109,9 @@ export default function SignInScreen() {
     setError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+    setPostAuthRoute(afterSignIn ?? null);
     const message = await signIn(email, password);
+    if (message) setPostAuthRoute(null);
 
     if (message) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -483,7 +488,7 @@ export default function SignInScreen() {
                   <Text style={[styles.dividerLabel, { color: colors.muted }]}>o</Text>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                 </View>
-                <GoogleSignInButton disabled={busy} onError={setError} onDone={() => { void offerAfterGoogle(); }} />
+                <GoogleSignInButton disabled={busy} afterSignIn={afterSignIn} onError={setError} onDone={() => { void offerAfterGoogle(); }} />
               </View>
               )}
 

@@ -99,6 +99,8 @@ function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // El correo ya tiene cuenta (p. ej. cliente): se ofrece ingresar y crear el comercio con ella.
+  const [existingAccount, setExistingAccount] = useState(false)
   // Per-field inline errors (from Zod or client-side validation).
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
@@ -325,6 +327,7 @@ function RegisterForm() {
         } else {
           setError(result.error || 'No se pudo crear la cuenta.')
         }
+        setExistingAccount(result.code === 'ACCOUNT_EXISTS')
         setLoading(false)
         return
       }
@@ -924,7 +927,17 @@ function RegisterForm() {
                             aria-live="assertive"
                           >
                             <Shield className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                            <span>{error}</span>
+                            <span>
+                              {error}
+                              {existingAccount ? (
+                                <Link
+                                  href={`/login?redirect=${encodeURIComponent(`/register/comercio${selectedPlan ? `?plan=${encodeURIComponent(planParam || selectedPlan.toLowerCase())}` : ''}`)}`}
+                                  className="mt-1 block font-bold underline"
+                                >
+                                  Ingresar y crear mi comercio
+                                </Link>
+                              ) : null}
+                            </span>
                           </motion.div>
                         )}
                       </AnimatePresence>

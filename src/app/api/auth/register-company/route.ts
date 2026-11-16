@@ -233,7 +233,10 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Ya existe una cuenta con este correo. Inicia sesion para crear una empresa.',
+          code: 'ACCOUNT_EXISTS',
+          // Típico: se registró como cliente y ahora quiere vender. Con su cuenta
+          // iniciada crea el comercio en /register/comercio, sin otra cuenta.
+          error: 'Ya tenés una cuenta con este correo. Ingresá con ella y creá tu comercio desde ahí.',
         },
         { status: 409 }
       )
