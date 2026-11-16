@@ -10,6 +10,7 @@ import { palette, usePalette } from '@/lib/palette';
 import { openSaasLink } from '@/lib/saas';
 import { getSaasSection, SAAS_SECTIONS } from '@/lib/saas-navigation';
 import { useSession } from '@/lib/session';
+import { useMarketplaceAccount } from '@/lib/marketplace-account';
 
 import { SaasButton, useSaasAccent } from './ui';
 
@@ -20,6 +21,8 @@ export function SaasShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const activeSection = getSaasSection(pathname);
   const { session, signOut } = useSession();
+  // Sin comercio el panel no abre: se ofrece crearlo (p. ej. quien entró con Google).
+  const account = useMarketplaceAccount();
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const displayName = typeof session?.user.user_metadata?.full_name === 'string' ? session.user.user_metadata.full_name.trim() : '';
@@ -147,7 +150,9 @@ export function SaasShell({ children }: PropsWithChildren) {
               </View>
             </View>
             {session ? <>
-              <SaasButton label="Abrir mi panel" icon="speedometer-outline" onPress={() => navigate('/panel' as Href)} />
+              {account.business.state === 'none'
+                ? <SaasButton label="Crear mi comercio" icon="storefront-outline" onPress={() => navigate('/create-company' as Href)} />
+                : <SaasButton label="Abrir mi panel" icon="speedometer-outline" onPress={() => navigate('/panel' as Href)} />}
             </> : <>
               <SaasButton label="Ingresar" icon="log-in-outline" onPress={() => navigate('/sign-in')} />
               <ProfileMenuItem icon="person-add-outline" title="Crear cuenta" description="Registrá tu comercio desde la app" onPress={() => { setMenuOpen(false); void openSaasLink('/register'); }} />

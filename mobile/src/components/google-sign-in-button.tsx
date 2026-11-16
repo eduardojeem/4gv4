@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { usePalette } from '@/lib/palette';
 import { useSession } from '@/lib/session';
+import { setPostAuthRoute, type PostAuthRoute } from '@/lib/post-auth-route';
 
 /**
  * «Continuar con Google»: entra o crea la cuenta en un paso. Al guardar la
@@ -14,11 +15,14 @@ export function GoogleSignInButton({
   disabled,
   onError,
   onDone,
+  afterSignIn,
 }: {
   label?: string;
   disabled?: boolean;
   onError: (message: string | null) => void;
   onDone?: () => void;
+  /** Pantalla a abrir con la sesión ya iniciada (la abre el layout, no esta pantalla). */
+  afterSignIn?: PostAuthRoute;
 }) {
   const { signInWithGoogle } = useSession();
   const colors = usePalette();
@@ -30,10 +34,13 @@ export function GoogleSignInButton({
     pending.current = true;
     setBusy(true);
     onError(null);
+    // Antes de guardar la sesión: el layout lo lee en cuanto la ve.
+    setPostAuthRoute(afterSignIn ?? null);
     try {
       const result = await signInWithGoogle();
-      if (result === 'cancelled') return;
+      if (result === 'cancelled') { setPostAuthRoute(null); return; }
       if (result) {
+        setPostAuthRoute(null);
         onError(result);
         AccessibilityInfo.announceForAccessibility(result);
         return;

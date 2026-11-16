@@ -5,6 +5,7 @@ import { useColorScheme } from 'react-native';
 
 import { BiometricLockScreen } from '@/components/biometric-lock-screen';
 import { apiFetch } from '@/lib/api';
+import { takePostAuthRoute } from '@/lib/post-auth-route';
 import { useMobileRegionalSettings } from '@/lib/regional-settings-sync';
 import { SessionProvider, useSession } from '@/lib/session';
 
@@ -31,6 +32,17 @@ function RootNavigator() {
   useEffect(() => {
     if (!isLoading) SplashScreen.hide();
   }, [isLoading]);
+
+  // Lo que pidió la pantalla que abrió Google (p. ej. «Crear mi comercio»). Se
+  // navega después del cambio de pantallas que dispara la sesión nueva, que si
+  // no lo pisaba y la persona terminaba en el marketplace sin su comercio.
+  useEffect(() => {
+    if (!sessionUserId || locked) return;
+    const route = takePostAuthRoute();
+    if (!route) return;
+    const timer = setTimeout(() => router.replace(route as never), 0);
+    return () => clearTimeout(timer);
+  }, [sessionUserId, locked]);
 
   useEffect(() => {
     if (!sessionUserId || locked) return;
