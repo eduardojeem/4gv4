@@ -131,8 +131,11 @@ describe('el alta usa el kit', () => {
     expect(registerCompanySchema.safeParse({ businessVertical: 'inventado' }).success).toBe(false)
 
     const registro = leer('src/app/api/auth/register-company/route.ts')
-    expect(registro).toContain('business_vertical: input.businessVertical')
+    // El comercio se arma en el módulo compartido con el alta de quien ya tiene cuenta.
+    expect(registro).toContain('businessVertical: input.businessVertical')
+    expect(leer('src/lib/organization/provision-company.ts')).toContain('business_vertical: input.businessVertical')
     expect(registro).toContain('provisionStarterKit(')
+    expect(leer('src/app/api/auth/create-company/route.ts')).toContain('provisionStarterKit(')
   })
 
   it('el onboarding siembra cobro, barra de confianza y WhatsApp', () => {
