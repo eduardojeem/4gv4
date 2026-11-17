@@ -86,6 +86,7 @@ export interface PublicProduct {
  * Shows only essential information without internal notes
  */
 export interface PublicRepair {
+  store?: { name: string; slug: string }
   ticketNumber: string
   device: string
   brand: string

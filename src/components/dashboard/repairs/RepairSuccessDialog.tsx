@@ -16,15 +16,20 @@ import {
   Layers, 
   FileText, 
   FileCheck2, 
-  Smartphone
+  Smartphone,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { 
   RepairPrintPayload, 
   printRepairReceipt, 
   openRepairWhatsApp,
+  generateRepairShareText,
   getReceiptSettings,
   REPAIR_RECEIPT_SETTINGS_EVENT,
 } from '@/lib/repair-receipt'
+import { repairWhatsAppPhone } from '@/lib/repairs/whatsapp-message'
+import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
 import { RepairReceiptSettingsDialog } from '@/components/dashboard/repairs/RepairReceiptSettingsDialog'
 
@@ -41,6 +46,20 @@ export function RepairSuccessDialog({
 }: RepairSuccessDialogProps) {
   const [paperFormat, setPaperFormat] = useState<'80mm' | '58mm' | 'A4'>('80mm')
   const [showSettings, setShowSettings] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyWhatsAppText = async () => {
+    if (!data) return
+    try {
+      const text = generateRepairShareText(data)
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      toast.success('Mensaje de WhatsApp copiado al portapapeles')
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      toast.error('No se pudo copiar el mensaje automáticamente')
+    }
+  }
 
   useEffect(() => {
     const syncPaper = () => setPaperFormat(getReceiptSettings().paperFormat)
@@ -65,6 +84,9 @@ export function RepairSuccessDialog({
   const totalCost = data.finalCost ?? data.estimatedCost ?? data.devices.reduce((acc, d) => acc + (d.finalCost ?? d.estimatedCost ?? 0), 0)
   const paidAmount = data.paidAmount ?? data.deposit ?? data.devices.reduce((acc, d) => acc + (d.paidAmount ?? d.deposit ?? 0), 0)
   const pendingBalance = Math.max(0, totalCost - paidAmount)
+  const targetPhone = data.customer.phone
+    ? repairWhatsAppPhone(data.customer.phone, data.customer.country || 'PY') || data.customer.phone.replace(/[^\d+]/g, '')
+    : null
 
   const handlePrintBoth = () => {
     printRepairReceipt('customer', data, paperFormat)
@@ -194,6 +216,30 @@ export function RepairSuccessDialog({
                   <MessageSquare className="h-4 w-4 text-emerald-600" />
                   <span>Enviar WhatsApp</span>
                 </Button>
+              </div>
+
+              {/* Atajo de copiado y destinatario WhatsApp */}
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 text-[11px]">
+                <span className="text-slate-600 dark:text-slate-400 font-medium truncate max-w-[220px]">
+                  {targetPhone ? `📱 Destino: +${targetPhone.replace(/^\+/, '')}` : '📱 Sin teléfono cargado'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyWhatsAppText}
+                  className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-300 hover:underline shrink-0"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>Copiar mensaje</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Opciones de Ficha Técnica */}

@@ -1,3 +1,5 @@
+import {RepairWhatsAppActions} from '@/components/repair-whatsapp-actions';
+import {DocumentActions} from '@/components/document-actions';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { repairWarrantySummary } from '@/lib/repair-warranty';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,14 +51,6 @@ import {
 } from '@/lib/repairs';
 
 type Colors = ReturnType<typeof usePalette>;
-
-/** Teléfono para wa.me: solo dígitos y con 595 si viene en formato local (09xx). */
-function whatsappNumber(phone: string) {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('595')) return digits;
-  if (digits.startsWith('0')) return `595${digits.slice(1)}`;
-  return digits;
-}
 
 export default function RepairDetail() {
   const colors = usePalette();
@@ -201,6 +195,7 @@ export default function RepairDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
+        {can('repairs.orders.read')&&<DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>}
         {/* Estado y avance */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rowBetween}>
@@ -357,22 +352,12 @@ export default function RepairDetail() {
                 <Ionicons name="call-outline" size={18} color={colors.text} />
                 <Text style={[styles.actionText, { color: colors.text }]}>Llamar</Text>
               </Pressable>
-              <Pressable
-                onPress={() =>
-                  Linking.openURL(
-                    `https://wa.me/${whatsappNumber(phone)}?text=${encodeURIComponent(
-                      `Hola ${customerName(repair)}, te escribimos por tu ${deviceName(repair)} (orden ${ticketOf(repair)}). Estado: ${status.label}.`
-                    )}`
-                  )
-                }
-                style={[styles.contact, { borderColor: '#16A34A66', backgroundColor: '#16A34A12' }]}>
-                <Ionicons name="logo-whatsapp" size={18} color="#16A34A" />
-                <Text style={[styles.actionText, { color: '#16A34A' }]}>WhatsApp</Text>
-              </Pressable>
+
             </View>
           ) : (
             <Text style={[styles.small, { color: colors.muted }]}>Sin teléfono cargado.</Text>
           )}
+          <RepairWhatsAppActions repairId={repair.id}/>
         </Card>
 
         {/* Costos */}

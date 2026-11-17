@@ -1,3 +1,4 @@
+import { publicRepairStore } from '@/lib/repairs/public-store'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -193,6 +194,7 @@ export async function GET(
     
     // Build public repair object (filter sensitive data)
     const publicRepair: PublicRepair = {
+      store: await publicRepairStore(admin, repair.organization_id),
       ticketNumber: repair.ticket_number,
       device: `${repair.device_brand} ${repair.device_model}`,
       brand: repair.device_brand,
@@ -224,7 +226,7 @@ export async function GET(
       success: true,
       data: publicRepair,
       cached: false
-    })
+    }, {headers:{'Cache-Control':'private, no-store'}})
   } catch (error) {
     logger.error('Public repair detail API error', { error })
     return NextResponse.json(

@@ -2201,7 +2201,7 @@ export function RepairFormDialogV2({
                                     images={field.value || []}
                                     onChange={field.onChange}
                                     maxImages={photoLimit}
-                                    maxSize={5242880}
+                                    maxSize={15 * 1024 * 1024}
                                     compact
                                     onUploadFiles={onUploadFiles}
                                     allowUrlInput={false}
@@ -2804,6 +2804,11 @@ export function RepairFormDialogV2({
                       </div>
                       {errors.depositAmount && (
                         <p className="text-xs text-red-500">{errors.depositAmount.message}</p>
+                      )}
+                      {(watch('laborCost') || 0) === 0 && (watch('parts')?.length || 0) === 0 && watch('finalCost') === null && (watch('depositAmount') ?? 0) > 0 && (
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          Seña de revisión o diagnóstico inicial (se descontará del presupuesto una vez aprobado).
+                        </p>
                       )}
                     </div>
 

@@ -1,3 +1,5 @@
+import {outputDocument} from './native-document';
+import {paymentReceiptHtml} from './payment-receipt-html';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import {File} from 'expo-file-system';
@@ -14,3 +16,5 @@ export function sharePaymentReceiptPdf(snapshot:unknown,epoch:number){
   remove:uri=>new File(uri).delete(),
  });
 }
+
+export function printPaymentReceipt(snapshot:unknown,epoch:number){return outputDocument({html:paymentReceiptHtml(snapshot),width:595,height:842},'print',epoch);}
