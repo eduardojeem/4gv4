@@ -183,10 +183,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
     }
   }, [isSearchOpen])
 
-  const storeName = company?.name?.trim() || 'Paravos Cosméticos'
+  const storeName = company?.name?.trim() || 'Tu tienda'
   const slogan = company?.slogan?.trim() || 'Alta Cosmética & Cuidado Botánico'
-  const logoUrl = company?.logoUrl?.trim() || 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/branding/paravos-logo.webp'
-  const phone = company?.phone?.trim() || '+595 981 111 111'
+  const logoUrl = company?.logoUrl?.trim() || ''
+  const phone = company?.phone?.trim() || ''
   const whatsapp = company?.whatsapp?.trim() || phone
   const whatsappClean = whatsapp.replace(/\D/g, '')
 
@@ -239,10 +239,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <div className="flex items-center gap-2">
                 <Sparkles className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
                 <span className="font-medium tracking-wide">
-                  Envíos a todo el país · Asesoramiento personalizado de rutina
+                  Consultá productos y opciones con el comercio
                 </span>
                 <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-rose-200/60 dark:bg-rose-900/50 px-2 py-0.5 text-[10px] font-semibold text-rose-800 dark:text-rose-200">
-                  ✦ 100% Vegano & Cruelty Free
+                  ✦ Catálogo online
                 </span>
               </div>
               <div className="hidden sm:flex items-center gap-4 text-[11px]">
@@ -281,7 +281,6 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <div className="relative h-11 w-11 overflow-hidden rounded-full border border-rose-200/80 shadow-xs bg-white">
                 <AppImage
                   src={logoUrl}
-                  fallbackSrc="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/branding/paravos-logo.webp"
                   alt={storeName}
                   fill
                   className="object-cover"
@@ -455,16 +454,16 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                             </div>
                             <div className="min-w-0 flex-1">
                               <span className="inline-block px-1.5 py-0.2 text-[9px] font-extrabold uppercase rounded-full bg-rose-600 text-white shadow-2xs">
-                                -25% OFF
+                                Catálogo
                               </span>
                               <p className="font-serif text-xs font-bold text-stone-900 dark:text-stone-100 truncate mt-0.5">
-                                Set Rutina Glow Completa
+                                Productos del comercio
                               </p>
                               <Link
-                                href={`${prefix}/inicio#ofertas`}
+                                href={`${prefix}/productos`}
                                 className="text-[11px] font-semibold text-rose-600 hover:underline inline-flex items-center gap-1"
                               >
-                                <span>Ver Oferta</span>
+                                <span>Ver productos</span>
                                 <ArrowRight className="h-2.5 w-2.5" />
                               </Link>
                             </div>
@@ -477,7 +476,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     <div className="mt-4 pt-3 border-t border-rose-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
                         <Clock className="h-3.5 w-3.5 text-rose-500" />
-                        <span>Envíos en el día en Asunción · Retiros en Showroom</span>
+                        <span>Consultá las opciones de entrega</span>
                       </div>
                       <Link
                         href={`${prefix}/productos`}
@@ -502,7 +501,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
             {/* Ofertas Especiales con Badge llamativo */}
             <Link
-              href={`${prefix}/inicio#ofertas`}
+              href={`${prefix}/productos`}
               className={cn(
                 'inline-flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors relative py-1',
                 isOffers
@@ -761,7 +760,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               </Link>
 
               <Link
-                href={`${prefix}/inicio#ofertas`}
+                href={`${prefix}/productos`}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
               >

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
@@ -8,18 +8,14 @@ import {
   ArrowRight,
   Clock,
   Droplets,
-  Heart,
   Instagram,
   Layers,
   MapPin,
   MessageCircle,
   Navigation,
   RefreshCw,
-  Search,
   ShieldCheck,
-  ShoppingBag,
   Sparkles,
-  Star,
   Sun,
   Truck,
   Zap,
@@ -32,8 +28,6 @@ import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-c
 import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { getCompanyMapsEmbedSrc, getDirectionsHref } from '@/lib/website/company-maps-url'
-import { cn } from '@/lib/utils'
-import type { PublicProduct } from '@/types/public'
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
@@ -48,175 +42,9 @@ interface EspecialCosmeticosHomeProps {
 const SUPABASE_CDN = 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images'
 const IMG_PEDESTAL = `${SUPABASE_CDN}/promotions/hero-cosmetica-pedestal.webp`
 const IMG_MODELO = `${SUPABASE_CDN}/promotions/hero-cosmetica-modelo.webp`
-const IMG_SERUM = `${SUPABASE_CDN}/promotions/hero-cosmetica-serum.webp`
-const IMG_SPA = `${SUPABASE_CDN}/promotions/hero-cosmetica-spa.webp`
 const IMG_BOUTIQUE = `${SUPABASE_CDN}/promotions/hero-cosmetica-boutique.webp`
 
-// Fallback catalog curated for cosmetics boutique
-const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
-  {
-    id: 'cosm-1',
-    name: 'Sérum Hidratante Ácido Hialurónico Puro 2% + B5',
-    sku: 'SER-HA-01',
-    description: 'Hidratación multicapa profunda con 3 pesos moleculares para devolver la elasticidad y luminosidad.',
-    sale_price: 145000,
-    wholesale_price: null,
-    stock_quantity: 25,
-    in_stock: true,
-    is_active: true,
-    featured: true,
-    brand: 'Glowora Lab',
-    category: {
-      id: 'serums',
-      name: 'Sérums Activos',
-    },
-    image: IMG_PEDESTAL,
-    images: [IMG_PEDESTAL],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-  {
-    id: 'cosm-2',
-    name: 'Crema Hidratante Facial Péptidos & Niacinamida 50ml',
-    sku: 'CRM-PEP-02',
-    description: 'Barrera cutánea fortalecida, textura suave y acabado aterciopelado no graso para todo tipo de piel.',
-    sale_price: 185000,
-    wholesale_price: null,
-    stock_quantity: 18,
-    in_stock: true,
-    is_active: true,
-    featured: true,
-    brand: 'Glowora Lab',
-    category: {
-      id: 'hidratantes',
-      name: 'Hidratantes',
-    },
-    image: IMG_SERUM,
-    images: [IMG_SERUM],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-  {
-    id: 'cosm-3',
-    name: 'Protector Solar Invisible Fluido FPS 50+ Toque Seco',
-    sku: 'SOL-FPS-03',
-    description: 'Protección UVA/UVB de amplio espectro, resistente al agua y sudor, sin residuos blancos.',
-    sale_price: 120000,
-    wholesale_price: null,
-    stock_quantity: 30,
-    in_stock: true,
-    is_active: true,
-    featured: true,
-    brand: 'Glowora Shield',
-    category: {
-      id: 'solar',
-      name: 'Protección Solar',
-    },
-    image: IMG_MODELO,
-    images: [IMG_MODELO],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-  {
-    id: 'cosm-4',
-    name: 'Espuma Limpiadora Suave con Extracto de Camelia 150ml',
-    sku: 'LIM-CAM-04',
-    description: 'Limpia poros suavemente sin alterar el manto lipídico natural. Fórmula calmante botánica.',
-    sale_price: 95000,
-    wholesale_price: null,
-    stock_quantity: 22,
-    in_stock: true,
-    is_active: true,
-    featured: false,
-    brand: 'Glowora Pure',
-    category: {
-      id: 'limpieza',
-      name: 'Limpieza Facial',
-    },
-    image: IMG_SPA,
-    images: [IMG_SPA],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-  {
-    id: 'cosm-5',
-    name: 'Aceite Reparador Facial Rosa Mosqueta & Escualano',
-    sku: 'OIL-ROSE-05',
-    description: 'Nutrición botánica intensiva para la noche, regenera manchas y líneas finas de expresión.',
-    sale_price: 160000,
-    wholesale_price: null,
-    stock_quantity: 14,
-    in_stock: true,
-    is_active: true,
-    featured: true,
-    brand: 'Glowora Botanicals',
-    category: {
-      id: 'serums',
-      name: 'Sérums Activos',
-    },
-    image: IMG_BOUTIQUE,
-    images: [IMG_BOUTIQUE],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-  {
-    id: 'cosm-6',
-    name: 'Mascarilla Hidroplástica Calmante de Centella Asiática',
-    sku: 'MSK-CENT-06',
-    description: 'Tratamiento exprés de hidratación y calma post-solar o para pieles sensibles y estresadas.',
-    sale_price: 75000,
-    wholesale_price: null,
-    stock_quantity: 40,
-    in_stock: true,
-    is_active: true,
-    featured: false,
-    brand: 'Glowora Spa',
-    category: {
-      id: 'mascarillas',
-      name: 'Mascarillas & Spa',
-    },
-    image: IMG_SPA,
-    images: [IMG_SPA],
-    unit_measure: 'unidad',
-    barcode: null,
-  },
-]
-
-// Fallback curated offers
-const COSMETICS_DEALS = [
-  {
-    id: 'deal-1',
-    name: 'Set Rutina Glow Completa (Limpiador + Sérum + Hidratante)',
-    tag: 'COMBO ESTRELLA',
-    discount: '-25% OFF',
-    originalPrice: 425000,
-    salePrice: 318000,
-    image: IMG_SPA,
-    description: 'Los 3 pasos fundamentales para lograr piel radiante y equilibrada todos los días.',
-  },
-  {
-    id: 'deal-2',
-    name: 'Dúo Solar Anti-Manchas (FPS 50+ & Sérum Vitamina C 15%)',
-    tag: 'MÁS VENDIDO',
-    discount: '-30% OFF',
-    originalPrice: 320000,
-    salePrice: 224000,
-    image: IMG_PEDESTAL,
-    description: 'Máxima protección antioxidante contra el fotoenvejecimiento y tono apagado.',
-  },
-  {
-    id: 'deal-3',
-    name: 'Kit Spa Renovación Nocturna (Aceite Botánico + Gua Sha de Cuarzo)',
-    tag: 'EDICIÓN ESPECIAL',
-    discount: '-20% OFF',
-    originalPrice: 250000,
-    salePrice: 200000,
-    image: IMG_SERUM,
-    description: 'Masaje linfático facial y nutrición nocturna profunda para despertar descansada.',
-  },
-]
-
-export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosmeticosHomeProps) {
+export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps) {
   const pathname = usePathname()
   const company = useStorefrontCompanyInfo(settings.company_info)
   const { categories: liveCategories } = usePublicCategories()
@@ -225,48 +53,35 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
   const prefix = slug ? `/${slug}` : ''
 
   // Swr fetch for real organization products
-  const { data: realProducts, isLoading } = useSWR(
+  const { data: realProducts, isLoading, error: productsError } = useSWR(
     newestProductsKey(company.slug),
     () => fetchPublicProducts(company.slug),
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
 
-  const productsToDisplay = useMemo(() => {
-    if (realProducts && realProducts.length > 0) {
-      return realProducts
-    }
-    return FALLBACK_COSMETICS_PRODUCTS
-  }, [realProducts])
+  const productsToDisplay = realProducts ?? []
+  const offers = productsToDisplay.filter(product => product.has_offer && product.offer_price != null && product.offer_price < product.sale_price)
 
   // Company info with fallbacks
-  const storeName = company?.name?.trim() || 'Glowora'
-  const slogan = company?.slogan?.trim() || 'Revelá Tu Brillo Natural'
-  const address = company?.address?.trim() || 'Avda. Santa Teresa c/ Herminio Maldonado, Asunción'
-  const phone = company?.phone?.trim() || '+595 981 123 456'
+  const storeName = company?.name?.trim() || 'Tu tienda'
+  const address = company?.address?.trim() || ''
+  const phone = company?.phone?.trim() || ''
   const rawWhatsapp = (company?.whatsapp || company?.phone || '').trim()
-  const whatsappClean = rawWhatsapp.replace(/\D/g, '') || '595981123456'
+  const whatsappClean = rawWhatsapp.replace(/\D/g, '')
   const mapsEmbed = getCompanyMapsEmbedSrc(company?.mapsUrl, address)
   const directionsHref = getDirectionsHref(company?.mapsUrl, address)
 
   // Categories config
-  const defaultCategories = [
-    { name: 'Limpieza Facial', count: 12, icon: Droplets, href: `${prefix}/productos?categoria=limpieza` },
-    { name: 'Hidratantes', count: 18, icon: Sparkles, href: `${prefix}/productos?categoria=hidratantes` },
-    { name: 'Sérums Activos', count: 24, icon: Zap, href: `${prefix}/productos?categoria=serums` },
-    { name: 'Protección Solar', count: 9, icon: Sun, href: `${prefix}/productos?categoria=solar` },
-    { name: 'Mascarillas & Spa', count: 15, icon: Layers, href: `${prefix}/productos?categoria=mascarillas` },
-  ]
-
   const categoriesToShow = useMemo(() => {
     if (liveCategories && liveCategories.length > 0) {
       return liveCategories.slice(0, 5).map((cat, idx) => ({
         name: cat.name,
-        count: cat.productCount || 8 + idx * 3,
+        count: cat.productCount ?? null,
         icon: [Droplets, Sparkles, Zap, Sun, Layers][idx % 5],
         href: `${prefix}/productos?categoria=${encodeURIComponent(cat.name)}`,
       }))
     }
-    return defaultCategories
+    return []
   }, [liveCategories, prefix])
 
   return (
@@ -282,10 +97,10 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               {/* Badge promocional superior */}
               <div className="inline-flex items-center gap-2 rounded-full bg-rose-100/90 px-3.5 py-1 text-xs font-semibold tracking-wide text-rose-800 dark:bg-rose-950/60 dark:text-rose-200 border border-rose-200 dark:border-rose-800 shadow-2xs">
                 <Sparkles className="h-3.5 w-3.5 text-rose-500 animate-spin-slow" />
-                <span>20% OFF Clientes Nuevos</span>
+                <span>Conocé nuestro catálogo</span>
                 <span className="h-1 w-1 rounded-full bg-rose-400" />
                 <span className="font-mono text-[11px] uppercase tracking-wider text-rose-600 dark:text-rose-300">
-                  CUPÓN: GLOW20
+                  Explorá la tienda
                 </span>
               </div>
 
@@ -298,7 +113,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               </h2>
 
               <p className="max-w-xl text-base sm:text-lg leading-relaxed text-stone-600 dark:text-stone-300 mx-auto lg:mx-0">
-                Fórmulas botánicas dermatológicamente comprobadas para hidratar, proteger y devolver la luminosidad a tu piel en solo 14 días.
+                Explorá los productos publicados por el comercio y consultá sus características antes de elegir.
               </p>
 
               {/* Botones de acción */}
@@ -324,19 +139,19 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                     ✓
                   </span>
-                  <span>100% Vegano</span>
+                  <span>Catálogo online</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
                     ♥
                   </span>
-                  <span>Cruelty Free</span>
+                  <span>Información de productos</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                     ★
                   </span>
-                  <span>Testado Dermatológicamente</span>
+                  <span>Contacto con la tienda</span>
                 </div>
               </div>
             </div>
@@ -362,13 +177,10 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                         Piel de Porcelana Radiante
                       </p>
                       <p className="text-xs text-stone-500 dark:text-stone-400">
-                        Resultados visibles en 14 días de uso continuo
+                        Explorá las opciones disponibles en el catálogo
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 text-amber-500 font-bold text-xs bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded-full border border-amber-200/50">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                      <span>4.9 / 5.0</span>
-                    </div>
+
                   </div>
                 </div>
               </div>
@@ -388,10 +200,10 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               </span>
               <div>
                 <h4 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">
-                  Envíos a Todo el País
+                  Opciones de entrega
                 </h4>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-tight mt-0.5">
-                  Asunción en 24h y envíos a todo el interior por encomienda.
+                  Consultá las zonas, los costos y los plazos con el comercio.
                 </p>
               </div>
             </div>
@@ -403,10 +215,10 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               </span>
               <div>
                 <h4 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">
-                  Pagos 100% Seguros
+                  Medios de pago
                 </h4>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-tight mt-0.5">
-                  QR bancario, transferencias, tarjetas de crédito y efectivo.
+                  Las opciones habilitadas se muestran al realizar tu pedido.
                 </p>
               </div>
             </div>
@@ -421,7 +233,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                   Cambios y Devoluciones
                 </h4>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-tight mt-0.5">
-                  Hasta 7 días para cambios directos con tu comprobante.
+                  Consultá las condiciones del comercio antes de comprar.
                 </p>
               </div>
             </div>
@@ -436,7 +248,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                   Asesoría Personalizada
                 </h4>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-tight mt-0.5">
-                  Nuestras cosmetólogas te guían por WhatsApp para armar tu rutina.
+                  Consultá al comercio por sus canales de contacto disponibles.
                 </p>
               </div>
             </div>
@@ -475,7 +287,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                     {cat.name}
                   </h4>
                   <span className="text-[11px] font-medium text-stone-400 mt-1">
-                    {cat.count} productos
+                    {cat.count == null ? 'Ver categoría' : `${cat.count} productos`}
                   </span>
                 </Link>
               )
@@ -497,32 +309,8 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                 Cosmética Que Cuida y Nutre Tu Piel
               </h3>
               <p className="text-sm sm:text-base leading-relaxed text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0">
-                No se trata de cubrir imperfecciones, sino de restaurar la barrera hidrolipídica de tu piel con activos de pureza clínica y extractos botánicos nobles.
+                Encontrá información de los productos y elegí de acuerdo con tus preferencias.
               </p>
-
-              {/* Métricas de prueba social */}
-              <div className="flex items-center justify-center lg:justify-start gap-8 py-2">
-                <div>
-                  <p className="font-serif text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400">
-                    10.000+
-                  </p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">Clientes Satisfechas</p>
-                </div>
-                <div className="h-10 w-px bg-rose-200 dark:bg-zinc-800" />
-                <div>
-                  <p className="font-serif text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400">
-                    4.9 ★
-                  </p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">Rating Promedio</p>
-                </div>
-                <div className="h-10 w-px bg-rose-200 dark:bg-zinc-800" />
-                <div>
-                  <p className="font-serif text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400">
-                    24 Horas
-                  </p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">Envíos en Asunción</p>
-                </div>
-              </div>
 
               <div>
                 <Link
@@ -545,7 +333,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               />
               <div className="absolute inset-0 bg-gradient-to-t from-stone-950/50 via-transparent to-transparent flex items-end p-6">
                 <span className="rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-rose-800 shadow-md">
-                  ✦ Fórmulas Botánicas Puras
+                  ✦ Descubrí el catálogo
                 </span>
               </div>
             </div>
@@ -553,89 +341,31 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
         </div>
       </section>
 
-      {/* ── 5. SECCIÓN DE OFERTAS CON DESCUENTOS DESTACADOS ── */}
-      <section id="ofertas" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950">
+      {offers.length > 0 && <section id="ofertas" className="scroll-mt-20 border-t border-rose-100 bg-rose-50/30 py-16 dark:border-zinc-800 dark:bg-zinc-900/60">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-            <div>
-              <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
-                Oportunidades de la Semana ⏳
-              </span>
-              <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-2">
-                Kits & Ofertas Especiales
-              </h3>
-            </div>
-            <span className="text-xs font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-full border border-rose-200">
-              Descuentos automáticos al carrito
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {COSMETICS_DEALS.map((deal) => (
-              <div
-                key={deal.id}
-                className="group flex flex-col justify-between overflow-hidden rounded-3xl border border-rose-200/80 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:shadow-xl hover:border-rose-300"
-              >
-                <div>
-                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-rose-50 dark:bg-zinc-800">
-                    <AppImage src={deal.image} alt={deal.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                    {/* Badge de porcentaje OFF */}
-                    <span className="absolute top-3 right-3 rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-md">
-                      {deal.discount}
-                    </span>
-                    <span className="absolute top-3 left-3 rounded-full bg-stone-900/80 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-semibold text-white uppercase">
-                      {deal.tag}
-                    </span>
-                  </div>
-
-                  <div className="pt-4 space-y-2">
-                    <h4 className="font-serif text-base font-bold text-stone-900 dark:text-stone-100 line-clamp-1">
-                      {deal.name}
-                    </h4>
-                    <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-2">
-                      {deal.description}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-rose-100 dark:border-zinc-800 mt-4 flex items-center justify-between">
-                  <div>
-                    <span className="block text-[11px] text-stone-400 line-through">
-                      Gs. {deal.originalPrice.toLocaleString('es-PY')}
-                    </span>
-                    <span className="font-serif text-lg font-bold text-rose-600 dark:text-rose-400">
-                      Gs. {deal.salePrice.toLocaleString('es-PY')}
-                    </span>
-                  </div>
-                  <Link
-                    href={`${prefix}/inicio#productos`}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 shadow-sm transition-colors"
-                    aria-label={`Comprar ${deal.name}`}
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h3 className="mb-8 font-serif text-3xl font-bold">Ofertas del comercio</h3>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">{offers.map(product => <ProductCard key={product.id} product={product} />)}</div>
         </div>
-      </section>
+      </section>}
 
       {/* ── 6. GRILLA DE PRODUCTOS DESTACADOS ── */}
       <section id="productos" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950 border-t border-rose-100 dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
-              Favoritos de la Comunidad
+              Catálogo del comercio
             </span>
             <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-2">
-              Productos Más Elegidos
+              Productos disponibles
             </h3>
             <p className="text-sm text-stone-500 dark:text-stone-400 mt-2">
-              Fórmulas certificadas con precios en Guaraníes y disponibilidad en tiempo real.
+              Productos y precios publicados por esta tienda.
             </p>
           </div>
 
+          {isLoading && <p role="status" className="py-8 text-center text-stone-500">Cargando productos...</p>}
+          {productsError && <p role="alert" className="py-8 text-center text-stone-500">No pudimos cargar el catálogo. Volvé a intentarlo.</p>}
+          {!isLoading && !productsError && productsToDisplay.length === 0 && <p className="py-8 text-center text-stone-500">Todavía no hay productos publicados.</p>}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {productsToDisplay.map((product) => (
               <ProductCard
@@ -662,8 +392,8 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               />
               <div className="absolute inset-0 bg-gradient-to-t from-stone-950/60 via-transparent to-transparent flex items-end p-6">
                 <div className="text-white">
-                  <p className="font-serif text-lg font-bold">Boutique & Showroom Asunción</p>
-                  <p className="text-xs text-white/80">Vení a probar las texturas y recibir asesoramiento en vivo</p>
+                  <p className="font-serif text-lg font-bold">Inspiración para tu cuidado</p>
+                  <p className="text-xs text-white/80">Imagen ilustrativa</p>
                 </div>
               </div>
             </div>
@@ -674,10 +404,10 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                 Nuestra Filosofía
               </span>
               <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
-                Belleza Consciente y Resultados Que Se Sienten
+                Conocé nuestra tienda
               </h3>
               <p className="text-sm sm:text-base leading-relaxed text-stone-600 dark:text-stone-300">
-                En {storeName}, creemos que el cuidado de la piel debe ser un ritual placentero y transparente. Seleccionamos cuidadosamente marcas éticas con concentraciones efectivas para brindar hidratación, luminosidad y protección duradera.
+                Conocé los productos de {storeName} y consultá al comercio para obtener más información.
               </p>
 
               <div className="grid grid-cols-2 gap-4 pt-2">
@@ -685,14 +415,14 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                   <Clock className="h-5 w-5 text-rose-500 mb-2" />
                   <h5 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">Horarios</h5>
                   <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                    {company.hours?.weekdays || 'Lun a Vie 08:30 - 19:30'}
+                    {company.hours?.weekdays || 'Consultá los horarios con el comercio'}
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-rose-150/60 dark:border-zinc-700">
                   <Instagram className="h-5 w-5 text-rose-500 mb-2" />
                   <h5 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">Comunidad</h5>
                   <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                    @{company.instagram ? company.instagram.replace(/^@/, '') : 'gloworapy'}
+                    @{company.instagram ? company.instagram.replace(/^@/, '') : 'No publicado'}
                   </p>
                 </div>
               </div>
@@ -723,7 +453,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                     <p className="font-serif text-sm font-bold text-stone-800 dark:text-stone-200">
                       Showroom y Tienda Física
                     </p>
-                    <p className="text-xs text-stone-500">{address}</p>
+                    <p className="text-xs text-stone-500">{address || 'Dirección no publicada'}</p>
                   </div>
                 </div>
               )}
@@ -735,17 +465,17 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
                 </span>
                 <div>
                   <h4 className="font-serif text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
-                    Encontranos en Asunción
+                    Nuestra ubicación
                   </h4>
                   <p className="font-medium text-stone-800 dark:text-stone-200 mt-1">{storeName}</p>
                   <p className="text-sm text-stone-500 dark:text-stone-400 leading-relaxed mt-1">
-                    {address}
+                    {address || 'Dirección no publicada'}
                   </p>
                 </div>
 
                 <div className="space-y-2 text-xs text-stone-600 dark:text-stone-400">
-                  <p><strong>Teléfono:</strong> {phone}</p>
-                  <p><strong>Atención al cliente:</strong> Lunes a Sábados</p>
+                  {phone && <p><strong>Teléfono:</strong> {phone}</p>}
+                  {company.hours?.weekdays && <p><strong>Horario:</strong> {company.hours.weekdays}</p>}
                 </div>
 
                 {directionsHref && (
@@ -766,7 +496,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
       </section>
 
       {/* ── 9. BOTÓN FLOTANTE DE WHATSAPP CON TOOLTIP ACTIVO ── */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3">
+      {whatsappClean && <div className="fixed bottom-24 right-6 z-40 flex items-center gap-3 lg:bottom-6">
         {/* Tooltip de recomendación de rutina */}
         <div className="hidden sm:flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-stone-800 shadow-lg border border-rose-200/80 backdrop-blur-md animate-bounce">
           <Sparkles className="h-3.5 w-3.5 text-rose-500" />
@@ -776,7 +506,7 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
         <FloatingWhatsAppButton
           fallbackPhone={whatsappClean}
         />
-      </div>
+      </div>}
     </div>
   )
 }
