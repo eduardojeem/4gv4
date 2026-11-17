@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { usePaymentControls } from '@/lib/payment-controls';
 import { apiFetch } from '@/lib/api';
-import { sharePaymentReceiptPdf } from '@/lib/payment-receipt';
+import { sharePaymentReceiptPdf, printPaymentReceipt } from '@/lib/payment-receipt';
 import { collectionPreview } from '@/lib/collection-preview';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
@@ -214,12 +214,12 @@ export function CollectSheet({
     }
   };
 
-  const sharePdf = async () => {
+  const sharePdf = async (print = false) => {
     if (!result || sharingPdf) return;
     const epoch = getPrivateCacheContext().epoch;
     setSharingPdf(true);
     setPdfError(null);
-    try { await sharePaymentReceiptPdf(result.collection?.receipt, epoch); }
+    try { if(print)await printPaymentReceipt(result.collection?.receipt, epoch);else await sharePaymentReceiptPdf(result.collection?.receipt, epoch); }
     catch (error) { if (getPrivateCacheContext().epoch === epoch) setPdfError(error instanceof Error ? error.message : 'No se pudo compartir el PDF. El pago sigue registrado.'); }
     finally { if (getPrivateCacheContext().epoch === epoch) setSharingPdf(false); }
   };
@@ -245,6 +245,7 @@ export function CollectSheet({
               <Ionicons name="share-outline" size={18} color={colors.text} />
               <Text style={[styles.bold, { color: colors.text }]}>Texto</Text>
             </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Imprimir comprobante de cobro" disabled={sharingPdf} onPress={()=>void sharePdf(true)} style={[styles.ghost,{borderColor:colors.border}]}><Ionicons name="print-outline" size={18} color={colors.text}/><Text style={[styles.bold,{color:colors.text}]}>Imprimir</Text></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Compartir comprobante PDF" disabled={sharingPdf} onPress={() => { void sharePdf(); }} style={[styles.ghost, { borderColor: colors.border, opacity: sharingPdf ? 0.5 : 1 }]}>
               {sharingPdf ? <ActivityIndicator color={palette.primary} /> : <Ionicons name="document-text-outline" size={18} color={colors.text} />}
               <Text style={[styles.bold, { color: colors.text }]}>PDF</Text>
@@ -421,7 +422,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '800' },
   link: { fontSize: 13, fontWeight: '800' },
   error: { color: palette.danger, fontSize: 13, fontWeight: '600' },
-  footer: { flexDirection: 'row', gap: 10 },
+  footer: { flexDirection: 'row', flexWrap:'wrap', gap: 10 },
   footerCol: { gap: 6 },
   ghost: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, justifyContent: 'center' },
   solid: { flex: 1, borderRadius: 14, minHeight: 54, alignItems: 'center', justifyContent: 'center' },

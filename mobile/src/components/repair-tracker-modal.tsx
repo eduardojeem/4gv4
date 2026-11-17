@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,8 +16,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeScanner } from './barcode-scanner';
-import { apiFetch } from '@/lib/api';
-import { formatGs } from '@/lib/marketplace';
+import { parseRepairLookup, repairLookupError, repairTrackingStatus } from '@/lib/repair-tracking-model';
+import { ApiError, apiFetch } from '@/lib/api';
+import { SITE_URL, formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 
 interface RepairTrackerModalProps {
@@ -26,6 +27,7 @@ interface RepairTrackerModalProps {
 }
 
 interface PublicRepairData {
+  store?: {name:string;slug:string};
   ticketNumber: string;
   device: string;
   brand: string;
@@ -54,15 +56,6 @@ const STEPS = [
   { key: 'entregado', label: 'Entregado', icon: 'cube-outline' as const },
 ];
 
-const STEP_INDEX: Record<string, number> = {
-  recibido: 0,
-  diagnostico: 1,
-  reparacion: 2,
-  pausado: 2,
-  listo: 3,
-  entregado: 4,
-};
-
 export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps) {
   const colors = usePalette();
   const insets = useSafeAreaInsets();
@@ -74,63 +67,43 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
   const [repair, setRepair] = useState<PublicRepairData | null>(null);
   const [showScanner, setShowScanner] = useState(false);
 
+  const requestId = useRef(0);
+  const pending = useRef(false);
+  const visibleRef = useRef(visible);
+  useEffect(() => {visibleRef.current = visible;}, [visible]);
+  useEffect(() => () => {requestId.current++;}, []);
+  const clearResult = () => {requestId.current++;pending.current=false;setLoading(false);setRepair(null);setErrorMsg(null);};
+  const close = () => {visibleRef.current=false;clearResult();setShowScanner(false);onClose();};
   const handleSearch = async (overrideTicket?: string) => {
-    const ticketToSearch = (overrideTicket ?? ticketInput).trim();
-    if (!ticketToSearch) {
-      setErrorMsg('Ingresá el número de ticket o escaneá el comprobante.');
-      return;
-    }
-    if (!contactInput.trim() && !overrideTicket) {
-      setErrorMsg('Ingresá tu número de teléfono o documento de contacto.');
-      return;
-    }
-
+    if(pending.current)return;
+    setRepair(null);setErrorMsg(null);
+    const lookup=parseRepairLookup(overrideTicket??ticketInput,SITE_URL);
+    if(!lookup){setErrorMsg('Este código no corresponde a un comprobante de reparación válido. Escaneá el QR original o ingresá el ticket, por ejemplo R-2026-00042.');return;}
+    if(!lookup.verify&&!contactInput.trim()){setTicketInput(lookup.ticket);setErrorMsg('Ingresá el teléfono o email registrado al dejar el equipo para consultar este ticket.');return;}
+    const id=++requestId.current;pending.current=true;setLoading(true);
     try {
-      setLoading(true);
-      setErrorMsg(null);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      const res = await apiFetch<{
-        success: boolean;
-        data?: { repair: PublicRepairData };
-        error?: string;
-      }>('/api/public/repairs/auth', {
-        method: 'POST',
-        auth: false,
-        body: JSON.stringify({
-          ticketNumber: ticketToSearch,
-          contact: contactInput.trim() || '0981000000',
-        }),
-      });
-
-      if (res?.data?.repair) {
-        setRepair(res.data.repair);
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        setErrorMsg(res?.error || 'No se encontró la reparación con los datos provistos.');
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'No se pudo consultar el ticket. Verificá los datos ingresados.');
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
-    }
+      const params=new URLSearchParams({...lookup.verify?{verify:lookup.verify}:{},...lookup.organizationSlug?{org:lookup.organizationSlug}:{}});
+      const res=lookup.verify
+        ? await apiFetch<{success:boolean;data:PublicRepairData}>('/api/public/repairs/'+encodeURIComponent(lookup.ticket)+'?'+params,{auth:false})
+        : await apiFetch<{success:boolean;data:{repair:PublicRepairData}}>('/api/public/repairs/auth',{method:'POST',auth:false,body:JSON.stringify({ticketNumber:lookup.ticket,contact:contactInput.trim(),...lookup.organizationSlug?{organizationSlug:lookup.organizationSlug}:{}})});
+      if(id!==requestId.current||!visibleRef.current)return;
+      const result=lookup.verify?res.data:(res.data as {repair:PublicRepairData}).repair;
+      if(!res.success||!result||typeof (result as PublicRepairData).status!=='string')throw new Error('Respuesta incompleta');
+      setRepair(result as PublicRepairData);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(()=>undefined);
+    } catch(error){
+      if(id===requestId.current&&visibleRef.current)setErrorMsg(repairLookupError(error instanceof ApiError?error.status:500,Boolean(lookup.verify)));
+    } finally {if(id===requestId.current){pending.current=false;setLoading(false);}}
   };
-
-  const handleBarcodeScanned = (code: string) => {
-    setShowScanner(false);
-    setTicketInput(code);
-    void handleSearch(code);
-  };
-
-  const currentStep = repair ? (STEP_INDEX[repair.status.toLowerCase()] ?? 0) : 0;
-  const isCancelled = repair?.status?.toLowerCase() === 'cancelado';
+  const handleBarcodeScanned=(code:string)=>{setShowScanner(false);setTicketInput(code);void handleSearch(code);};
+  const status=repair?repairTrackingStatus(repair.status):null;
+  const currentStep=status?.step??0;
+  const statusColor=status?.tone==='danger'?palette.danger:status?.tone==='warning'?'#B45309':'#15803D';
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Cerrar rastreador" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Cerrar rastreador" />
         <View
           style={[
             styles.sheet,
@@ -146,14 +119,14 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
               <View style={[styles.iconBadge, { backgroundColor: 'rgba(37,99,235,0.12)' }]}>
                 <Ionicons name="construct" size={20} color={palette.primary} />
               </View>
-              <View>
+              <View style={{flex:1,minWidth:0}}>
                 <Text style={[styles.title, { color: colors.text }]}>Seguimiento de Reparación</Text>
                 <Text style={[styles.subtitle, { color: colors.muted }]}>
-                  Consultá el estado de tu equipo en tiempo real
+                  Escaneá tu comprobante o consultá con ticket y contacto
                 </Text>
               </View>
             </View>
-            <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+            <Pressable onPress={close} hitSlop={10} style={styles.closeBtn}>
               <Ionicons name="close" size={22} color={colors.muted} />
             </Pressable>
           </View>
@@ -167,13 +140,13 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
                   value={ticketInput}
                   onChangeText={(text) => {
                     setTicketInput(text);
-                    setErrorMsg(null);
+                    clearResult();
                   }}
-                  placeholder="Ej: REP-2026-00042 o 1045"
+                  placeholder="Ej: R-2026-00042 o REP-000042"
                   placeholderTextColor={colors.muted}
                   autoCapitalize="characters"
                   returnKeyType="next"
-                  style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+                  style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border }]}
                 />
                 <Pressable
                   onPress={() => setShowScanner(true)}
@@ -184,24 +157,25 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
               </View>
 
               <Text style={[styles.fieldLabel, { color: colors.text, marginTop: 10 }]}>
-                Teléfono o Cédula de contacto
+                Teléfono o email de contacto
               </Text>
               <TextInput
                 value={contactInput}
                 onChangeText={(text) => {
                   setContactInput(text);
-                  setErrorMsg(null);
+                  clearResult();
                 }}
-                placeholder="Teléfono ingresado al dejar el equipo"
+                placeholder="Teléfono o email registrado en el comercio"
                 placeholderTextColor={colors.muted}
-                keyboardType="phone-pad"
+                keyboardType="default"
+                autoCapitalize="none"
                 returnKeyType="search"
                 onSubmitEditing={() => handleSearch()}
                 style={[styles.input, { color: colors.text, borderColor: colors.border }]}
               />
 
               {errorMsg ? (
-                <View style={styles.errorAlert}>
+                <View accessibilityRole="alert" style={styles.errorAlert}>
                   <Ionicons name="alert-circle" size={16} color="#EF4444" />
                   <Text style={styles.errorText}>{errorMsg}</Text>
                 </View>
@@ -225,8 +199,14 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
             {/* ── Resultado del Ticket ── */}
             {repair && (
               <View style={[styles.resultCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={{gap:6}}>
+                  <Text style={[styles.fieldLabel,{color:colors.muted}]}>Comercio que recibió tu equipo</Text>
+                  <Text style={[styles.deviceName,{color:colors.text}]}>{repair.store?.name || 'Comercio no disponible'}</Text>
+                  <Text style={[styles.subtitle,{color:colors.muted}]}>Estado consultado. Tocá Actualizar para comprobar cambios.</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Actualizar estado de la reparación" onPress={()=>void handleSearch()} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:palette.primary,fontWeight:'700'}}>Actualizar estado</Text></Pressable>
+                </View>
                 <View style={styles.resultHeader}>
-                  <View>
+                  <View style={{flex:1,minWidth:0}}>
                     <Text style={[styles.ticketBadgeText, { color: palette.primary }]}>
                       Ticket #{repair.ticketNumber}
                     </Text>
@@ -235,22 +215,20 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
                   <View
                     style={[
                       styles.statusPill,
-                      isCancelled
-                        ? { backgroundColor: 'rgba(239,68,68,0.14)', borderColor: 'rgba(239,68,68,0.3)' }
-                        : { backgroundColor: 'rgba(16,185,129,0.14)', borderColor: 'rgba(16,185,129,0.3)' },
+                      { backgroundColor: statusColor+'18', borderColor: statusColor+'55' },
                     ]}>
                     <Text
                       style={[
                         styles.statusPillText,
-                        { color: isCancelled ? '#EF4444' : '#10B981' },
+                        { color: statusColor },
                       ]}>
-                      {repair.status.toUpperCase()}
+                      {status?.label}
                     </Text>
                   </View>
                 </View>
 
                 {/* ── Stepper Visual ── */}
-                {!isCancelled && (
+                {status?.step != null && (
                   <View style={styles.stepperContainer}>
                     <View style={styles.stepperRow}>
                       {STEPS.map((step, idx) => {
@@ -279,7 +257,7 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
                                   fontWeight: isCurrent ? '800' : '600',
                                 },
                               ]}>
-                              {step.label}
+                              {isCurrent && repair.status === 'pausado' ? 'En pausa' : step.label}
                             </Text>
                           </View>
                         );
@@ -336,12 +314,13 @@ export function RepairTrackerModal({ visible, onClose }: RepairTrackerModalProps
       </KeyboardAvoidingView>
 
       {/* Escáner de código de barras para el ticket */}
-      <BarcodeScanner
+      {showScanner && <BarcodeScanner
         visible={showScanner}
-        title="Escaneá el código del Ticket"
+        title="Escaneá el QR de tu reparación"
+        permissionMessage="Permití la cámara para escanear el comprobante de tu reparación."
         onClose={() => setShowScanner(false)}
         onScanned={handleBarcodeScanned}
-      />
+      />}
     </Modal>
   );
 }
@@ -417,7 +396,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   input: {
-    flex: 1,
     height: 44,
     borderRadius: 12,
     borderWidth: 1,

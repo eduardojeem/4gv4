@@ -1,3 +1,4 @@
+import {DocumentActions} from '@/components/document-actions';
 import { getPrivateCacheContext, isPrivateCacheSnapshotCompatible, isPrivateIdentityTransition, isSameOrganizationIdentity, subscribePrivateCacheContext } from '@/lib/private-cache-context';
 import { usePanel } from '@/lib/panel';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,6 +210,7 @@ export default function ProductDetail() {
           </View>
         )}
 
+        {can('products.read')&&<DocumentActions path={'/api/products/'+encodeURIComponent(product.id)+'/labels'} title="Etiquetas del producto" labels/>}
         {/* Nombre y etiquetas */}
         <View style={styles.head}>
           <Text style={[styles.name, { color: colors.text }]}>{product.name}</Text>

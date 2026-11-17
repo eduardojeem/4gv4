@@ -282,7 +282,7 @@ export function RepairCostCalculator({
               inputMode="numeric"
               value={formatThousands(finalCost)}
               onChange={(e) => handleFinalCostInputChange(parseThousands(e.target.value).toString())}
-              placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
+              placeholder={estimatedCost > 0 ? `${formatCurrency(estimatedCost)} (estimado)` : 'A diagnosticar (sin precio fijado)'}
               className={`pl-12 h-16 text-xl font-bold font-mono border-2 disabled:opacity-80 rounded-2xl ${
                 hasCostDifference
                   ? costDifference > 0
@@ -303,7 +303,9 @@ export function RepairCostCalculator({
               ) : null}
           {isFinalDerived && (
             <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-              Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.
+              {estimatedCost > 0
+                ? 'Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.'
+                : 'Sin repuestos ni mano de obra cargada: quedará a diagnosticar en el taller hasta acordar presupuesto.'}
             </p>
           )}
           {isLaborDerived && finalCost === null && (
