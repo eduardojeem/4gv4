@@ -134,6 +134,7 @@ export default function MarketplaceScreen() {
   // Cuenta y comercio del usuario: los mismos datos que el menú del avatar,
   // atados a la sesión (al cambiar de cuenta no queda el negocio anterior).
   const account = useMarketplaceAccount();
+  const reloadAccount = account.reload;
   const org = account.business.state === 'member' ? account.business.organization : null;
   const panelAllowed = canOpenBusinessPanel(account.business);
 
@@ -333,9 +334,10 @@ export default function MarketplaceScreen() {
   }, [attempt, catalogRequest, locationReady]);
 
   const reload = useCallback(() => {
+    reloadAccount();
     setRefreshing(true);
     setAttempt((n) => n + 1);
-  }, []);
+  }, [reloadAccount]);
 
   // Cambiar pestaña dentro del mismo layout con scroll automático al inicio
   const handleTabPress = async (tab: NavTab) => {
@@ -624,7 +626,7 @@ export default function MarketplaceScreen() {
   };
 
   // Nombres descriptivos para chips activos
-  const activeCategoryName = data?.categories.find((c) => c.id === productCategory)?.name ?? productCategory;
+  const activeCategoryName = data?.showcase?.find(card => card.categoryIds.join(',') === productCategory)?.title ?? data?.categories.find((c) => c.id === productCategory)?.name ?? productCategory;
   const activeStoreName = (data?.storeOptions??data?.stores)?.find((s) => s.slug === productStore)?.name ?? productStore;
 
   const handleSignOutConfirm = () => {
@@ -857,8 +859,13 @@ export default function MarketplaceScreen() {
 
                   {/* Carrusel Showcase de Categorías destacadas (como en Web) */}
                   <MarketplaceCategoriesShowcase
-                    onSelectCategory={(term) => {
-                      setProductQuery(term);
+                    key={data.showcase?.map(card=>card.id).join(',') ?? 'empty'}
+                    categories={data.showcase ?? []}
+                    onSelectCategory={(card) => {
+                      setProductQuery('');
+                      setProductCategory(card.categoryIds.join(','));
+                      setProductBrand(null);
+                      setProductStore(null);
                       setProductPage(1);
                       setActiveTab('productos');
                       scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -1950,6 +1957,17 @@ export default function MarketplaceScreen() {
                   </Pressable>
 
                   <Pressable
+                    onPress={() => router.push((session ? '/mis-turnos' : '/sign-in') as never)}
+                    accessibilityRole="button"
+                    style={[styles.quickCardItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <View style={[styles.quickCardIconWrap, { backgroundColor: dark ? 'rgba(16,185,129,0.18)' : '#ECFDF5' }]}>
+                      <Ionicons name="calendar-outline" size={20} color={colors.successText} />
+                    </View>
+                    <Text style={[styles.quickCardTitle, { color: colors.text }]}>Mis turnos</Text>
+                    <Text style={[styles.quickCardSub, { color: colors.muted }]}>{session ? 'Reservas e historial en tus tiendas' : 'Iniciá sesión para verlos'}</Text>
+                  </Pressable>
+
+                  <Pressable
                     onPress={async () => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       setShowRepairTracker(true);
@@ -2634,6 +2652,7 @@ export default function MarketplaceScreen() {
             scrollRef.current?.scrollTo({ y: 0, animated: true });
           }}
           onOpenOrders={() => router.push('/mis-pedidos' as never)}
+          onOpenAppointments={() => router.push('/mis-turnos' as never)}
           onOpenRepairs={() => setShowRepairTracker(true)}
           onSignIn={() => router.push('/sign-in' as never)}
           onOpenPanel={() => router.push('/panel' as never)}

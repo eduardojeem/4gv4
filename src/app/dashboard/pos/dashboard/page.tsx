@@ -40,14 +40,14 @@ export default function POSDashboard() {
   const { stats, loading, error, refetch, detailsLoaded, detailsLoading, detailsError, loadDetails } = usePosStats(dateRange)
   const detailProps = { detailsLoaded, detailsLoading, detailsError, onLoadDetails: () => { void loadDetails().catch(() => undefined) } }
 
-  // Pestañas segun los modulos de la organizacion. Se leen del contexto que el
+  // PestaÃ±as segun los modulos de la organizacion. Se leen del contexto que el
   // layout arma en el servidor: no hay estado de carga ni parpadeo.
   const { effectiveModules } = useSubscriptionStatus()
   const availableTabs = availablePosDashboardTabs(effectiveModules)
   const hasRepairs = availableTabs.some((tab) => tab.value === 'repairs')
   const hasCredits = availableTabs.some((tab) => tab.value === 'credits')
   const viewTab = resolveActiveTab(activeViewTab, availableTabs)
-  // La cartera completa solo se pide al abrir la pestaña de creditos.
+  // La cartera completa solo se pide al abrir la pestaÃ±a de creditos.
   const creditPortfolio = useCreditPortfolio(dateRange, hasCredits && viewTab === 'credits')
   const [refreshing, setRefreshing] = useState(false)
 
@@ -55,10 +55,10 @@ export default function POSDashboard() {
     try {
       const full = await loadDetails()
       // Exportaba `recentSales`: las 10 ventas mas recientes, no el periodo, y
-      // con Cliente e Items en «undefined». Ahora son todas las del periodo,
+      // con Cliente e Items en Â«undefinedÂ». Ahora son todas las del periodo,
       // con las columnas de la tabla detallada.
       if (!full.allSales.length) {
-        toast.error('No hay ventas en el período para exportar')
+        toast.error('No hay ventas en el perÃ­odo para exportar')
         return
       }
 
@@ -72,8 +72,9 @@ export default function POSDashboard() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      URL.revokeObjectURL(url)
 
-      toast.success(`Exportadas ${full.allSales.length} ventas del período`)
+      toast.success(`Exportadas ${full.allSales.length} ventas del perÃ­odo`)
     } catch (e) {
       toast.error('Error al exportar datos')
       console.error(e)
@@ -82,9 +83,14 @@ export default function POSDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
-    setRefreshing(false)
-    toast.success('Datos actualizados')
+    try {
+      await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
+      toast.success('Datos actualizados')
+    } catch {
+      toast.error('No se pudieron actualizar todos los datos. Revisá el aviso y reintentá.')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   if (authLoading) {
@@ -106,7 +112,7 @@ export default function POSDashboard() {
           <div className="space-y-1">
             <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
             <p className="text-xs text-muted-foreground">
-              Esta sección contiene métricas financieras confidenciales y está reservada exclusivamente para administradores y gerencia.
+              Esta secciÃ³n contiene mÃ©tricas financieras confidenciales y estÃ¡ reservada exclusivamente para administradores y gerencia.
             </p>
           </div>
           <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
@@ -124,7 +130,7 @@ export default function POSDashboard() {
     return (
       <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        <p className="text-sm text-slate-500">Cargando analíticas del POS...</p>
+        <p className="text-sm text-slate-500">Cargando analÃ­ticas del POS...</p>
       </div>
     )
   }
@@ -138,7 +144,7 @@ export default function POSDashboard() {
             Error al cargar datos
           </p>
           <p className="mt-1 text-xs text-red-700 dark:text-red-400">{error.message}</p>
-          <Button onClick={() => refetch()} className="mt-4 gap-2" size="sm">
+          <Button onClick={() => void refetch().catch(() => undefined)} className="mt-4 gap-2" size="sm">
             <RefreshCw className="h-3.5 w-3.5" />
             Reintentar
           </Button>
@@ -149,7 +155,7 @@ export default function POSDashboard() {
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
-      {/* Header con pestañas de vista y filtro de fecha */}
+      {/* Header con pestaÃ±as de vista y filtro de fecha */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <PosDashboardHeader
           dateRange={dateRange}
@@ -164,7 +170,7 @@ export default function POSDashboard() {
 
 
 
-      <p className="text-xs text-muted-foreground">Consultá períodos de hasta 20 años. Los detalles y exportaciones se cargan al solicitarlos.</p>
+      <p className="text-xs text-muted-foreground">ConsultÃ¡ perÃ­odos de hasta 20 aÃ±os. Los detalles y exportaciones se cargan al solicitarlos.</p>
       {/* Refresh footer */}
       <div className="flex justify-end -mt-2">
         <Button
@@ -194,8 +200,8 @@ export default function POSDashboard() {
         <ProfitStatsCards stats={stats} showRepairs={hasRepairs} />
       )}
 
-      {/* 4. Créditos: pestaña propia, solo con el modulo de creditos. Antes
-          vivian dentro de «Ventas POS» y aparecian aunque la organizacion no
+      {/* 4. CrÃ©ditos: pestaÃ±a propia, solo con el modulo de creditos. Antes
+          vivian dentro de Â«Ventas POSÂ» y aparecian aunque la organizacion no
           vendiera a credito. */}
       {hasCredits && viewTab === 'credits' && (
         <CreditPortfolioCards
@@ -207,7 +213,7 @@ export default function POSDashboard() {
         <CreditStatsCards stats={stats} {...detailProps} />
       )}
 
-      {/* 5. Gráficos y Tablas */}
+      {/* 5. GrÃ¡ficos y Tablas */}
       {(showsSection('sales', viewTab) || viewTab === 'profit') && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
@@ -216,11 +222,11 @@ export default function POSDashboard() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <RecentTransactionsList sales={stats.recentSales} />
+            <RecentTransactionsList onSaleChanged={handleRefresh} sales={stats.recentSales} />
             <TopProductsCard products={stats.topProducts} />
           </div>
 
-          <DetailedSalesTable stats={stats} {...detailProps} />
+          <DetailedSalesTable onSaleChanged={handleRefresh} stats={stats} {...detailProps} />
         </>
       )}
     </div>

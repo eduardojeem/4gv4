@@ -14,9 +14,10 @@ import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface DetailedSalesTableProps extends PosDetailProps {
     stats: PosStats
+    onSaleChanged?: () => void | Promise<void>
 }
 
-export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps }: DetailedSalesTableProps) {
+export function DetailedSalesTable({ stats, detailsLoaded = true, onSaleChanged, ...detailProps }: DetailedSalesTableProps) {
     const allSales = stats.allSales || []
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
 
@@ -54,7 +55,7 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                                         <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Facturado</th>
                                         <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Costo Items</th>
                                         <th className="px-6 py-4 font-medium uppercase tracking-wider text-right">Ganancia Neta</th>
-                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-center">Método</th>
+                                        <th className="px-6 py-4 font-medium uppercase tracking-wider text-center">MÃ©todo</th>
                                         <th className="px-6 py-4 font-medium uppercase tracking-wider w-12 text-center">Acciones</th>
                                     </tr>
                                 </thead>
@@ -82,10 +83,10 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                                                         {formatCurrency(total)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right text-slate-500">
-                                                        {cost == null ? '—' : formatCurrency(cost)}
+                                                        {cost == null ? 'â€”' : formatCurrency(cost)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                                                        {profit == null ? '—' : formatCurrency(profit)}
+                                                        {profit == null ? 'â€”' : formatCurrency(profit)}
                                                         {refund > 0 && (
                                                             <div className="text-[10px] text-rose-500 font-normal mt-0.5 whitespace-nowrap">
                                                                 (-{formatCurrency(refund)})
@@ -119,7 +120,7 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                 </CardContent>
             </Card>
 
-            <SaleDetailsModal 
+            <SaleDetailsModal onSaleChanged={onSaleChanged} 
                 saleId={selectedSaleId}
                 isOpen={!!selectedSaleId}
                 onClose={() => setSelectedSaleId(null)}

@@ -18,6 +18,7 @@ import {
   resolveWarranty,
   WARRANTY_TYPE_PRINT_LABELS,
 } from '@/lib/repairs/warranty'
+import { repairWhatsAppPhone } from '@/lib/repairs/whatsapp-message'
 
 export { DEFAULT_RECEIPT_SETTINGS, type RepairReceiptSettings } from '@/lib/repairs/receipt-settings'
 
@@ -463,7 +464,8 @@ export const openRepairWhatsApp = (payload: RepairPrintPayload, directPhone?: st
   const text = generateRepairShareText(payload)
   const encodedText = encodeURIComponent(text)
 
-  let cleanPhone = phone ? phone.replace(/[^\d+]/g, '') : ''
+  const validatedPhone = repairWhatsAppPhone(phone, payload.customer.country || 'PY')
+  let cleanPhone = validatedPhone || (phone ? phone.replace(/[^\d+]/g, '') : '')
   if (cleanPhone.startsWith('+')) {
     cleanPhone = cleanPhone.slice(1)
   }

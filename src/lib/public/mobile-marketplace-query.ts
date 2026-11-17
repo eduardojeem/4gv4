@@ -6,7 +6,7 @@ export function filterMarketProducts<T extends CatalogCard>(products:T[],query:P
  const q=text(query.q??''),brand=text(query.brand??''),favoriteIds=query.favorites?new Set(query.favorites):null
  let list=products.filter(product=>{
   if(q&&![product.name,product.store.name,product.brand,product.category?.name].some(value=>value&&text(value).includes(q)))return false
-  if(query.category&&product.category?.id!==query.category&&product.category?.parentId!==query.category)return false
+  if(query.category){const ids=query.category.split(',').filter(Boolean);if(!ids.includes(product.category?.id??'')&&!ids.includes(product.category?.parentId??''))return false}
   if(brand&&!text(product.brand??'').includes(brand)&&!text(product.name).includes(brand))return false
   if(query.store&&product.store.slug!==query.store)return false
   if(query.onlyOffers&&product.offerPrice===null)return false

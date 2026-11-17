@@ -61,8 +61,8 @@ export function usePosStats(dateRange: DateRange | undefined) {
   const stats = detailsLoaded ? { ...summary, allSales: detailSnapshot.stats.allSales, allCredits: detailSnapshot.stats.allCredits, allRepairCredits: detailSnapshot.stats.allRepairCredits, repairStats: { ...summary.repairStats, deliveredRepairs: detailSnapshot.stats.repairStats.deliveredRepairs } } : summary
 
   const fetchSummary = useCallback(async (force = false, signal?: AbortSignal) => {
-    if (organizationLoading || (scopeOrganizationId && organizationId !== scopeOrganizationId)) return
-    if (!organizationId || !from || !to) { setLoading(false); setError(new Error(!organizationId ? 'No hay una organización activa para mostrar estadísticas.' : 'Selecciona un período válido.')); return }
+    if (organizationLoading || (scopeOrganizationId && organizationId !== scopeOrganizationId)) return false
+    if (!organizationId || !from || !to) { setLoading(false); setError(new Error(!organizationId ? 'No hay una organizaciÃ³n activa para mostrar estadÃ­sticas.' : 'Selecciona un perÃ­odo vÃ¡lido.')); return }
     setLoading(true); setError(null)
     try {
       const raw = await getCachedDashboardSummary<Summary>(key, async () => {
@@ -70,15 +70,15 @@ export function usePosStats(dateRange: DateRange | undefined) {
         if (signal) query = query.abortSignal(signal)
         const { data, error } = await query
         if (error) throw new Error(error.message || 'No se pudo cargar el resumen del POS')
-        if (!data || typeof data !== 'object') throw new Error('Resumen del POS no disponible; aplica la migración dashboard_pos_summary.')
+        if (!data || typeof data !== 'object') throw new Error('Resumen del POS no disponible; aplica la migraciÃ³n dashboard_pos_summary.')
         const parsed = summarySchema.safeParse(data)
-        if (!parsed.success) throw new Error('El resumen del POS tiene un formato inválido. Reintentá o revisá la migración.')
+        if (!parsed.success) throw new Error('El resumen del POS tiene un formato invÃ¡lido. ReintentÃ¡ o revisÃ¡ la migraciÃ³n.')
         const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
         const dailyBuckets = new Map(parsed.data.dailySales.map(day=>[day.bucket_day,day]))
-        if (parsed.data.dailySales.length !== expectedDays.length || dailyBuckets.size !== expectedDays.length || expectedDays.some(day=>!dailyBuckets.has(day))) throw new Error('El resumen diario está incompleto. Reintentá la consulta.')
+        if (parsed.data.dailySales.length !== expectedDays.length || dailyBuckets.size !== expectedDays.length || expectedDays.some(day=>!dailyBuckets.has(day))) throw new Error('El resumen diario estÃ¡ incompleto. ReintentÃ¡ la consulta.')
         return parsed.data
       }, { force, signal })
-      if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return
+      if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return false
       const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
       const dailyBuckets = new Map(raw.dailySales.map(day=>[day.bucket_day,day]))
       const costHidden = raw.costHidden
@@ -90,10 +90,12 @@ export function usePosStats(dateRange: DateRange | undefined) {
         topProduct: raw.topProducts[0] ?? {name:'N/A',sales:0},
         dailySales: buildDailySales({from: new Date(from), to: new Date(to)}, []).map((day,i) => ({ ...day, sales: dailyBuckets.get(expectedDays[i])!.sales, transactions: dailyBuckets.get(expectedDays[i])!.transactions })),
         paymentMethods: raw.paymentMethods.map(method => ({ ...method, color: colors[method.name] ?? '#6b7280' })),
-        profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen no está disponible.`] : [] }
+        profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} Ã­tem(s) vendidos no tienen precio de compra cargado: el margen no estÃ¡ disponible.`] : [] }
       setSnapshot({key,stats:next})
+      return true
     } catch (cause) {
       if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setError(cause instanceof Error ? cause : new Error('No se pudo cargar el resumen'))
+      return false
     } finally { if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setLoading(false) }
   }, [organizationLoading, organizationId, scopeOrganizationId, from, to, key, branchId, scope, currentScope, supabase, setError, timezone])
   useEffect(() => {
@@ -102,7 +104,7 @@ export function usePosStats(dateRange: DateRange | undefined) {
     return () => controller.abort()
   }, [fetchSummary])
   const loadDetails = useCallback(async () => {
-    if (snapshot?.key !== key) throw new Error('Esperá a que se complete el resumen del período antes de solicitar el detalle.')
+    if (snapshot?.key !== key) throw new Error('EsperÃ¡ a que se complete el resumen del perÃ­odo antes de solicitar el detalle.')
     if (detailSnapshot?.key === key) return detailSnapshot.stats
     const requestKey = key
     setDetailsLoadingKey(key); setDetailFailure(null)
@@ -110,7 +112,7 @@ export function usePosStats(dateRange: DateRange | undefined) {
       const loaded = await fetchFullDetails()
       const incomplete = loaded?.warnings.filter(message => !message.includes('precio de compra cargado'))
       if (!loaded || incomplete?.length) throw new Error(incomplete?.join(' ') || 'No se pudo cargar el detalle completo')
-      if (currentScope.current !== scope || keyRef.current !== requestKey) throw new Error('El ámbito cambió. Vuelve a solicitar el detalle.')
+      if (currentScope.current !== scope || keyRef.current !== requestKey) throw new Error('El Ã¡mbito cambiÃ³. Vuelve a solicitar el detalle.')
       setDetailSnapshot({key:requestKey,stats:loaded})
       return loaded
     } catch (cause) {
@@ -119,6 +121,6 @@ export function usePosStats(dateRange: DateRange | undefined) {
       throw failure
     } finally { if (keyRef.current === requestKey) setDetailsLoadingKey(null) }
   }, [fetchFullDetails, key, currentScope, scope, detailSnapshot, snapshot])
-  const refetch = useCallback(async () => { setDetailSnapshot(null); await fetchSummary(true) }, [fetchSummary])
+  const refetch = useCallback(async () => { setDetailSnapshot(null); if (!await fetchSummary(true)) throw new Error('No se pudo actualizar el resumen del POS.') }, [fetchSummary])
   return { stats, loading: organizationLoading || loading || (!currentKey && !error), error, refetch, detailsLoaded, detailsLoading, detailsError, loadDetails }
 }

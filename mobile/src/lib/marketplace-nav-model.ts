@@ -11,7 +11,7 @@ export type MarketplaceBottomTabItem = {
   accessibilityLabel: string;
 };
 
-export type MarketplaceQuickActivityKey = 'orders' | 'repairs';
+export type MarketplaceQuickActivityKey = 'orders' | 'appointments' | 'repairs';
 
 export type LocationFacetLike = {
   countries?: { code: string; label: string }[];
@@ -94,7 +94,7 @@ export function isMarketplaceTabHighlighted(
 }
 
 export function marketplaceQuickActivityKeys(signedIn: boolean): MarketplaceQuickActivityKey[] {
-  return signedIn ? ['orders', 'repairs'] : [];
+  return signedIn ? ['orders', 'appointments', 'repairs'] : [];
 }
 
 export function formatMarketplaceLocationChip(

@@ -62,7 +62,7 @@ function Tile({
 
 /**
  * La cartera de creditos: cuanto se debe, cuanto esta vencido y cuanto se
- * cobro. La seccion que ya existia («Resumen de Ventas a Crédito») solo mira
+ * cobro. La seccion que ya existia (Â«Resumen de Ventas a CrÃ©ditoÂ») solo mira
  * los creditos de venta OTORGADOS en el periodo, asi que no respondia la
  * pregunta que importa: cuanta plata hay en la calle y cuanta esta atrasada.
  */
@@ -76,18 +76,18 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
           <span className="rounded-md bg-rose-100 p-1.5 dark:bg-rose-900/40">
             <HandCoins className="h-4 w-4 text-rose-600 dark:text-rose-400" />
           </span>
-          Cartera de créditos
+          Cartera de crÃ©ditos
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Saldo y mora de toda la cartera al día de hoy —ventas, taller y manuales—. Lo otorgado y lo cobrado
-          corresponden al período elegido.
+          Saldo y mora de toda la cartera al dÃ­a de hoy â€”ventas, taller y manualesâ€”. Lo otorgado y lo cobrado
+          corresponden al perÃ­odo elegido.
         </p>
       </div>
 
       {(state.status === 'idle' || state.status === 'loading') && (
         <div className="flex items-center gap-2 rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando cartera de créditos…
+          Cargando cartera de crÃ©ditosâ€¦
         </div>
       )}
 
@@ -97,7 +97,7 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
             <AlertTriangle className="h-4 w-4 shrink-0" />
             {state.message}
           </p>
-          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => void refetch()}>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => void refetch().catch(() => undefined)}>
             <RefreshCw className="h-3.5 w-3.5" />
             Reintentar
           </Button>
@@ -111,7 +111,7 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
         if (sinCartera) {
           return (
             <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              La organización no tiene créditos con saldo ni movimientos en este período.
+              La organizaciÃ³n no tiene crÃ©ditos con saldo ni movimientos en este perÃ­odo.
             </div>
           )
         }
@@ -123,7 +123,7 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
                 icon={Wallet}
                 label="Saldo por cobrar"
                 value={formatCurrency(cartera.outstandingAmount)}
-                hint={`${cartera.activeCredits} ${cartera.activeCredits === 1 ? 'crédito con saldo' : 'créditos con saldo'}`}
+                hint={`${cartera.activeCredits} ${cartera.activeCredits === 1 ? 'crÃ©dito con saldo' : 'crÃ©ditos con saldo'}`}
               />
               <Tile
                 icon={AlertTriangle}
@@ -138,9 +138,9 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
               />
               <Tile
                 icon={CalendarClock}
-                label="Vence en 30 días"
+                label="Vence en 30 dÃ­as"
                 value={formatCurrency(cartera.dueSoonAmount)}
-                hint="Cuotas pendientes que vencen de hoy a 30 días"
+                hint="Cuotas pendientes que vencen de hoy a 30 dÃ­as"
               />
               <Tile
                 icon={PiggyBank}
@@ -153,7 +153,7 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
             <div className="grid gap-4 sm:grid-cols-3">
               <Tile
                 icon={HandCoins}
-                label="Otorgados en el período"
+                label="Otorgados en el perÃ­odo"
                 value={String(period.grantedCount)}
                 hint={`${formatCurrency(period.principalGranted)} de capital`}
               />
@@ -161,11 +161,11 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
                 icon={Wallet}
                 label="Financiado con intereses"
                 value={formatCurrency(period.financedTotal)}
-                hint={`${formatCurrency(period.scheduledInterest)} de interés`}
+                hint={`${formatCurrency(period.scheduledInterest)} de interÃ©s`}
               />
               <Tile
                 icon={PiggyBank}
-                label="Cobrado en el período"
+                label="Cobrado en el perÃ­odo"
                 value={formatCurrency(period.paymentsReceived)}
                 hint="Pagos de cuotas registrados"
               />
@@ -178,9 +178,9 @@ export function CreditPortfolioCards({ portfolio, repairCredits }: CreditPortfol
         <p className="flex items-start gap-2 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
           <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            En el período se otorgaron {repairCredits.count}{' '}
-            {repairCredits.count === 1 ? 'crédito' : 'créditos'} por reparaciones ({formatCurrency(repairCredits.totalAmount)},
-            pendiente {formatCurrency(repairCredits.pendingAmount)}). El detalle está en la pestaña Reparaciones.
+            En el perÃ­odo se otorgaron {repairCredits.count}{' '}
+            {repairCredits.count === 1 ? 'crÃ©dito' : 'crÃ©ditos'} por reparaciones ({formatCurrency(repairCredits.totalAmount)},
+            pendiente {formatCurrency(repairCredits.pendingAmount)}). El detalle estÃ¡ en la pestaÃ±a Reparaciones.
           </span>
         </p>
       )}

@@ -1,6 +1,57 @@
 {
-  "generatedAt": "2026-10-15T01:50:39.577Z",
+  "generatedAt": "2026-11-15T23:58:39.965Z",
   "apiRoutes": [
+    {
+      "route": "/api/account/delete",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/analytics/agenda",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
     {
       "route": "/api/admin/analytics/website",
       "methods": [
@@ -83,6 +134,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/admin/branches/[id]/insights",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/admin/cash-monitor/actions",
       "methods": [
         "POST"
@@ -111,6 +183,27 @@
       "methodSecurity": [
         {
           "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/finances/calendar",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -249,6 +342,36 @@
         },
         {
           "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/finances/control",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -644,6 +767,36 @@
       "serviceRole": true
     },
     {
+      "route": "/api/admin/payment-controls",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/admin/promote-self",
       "methods": [
         "POST"
@@ -767,6 +920,36 @@
       "serviceRole": true
     },
     {
+      "route": "/api/admin/security/mfa-policy",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/admin/set-role-by-email",
       "methods": [
         "POST"
@@ -788,6 +971,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/admin/settings/setup-status",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/admin/setup-storage",
       "methods": [
         "POST"
@@ -805,6 +1009,66 @@
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/subscriptions",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/subscriptions/autopay",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": false
     },
@@ -881,7 +1145,49 @@
       "serviceRole": false
     },
     {
+      "route": "/api/admin/subscriptions/data-export",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/admin/subscriptions/payments/bancard",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/subscriptions/payments/stripe",
       "methods": [
         "POST"
       ],
@@ -920,6 +1226,87 @@
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/admin/subscriptions/transfers",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/subscriptions/transfers/[id]/cancel",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/admin/subscriptions/transfers/[id]/receipt",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
       "serviceRole": true
     },
     {
@@ -1358,6 +1745,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/admin/website/storefront-templates",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/admin/website/sync-company",
       "methods": [
         "PUT"
@@ -1594,11 +2002,20 @@
     {
       "route": "/api/agenda/lookup",
       "methods": [
-        "GET"
+        "GET",
+        "POST"
       ],
       "methodSecurity": [
         {
           "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -1673,6 +2090,57 @@
       "serviceRole": true
     },
     {
+      "route": "/api/agenda/professionals/employee",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/agenda/professionals/invite",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/agenda/services",
       "methods": [
         "POST"
@@ -1710,6 +2178,45 @@
         },
         {
           "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/agenda/settlements",
+      "methods": [
+        "GET",
+        "POST",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -2056,6 +2563,57 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/brands/from-catalog",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/brands/link",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
           "serviceRole": true
         }
       ],
@@ -2100,6 +2658,36 @@
         },
         {
           "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/categories/global",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -2459,6 +3047,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/credits/receipts",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/credits/sale",
       "methods": [
         "POST"
@@ -2501,7 +3110,100 @@
       "serviceRole": false
     },
     {
+      "route": "/api/cron/bancard-reconcile",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/cron/communications",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/cron/daily",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/cron/plan-grace-notifications",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/cron/subscription-autopay",
       "methods": [
         "POST"
       ],
@@ -2646,6 +3348,27 @@
         },
         {
           "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/customers/[id]/collection-context",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -3112,14 +3835,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/dashboard/summary",
@@ -3164,6 +3887,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/dev/runtime-target",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
       "route": "/api/exchange-rates",
       "methods": [
         "GET",
@@ -3189,6 +3933,27 @@
         },
         {
           "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/feedback",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -3236,7 +4001,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "POST",
@@ -3244,14 +4009,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/inventory-counts/[id]",
@@ -3267,7 +4032,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "PATCH",
@@ -3275,7 +4040,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "POST",
@@ -3283,14 +4048,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/inventory/alerts",
@@ -3437,6 +4202,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/loyalty/program",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/loyalty/rules",
       "methods": [
         "GET",
@@ -3525,6 +4311,69 @@
       "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": false
+    },
+    {
+      "route": "/api/marketplace/locations",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/marketplace/profile/appointments",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/marketplace/profile/appointments/[id]",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
     },
     {
       "route": "/api/marketplace/profile/carts",
@@ -3617,6 +4466,381 @@
       "serviceRole": false
     },
     {
+      "route": "/api/mobile/admin/overview",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/app-release",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/mobile/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": true,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/auth/password-reset",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": true,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/cash-register/credit-collections",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/cash-register/history",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/marketplace",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/mobile/marketplace/catalog",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/mobile/onboarding",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/pos/session",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/push/register",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/push/unregister",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/quotes",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/mobile/registration-options",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/mobile/saas",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/mobile/system-news",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/notifications",
       "methods": [
         "GET"
@@ -3638,6 +4862,36 @@
       "serviceRole": true
     },
     {
+      "route": "/api/notifications/preferences",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/notifications/read",
       "methods": [
         "POST"
@@ -3645,6 +4899,27 @@
       "methodSecurity": [
         {
           "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/notifications/unread-count",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -3712,11 +4987,20 @@
     {
       "route": "/api/onboarding/status",
       "methods": [
-        "GET"
+        "GET",
+        "PATCH"
       ],
       "methodSecurity": [
         {
           "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -3854,6 +5138,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/orders/bulk-status",
+      "methods": [
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/orders/item-images",
       "methods": [
         "POST"
@@ -3947,6 +5252,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/payments/stripe/webhook",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
       "route": "/api/pos/cash-counts",
       "methods": [
         "POST"
@@ -3970,9 +5296,18 @@
     {
       "route": "/api/pos/cash-movements",
       "methods": [
+        "GET",
         "POST"
       ],
       "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
         {
           "method": "POST",
           "rateLimited": false,
@@ -4026,6 +5361,27 @@
       "methodSecurity": [
         {
           "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/pos/credit-policy",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -4238,6 +5594,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/products/access",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/products/barcode-lookup",
       "methods": [
         "GET"
@@ -4441,7 +5818,7 @@
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
-          "authGuard": false,
+          "authGuard": true,
           "serviceRole": false
         },
         {
@@ -4456,7 +5833,7 @@
       "rateLimited": true,
       "turnstile": false,
       "superAdminGuard": false,
-      "authGuard": false,
+      "authGuard": true,
       "serviceRole": false
     },
     {
@@ -5212,14 +6589,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": true
+          "serviceRole": false
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": true
+      "serviceRole": false
     },
     {
       "route": "/api/raffles/[id]/tickets",
@@ -5296,10 +6673,19 @@
     {
       "route": "/api/repairs/[id]",
       "methods": [
+        "GET",
         "PATCH",
         "DELETE"
       ],
       "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
         {
           "method": "PATCH",
           "rateLimited": false,
@@ -5417,6 +6803,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/repairs/[id]/deposit-settlement",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/repairs/[id]/images",
       "methods": [
         "POST",
@@ -5445,6 +6852,36 @@
       "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": false
+    },
+    {
+      "route": "/api/repairs/[id]/part-purchase",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
     },
     {
       "route": "/api/repairs/[id]/payment",
@@ -5631,6 +7068,27 @@
     },
     {
       "route": "/api/repairs/inventory/search",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/repairs/price-suggestion",
       "methods": [
         "GET"
       ],
@@ -6017,6 +7475,27 @@
       "serviceRole": true
     },
     {
+      "route": "/api/subscription/access",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/subscription/usage",
       "methods": [
         "GET"
@@ -6150,14 +7629,14 @@
       "methodSecurity": [
         {
           "method": "POST",
-          "rateLimited": false,
+          "rateLimited": true,
           "turnstile": false,
           "superAdminGuard": true,
           "authGuard": true,
           "serviceRole": false
         }
       ],
-      "rateLimited": false,
+      "rateLimited": true,
       "turnstile": false,
       "superAdminGuard": true,
       "authGuard": true,
@@ -6548,6 +8027,57 @@
       "serviceRole": true
     },
     {
+      "route": "/api/superadmin/payment-controls",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/superadmin/payments/[id]/refund",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/superadmin/platform-branding",
       "methods": [
         "GET",
@@ -6710,6 +8240,99 @@
       "serviceRole": false
     },
     {
+      "route": "/api/superadmin/settings",
+      "methods": [
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": true,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/settings/policies",
+      "methods": [
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": true,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/storefront-templates",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/storefront-templates/usage",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/superadmin/subscription-plans",
       "methods": [
         "GET",
@@ -6761,6 +8384,99 @@
       "serviceRole": true
     },
     {
+      "route": "/api/superadmin/subscription-transfer-settings",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/superadmin/subscription-transfers",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/subscription-transfers/[id]/receipt",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/subscription-transfers/[id]/review",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
       "route": "/api/superadmin/subscriptions/[id]",
       "methods": [
         "PATCH"
@@ -6768,6 +8484,27 @@
       "methodSecurity": [
         {
           "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": true,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/superadmin/subscriptions/[id]/payments",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": true,
@@ -6984,7 +8721,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "POST",
@@ -6992,7 +8729,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "PUT",
@@ -7000,14 +8737,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/variants/[id]",
@@ -7024,7 +8761,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "PUT",
@@ -7032,7 +8769,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "DELETE",
@@ -7040,7 +8777,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "PATCH",
@@ -7048,14 +8785,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     }
   ],
   "clientPrivateEnvRefs": [],
@@ -7143,17 +8880,74 @@
     "20261014130000",
     "20261014140000",
     "20261015090000",
+    "20261015215221",
     "20261016090000",
     "20261016120000",
     "20261016150000",
     "20261016180000",
-    "20261017100000"
+    "20261016214756",
+    "20261017100000",
+    "20261017213627",
+    "20261017213637",
+    "20261017213719",
+    "20261018232327",
+    "20261021225959",
+    "20261021230952",
+    "20261022011708",
+    "20261023121250",
+    "20261023121531",
+    "20261024180000",
+    "20261025120000",
+    "20261025130103",
+    "20261025174643",
+    "20261025212829",
+    "20261026120000",
+    "20261026130000",
+    "20261027213300",
+    "20261028120000",
+    "20261031230000",
+    "20261101000000",
+    "20261101010000",
+    "20261101020000",
+    "20261101030000",
+    "20261101040000",
+    "20261101050000",
+    "20261101060000",
+    "20261101070000",
+    "20261101080000",
+    "20261103232929",
+    "20261104120000",
+    "20261107120000",
+    "20261108120000",
+    "20261109120000",
+    "20261109130000",
+    "20261109140000",
+    "20261109150000",
+    "20261110120000",
+    "20261111120000",
+    "20261111193000",
+    "20261112120000",
+    "20261112215428",
+    "20261112233822",
+    "20261112235456",
+    "20261113000000",
+    "20261113215854",
+    "20261113222022",
+    "20261115023522",
+    "20261115161607",
+    "20261115210719"
   ],
   "paymentProviders": [
     {
       "provider": "bancard",
       "webhookRoutes": [
         "/api/payments/bancard/webhook"
+      ]
+    },
+    {
+      "provider": "stripe",
+      "webhookRoutes": [
+        "/api/payments/stripe/webhook"
       ]
     }
   ],

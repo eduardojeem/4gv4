@@ -1,3 +1,4 @@
+import type { ShowcaseCard } from '../../../src/lib/public/marketplace-showcase-content';
 import type { PublicLocation, MarketplaceLocation } from '../../../src/lib/public/marketplace-location';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -43,6 +44,7 @@ export type MarketStore = {
 };
 
 export type MarketplaceHome = {
+  showcase?: ShowcaseCard[];
   pagination?: Record<'products'|'offers'|'stores',{page:number;total:number;totalPages:number}>;
   home?: {products:MarketProduct[];total:number;offers:MarketProduct[];stores:MarketStore[]};
   storeOptions?: MarketStore[];

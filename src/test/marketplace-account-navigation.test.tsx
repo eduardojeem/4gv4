@@ -115,8 +115,10 @@ describe('app: cuenta y negocio del marketplace', () => {
     expect(canOpenBusinessPanel({ state: 'none' })).toBe(false)
   })
 
-  it('un 403 dice que no tiene negocio; otro error no permite afirmarlo', () => {
-    expect(businessFromResponse({ ok: false, error: { status: 403 } })).toEqual({ state: 'none' })
+  it('solo la ausencia confirmada significa sin negocio; un 403 genérico es desconocido', () => {
+    expect(businessFromResponse({ ok: false, error: { status: 403 } })).toEqual({ state: 'unknown' })
+    expect(businessFromResponse({ ok: false, error: { status: 403, body: {code:'NO_ACTIVE_BUSINESS_MEMBERSHIP'} } })).toEqual({ state: 'none' })
+    expect(businessFromResponse({ ok: true, data: {} })).toEqual({ state: 'unknown' })
     expect(businessFromResponse({ ok: false, error: { status: 500 } })).toEqual({ state: 'unknown' })
     expect(businessFromResponse({ ok: false, error: new Error('Network request failed') })).toEqual({ state: 'unknown' })
   })

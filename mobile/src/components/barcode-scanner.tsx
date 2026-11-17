@@ -31,12 +31,14 @@ export function BarcodeScanner({
   onScanned,
   title = 'Escaneá el código de barras',
   hint = 'Centrá el código dentro del recuadro',
+  permissionMessage = 'Necesitamos acceso a la cámara para escanear el código.',
 }: {
   visible: boolean;
   onClose: () => void;
   onScanned: (code: string) => void;
   title?: string;
   hint?: string;
+  permissionMessage?: string;
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -69,7 +71,7 @@ export function BarcodeScanner({
         ) : (
           <View style={styles.center}>
             <Ionicons name="camera-outline" size={48} color="#fff" />
-            <Text style={styles.message}>Necesitamos acceso a la cámara para escanear el IMEI o código de barras.</Text>
+            <Text style={styles.message}>{permissionMessage}</Text>
             <Pressable onPress={requestPermission} style={styles.grant}>
               <Text style={styles.grantText}>Permitir cámara</Text>
             </Pressable>

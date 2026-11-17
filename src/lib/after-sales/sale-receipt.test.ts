@@ -19,8 +19,8 @@ const sale: StoredSale = {
 }
 
 describe('buildReprintReceiptData', () => {
-  // El bug que evita: createReceiptData() emite un numero nuevo, así que una
-  // reimpresión quedaría como un segundo documento de la misma venta.
+  // El bug que evita: createReceiptData() emite un numero nuevo, asÃ­ que una
+  // reimpresiÃ³n quedarÃ­a como un segundo documento de la misma venta.
   it('keeps the original sale code as the receipt number', () => {
     expect(buildReprintReceiptData(sale).receiptNumber).toBe('VTA-000123')
   })
@@ -79,8 +79,20 @@ describe('normalizeReceiptPaymentMethod', () => {
     expect(normalizeReceiptPaymentMethod('credito')).toBe('credit')
   })
 
-  it('falls back to cash for anything unrecognized', () => {
-    expect(normalizeReceiptPaymentMethod(null)).toBe('cash')
-    expect(normalizeReceiptPaymentMethod('qr')).toBe('cash')
+  it('rechaza métodos desconocidos y reconoce QR', () => {
+    expect(() => normalizeReceiptPaymentMethod(null)).toThrow()
+    expect(normalizeReceiptPaymentMethod('qr')).toBe('transfer')
+  })
+})
+
+ describe('fidelidad del comprobante', () => {
+  it('conserva saldo a favor', () => {
+    expect(buildReprintReceiptData({ ...sale, payments: [{ method: 'store_credit', amount: 450000 }] }).payments[0].method).toBe('store_credit')
+  })
+  it('no convierte un mÃ©todo desconocido en efectivo', () => {
+    expect(() => buildReprintReceiptData({ ...sale, paymentMethod: 'mixed', payments: [] })).toThrow()
+  })
+  it('conserva cantidades fraccionarias vendidas', () => {
+    expect(buildReprintReceiptData({ ...sale, items: [{ ...sale.items[0], quantity: 0.5 }] }).items[0].quantity).toBe(0.5)
   })
 })

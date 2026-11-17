@@ -6,7 +6,7 @@ import type { CartItem, PaymentSplit, ReceiptData } from '@/lib/receipt-utils'
  * No usa `createReceiptData()` a proposito: esa funcion emite un numero nuevo
  * con `generateReceiptNumber()` y toma las formas en memoria del POS. Reimprimir
  * con numero nuevo y fecha de hoy dejaria dos documentos distintos para la misma
- * venta, que es peor que no poder reimprimir. Acá el numero y la fecha son
+ * venta, que es peor que no poder reimprimir. AcÃ¡ el numero y la fecha son
  * siempre los de la venta original.
  */
 
@@ -46,7 +46,7 @@ export type StoredSale = {
   payments?: StoredSalePayment[] | null
 }
 
-const PAYMENT_METHODS: PaymentSplit['method'][] = ['cash', 'card', 'transfer', 'credit']
+const PAYMENT_METHODS: PaymentSplit['method'][] = ['cash', 'card', 'transfer', 'credit', 'store_credit']
 
 /** El POS guarda el metodo en varias formas; el ticket entiende cuatro. */
 export function normalizeReceiptPaymentMethod(value: unknown): PaymentSplit['method'] {
@@ -56,9 +56,9 @@ export function normalizeReceiptPaymentMethod(value: unknown): PaymentSplit['met
   }
   if (raw === 'efectivo') return 'cash'
   if (raw === 'tarjeta' || raw === 'debit' || raw === 'debito' || raw === 'credit_card') return 'card'
-  if (raw === 'transferencia' || raw === 'bank_transfer') return 'transfer'
-  if (raw === 'credito' || raw === 'crédito') return 'credit'
-  return 'cash'
+  if (raw === 'transferencia' || raw === 'bank_transfer' || raw === 'qr' || raw === 'sipap') return 'transfer'
+  if (raw === 'credito' || raw === 'crÃ©dito') return 'credit'
+  throw new Error('No se puede reimprimir: el medio de pago no está identificado.')
 }
 
 function splitDateTime(createdAt: string | null) {
@@ -84,7 +84,7 @@ export function buildReprintReceiptData(sale: StoredSale): ReceiptData {
     name: item.name,
     sku: item.sku ?? '',
     price: toAmount(item.unitPrice),
-    quantity: Math.max(1, Math.trunc(Number(item.quantity) || 1)),
+    quantity: Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0 ? Number(item.quantity) : 1,
     discount: item.discount == null ? undefined : toAmount(item.discount),
   }))
 

@@ -82,7 +82,7 @@ export function StorefrontAppearancePreview({
 
         {/* Portada Premium (si está activa) */}
         {heroEnabled ? (
-          <div className={cn('bg-gradient-to-br px-4 py-5 text-white', theme.hero, style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800', style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30')}>
+          <div className={cn('bg-gradient-to-br px-4 py-5 text-white', theme.hero, style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800', style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30', style === 'especial-cosmeticos' && 'from-rose-500 via-pink-400 to-amber-200 border-b border-rose-300')}>
             <span className={cn(STOREFRONT_EYEBROW_CLASS[style], 'text-[9px]', style !== 'sport' && style !== 'tech' && style !== 'market' && 'text-white/80')}>
               {verticalDef.hero.badge || 'Bienvenidos'}
             </span>
@@ -143,7 +143,7 @@ export function StorefrontAppearancePreview({
               {style === 'services' ? 'Servicios del local' : 'Productos destacados'}
             </p>
             <span className={cn('text-[9px]', style === 'especial-para-barbero' ? 'text-primary font-semibold' : 'text-muted-foreground')}>
-              {style === 'wholesale-pro' ? 'Precios por mayor' : style === 'especial-para-barbero' ? 'Minorista & Mayorista' : style === 'catalog-basic' ? 'Vitrina digital' : 'Disponibles'}
+              {style === 'wholesale-pro' ? 'Precios por mayor' : style === 'especial-para-barbero' ? 'Minorista & Mayorista' : style === 'especial-cosmeticos' ? 'Rutinas & Ofertas' : style === 'catalog-basic' ? 'Vitrina digital' : 'Disponibles'}
             </span>
           </div>
 

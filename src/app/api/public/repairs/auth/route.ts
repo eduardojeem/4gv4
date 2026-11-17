@@ -1,3 +1,4 @@
+import { publicRepairStore } from '@/lib/repairs/public-store'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -271,6 +272,7 @@ export async function POST(request: NextRequest) {
     
     // Build public repair object
     const publicRepair: PublicRepair = {
+      store: await publicRepairStore(createAdminSupabase(), repair.organization_id),
       ticketNumber: repair.ticket_number,
       device: `${repair.device_brand || ''} ${repair.device_model || ''}`.trim() || repair.device_type || 'Dispositivo',
       brand: repair.device_brand || '',
@@ -321,6 +323,7 @@ export async function POST(request: NextRequest) {
       data: response
     })
     
+    nextResponse.headers.set('Cache-Control','private, no-store')
     nextResponse.cookies.set('repair_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

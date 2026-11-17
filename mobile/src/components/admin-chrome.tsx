@@ -38,6 +38,10 @@ export function AdminHeader(){
    <Pressable onPress={open} accessibilityRole="button" accessibilityLabel="Abrir menú Más de administración" style={styles.menu}><Ionicons name="menu-outline" size={24} color={colors.text}/></Pressable>
    <View style={[styles.logo,{backgroundColor:colors.background}]}>{org?.logoUrl?<Image source={org.logoUrl} contentFit="cover" style={styles.fill}/>:<Ionicons name="storefront-outline" size={20} color={colors.text}/>}</View>
    <View style={styles.flex}><Text numberOfLines={1} style={[styles.org,{color:colors.text}]}>{org?.name??'Tu negocio'}</Text><Text style={[styles.subtitle,{color:colors.muted}]}>Administración</Text></View>
+   <Pressable onPress={()=>router.replace('/panel' as never)} accessibilityRole="button" accessibilityLabel="Volver al inicio del negocio" accessibilityHint="Abre el resumen principal del panel" style={[styles.home,{borderColor:colors.border,backgroundColor:colors.background}]}>
+    <Ionicons name="home-outline" size={19} color={colors.text}/>
+    <Text style={[styles.homeText,{color:colors.text}]}>Inicio</Text>
+   </Pressable>
   </View>
  </SafeAreaView>;
 }
@@ -45,4 +49,4 @@ export function AdminTabBar(){
  const {data}=usePanel(),{open,menuOpen}=useAdminMenu(),pathname=usePathname(),org=data?.organization;
  return <AdminNavigationBar pathname={pathname} menuOpen={menuOpen} accent={navigationColor(org?.brandColor,org?.customBrandColor)} onMenu={open} onSelect={go}/>;
 }
-const styles=StyleSheet.create({flex:{flex:1},header:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:6,gap:10,borderBottomWidth:StyleSheet.hairlineWidth},menu:{width:44,height:44,alignItems:'center',justifyContent:'center'},logo:{width:32,height:32,borderRadius:9,overflow:'hidden',alignItems:'center',justifyContent:'center'},fill:{width:'100%',height:'100%'},org:{fontSize:15,fontWeight:'700'},subtitle:{fontSize:12,marginTop:1}});
+const styles=StyleSheet.create({home:{minHeight:44,minWidth:44,paddingHorizontal:10,borderRadius:12,borderWidth:StyleSheet.hairlineWidth,alignItems:"center",justifyContent:"center",gap:2},homeText:{fontSize:11,fontWeight:"600"},flex:{flex:1},header:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:6,gap:10,borderBottomWidth:StyleSheet.hairlineWidth},menu:{width:44,height:44,alignItems:'center',justifyContent:'center'},logo:{width:32,height:32,borderRadius:9,overflow:'hidden',alignItems:'center',justifyContent:'center'},fill:{width:'100%',height:'100%'},org:{fontSize:15,fontWeight:'700'},subtitle:{fontSize:12,marginTop:1}});
