@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-
-function normalizePlanCode(value: string) {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'basic' || normalized === 'starter') return 'BASIC'
-  if (normalized === 'pro' || normalized === 'profesional' || normalized === 'professional') return 'PRO'
-  if (normalized === 'enterprise') return 'ENTERPRISE'
-  return 'FREE'
-}
+import { planOrganizationUpdate, type CurrentOrganization, type CurrentSubscription } from '@/lib/superadmin/organization-update'
 
 export async function GET(
   request: NextRequest,
@@ -167,107 +160,110 @@ export async function PATCH(
   }
 
   const body = await request.json().catch(() => ({}))
-  const name = typeof body.name === 'string' ? body.name.trim() : undefined
-  const slug = typeof body.slug === 'string' ? body.slug.trim() : undefined
-  const plan = typeof body.plan === 'string' ? normalizePlanCode(body.plan) : undefined
-  const status = typeof body.status === 'string' ? body.status.trim().toLowerCase() : undefined
-  const currency = typeof body.currency === 'string' ? body.currency.trim() : undefined
-  const timezone = typeof body.timezone === 'string' ? body.timezone.trim() : undefined
-  const businessVertical = typeof body.business_vertical === 'string' ? body.business_vertical.trim().toLowerCase() : undefined
-  const operatingModel = typeof body.operating_model === 'string' ? body.operating_model.trim().toLowerCase() : undefined
-  const enabledModules = Array.isArray(body.enabled_modules) ? body.enabled_modules : undefined
-  const trialEndsAt = body.trial_ends_at !== undefined ? body.trial_ends_at : undefined
-  const currentPeriodEndsAt = body.current_period_ends_at !== undefined ? body.current_period_ends_at : undefined
-  const cancelAtPeriodEnd = typeof body.cancel_at_period_end === 'boolean' ? body.cancel_at_period_end : undefined
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Datos inválidos.' }, { status: 400 })
+  }
 
-  // Fetch current organization state for audit diff
-  const { data: currentOrg, error: fetchError } = await admin
-    .from('organizations')
-    .select('*')
-    .eq('id', targetId)
-    .maybeSingle()
+  // Estado actual: para validar, para la auditoría y para deshacer si algo falla.
+  const [{ data: currentOrg, error: fetchError }, { data: currentSub, error: subError }, { data: currentSettings }] = await Promise.all([
+    admin.from('organizations').select('*').eq('id', targetId).maybeSingle(),
+    admin.from('subscriptions').select('*').eq('organization_id', targetId).maybeSingle(),
+    admin.from('organization_settings').select('*').eq('organization_id', targetId).maybeSingle(),
+  ])
 
   if (fetchError || !currentOrg) {
     return NextResponse.json({ error: 'Organización no encontrada.' }, { status: 404 })
   }
+  if (subError) {
+    return NextResponse.json({ error: 'No se pudo consultar la suscripción. Volvé a intentar.' }, { status: 500 })
+  }
 
-  // Validate slug if changed
-  if (slug && slug !== currentOrg.slug) {
-    if (!/^[a-z0-9-]+$/.test(slug)) {
-      return NextResponse.json({ error: 'El slug solo puede contener letras minúsculas, números y guiones.' }, { status: 400 })
-    }
-    const { data: conflict } = await admin.from('organizations').select('id').eq('slug', slug).maybeSingle()
+  // Todo se valida antes de escribir: antes un dato inválido podía dejar la
+  // empresa guardada y la suscripción sin guardar.
+  const planned = planOrganizationUpdate(
+    body as Record<string, unknown>,
+    currentOrg as CurrentOrganization,
+    (currentSub as CurrentSubscription) ?? null,
+  )
+  if (planned.ok === false) {
+    return NextResponse.json({ error: planned.error, field: planned.field }, { status: 400 })
+  }
+  const { organization: orgPatch, subscription: subPatch, settings: settingsPatch, slugChange } = planned.plan
+
+  if (slugChange) {
+    const { data: conflict } = await admin.from('organizations').select('id').eq('slug', slugChange.to).maybeSingle()
     if (conflict && conflict.id !== targetId) {
-      return NextResponse.json({ error: `El slug "${slug}" ya está en uso por otra empresa.` }, { status: 409 })
+      return NextResponse.json({ error: `La dirección "${slugChange.to}" ya está en uso por otra empresa.`, field: 'slug' }, { status: 409 })
     }
   }
 
-  // 1. Update organizations table
-  const orgUpdates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  }
-  if (name !== undefined) orgUpdates.name = name
-  if (slug !== undefined) orgUpdates.slug = slug
-  if (plan !== undefined) orgUpdates.plan = plan
-  if (businessVertical !== undefined) orgUpdates.business_vertical = businessVertical
-  if (operatingModel !== undefined) orgUpdates.operating_model = operatingModel
-  if (enabledModules !== undefined) orgUpdates.enabled_modules = enabledModules
-
-  const { error: orgUpdateError } = await admin
-    .from('organizations')
-    .update(orgUpdates)
-    .eq('id', targetId)
-
-  if (orgUpdateError) {
-    return NextResponse.json({ error: orgUpdateError.message || 'Error al actualizar organización.' }, { status: 500 })
+  const previousOf = (row: Record<string, unknown> | null | undefined, patch: Record<string, unknown>) =>
+    Object.fromEntries(Object.keys(patch).map((key) => [key, row?.[key] ?? null]))
+  const undo: Array<() => PromiseLike<unknown>> = []
+  const rollback = async () => {
+    for (const step of [...undo].reverse()) await Promise.resolve(step()).catch(() => undefined)
   }
 
-  // 2. Update or sync subscription table if plan or status provided
-  if (plan !== undefined || status !== undefined || trialEndsAt !== undefined || currentPeriodEndsAt !== undefined || cancelAtPeriodEnd !== undefined) {
-    const subUpdates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+  // 1. Empresa
+  if (Object.keys(orgPatch).length) {
+    const orgBefore = previousOf(currentOrg as Record<string, unknown>, orgPatch)
+    const { error } = await admin.from('organizations').update({ ...orgPatch, updated_at: new Date().toISOString() }).eq('id', targetId)
+    if (error) {
+      return NextResponse.json({ error: 'No se pudo actualizar la empresa. Revisá los datos y volvé a intentar.' }, { status: 500 })
     }
-    if (plan !== undefined) subUpdates.plan = plan
-    if (status !== undefined) subUpdates.status = status
-    if (trialEndsAt !== undefined) subUpdates.trial_ends_at = trialEndsAt
-    if (currentPeriodEndsAt !== undefined) subUpdates.current_period_ends_at = currentPeriodEndsAt
-    if (cancelAtPeriodEnd !== undefined) subUpdates.cancel_at_period_end = cancelAtPeriodEnd
+    undo.push(() => admin.from('organizations').update(orgBefore).eq('id', targetId))
+  }
 
-    // Check if subscription exists
-    const { data: existingSub, error: lookupError } = await admin.from('subscriptions').select('id').eq('organization_id', targetId).maybeSingle()
-    if (lookupError) return NextResponse.json({ error: 'No se pudo consultar la suscripción. Volvé a intentar.' }, { status: 500 })
-    const result = existingSub
-      ? await admin.from('subscriptions').update(subUpdates).eq('id', existingSub.id)
+  // 2. Suscripción
+  if (subPatch) {
+    const sub = currentSub as Record<string, unknown> | null
+    const result = sub
+      ? await admin.from('subscriptions').update({ ...subPatch, updated_at: new Date().toISOString() }).eq('id', String(sub.id))
       : await admin.from('subscriptions').insert({
           organization_id: targetId,
-          plan: plan ?? currentOrg.plan ?? 'FREE',
-          status: status || 'active',
+          plan: subPatch.plan ?? currentOrg.plan ?? 'FREE',
+          status: subPatch.status ?? 'active',
           provider: 'manual',
-          trial_ends_at: trialEndsAt || null,
-          current_period_ends_at: currentPeriodEndsAt || null,
-          cancel_at_period_end: cancelAtPeriodEnd || false,
+          trial_ends_at: subPatch.trial_ends_at ?? null,
+          current_period_ends_at: subPatch.current_period_ends_at ?? null,
+          cancel_at_period_end: subPatch.cancel_at_period_end ?? false,
+          ...(subPatch.payment_status ? { payment_status: subPatch.payment_status } : {}),
         })
-    if (result.error) return NextResponse.json({ error: 'No se pudo guardar la suscripción. Revisá los datos y volvé a intentar.' }, { status: 500 })
+    if (result.error) {
+      await rollback()
+      return NextResponse.json({ error: 'No se pudo guardar la suscripción. No se aplicó ningún cambio.' }, { status: 500 })
+    }
+    undo.push(() => sub
+      ? admin.from('subscriptions').update(previousOf(sub, subPatch)).eq('id', String(sub.id))
+      : admin.from('subscriptions').delete().eq('organization_id', targetId))
   }
 
-  // 3. Update organization_settings table if currency/timezone provided
-  if (currency !== undefined || timezone !== undefined) {
-    const settingsUpdates: Record<string, unknown> = {}
-    if (currency !== undefined) settingsUpdates.currency = currency
-    if (timezone !== undefined) settingsUpdates.timezone = timezone
-
-    const { data: existingSettings } = await admin.from('organization_settings').select('organization_id').eq('organization_id', targetId).maybeSingle()
-    if (existingSettings) {
-      await admin.from('organization_settings').update(settingsUpdates).eq('organization_id', targetId)
-    } else {
-      await admin.from('organization_settings').insert({
-        organization_id: targetId,
-        ...settingsUpdates,
-      })
+  // 3. Moneda y zona horaria (antes un error acá se informaba como éxito)
+  if (settingsPatch) {
+    const result = currentSettings
+      ? await admin.from('organization_settings').update(settingsPatch).eq('organization_id', targetId)
+      : await admin.from('organization_settings').insert({ organization_id: targetId, ...settingsPatch })
+    if (result.error) {
+      await rollback()
+      return NextResponse.json({ error: 'No se pudieron guardar la moneda y la zona horaria. No se aplicó ningún cambio.' }, { status: 500 })
     }
   }
 
-  // 4. Audit Log
+  // 4. La dirección vieja redirige a la nueva, como al cambiarla desde
+  // Configuración del sitio: los enlaces y QR ya compartidos siguen andando.
+  if (slugChange) {
+    await Promise.all([
+      admin.from('organization_slug_aliases').delete().eq('old_slug', slugChange.to),
+      admin.from('organization_slug_aliases').upsert(
+        { organization_id: targetId, old_slug: slugChange.from, new_slug: slugChange.to, created_by: superAdmin.id },
+        { onConflict: 'old_slug' },
+      ),
+    ]).catch((error) => {
+      console.warn('[superadmin] No se pudo guardar el alias de la dirección', { organizationId: targetId, error: error instanceof Error ? error.message : String(error) })
+    })
+  }
+
+  // 5. Auditoría: todo lo que se cambió, no solo nombre, plan y estado.
   await logSuperAdminAction({
     actorId: superAdmin.id,
     actorEmail: superAdmin.email,
@@ -275,8 +271,12 @@ export async function PATCH(
     resource: 'organizations',
     resourceId: targetId,
     organizationId: targetId,
-    oldValues: currentOrg as Record<string, unknown>,
-    newValues: { name, slug, plan, status, currency, timezone },
+    oldValues: {
+      ...(currentOrg as Record<string, unknown>),
+      subscription: currentSub ?? null,
+      settings: currentSettings ? { currency: currentSettings.currency, timezone: currentSettings.timezone } : null,
+    },
+    newValues: { ...orgPatch, ...(subPatch ? { subscription: subPatch } : {}), ...(settingsPatch ?? {}) },
     request,
   })
 
