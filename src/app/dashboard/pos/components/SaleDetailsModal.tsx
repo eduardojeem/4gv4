@@ -1,14 +1,20 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { branchHeaders } from '@/lib/branches/client'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { useSales } from '@/hooks/useSales'
-import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert, Ban, Loader2 } from 'lucide-react'
+import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer, ShieldAlert, Ban, Loader2, MoreHorizontal, RefreshCw, AlertTriangle, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,7 +30,6 @@ import { Button } from '@/components/ui/button'
 import { printReceipt, CompanyInfo } from '@/lib/receipt-utils'
 import { buildReprintReceiptData, type StoredSale } from '@/lib/after-sales/sale-receipt'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import { config } from '@/lib/config'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
 
@@ -38,7 +43,7 @@ export interface SaleDetailItem {
   price?: number
   unit_price?: number
   discount?: number
-  /** Columna real de sale_items: el descuento de la línea en moneda. */
+  /** Columna real de sale_items: el descuento de la lÃ­nea en moneda. */
   discount_amount?: number | null
   subtotal?: number
   total?: number
@@ -60,7 +65,7 @@ type SaleDetailCustomer = { name?: string | null; phone?: string | null; email?:
 
 export interface SaleDetailRecord {
   id: string
-  /** Código guardado por el POS (sales.code). */
+  /** CÃ³digo guardado por el POS (sales.code). */
   code?: string | null
   sale_number?: string
   customer?: SaleDetailCustomer | SaleDetailCustomer[] | null
@@ -71,6 +76,8 @@ export interface SaleDetailRecord {
   customer_id?: string | null
   customer_name?: string | null
   cashier_id?: string | null
+  cashier_name?: string | null
+  branch_id?: string | null
   total_amount?: number
   total?: number
   subtotal?: number
@@ -81,20 +88,12 @@ export interface SaleDetailRecord {
   change_amount?: number
   payment_method?: string
   payment_status?: string
-  /** `cancelled` cuando la venta se anuló. */
+  /** `cancelled` cuando la venta se anulÃ³. */
   status?: string
   notes?: string
   sale_items?: SaleDetailItem[]
   items?: SaleDetailItem[]
   payments?: SaleDetailPayment[]
-}
-
-function toReceiptPaymentMethod(method?: string): 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit' {
-  if (method === 'card' || method === 'tarjeta') return 'card'
-  if (method === 'transfer' || method === 'transferencia' || method === 'sipap' || method === 'qr') return 'transfer'
-  if (method === 'credit' || method === 'credito') return 'credit'
-  if (method === 'store_credit') return 'store_credit'
-  return 'cash'
 }
 
 function saleItems(sale: SaleDetailRecord) {
@@ -113,7 +112,7 @@ export function saleReference(sale: SaleDetailRecord) {
 
 /**
  * Subtotal bruto guardado. Antes se mostraba total - IVA: con precios con IVA
- * incluido y un descuento, «Subtotal - Descuento» no daba el total.
+ * incluido y un descuento, Â«Subtotal - DescuentoÂ» no daba el total.
  */
 export function saleSubtotal(sale: SaleDetailRecord) {
   return Number(sale.subtotal_amount ?? sale.subtotal ?? (Number(sale.total_amount ?? sale.total ?? 0) + Number(sale.discount_amount ?? sale.discount ?? 0)))
@@ -130,6 +129,7 @@ export function toStoredSale(sale: SaleDetailRecord): StoredSale {
     discount: Number(sale.discount_amount ?? sale.discount ?? 0),
     total: Number(sale.total_amount ?? sale.total ?? 0),
     paymentMethod: sale.payment_method ?? null,
+    cashierName: sale.cashier_name ?? null,
     customer: customer?.name ? customer : (sale.customer_name ? { name: sale.customer_name } : null),
     items: saleItems(sale).map(item => ({
       id: item.id,
@@ -142,7 +142,7 @@ export function toStoredSale(sale: SaleDetailRecord): StoredSale {
     })),
     payments: salePayments(sale).map(payment => ({
       id: payment.id,
-      method: toReceiptPaymentMethod(payment.payment_method ?? payment.method),
+      method: payment.payment_method ?? payment.method,
       amount: Number(payment.amount) || 0,
       reference: payment.reference ?? null,
     })),
@@ -153,319 +153,163 @@ interface SaleDetailsModalProps {
   isOpen: boolean
   onClose: () => void
   saleId: string | null
+  onSaleChanged?: () => void | Promise<void>
 }
 
-export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalProps) {
-  const { getSale } = useSales()
-  const { settings } = useSharedSettings()
-  const [loading, setLoading] = useState(false)
+/** Un nuevo ámbito o venta desmonta su detalle y sus confirmaciones. */
+export function SaleDetailsModal(props: SaleDetailsModalProps) {
+  const { scope, organizationId } = useTenantScope()
+  const { organization, isLoading } = useActiveOrganization()
+  const { selectedBranchId } = useBranch()
+  if (!props.isOpen || !props.saleId || isLoading || !organizationId || organizationId !== organization?.id) return null
+  return <SaleDetailsContent key={`${scope}:${selectedBranchId}:${props.saleId}`} {...props} />
+}
+
+export function salePaymentSummary(sale: SaleDetailRecord) {
+  const payments = salePayments(sale)
+  const financed = payments.filter(p => ['credit', 'credito', 'crédito'].includes(p.payment_method ?? p.method ?? '')).reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const applied = payments.filter(p => !['credit', 'credito', 'crédito'].includes(p.payment_method ?? p.method ?? '')).reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  return { applied: payments.length ? applied : null, financed: payments.length ? financed : null }
+}
+
+function SaleDetailsContent({ isOpen, onClose, saleId, onSaleChanged }: SaleDetailsModalProps) {
+  const { getSale } = useSales(false)
+  const { settings, isLoading: settingsLoading, error: settingsError, scope: settingsScope } = useSharedSettings()
+  const { scope, currentScope } = useTenantScope()
+  const { branches, selectedBranchId } = useBranch()
+  const { user, hasPermission } = useAuth()
+  const { effectiveModules } = useSubscriptionStatus()
   const [sale, setSale] = useState<SaleDetailRecord | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [retry, setRetry] = useState(0)
   const [afterSalesOpen, setAfterSalesOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
   const [voidReason, setVoidReason] = useState('')
   const [voiding, setVoiding] = useState(false)
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  const isCurrent = () => alive.current && currentScope.current === scope
   const isVoided = sale?.status === 'cancelled'
+  const canVoid = hasPermission('pos.cash.manage')
+  const canAfterSales = hasPermission('crm.customers.manage') && effectiveModules.includes('crm')
 
-  // Anular devuelve stock, efectivo, cuotas, saldo a favor y puntos, y deja
-  // las reparaciones cobradas otra vez con saldo (void_pos_sale).
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setSale(null)
+    void getSale(saleId!).then(data => {
+      if (active && currentScope.current === scope) { setSale(data); setLoading(false) }
+    }).catch(() => { if (active && currentScope.current === scope) setLoading(false) })
+    return () => { active = false }
+  }, [saleId, getSale, retry, scope, currentScope])
+
   const handleVoid = async () => {
-    if (!sale || voiding) return
+    if (!sale || voiding || !canVoid || isVoided || !isCurrent()) return
     setVoiding(true)
     try {
       const params = new URLSearchParams({ id: sale.id })
       if (voidReason.trim()) params.set('reason', voidReason.trim())
-      const response = await fetch(`/api/sales?${params.toString()}`, { method: 'DELETE' })
+      const response = await fetch(`/api/sales?${params}`, { method: 'DELETE', headers: branchHeaders(selectedBranchId) })
       const payload = await response.json().catch(() => null) as { success?: boolean; error?: string; message?: string } | null
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo anular la venta.')
-      toast.success(payload.message || 'Venta anulada')
+      if (!isCurrent()) return
+      setSale({ ...sale, status: 'cancelled' })
       setVoidOpen(false)
       setVoidReason('')
-      setSale(await getSale(sale.id))
+      toast.success(payload.message || 'Venta anulada')
+      try { await onSaleChanged?.() } catch { toast.error('La venta se anuló, pero el resumen necesita actualizarse.') }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo anular la venta.')
-    } finally {
-      setVoiding(false)
-    }
+      if (isCurrent()) toast.error(error instanceof Error ? error.message : 'No se pudo anular la venta.')
+    } finally { if (isCurrent()) setVoiding(false) }
   }
 
   const handlePrintReceipt = () => {
-    if (!sale) return
-
-    const companyInfo: CompanyInfo = {
-        name: settings.companyName || config.company.name,
-        address: settings.companyAddress || config.company.address,
-        phone: settings.companyPhone || config.company.phone,
-        email: settings.companyEmail || config.company.email,
-        ruc: settings.companyRuc
+    if (!sale || isVoided || !isCurrent() || settingsLoading || settingsError || settingsScope !== 'organization') return
+    if (!settings.companyName.trim() || settings.companyName === 'Mi Empresa') {
+      toast.error('Completá los datos del negocio antes de imprimir el comprobante.')
+      return
     }
-
-    // Mismo armado que la reimpresión de Posventa: número y fecha originales,
-    // descuento por línea en moneda y los pagos de sale_payments.
-    printReceipt(buildReprintReceiptData(toStoredSale(sale)), companyInfo)
+    const companyInfo: CompanyInfo = {
+      name: settings.companyName, address: settings.companyAddress, phone: settings.companyPhone,
+      email: settings.companyEmail, ruc: settings.companyRuc,
+    }
+    try { printReceipt(buildReprintReceiptData(toStoredSale(sale)), companyInfo) }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo preparar el comprobante.') }
   }
 
-  useEffect(() => {
-    const fetch = async () => {
-      if (!saleId || !isOpen) return
-      setLoading(true)
-      const data = await getSale(saleId)
-      setSale(data)
-      setLoading(false)
-    }
-    fetch()
-  }, [saleId, isOpen, getSale])
+  const customer = sale ? toStoredSale(sale).customer : null
+  const paymentSummary = sale ? salePaymentSummary(sale) : null
+  const branch = branches.find(branch => branch.id === sale?.branch_id)
+  const cashier = sale?.cashier_name || ((sale?.created_by || sale?.cashier_id) === user?.id ? user?.name : null)
+  const paymentStatus = ({ paid: 'Pagada', pending: 'Pendiente de pago', partial: 'Pago parcial', unpaid: 'Sin pagar', refunded: 'Reembolsada', cancelled: 'Anulada' } as Record<string, string>)[sale?.payment_status ?? ''] || 'Estado de pago no informado'
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-                <FileText className="h-5 w-5 text-primary" />
-                Detalle de la Venta
-                {sale && (
-                <Badge variant="outline" className="ml-2">
-                    {saleReference(sale)}
-                </Badge>
-                )}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Consulta el resumen completo de la venta, sus items y la información del comprobante.
-            </DialogDescription>
-            {!loading && sale && (
-                <div className="flex items-center gap-2">
-                    {isVoided ? (
-                      <Badge variant="destructive">Anulada</Badge>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => setVoidOpen(true)} className="text-rose-600 hover:text-rose-700">
-                        <Ban className="mr-2 h-4 w-4" />
-                        Anular
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => setAfterSalesOpen(true)}>
-                        <ShieldAlert className="mr-2 h-4 w-4" />
-                        Posventa
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
-                        <Printer className="mr-2 h-4 w-4" />
-                        Imprimir Copia
-                    </Button>
-                </div>
-            )}
+    <Dialog open={isOpen} onOpenChange={open => { if (!open && !voiding) onClose() }}>
+      <DialogContent className="flex max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b bg-muted/20 px-5 pb-4 pt-5 text-left sm:px-6">
+          <div className="flex items-start gap-3 pr-7">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><Receipt className="h-5 w-5" /></div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-lg">Detalle de la venta</DialogTitle>
+              <DialogDescription className="mt-1 break-all text-xs">{sale ? saleReference(sale) : 'Consultá los datos y pagos registrados.'}</DialogDescription>
+            </div>
           </div>
+          {sale && !loading && <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+            <Badge variant={isVoided ? 'destructive' : 'secondary'}>{isVoided ? 'Venta anulada' : paymentStatus}</Badge>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" disabled={isVoided || voiding || settingsLoading || !!settingsError || settingsScope !== 'organization'} onClick={handlePrintReceipt}><Printer className="mr-2 h-4 w-4" />Imprimir copia</Button>
+              {(canVoid || canAfterSales) && !isVoided && <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={voiding}><MoreHorizontal className="mr-1 h-4 w-4" />Más</Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canAfterSales && <DropdownMenuItem onSelect={() => setAfterSalesOpen(true)}><ShieldAlert className="mr-2 h-4 w-4" />Gestionar posventa</DropdownMenuItem>}
+                  {canVoid && <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setVoidOpen(true)}><Ban className="mr-2 h-4 w-4" />Anular venta</DropdownMenuItem>}
+                </DropdownMenuContent>
+              </DropdownMenu>}
+            </div>
+          </div>}
         </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto space-y-6 pr-1">
-          {loading && (
-            <div className="p-4 text-sm text-muted-foreground">Cargando detalle...</div>
-          )}
-
-          {!loading && sale && (
-            <>
-              {/* Información principal */}
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Fecha</span>
-                    </div>
-                    <p className="text-lg font-bold">
-                      {new Date(sale.created_at).toLocaleDateString('es-PY')}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(sale.created_at).toLocaleTimeString('es-PY')}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Cliente</span>
-                    </div>
-                    <p className="text-lg font-bold">{toStoredSale(sale).customer?.name || 'Consumidor Final'}</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Pago</span>
-                    </div>
-                    <p className="text-lg font-bold">{paymentMethodLabel(sale.payment_method)}</p>
-                    <Badge variant={sale.payment_status === 'paid' ? 'default' : 'secondary'} className="mt-1">
-                      {sale.payment_status === 'paid' ? 'Pagada' : sale.payment_status}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Resumen monetario */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Receipt className="h-5 w-5" />
-                    Resumen
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Subtotal:</span>
-                      <span>{formatCurrency(saleSubtotal(sale))}</span>
-                    </div>
-                    {((sale.discount_amount ?? sale.discount) || 0) > 0 && (
-                      <div className="flex justify-between text-primary">
-                        <span>Descuento:</span>
-                        <span>-{formatCurrency(sale.discount_amount ?? sale.discount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>{config.pricesIncludeTax ? 'IVA incluido:' : 'IVA:'}</span>
-                      <span>{formatCurrency(sale.tax_amount ?? sale.tax ?? 0)}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between font-bold text-lg">
-                      <span>Total:</span>
-                      <span className="text-primary">{formatCurrency(sale.total_amount ?? sale.total)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Items vendidos */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShoppingCart className="h-5 w-5" />
-                    Items
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[260px] w-full pr-4">
-                    <div className="space-y-3 text-sm">
-                      {(sale.sale_items || sale.items || []).map((item: SaleDetailItem) => (
-                        <div key={item.id} className="flex justify-between border-b pb-2 last:border-0 last:pb-0">
-                          <div>
-                            <p className="font-medium">{item.products?.name || item.product_name}</p>
-                            <p className="text-xs text-muted-foreground">x{item.quantity}</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium">{formatCurrency((item.subtotal ?? item.total ?? 0))}</div>
-                            <div className="text-xs text-muted-foreground">
-                              Unit: {formatCurrency(item.price ?? item.unit_price ?? 0)}
-                            </div>
-                            {Number(item.discount_amount ?? item.discount ?? 0) > 0 && (
-                              <div className="text-xs text-primary">
-                                Descuento: -{formatCurrency(Number(item.discount_amount ?? item.discount))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      {(sale.sale_items || sale.items || []).length === 0 && (
-                        <div className="text-center py-8 text-muted-foreground">
-                          Sin items
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              {/* Pagos registrados */}
-              {salePayments(sale).length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CreditCard className="h-5 w-5" />
-                      Pagos
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {salePayments(sale).map((p: SaleDetailPayment) => (
-                        <div key={p.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
-                          <div>
-                            {paymentMethodLabel(p.payment_method ?? p.method)}
-                            {p.reference && (
-                              <span className="ml-2 text-xs text-muted-foreground">({p.reference})</span>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium">{formatCurrency(p.amount)}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {p.created_at ? new Date(p.created_at).toLocaleString('es-PY') : '-'}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+          {loading && <div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />Cargando detalle...</div>}
+          {!loading && !sale && <div role="alert" className="rounded-xl border border-dashed p-6 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-amber-600" /><p className="font-medium">No pudimos cargar esta venta</p>
+            <p className="mt-1 text-sm text-muted-foreground">Revisá tu conexión, la empresa y la sucursal seleccionadas.</p>
+            <Button className="mt-4" variant="outline" onClick={() => setRetry(n => n + 1)}><RefreshCw className="mr-2 h-4 w-4" />Reintentar</Button>
+          </div>}
+          {!loading && sale && <>
+            {isVoided && <p role="status" className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">Esta venta está anulada. Los importes de abajo son el registro original; no representan un cobro vigente. Su copia está deshabilitada.</p>}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:col-span-1"><p className="text-xs font-medium text-muted-foreground">Total de la venta</p><p className="mt-1 break-words text-2xl font-bold text-primary">{formatCurrency(sale.total_amount ?? sale.total)}</p></div>
+              <div className="rounded-xl border bg-card p-4"><p className="text-xs font-medium text-muted-foreground">Pagos al emitir</p><p className="mt-1 break-words text-lg font-semibold">{paymentSummary?.applied == null ? 'Sin desglose' : formatCurrency(paymentSummary.applied)}</p></div>
+              <div className="rounded-xl border bg-card p-4"><p className="text-xs font-medium text-muted-foreground">Financiado al emitir</p><p className="mt-1 break-words text-lg font-semibold">{paymentSummary?.financed == null ? 'Sin desglose' : formatCurrency(paymentSummary.financed)}</p></div>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">Los pagos al emitir incluyen el saldo a favor aplicado. Las cuotas cobradas después y el saldo actual se consultan en Créditos.</p>
+            {settingsError && <p className="text-xs text-amber-700 dark:text-amber-400">No se pudieron cargar los datos del negocio. La impresión está deshabilitada.</p>}
+            <Card className="shadow-none"><CardContent className="grid gap-5 pt-5 sm:grid-cols-2">
+              <div className="min-w-0"><p className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="h-4 w-4" />Cliente</p><p className="break-words font-semibold">{customer?.name || 'Consumidor final'}</p>{customer?.phone && <p className="mt-1 break-words text-sm text-muted-foreground">{customer.phone}</p>}{customer?.email && <p className="break-all text-sm text-muted-foreground">{customer.email}</p>}</div>
+              <div className="min-w-0 space-y-2 text-sm"><p className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />{new Date(sale.created_at).toLocaleString('es-PY')}</p><p className="flex items-start gap-2 break-all"><Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />Sucursal: {branch?.name || sale.branch_id || 'No registrada'}</p><p className="break-all text-muted-foreground">Cajero: {cashier || sale.created_by || sale.cashier_id || 'No registrado'}</p></div>
+            </CardContent></Card>
+            <Card className="shadow-none"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><ShoppingCart className="h-4 w-4 text-primary" />Productos y servicios <span className="ml-auto text-xs text-muted-foreground">{saleItems(sale).length} ítems</span></CardTitle></CardHeader>
+              <CardContent><div className="divide-y">{saleItems(sale).map(item => <div key={item.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div className="min-w-0"><p className="break-words text-sm font-medium">{item.products?.name || item.product_name || (item.is_service ? 'Servicio' : 'Producto')}</p><p className="mt-1 text-xs text-muted-foreground">{item.quantity} × {formatCurrency(item.unit_price ?? item.price ?? 0)}</p>{(item.products?.sku || item.sku) && <p className="mt-1 break-all text-xs text-muted-foreground">SKU: {item.products?.sku || item.sku}</p>}{Number(item.discount_amount ?? item.discount ?? 0) > 0 && <p className="mt-1 text-xs text-primary">Descuento: −{formatCurrency(item.discount_amount ?? item.discount)}</p>}</div>
+                <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(item.subtotal ?? item.total ?? (Number(item.quantity) * Number(item.unit_price ?? item.price ?? 0) - Number(item.discount_amount ?? item.discount ?? 0)))}</p>
+              </div>)}{!saleItems(sale).length && <p className="py-4 text-sm text-muted-foreground">No se guardó el detalle de los ítems.</p>}</div>
+              <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-4 text-sm"><div className="flex justify-between gap-3"><span>Subtotal</span><span>{formatCurrency(saleSubtotal(sale))}</span></div>{Number(sale.discount_amount ?? sale.discount ?? 0) > 0 && <div className="flex justify-between gap-3"><span>Descuento</span><span>−{formatCurrency(sale.discount_amount ?? sale.discount)}</span></div>}<div className="flex justify-between gap-3 text-muted-foreground"><span>IVA registrado</span><span>{formatCurrency(sale.tax_amount ?? sale.tax ?? 0)}</span></div><Separator /><div className="flex justify-between gap-3 font-bold"><span>Total</span><span>{formatCurrency(sale.total_amount ?? sale.total)}</span></div></div>
+              </CardContent></Card>
+            <Card className="shadow-none"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><CreditCard className="h-4 w-4 text-primary" />Pagos registrados</CardTitle></CardHeader><CardContent>
+              <div className="divide-y">{salePayments(sale).map(payment => <div key={payment.id} className="flex items-start justify-between gap-3 py-3 first:pt-0"><div className="min-w-0"><p className="text-sm font-medium">{paymentMethodLabel(payment.payment_method ?? payment.method)}</p>{payment.reference && <p className="mt-1 break-all text-xs text-muted-foreground">Referencia: {payment.reference}</p>}{payment.card_last4 && <p className="text-xs text-muted-foreground">Tarjeta terminada en {payment.card_last4}</p>}{payment.created_at && <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleString('es-PY')}</p>}</div><p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(payment.amount)}</p></div>)}</div>
+              {!salePayments(sale).length && <p className="text-sm text-muted-foreground">Medio declarado: {paymentMethodLabel(sale.payment_method)}. Esta venta no tiene un desglose de pagos guardado.</p>}
+              {sale.change_amount != null && <p className="mt-3 flex justify-between gap-3 border-t pt-3 text-sm"><span>Vuelto registrado</span><span className="font-medium">{formatCurrency(sale.change_amount)}</span></p>}
+            </CardContent></Card>
+            {sale.notes && <div className="rounded-xl border p-4"><p className="mb-1 text-sm font-semibold">Notas</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{sale.notes}</p></div>}
+          </>}
         </div>
-
-        <AlertDialog open={voidOpen} onOpenChange={(open) => !voiding && setVoidOpen(open)}>
-          <AlertDialogContent className="max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Anular esta venta?</AlertDialogTitle>
-              <AlertDialogDescription className="leading-relaxed">
-                Se devuelve el stock, sale de tu caja el efectivo cobrado, se cancelan las cuotas impagas,
-                vuelve el saldo a favor que usó el cliente y se descuentan los puntos. Si la venta cobró una
-                reparación, la reparación vuelve a deber ese monto. No se puede deshacer.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <Input
-              value={voidReason}
-              onChange={(e) => setVoidReason(e.target.value)}
-              placeholder="Motivo (opcional)"
-              maxLength={300}
-              disabled={voiding}
-            />
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={voiding}>No anular</AlertDialogCancel>
-              <Button onClick={handleVoid} disabled={voiding} className="bg-rose-600 text-white hover:bg-rose-700">
-                {voiding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
-                Sí, anular venta
-              </Button>
-            </AlertDialogFooter>
+        <AlertDialog open={voidOpen && !!sale && !isVoided} onOpenChange={open => { if (!voiding) setVoidOpen(open) }}>
+          <AlertDialogContent className="max-w-md"><AlertDialogHeader><AlertDialogTitle>¿Anular la venta {sale ? saleReference(sale) : ''}?</AlertDialogTitle><AlertDialogDescription className="leading-relaxed">Se devuelve el stock y se revierten los movimientos internos asociados: efectivo de caja, cuotas impagas, saldo a favor y puntos. Si cobraste una reparación, vuelve a quedar con saldo pendiente. Las transferencias y los pagos con tarjeta no se reintegran automáticamente al cliente. No se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
+            <label className="space-y-2 text-sm">Motivo (opcional)<Input value={voidReason} onChange={event => setVoidReason(event.target.value)} maxLength={300} disabled={voiding} /></label>
+            <AlertDialogFooter><AlertDialogCancel disabled={voiding}>Volver</AlertDialogCancel><Button variant="destructive" onClick={handleVoid} disabled={voiding}>{voiding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sí, anular venta</Button></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        {sale && (
-          <CreateAfterSalesCaseDialog
-            open={afterSalesOpen}
-            onOpenChange={setAfterSalesOpen}
-            sourceType="sale"
-            saleId={sale.id}
-            customerId={sale.customer_id || null}
-            reference={saleReference(sale)}
-            customerName={toStoredSale(sale).customer?.name || null}
-            allowedRequestTypes={['product_warranty', 'exchange', 'return']}
-            saleItems={(sale.sale_items || sale.items || []).map((item: {
-              id: string | number
-              product_id?: string | null
-              product_name?: string
-              name?: string
-              products?: { name?: string; image_url?: string | null } | null
-              unit_price?: number | string
-              quantity?: number | string
-            }) => ({
-              id: String(item.id),
-              product_id: item.product_id ?? null,
-              name: item.product_name || item.name || item.products?.name || 'Producto',
-              quantity: Number(item.quantity) || 1,
-              unitPrice: Number(item.unit_price) || 0,
-              imageUrl: item.products?.image_url ?? null,
-            }))}
-          />
-        )}
+        {sale && canAfterSales && !isVoided && <CreateAfterSalesCaseDialog open={afterSalesOpen} onOpenChange={setAfterSalesOpen} sourceType="sale" saleId={sale.id} customerId={sale.customer_id || null} reference={saleReference(sale)} customerName={customer?.name || null} allowedRequestTypes={['product_warranty', 'exchange', 'return']} saleItems={saleItems(sale).map(item => ({ id: item.id, product_id: item.product_id ?? null, name: item.product_name || item.products?.name || 'Producto', quantity: Number(item.quantity) || 1, unitPrice: Number(item.unit_price ?? item.price) || 0, imageUrl: null }))} />}
       </DialogContent>
     </Dialog>
   )
