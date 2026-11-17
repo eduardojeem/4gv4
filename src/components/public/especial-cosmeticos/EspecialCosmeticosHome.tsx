@@ -45,6 +45,13 @@ interface EspecialCosmeticosHomeProps {
   capabilities?: StorefrontCapabilities
 }
 
+const SUPABASE_CDN = 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images'
+const IMG_PEDESTAL = `${SUPABASE_CDN}/promotions/hero-cosmetica-pedestal.webp`
+const IMG_MODELO = `${SUPABASE_CDN}/promotions/hero-cosmetica-modelo.webp`
+const IMG_SERUM = `${SUPABASE_CDN}/promotions/hero-cosmetica-serum.webp`
+const IMG_SPA = `${SUPABASE_CDN}/promotions/hero-cosmetica-spa.webp`
+const IMG_BOUTIQUE = `${SUPABASE_CDN}/promotions/hero-cosmetica-boutique.webp`
+
 // Fallback catalog curated for cosmetics boutique
 const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
   {
@@ -63,8 +70,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'serums',
       name: 'Sérums Activos',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-pedestal.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-pedestal.webp'],
+    image: IMG_PEDESTAL,
+    images: [IMG_PEDESTAL],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -84,8 +91,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'hidratantes',
       name: 'Hidratantes',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-serum.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-serum.webp'],
+    image: IMG_SERUM,
+    images: [IMG_SERUM],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -105,8 +112,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'solar',
       name: 'Protección Solar',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-modelo.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-modelo.webp'],
+    image: IMG_MODELO,
+    images: [IMG_MODELO],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -126,8 +133,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'limpieza',
       name: 'Limpieza Facial',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-spa.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-spa.webp'],
+    image: IMG_SPA,
+    images: [IMG_SPA],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -147,8 +154,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'serums',
       name: 'Sérums Activos',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-boutique.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-boutique.webp'],
+    image: IMG_BOUTIQUE,
+    images: [IMG_BOUTIQUE],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -168,8 +175,8 @@ const FALLBACK_COSMETICS_PRODUCTS: PublicProduct[] = [
       id: 'mascarillas',
       name: 'Mascarillas & Spa',
     },
-    image: '/images/promotional-carousel/hero-cosmetica-spa.webp',
-    images: ['/images/promotional-carousel/hero-cosmetica-spa.webp'],
+    image: IMG_SPA,
+    images: [IMG_SPA],
     unit_measure: 'unidad',
     barcode: null,
   },
@@ -184,7 +191,7 @@ const COSMETICS_DEALS = [
     discount: '-25% OFF',
     originalPrice: 425000,
     salePrice: 318000,
-    image: '/images/promotional-carousel/hero-cosmetica-spa.webp',
+    image: IMG_SPA,
     description: 'Los 3 pasos fundamentales para lograr piel radiante y equilibrada todos los días.',
   },
   {
@@ -194,7 +201,7 @@ const COSMETICS_DEALS = [
     discount: '-30% OFF',
     originalPrice: 320000,
     salePrice: 224000,
-    image: '/images/promotional-carousel/hero-cosmetica-pedestal.webp',
+    image: IMG_PEDESTAL,
     description: 'Máxima protección antioxidante contra el fotoenvejecimiento y tono apagado.',
   },
   {
@@ -204,7 +211,7 @@ const COSMETICS_DEALS = [
     discount: '-20% OFF',
     originalPrice: 250000,
     salePrice: 200000,
-    image: '/images/promotional-carousel/hero-cosmetica-serum.webp',
+    image: IMG_SERUM,
     description: 'Masaje linfático facial y nutrición nocturna profunda para despertar descansada.',
   },
 ]
@@ -338,8 +345,8 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
             <div className="relative mx-auto w-full max-w-lg lg:max-w-none">
               <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-rose-200/80 shadow-2xl shadow-rose-950/10">
                 <AppImage
-                  src="/images/promotional-carousel/hero-cosmetica-modelo.webp"
-                  fallbackSrc="https://images.unsplash.com/photo-1556228720-195a672e8a03?w=1000&auto=format&fit=crop&q=85"
+                  src={IMG_MODELO}
+                  fallbackSrc="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/promotions/hero-cosmetica-modelo.webp"
                   alt="Modelo con piel luminosa y dewy aplicando sérum facial"
                   fill
                   priority
@@ -530,8 +537,8 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
             {/* Foto pedestal de cosméticos con rosas */}
             <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden rounded-3xl border border-rose-200 shadow-xl">
               <AppImage
-                src="/images/promotional-carousel/hero-cosmetica-pedestal.webp"
-                fallbackSrc="https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=1000&auto=format&fit=crop&q=85"
+                src={IMG_PEDESTAL}
+                fallbackSrc="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/promotions/hero-cosmetica-pedestal.webp"
                 alt="Pedestal con frascos de sérum y rosas"
                 fill
                 className="object-cover"
@@ -647,8 +654,8 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
             {/* Foto interior de la boutique */}
             <div className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-rose-200 shadow-xl">
               <AppImage
-                src="/images/promotional-carousel/hero-cosmetica-boutique.webp"
-                fallbackSrc="https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1000&auto=format&fit=crop&q=85"
+                src={IMG_BOUTIQUE}
+                fallbackSrc="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/promotions/hero-cosmetica-boutique.webp"
                 alt="Interior boutique de cosmética y skincare de lujo"
                 fill
                 className="object-cover"
