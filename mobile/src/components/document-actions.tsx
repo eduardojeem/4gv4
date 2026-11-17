@@ -10,11 +10,14 @@ export function DocumentActions({
   title,
   labels = false,
   whatsappPdf = false,
+  variants = true,
 }: {
   path: string
   title: string
   labels?: boolean
   whatsappPdf?: boolean
+  /** false: el documento tiene una sola versión (pedidos), sin «cliente / ficha técnica». */
+  variants?: boolean
 }) {
   const sequence = useRef(0)
   useEffect(
@@ -89,7 +92,7 @@ export function DocumentActions({
       }}
     >
       <Text style={{ color: c.text, fontSize: 17, fontWeight: '700' }}>{title}</Text>
-      {!labels && (
+      {!labels && variants && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {chip('customer', 'Para el cliente', type === 'customer', () => setType('customer'))}
           {chip('technician', 'Ficha técnica simple', type === 'technician', () =>
