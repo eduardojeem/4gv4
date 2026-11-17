@@ -185,7 +185,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
   const storeName = company?.name?.trim() || 'Paravos Cosméticos'
   const slogan = company?.slogan?.trim() || 'Alta Cosmética & Cuidado Botánico'
-  const logoUrl = company?.logoUrl?.trim() || '/branding/paravos-logo.webp'
+  const logoUrl = company?.logoUrl?.trim() || 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/branding/paravos-logo.webp'
   const phone = company?.phone?.trim() || '+595 981 111 111'
   const whatsapp = company?.whatsapp?.trim() || phone
   const whatsappClean = whatsapp.replace(/\D/g, '')
@@ -281,7 +281,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <div className="relative h-11 w-11 overflow-hidden rounded-full border border-rose-200/80 shadow-xs bg-white">
                 <AppImage
                   src={logoUrl}
-                  fallbackSrc="/branding/paravos-logo.webp"
+                  fallbackSrc="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/branding/paravos-logo.webp"
                   alt={storeName}
                   fill
                   className="object-cover"
