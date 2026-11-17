@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { OrganizationDetailView, type FullOrganizationDetail } from '@/components/superadmin/organizations/OrganizationDetailView'
 import { summarizeOrganizationActivity } from '@/lib/superadmin/organization-activity'
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
+import { loadPlanTemplateCatalog } from '@/lib/website/template-plan-access.server'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import {
   summarizeCredits,
@@ -267,12 +268,14 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
   // comercial seria mostrar un numero que nadie aplica.
   const planTier = (subscription?.plan || org.plan || 'FREE').toLowerCase()
   const planCode = normalizePlanCode(planTier)
-  const [{ data: planRow }, { data: technicalPlan }, { data: allPlans }] = await Promise.all([
+  const [{ data: planRow }, { data: technicalPlan }, { data: allPlans }, templateCatalog] = await Promise.all([
     admin.from('subscription_plans').select('*').eq('tier', planTier).maybeSingle(),
     admin.from('plans').select('code, name, limits, modules, is_active').eq('code', planCode).maybeSingle(),
     // Para poder decir a que tope pasaria si sube de plan, sin salir de la
     // pantalla. Son cuatro filas.
     admin.from('plans').select('code, name, limits').eq('is_active', true),
+    // Plantillas de tienda por plan: sin el catálogo la ficha dice «no se pudo leer».
+    loadPlanTemplateCatalog().catch(() => null),
   ])
 
   const isLimitMap = (value: unknown): value is Record<string, unknown> =>
@@ -389,6 +392,7 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
     plan_modules: Array.isArray(technicalPlan?.modules) ? technicalPlan.modules.map(String) : null,
     module_trials: activeTrials,
     all_plans: (allPlans ?? []) as Array<{ code: string; name: string; limits: unknown }>,
+    template_catalog: templateCatalog,
     plan_limits_source: technicalPlan ? 'technical' : planRow?.limits ? 'commercial' : 'missing',
     counts: {
       products: productsCount ?? 0,

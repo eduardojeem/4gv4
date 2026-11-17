@@ -58,3 +58,26 @@ describe('la cuenta del marketplace se actualiza al crear el comercio', () => {
     expect(read('mobile/src/app/create-company.tsx')).toContain('if (alreadyHas) refreshMarketplaceAccount()')
   })
 })
+
+describe('ubicación de Google en ingreso y registro', () => {
+  it('en el ingreso Google va arriba del correo, con el separador', () => {
+    const signIn = read('mobile/src/app/sign-in.tsx')
+    const google = signIn.indexOf('<GoogleSignInButton')
+    expect(google).toBeGreaterThan(-1)
+    expect(google).toBeLessThan(signIn.indexOf('Correo electrónico'))
+    expect(signIn).toContain('<AuthDivider />')
+    // El aviso viejo sobre la biometría ya no aparece siempre.
+    expect(signIn).not.toContain('ya no guardamos tu contraseña para el acceso biométrico')
+  })
+
+  it('el registro de cliente pone Google primero y el formulario usa autocompletar', () => {
+    const customer = read('mobile/src/app/register-customer.tsx')
+    expect(customer.indexOf('<GoogleSignInButton')).toBeLessThan(customer.indexOf('<Section title="Tus datos"'))
+    expect(customer).toContain('textContentType="newPassword"')
+    expect(customer).toContain('autoComplete="email"')
+  })
+
+  it('«Crear una cuenta» ofrece Google como atajo', () => {
+    expect(read('mobile/src/app/join.tsx')).toContain('<GoogleSignInButton')
+  })
+})

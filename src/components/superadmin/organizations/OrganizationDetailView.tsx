@@ -36,13 +36,21 @@ import {
   Monitor,
   Hammer,
   Banknote,
-  HandCoins
+  HandCoins,
+  Palette,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { OrganizationStorefrontTab, type OrganizationBusinessProfileView } from './OrganizationStorefrontTab'
+import { describeOrganizationStorefront } from '@/lib/superadmin/organization-storefront'
+import type { PlanTemplateCatalogEntry } from '@/lib/website/template-plan-access.server'
+import { OPERATING_MODEL_LABELS } from '@/lib/organization/business-labels'
+import { PRIMARY_ACTIVITY_LABELS } from '@/lib/organization/primary-activity'
+import { SERVICE_SPECIALTY_LABELS } from '@/lib/organization/service-specialties'
+import type { PlanCode } from '@/lib/saas/plan-features'
 import {
   ACTIVITY_LABELS,
   getActivityLevel,
@@ -98,7 +106,7 @@ import {
 import { describeLastAccess, summarizeTeamAccess } from '@/lib/superadmin/last-access'
 import { auditActionLabel } from '@/lib/superadmin/audit-labels'
 import { OrganizationDetailHeader, OrganizationOverviewNavigation } from './organization-detail-header'
-import { EditOrganizationDialog, OPERATING_MODELS, type EditableOrganization } from './EditOrganizationDialog'
+import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 import { cn } from '@/lib/utils'
 import { planLabel } from '@/lib/superadmin/plan-names'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
@@ -118,6 +126,10 @@ export type FullOrganizationDetail = {
     enabled_modules?: string[] | null
     storefront_public?: boolean | null
     marketplace_public?: boolean | null
+    primary_activity?: string | null
+    service_specialties?: string[] | null
+    attention_mode?: string | null
+    appointment_mode?: string | null
   }
   owner: {
     id: string
@@ -225,6 +237,8 @@ export type FullOrganizationDetail = {
   admin_settings: Record<string, unknown> | null
   /** `website_settings` con key `company_info` */
   company_info: Record<string, unknown> | null
+  /** Plantillas de tienda de cada plan; null si no se pudo leer. */
+  template_catalog?: PlanTemplateCatalogEntry[] | null
   /** `billing_profiles` */
   billing: Record<string, unknown> | null
   /** `organization_settings.modules`, para leer la marca de onboarding. */
@@ -289,6 +303,14 @@ const PLAN_STYLES: Record<string, string> = {
   ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
 }
 
+const ATTENTION_MODE_LABELS: Record<string, string> = { local: 'En el local', home: 'A domicilio', both: 'En el local y a domicilio' }
+const APPOINTMENT_MODE_LABELS: Record<string, string> = { booking: 'Con turno', walk_in: 'Por orden de llegada', both: 'Con turno y por orden de llegada' }
+const TEMPLATE_PLAN_CODES: readonly PlanCode[] = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE']
+function normalizeTemplatePlanCode(value: string): PlanCode {
+  const upper = value.toUpperCase()
+  return (TEMPLATE_PLAN_CODES as readonly string[]).includes(upper) ? (upper as PlanCode) : 'FREE'
+}
+
 export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string; desc: string; badge: string }> = {
   electronics: {
     label: 'Tecnología & Celulares',
@@ -326,6 +348,7 @@ export const VERTICAL_DESCRIPTIONS: Record<string, { label: string; icon: string
     desc: 'Herramientas, materiales y electricidad con venta fraccionada, créditos a cuenta corriente y remisiones.',
     badge: 'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-orange-300',
   },
+  beauty_services: { label: 'Belleza y cuidado personal', icon: '💅', desc: 'Servicios de belleza y cuidado personal con agenda de turnos: uñas, pestañas, cejas, estética y más.', badge: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300' },
   barbershop: { label: 'Barbería y peluquería', icon: '💈', desc: 'Servicios de barbería y peluquería. Revisá sus funciones habilitadas y su actividad.', badge: 'bg-muted text-foreground border-border' },
   other: {
     label: 'Otros Rubros Comerciales',
@@ -1186,6 +1209,7 @@ export function OrganizationDetailView({ data }: Props) {
   const limitesEnRiesgo = countAttention(filasLimite)
 
   const verticalMeta = VERTICAL_DESCRIPTIONS[org.business_vertical || 'general'] || VERTICAL_DESCRIPTIONS.general
+  const operatingModelLabel = OPERATING_MODEL_LABELS[(org.operating_model || 'retail') as keyof typeof OPERATING_MODEL_LABELS] ?? 'Venta minorista'
   // `enabled_modules === null` significa «todos los del plan», que es la regla
   // de `resolveEffectiveModules`. El codigo anterior lo reemplazaba por una
   // lista fija de cuatro modulos: no solo era inventada, contradecia al
@@ -1214,6 +1238,24 @@ export function OrganizationDetailView({ data }: Props) {
   // El modulo de creditos puede estar apagado: «nunca financio» y «no lo tiene»
   // son cosas distintas.
   const creditsModuleEnabled = enabledModulesList.includes('credits')
+
+  // Plantilla de la tienda y tipo de negocio (pestaña «Tienda y negocio»).
+  const storefront = describeOrganizationStorefront({
+    companyInfo: company_info,
+    businessVertical: org.business_vertical,
+    servicesAvailable: enabledModulesList.includes('services'),
+    planCode: normalizeTemplatePlanCode(effectivePlan),
+    catalog: data.template_catalog ?? null,
+  })
+  const businessProfile: OrganizationBusinessProfileView = {
+    verticalLabel: verticalMeta.label,
+    verticalIcon: verticalMeta.icon,
+    operatingModel: operatingModelLabel,
+    primaryActivity: PRIMARY_ACTIVITY_LABELS[(org.primary_activity || 'auto') as keyof typeof PRIMARY_ACTIVITY_LABELS] ?? 'Automático según el rubro',
+    specialties: (org.service_specialties ?? []).map((key) => SERVICE_SPECIALTY_LABELS[key as keyof typeof SERVICE_SPECIALTY_LABELS] ?? key),
+    attentionMode: org.attention_mode ? ATTENTION_MODE_LABELS[org.attention_mode] ?? org.attention_mode : null,
+    appointmentMode: org.appointment_mode ? APPOINTMENT_MODE_LABELS[org.appointment_mode] ?? org.appointment_mode : null,
+  }
 
   const editableOrg: EditableOrganization = {
     id: org.id,
@@ -1253,6 +1295,14 @@ export function OrganizationDetailView({ data }: Props) {
             >
               <Building2 className="h-3.5 w-3.5" />
               Resumen
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="storefront"
+              className="min-h-11 gap-2 rounded-xl px-4 py-2 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground cursor-pointer"
+            >
+              <Palette className="h-3.5 w-3.5" />
+              Tienda y negocio
             </TabsTrigger>
 
             <TabsTrigger
@@ -1992,7 +2042,7 @@ export function OrganizationDetailView({ data }: Props) {
                         {verticalMeta.label}
                       </h3>
                       <Badge variant="outline" className="text-xs font-bold text-muted-foreground">
-                        {OPERATING_MODELS.find(model => model.value === org.operating_model)?.label || 'Venta minorista'}
+                        {operatingModelLabel}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">
@@ -2016,6 +2066,17 @@ export function OrganizationDetailView({ data }: Props) {
         </TabsContent>
 
         {/* Tab 2: Dedicated Detailed Rubro & Modules Matrix */}
+        <TabsContent value="storefront" className="space-y-6 m-0">
+          <OrganizationStorefrontTab
+            storefront={storefront}
+            business={businessProfile}
+            slug={org.slug}
+            planName={planName}
+            storefrontPublic={storefrontPublic}
+            marketplacePublic={org.marketplace_public === true}
+          />
+        </TabsContent>
+
         <TabsContent value="modules" className="space-y-6 m-0">
           <div className="space-y-2 border-b border-border pb-5"><h2 className="text-xl font-semibold tracking-tight">Funciones y actividad</h2><p className="max-w-3xl text-sm leading-6 text-muted-foreground">Diferenciá lo que incluye el plan, lo que está habilitado y lo que realmente usa la empresa.</p></div>
           
@@ -2036,7 +2097,7 @@ export function OrganizationDetailView({ data }: Props) {
                         Rubro Comercial Principal
                       </Badge>
                       <Badge variant="outline" className="rounded-full text-xs font-bold px-2.5 py-0.5 border-border text-foreground/80">
-                        Modelo: {org.operating_model === 'wholesale' ? 'Mayorista' : org.operating_model === 'repair' ? 'Taller de reparación' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}
+                        Modelo: {operatingModelLabel}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">

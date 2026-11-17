@@ -25,6 +25,7 @@ import {
   TextInput,
   View,
   type KeyboardTypeOptions,
+  type TextInputProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -372,6 +373,8 @@ export function Field({
   icon,
   right,
   secure,
+  autoComplete,
+  textContentType,
 }: {
   label: string;
   value: string;
@@ -388,6 +391,9 @@ export function Field({
   right?: ReactNode;
   /** Contraseña: oculta lo que se escribe. */
   secure?: boolean;
+  /** Autocompletar del sistema: correo, nombre, contraseña nueva… */
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
 }) {
   const colors = usePalette();
   const { saving } = useWebsiteEditor();
@@ -433,7 +439,8 @@ export function Field({
           autoCorrect={autoCapitalize !== 'none'}
           maxLength={maxLength}
           secureTextEntry={secure}
-          textContentType={secure ? 'password' : undefined}
+          autoComplete={autoComplete}
+          textContentType={textContentType ?? (secure ? 'password' : undefined)}
           accessibilityLabel={label}
           style={[
             styles.input,
