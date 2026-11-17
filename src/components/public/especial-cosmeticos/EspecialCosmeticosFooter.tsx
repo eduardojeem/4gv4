@@ -171,7 +171,7 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
                 </Link>
               </li>
               <li>
-                <Link href={`${prefix}/inicio#ofertas`} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors">
+                <Link href={`${prefix}/ofertas`} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors">
                   Ofertas Especiales
                 </Link>
               </li>
