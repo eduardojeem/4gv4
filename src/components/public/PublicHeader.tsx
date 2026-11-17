@@ -5,6 +5,7 @@ import { CatalogBasicHeader } from '@/components/public/catalog-basic/CatalogBas
 import { InformaticaElectronicaHeader } from '@/components/public/informatica-electronica/InformaticaElectronicaHeader'
 import { BarberHeader } from '@/components/public/barber/BarberHeader'
 import { EspecialBarberoHeader } from '@/components/public/especial-para-barbero/EspecialBarberoHeader'
+import { EspecialCosmeticosHeader } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHeader'
 
 import { WhatsAppIcon, InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/public/SocialIcons'
 
@@ -271,6 +272,9 @@ export function PublicHeader({
         servicesModuleEnabled={servicesModuleEnabled}
       />
     )
+  }
+  if (storefrontStyle === 'especial-cosmeticos') {
+    return <EspecialCosmeticosHeader settings={effectiveSettings ?? null} />
   }
 
   return (

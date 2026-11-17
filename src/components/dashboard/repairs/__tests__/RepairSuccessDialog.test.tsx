@@ -43,4 +43,11 @@ describe('RepairSuccessDialog', () => {
     expect(screen.getByText(/Reparación Ingresada con Éxito/i)).toBeInTheDocument()
     expect(screen.getByText(/Imprimir Ambos/i)).toBeInTheDocument()
   })
+
+  it('displays WhatsApp destination and copy button', () => {
+    render(<RepairSuccessDialog open onClose={vi.fn()} data={payload} />)
+    expect(screen.getByText(/Enviar WhatsApp/i)).toBeInTheDocument()
+    expect(screen.getByText(/Copiar mensaje/i)).toBeInTheDocument()
+    expect(screen.getByText(/595981123456/i)).toBeInTheDocument()
+  })
 })

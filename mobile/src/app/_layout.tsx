@@ -68,6 +68,7 @@ function RootNavigator() {
           <Stack.Screen name="delete-account" />
           <Stack.Screen name="feedback" />
           <Stack.Screen name="mis-pedidos" />
+          <Stack.Screen name="mis-turnos" />
           <Stack.Screen name="mi-cuenta" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>

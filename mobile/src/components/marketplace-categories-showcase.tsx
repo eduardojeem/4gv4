@@ -13,125 +13,28 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { palette, usePalette } from '../lib/palette';
+import { palette } from '../lib/palette';
 
-export interface CategorySlide {
-  id: string;
-  eyebrow: string;
-  title: string;
-  description: string;
-  image: string;
-  searchTerm: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  accentColor: string;
-  bgDark: string;
-}
+import type { ShowcaseCard } from '../../../src/lib/public/marketplace-showcase-content';
 
-export const SHOWCASE_CATEGORIES: CategorySlide[] = [
-  {
-    id: 'belleza',
-    eyebrow: 'BRILLA CON CONFIANZA',
-    title: 'Belleza & Estética',
-    description: 'Esenciales de piel, cabello y belleza hechos para ti.',
-    image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80&auto=format',
-    searchTerm: 'belleza',
-    iconName: 'sparkles-outline',
-    accentColor: '#10B981',
-    bgDark: '#064E3B',
-  },
-  {
-    id: 'servicios',
-    eyebrow: 'PROFESIONALES DE CONFIANZA',
-    title: 'Servicios',
-    description: 'Descubre expertos locales listos para ayudarte.',
-    image: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80&auto=format',
-    searchTerm: 'servicios',
-    iconName: 'construct-outline',
-    accentColor: '#0EA5E9',
-    bgDark: '#0C4A6E',
-  },
-  {
-    id: 'electronica',
-    eyebrow: 'MÁS CONECTADO CADA DÍA',
-    title: 'Electrónica',
-    description: 'Dispositivos y tecnología para una vida conectada.',
-    image: 'https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=800&q=80&auto=format',
-    searchTerm: 'electronica',
-    iconName: 'phone-portrait-outline',
-    accentColor: '#8B5CF6',
-    bgDark: '#4C1D95',
-  },
-  {
-    id: 'electrodomesticos',
-    eyebrow: 'CONFORT & TECNOLOGÍA EN CASA',
-    title: 'Electrodomésticos',
-    description: 'Heladeras, lavarropas, climatización y cocina para tu día a día.',
-    image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&q=80&auto=format',
-    searchTerm: 'electrodomesticos',
-    iconName: 'hardware-chip-outline',
-    accentColor: '#2563EB',
-    bgDark: '#1E3A8A',
-  },
-  {
-    id: 'muebles',
-    eyebrow: 'CONFORT & DISEÑO',
-    title: 'Muebles & Hogar',
-    description: 'Muebles de diseño y confort para transformar tus ambientes.',
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80&auto=format',
-    searchTerm: 'muebles',
-    iconName: 'home-outline',
-    accentColor: '#D97706',
-    bgDark: '#78350F',
-  },
-  {
-    id: 'computacion',
-    eyebrow: 'PRODUCTIVIDAD & EQUIPAMIENTO',
-    title: 'Computación',
-    description: 'Pantallas, teclados, mouse, impresoras y conectividad.',
-    image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800&q=80&auto=format',
-    searchTerm: 'computacion',
-    iconName: 'laptop-outline',
-    accentColor: '#6366F1',
-    bgDark: '#312E81',
-  },
-  {
-    id: 'audio',
-    eyebrow: 'SONIDO DE ALTA FIDELIDAD',
-    title: 'Audio & Video',
-    description: 'Auriculares, parlantes y sonido envolvente.',
-    image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=800&q=80&auto=format',
-    searchTerm: 'audio',
-    iconName: 'headset-outline',
-    accentColor: '#06B6D4',
-    bgDark: '#164E63',
-  },
-  {
-    id: 'moda',
-    eyebrow: 'TU PROPIO ESTILO',
-    title: 'Moda & Relojería',
-    description: 'Remeras básicas, indumentaria corporativa y relojes.',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80&auto=format',
-    searchTerm: 'reloj',
-    iconName: 'shirt-outline',
-    accentColor: '#F43F5E',
-    bgDark: '#881337',
-  },
-];
+type CategorySlide = ShowcaseCard & { iconName: keyof typeof Ionicons.glyphMap; accentColor:string; bgDark:string };
 
 interface MarketplaceCategoriesShowcaseProps {
-  onSelectCategory: (searchTerm: string) => void;
+  categories: ShowcaseCard[];
+  onSelectCategory: (category: ShowcaseCard) => void;
   onExploreAll?: () => void;
   title?: string;
   subtitle?: string;
 }
 
 export function MarketplaceCategoriesShowcase({
+  categories,
   onSelectCategory,
   onExploreAll,
   title = 'Categorías destacadas',
   subtitle = 'Explorá los rubros comerciales del marketplace y encontrá productos en tu ciudad.',
 }: MarketplaceCategoriesShowcaseProps) {
-  const colors = usePalette();
+  const slides = useMemo<CategorySlide[]>(() => categories.map(card => ({...card,iconName:"grid-outline",accentColor:palette.primary,bgDark:"#0F172A"})),[categories]);
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - 56, 340);
   const scrollRef = useRef<ScrollView>(null);
@@ -142,17 +45,17 @@ export function MarketplaceCategoriesShowcase({
   // Filtrar categorías según búsqueda
   const filteredCategories = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return SHOWCASE_CATEGORIES;
-    return SHOWCASE_CATEGORIES.filter(
+    if (!q) return slides;
+    return slides.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
         c.eyebrow.toLowerCase().includes(q) ||
         c.searchTerm.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, slides]);
 
-  const activeCategory = filteredCategories[activeIndex] ?? filteredCategories[0] ?? SHOWCASE_CATEGORIES[0];
+  const activeCategory = filteredCategories[activeIndex] ?? filteredCategories[0] ?? slides[0];
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -175,6 +78,8 @@ export function MarketplaceCategoriesShowcase({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  if (!slides.length) return null;
+
   return (
     <View style={[styles.container, { backgroundColor: activeCategory ? activeCategory.bgDark : '#0F172A' }]}>
       {/* Resplandor ambiental superior */}
@@ -183,7 +88,7 @@ export function MarketplaceCategoriesShowcase({
         style={[
           styles.ambientGlow,
           {
-            backgroundColor: activeCategory.accentColor,
+            backgroundColor: activeCategory?.accentColor ?? palette.primary,
             opacity: 0.28,
           },
         ]}
@@ -194,7 +99,7 @@ export function MarketplaceCategoriesShowcase({
         <View style={styles.headerTopRow}>
           <View style={styles.badgePill}>
             <Ionicons name="sparkles" size={13} color="#6EE7B7" />
-            <Text style={styles.badgePillText}>SHOWCASE · CATEGORÍAS</Text>
+            <Text style={styles.badgePillText}>EXPLORÁ POR RUBRO</Text>
             <View style={styles.badgeDot} />
             <Text style={styles.badgeCountText}>{filteredCategories.length} rubros</Text>
           </View>
@@ -297,7 +202,7 @@ export function MarketplaceCategoriesShowcase({
                   key={cat.id}
                   onPress={() => {
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    onSelectCategory(cat.searchTerm);
+                    onSelectCategory(cat);
                   }}
                   style={({ pressed }) => [
                     styles.card,
@@ -340,7 +245,7 @@ export function MarketplaceCategoriesShowcase({
                       {/* Botón de acción */}
                       <View style={styles.cardActionRow}>
                         <View style={[styles.actionBtn, { backgroundColor: cat.accentColor }]}>
-                          <Text style={styles.actionBtnText}>Explorar ahora</Text>
+                          <Text style={styles.actionBtnText}>Ver {cat.count} productos</Text>
                           <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
                         </View>
                       </View>

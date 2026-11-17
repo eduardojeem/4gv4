@@ -5,6 +5,7 @@ import { CatalogBasicHome } from '@/components/public/catalog-basic/CatalogBasic
 import { InformaticaElectronicaHome } from '@/components/public/informatica-electronica/InformaticaElectronicaHome'
 import { BarberHome } from '@/components/public/barber/BarberHome'
 import { EspecialBarberoHome } from '@/components/public/especial-para-barbero/EspecialBarberoHome'
+import { EspecialCosmeticosHome } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHome'
 import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -233,6 +234,9 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   if (storefrontStyle === 'barber') return <BarberHome settings={settings} branches={branches} capabilities={capabilities} />
   if (storefrontStyle === 'especial-para-barbero') {
     return <EspecialBarberoHome settings={settings} branches={branches} capabilities={capabilities} />
+  }
+  if (storefrontStyle === 'especial-cosmeticos') {
+    return <EspecialCosmeticosHome settings={settings} branches={branches} capabilities={capabilities} />
   }
 
   return (

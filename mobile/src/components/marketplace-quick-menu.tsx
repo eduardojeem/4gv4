@@ -38,6 +38,7 @@ export type MarketplaceQuickMenuProps = {
   onOpenCategories: () => void;
   onOpenFavorites: () => void;
   onOpenOrders: () => void;
+  onOpenAppointments: () => void;
   onOpenRepairs: () => void;
   onSignIn: () => void;
   onOpenPanel: () => void;
@@ -60,6 +61,7 @@ export function MarketplaceQuickMenu({
   onOpenCategories,
   onOpenFavorites,
   onOpenOrders,
+  onOpenAppointments,
   onOpenRepairs,
   onSignIn,
   onOpenPanel,
@@ -531,6 +533,11 @@ export function MarketplaceQuickMenu({
                           </View>
                         </Pressable>
                       </View>
+                      <Pressable onPress={()=>closeThen(onOpenAppointments)} accessibilityRole="button" style={{minHeight:52,flexDirection:'row',alignItems:'center',gap:10,padding:13,marginTop:10,borderRadius:15,borderWidth:1,borderColor:cardBorder,backgroundColor:cardBg}}>
+                        <Ionicons name="calendar-outline" size={21} color={colors.successText}/>
+                        <View style={{flex:1}}><Text style={[styles.bentoTitle,{color:colors.text}]}>Mis turnos</Text><Text style={[styles.bentoSub,{color:colors.muted}]}>Próximas reservas e historial</Text></View>
+                        <Ionicons name="chevron-forward" size={17} color={colors.muted}/>
+                      </Pressable>
                     </View>
                   )}
 

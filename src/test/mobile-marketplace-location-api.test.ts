@@ -8,7 +8,7 @@ vi.mock('@/lib/public/marketplace-location-catalog',()=>({getScopedLocationCatal
  if(state.fail)throw new Error('unavailable')
  const allStores=[{id:'py',name:'Uno',slug:'uno',logo_url:null,city:'Asunción',countryCode:'PY',currency:'PYG',locations:[publicLocation('PY','Asunción')!,publicLocation('PY','Encarnación')!],rubro:'comercio',products_count:1500},{id:'ar',name:'Dos',slug:'dos',logo_url:null,city:'San Lorenzo',countryCode:'AR',currency:'ARS',locations:[publicLocation('AR','San Lorenzo')!],rubro:'comercio',products_count:1}]
  const stores=allStores.filter(store=>(selection.country==='all'||store.countryCode===selection.country)&&(selection.city==='all'||store.locations.some(location=>location.key===selection.city)))
- const products=Array.from({length:1501},(_,index)=>({id:String(index),name:'Producto '+index,brand:'Marca',organization_id:index===1500?'ar':'py',organization_name:index===1500?'Dos':'Uno',organization_slug:index===1500?'dos':'uno',sale_price:100,image:null,in_stock:true,featured:false,has_offer:index===1499,offer_price:50,hide_price:false,category:null})).filter(product=>stores.some(store=>store.id===product.organization_id))
+ const products=Array.from({length:1501},(_,index)=>({id:String(index),name:'Producto '+index,brand:'Marca',organization_id:index===1500?'ar':'py',organization_name:index===1500?'Dos':'Uno',organization_slug:index===1500?'dos':'uno',sale_price:100,image:null,in_stock:true,featured:false,has_offer:index===1499,offer_price:50,hide_price:false,category:index<1500?{id:index<750?'pantallas':'celulares',name:index<750?'Pantallas':'Celulares'}:null})).filter(product=>stores.some(store=>store.id===product.organization_id))
  return {stores,products,facets:{...locationFacets(allStores,selection.country),allCities:locationFacets(allStores).cities}}
 }}))
 import {GET,POST} from '../app/api/mobile/marketplace/catalog/route'
@@ -17,3 +17,9 @@ it('paginates after geography, including records beyond the old 1000-product cei
 it('never merges the same city from another country and rejects contradictory selection',async()=>{const body=await(await GET(new Request('http://localhost/catalog?country=AR&city=AR:san-lorenzo'))).json();expect(body.products.map((item:{id:string})=>item.id)).toEqual(['1500']);expect((await GET(new Request('http://localhost/catalog?country=PY&city=AR:san-lorenzo'))).status).toBe(400)})
 it('keeps local favorites as a read-only request body and filters before pagination',async()=>{const response=await POST(new Request('http://localhost/catalog?country=PY',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorites:['1499']})}));const body=await response.json();expect(body.products.map((item:{id:string})=>item.id)).toEqual(['1499']);expect(body.pagination.products.total).toBe(1)})
 it('reports a service failure rather than a successful empty marketplace',async()=>{state.fail=true;expect((await GET(new Request('http://localhost/catalog'))).status).toBe(503)})
+
+it('envía rubros reales del lugar y filtra todas sus categorías',async()=>{
+ const body=await(await GET(new Request('http://localhost/catalog?country=PY&category=pantallas,celulares'))).json();
+ expect(body.showcase).toHaveLength(1);expect(body.showcase[0]).toMatchObject({id:'electronica',count:1500,categoryIds:['celulares','pantallas']});expect(body.pagination.products.total).toBe(1500);
+ const other=await(await GET(new Request('http://localhost/catalog?country=AR'))).json();expect(other.showcase).toEqual([]);
+})
