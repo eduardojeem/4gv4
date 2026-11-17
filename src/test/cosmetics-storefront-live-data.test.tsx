@@ -5,13 +5,14 @@ vi.mock('swr',()=>({default:()=>({data:state.products,isLoading:state.loading,er
 vi.mock('next/navigation',()=>({usePathname:()=>'/prueba/inicio'}))
 vi.mock('@/components/public/storefront-style-context',()=>({useStorefrontCompanyInfo:()=>state.company}))
 vi.mock('@/hooks/usePublicCategories',()=>({usePublicCategories:()=>({categories:state.categories})}))
+vi.mock('@/components/public/inicio/PromotionalCarousel',()=>({PromotionalCarousel:()=> <div data-testid="configured-carousel">Banner configurado</div>}))
 vi.mock('@/components/public/ProductCard',()=>({ProductCard:({product}:{product:{id:string;name:string}})=><div data-testid="real-product">{product.name}</div>}))
 vi.mock('@/components/public/FloatingWhatsAppButton',()=>({FloatingWhatsAppButton:({fallbackPhone}:{fallbackPhone:string})=><a href={'https://wa.me/'+fallbackPhone}>WhatsApp real</a>}))
 vi.mock('@/components/ui/app-image',()=>({AppImage:()=>null}))
 import { EspecialCosmeticosHome } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHome'
 import type {WebsiteSettings} from '@/types/website-settings'
 beforeEach(()=>{state.products=[];state.loading=false;state.error=null;state.categories=[];state.company={name:'Comercio de prueba',slug:'prueba'}})
-const show=()=>render(<EspecialCosmeticosHome settings={{company_info:state.company} as unknown as WebsiteSettings}/> )
+const show=(over:Record<string,unknown>={})=>render(<EspecialCosmeticosHome settings={{company_info:state.company,...over} as unknown as WebsiteSettings}/> )
 it('un catálogo vacío no inventa productos, ofertas, contactos ni reseñas',()=>{
  const {container}=show()
  expect(screen.queryAllByTestId('real-product')).toHaveLength(0)
@@ -39,4 +40,14 @@ it('un error de catálogo se comunica sin sustituir datos por una muestra',()=>{
  state.error=new Error('error de red');show()
  expect(screen.getByText(/No pudimos cargar el catálogo/)).toBeInTheDocument()
  expect(screen.queryAllByTestId('real-product')).toHaveLength(0)
+})
+
+it('muestra el carrusel configurado sin recurrir a ofertas inventadas',()=>{
+ show({promotional_carousel:{enabled:true,slides:[{id:'banner-real',active:true,title:'Banner del comercio'}]}})
+ expect(screen.getByTestId('configured-carousel')).toBeInTheDocument()
+ expect(screen.queryAllByTestId('real-product')).toHaveLength(0)
+})
+it.each([{enabled:false,slides:[{id:'b',active:true}]},{enabled:true,slides:[{id:'b',active:false}]}])('respeta el carrusel oculto o sin banners activos',promotional_carousel=>{
+ show({promotional_carousel})
+ expect(screen.queryByTestId('configured-carousel')).toBeNull()
 })

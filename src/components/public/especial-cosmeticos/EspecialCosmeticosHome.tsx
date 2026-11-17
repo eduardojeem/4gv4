@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
+import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 import { ProductCard } from '@/components/public/ProductCard'
 import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
 import { fetchPublicProducts, newestProductsKey, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
@@ -84,9 +85,27 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
     return []
   }, [liveCategories, prefix])
 
+  const hasConfiguredSlides =
+    settings.promotional_carousel?.enabled !== false &&
+    Boolean(settings.promotional_carousel?.slides?.some((slide) => slide.active))
+
   return (
     <div className="flex flex-col min-h-screen bg-[#FFFDFB] text-stone-800 dark:bg-zinc-950 dark:text-stone-100">
       <h1 className="sr-only">{storeName} - Cosmética & Skincare Premium</h1>
+
+      {/* ── 0. BANNERS DEL CARRUSEL PROMOCIONAL (ROTATIVO) ── */}
+      {hasConfiguredSlides && settings.promotional_carousel && (
+        <section className="relative w-full border-b border-rose-100 dark:border-zinc-800 bg-[#FFF5F6]/40 dark:bg-zinc-900/40">
+          <PromotionalCarousel
+            settings={{
+              ...settings.promotional_carousel,
+              enabled: true,
+              layoutMode: settings.promotional_carousel.layoutMode || 'contained',
+            }}
+            isPageLead
+          />
+        </section>
+      )}
 
       {/* ── 1. HERO SECTION BOUTIQUE GLOWORA ── */}
       <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF5F6] via-[#FFFDFB] to-[#FFFDFB] dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 py-12 sm:py-20 lg:py-28">
