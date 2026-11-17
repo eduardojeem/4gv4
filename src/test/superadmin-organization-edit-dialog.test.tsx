@@ -75,3 +75,38 @@ describe('arreglos de la auditoría', () => {
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ enabled_modules: null })
   })
 })
+
+describe('acciones rápidas y resumen', () => {
+  it('muestra cómo está hoy la suscripción', () => {
+    render(<EditOrganizationDialog organization={{ ...organization, subscription_status: 'suspended', payment_status: 'unpaid' }} open onClose={() => {}} />)
+    expect(screen.getByText('Hoy: Bloqueada: el comercio no puede operar')).toBeInTheDocument()
+  })
+
+  it('«Reactivar 1 mes» deja estado y fecha listos para guardar', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
+    vi.stubGlobal('fetch', fetcher)
+    const user = userEvent.setup()
+    render(<EditOrganizationDialog organization={{ ...organization, subscription_status: 'suspended', payment_status: 'unpaid' }} open onClose={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Reactivar 1 mes' }))
+    expect(screen.getByLabelText('Activa hasta')).not.toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Revisar cambios' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    const body = JSON.parse(fetcher.mock.calls[0][1].body)
+    expect(body.status).toBe('active')
+    expect(new Date(body.current_period_ends_at).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('cerrar con cambios sin guardar pide confirmación', async () => {
+    const onClose = vi.fn()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    render(<EditOrganizationDialog organization={organization} open onClose={onClose} />)
+    const name = screen.getByLabelText(/Nombre de la Empresa/)
+    await user.clear(name); await user.type(name, 'Otro nombre')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(confirm).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+})

@@ -1221,6 +1221,7 @@ export function OrganizationDetailView({ data }: Props) {
     slug: org.slug,
     plan: effectivePlan,
     subscription_status: effectiveStatus,
+    payment_status: subscription?.payment_status ?? null,
     currency: settings?.currency || 'PYG',
     timezone: settings?.timezone || 'America/Asuncion',
     business_vertical: org.business_vertical || 'general',

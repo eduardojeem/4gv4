@@ -29,6 +29,7 @@ import { buildOrganizationPatch, organizationEditDefaults, organizationPatchPayl
 import { ORGANIZATION_MODULE_KEYS, ORGANIZATION_PLAN_CODES, RESTRICTIVE_STATUSES, planCodeOf } from '@/lib/superadmin/organization-update'
 import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { createClient } from '@/lib/supabase/client'
+import { applyQuickAction, planModuleDiff, QUICK_ACTIONS, summarizeSubscription, type QuickActionKey } from '@/lib/superadmin/organization-quick-actions'
 import { ORGANIZATION_CURRENCIES, ORGANIZATION_TIMEZONES, timezoneOffsetLabel } from '@/lib/superadmin/create-organization'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 
@@ -38,6 +39,7 @@ export type EditableOrganization = {
   slug: string
   plan: string
   subscription_status?: string | null
+  payment_status?: string | null
   currency?: string | null
   timezone?: string | null
   business_vertical?: string | null
@@ -125,6 +127,10 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   const [periodEndsAt, setPeriodEndsAt] = useState<string | null>(null)
   // Planes vigentes (los desactivados no se ofrecen, salvo el que ya tiene).
   const [activePlans, setActivePlans] = useState<string[] | null>(null)
+  // Funciones que incluye cada plan vigente: para mostrar qué gana o pierde al cambiarlo.
+  const [planModules, setPlanModules] = useState<Record<string, string[]>>({})
+  // Error del servidor atado a un campo: se muestra debajo de ese campo.
+  const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -147,6 +153,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       setTrialEndsAt(toDateInput(organization.trial_ends_at))
       setPeriodEndsAt(toDateInput(organization.current_period_ends_at))
       setError(null)
+      setFieldError(null)
       setShowConfirmation(false)
     }
   }, [organization, open])
@@ -156,10 +163,16 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
     let active = true
     void (async () => {
       try {
-        const { data, error } = await createClient().from('subscription_plans').select('tier').eq('is_active', true)
+        const { data, error } = await createClient().from('plans').select('code, modules').eq('is_active', true)
         if (!active || error || !Array.isArray(data)) return
-        const codes = data.map((row) => planCodeOf(String(row.tier ?? ''))).filter((code): code is string => Boolean(code))
-        setActivePlans(codes.length ? Array.from(new Set(codes)) : null)
+        const modulesByPlan: Record<string, string[]> = {}
+        for (const row of data as Array<{ code?: string | null; modules?: unknown }>) {
+          const code = planCodeOf(String(row.code ?? ''))
+          if (code) modulesByPlan[code] = Array.isArray(row.modules) ? row.modules.map(String) : []
+        }
+        const codes = Object.keys(modulesByPlan)
+        setActivePlans(codes.length ? codes : null)
+        setPlanModules(modulesByPlan)
       } catch {
         // Sin la lista se ofrecen los planes conocidos.
       }
@@ -176,6 +189,29 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   const statusLabel = STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status
   const planOptions = Array.from(new Set([...(activePlans ?? PLAN_OPTIONS), plan]))
   const today = toDateInput(new Date().toISOString()) ?? ''
+  // Cómo está hoy la suscripción guardada (no el borrador).
+  const summary = summarizeSubscription(organization.subscription_status ? {
+    status: organization.subscription_status,
+    payment_status: organization.payment_status,
+    trial_ends_at: organization.trial_ends_at,
+    current_period_ends_at: organization.current_period_ends_at,
+  } : null)
+  const originalPlan = (organization.plan || 'FREE').toUpperCase()
+  const moduleDiff = plan !== originalPlan ? planModuleDiff(planModules[originalPlan], planModules[plan]) : { gained: [], lost: [] }
+  function quickAction(key: QuickActionKey) {
+    const result = applyQuickAction(key, { status: organization?.subscription_status ?? null, current_period_ends_at: organization?.current_period_ends_at, trial_ends_at: organization?.trial_ends_at })
+    setStatus(result.status)
+    if (result.current_period_ends_at) setPeriodEndsAt(result.current_period_ends_at)
+    if (result.trial_ends_at) setTrialEndsAt(result.trial_ends_at)
+    setError(null)
+    setFieldError(null)
+  }
+  // Cerrar con cambios sin guardar pide confirmación.
+  function requestClose() {
+    if (isSubmitting) return
+    if (hasChanges && !window.confirm('Tenés cambios sin guardar. ¿Cerrar igual?')) return
+    onClose()
+  }
   
   const draft: OrganizationEditValues = { name, slug, plan, status, currency, timezone, business_vertical: businessVertical, operating_model: operatingModel, enabled_modules: inheritModules ? null : enabledModules, cancel_at_period_end: cancelAtPeriodEnd, trial_ends_at: trialEndsAt, current_period_ends_at: periodEndsAt }
   const changes = buildOrganizationPatch(organization, draft)
@@ -253,6 +289,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.success) {
+        if (typeof data.field === 'string' && typeof data.error === 'string') setFieldError({ field: data.field, message: data.error })
         throw new Error(data.error || 'Error al guardar los cambios.')
       }
 
@@ -269,7 +306,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   }
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !isSubmitting) onClose() }}>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) requestClose() }}>
       <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden p-0 sm:max-w-3xl rounded-3xl border border-border shadow-2xl">
         
         {/* Header */}
@@ -437,6 +474,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                     required
                   />
                 </div>
+                {isSlugChanged ? <p className="text-xs text-muted-foreground">La dirección anterior va a redirigir a la nueva.</p> : null}
+                {fieldError?.field === 'slug' ? <p role="alert" className="text-xs text-red-600">{fieldError.message}</p> : null}
               </div>
 
               {/* Rubro Comercial & Modelo Operativo */}
@@ -477,6 +516,20 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               </div>
 
               <div className="sm:col-span-2 border-t border-border pt-5"><h3 className="text-base font-semibold">2. Plan y acceso</h3><p className="mt-1 text-sm text-muted-foreground">Cambiar estos valores puede modificar las funciones disponibles.</p></div>
+              <div className={cn('sm:col-span-2 space-y-3 rounded-2xl border p-4', summary.tone === 'danger' ? 'border-red-300 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/30' : summary.tone === 'warn' ? 'border-amber-300 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/30' : 'border-border bg-muted/30')}>
+                <div>
+                  <p className="text-sm font-semibold">Hoy: {summary.headline}</p>
+                  {summary.dueLine || summary.paymentLine ? <p className="mt-0.5 text-xs text-muted-foreground">{[summary.dueLine, summary.paymentLine].filter(Boolean).join(' · ')}</p> : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_ACTIONS.map((action) => (
+                    <Button key={action.key} type="button" variant="outline" size="sm" title={action.hint} className="rounded-xl text-xs font-semibold" onClick={() => quickAction(action.key)}>
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">Los atajos completan el estado y la fecha; revisás y confirmás antes de guardar.</p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-plan" className="text-xs font-bold text-foreground/80">
                   Plan Asignado
@@ -493,6 +546,13 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                     ))}
                   </SelectContent>
                 </Select>
+                {moduleDiff.gained.length || moduleDiff.lost.length ? (
+                  <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-2.5 text-xs">
+                    {moduleDiff.gained.length ? <p><span className="font-semibold text-emerald-700 dark:text-emerald-400">Gana:</span> {moduleDiff.gained.map(moduleDisplayName).join(', ')}</p> : null}
+                    {moduleDiff.lost.length ? <p><span className="font-semibold text-red-700 dark:text-red-400">Pierde:</span> {moduleDiff.lost.map(moduleDisplayName).join(', ')}</p> : null}
+                  </div>
+                ) : null}
+                {fieldError?.field === 'plan' ? <p role="alert" className="text-xs text-red-600">{fieldError.message}</p> : null}
               </div>
 
               <div className="space-y-1.5">
@@ -519,6 +579,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   <Label htmlFor="edit-org-period-end" className="text-xs font-bold text-foreground/80">Activa hasta</Label>
                   <Input id="edit-org-period-end" type="date" min={today} value={periodEndsAt ?? ''} onChange={(e) => setPeriodEndsAt(e.target.value || null)} className="h-11 w-full rounded-xl text-sm font-medium" />
                   <p className="text-xs text-muted-foreground">Al activarla se marca el pago como al día. Después de esta fecha vuelve a pedir renovación.</p>
+                  {fieldError?.field === 'current_period_ends_at' ? <p role="alert" className="text-xs text-red-600">{fieldError.message}</p> : null}
                 </div>
               )}
               {status === 'trialing' && (
@@ -526,6 +587,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   <Label htmlFor="edit-org-trial-end" className="text-xs font-bold text-foreground/80">Prueba hasta</Label>
                   <Input id="edit-org-trial-end" type="date" min={today} value={trialEndsAt ?? ''} onChange={(e) => setTrialEndsAt(e.target.value || null)} className="h-11 w-full rounded-xl text-sm font-medium" />
                   <p className="text-xs text-muted-foreground">Después de esta fecha la prueba termina y pide elegir un plan.</p>
+                  {fieldError?.field === 'trial_ends_at' ? <p role="alert" className="text-xs text-red-600">{fieldError.message}</p> : null}
                 </div>
               )}
 
@@ -549,6 +611,11 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 </Select>
               </div>
 
+              {currency !== (organization.currency || 'PYG') ? (
+                <p className="sm:col-span-2 rounded-xl border border-amber-300 bg-amber-50/80 p-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  Cambiar la moneda no convierte los precios ni los montos ya cargados: solo cambia cómo se muestran.
+                </p>
+              ) : null}
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-timezone" className="text-xs font-bold text-foreground/80">
                   Zona Horaria
@@ -650,7 +717,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={onClose}
+                onClick={requestClose}
                 className="rounded-xl text-xs font-bold cursor-pointer"
               >
                 Cancelar
