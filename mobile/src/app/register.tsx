@@ -12,7 +12,7 @@ import { emptyRegisterForm, passwordChecks, registerIssues, registerPayload, sto
 import { useSession } from '@/lib/session';
 import { websiteErrorMessage } from '@/lib/website-admin';
 import { CompanySignupFields, useSignupCatalog, useSlugAvailability } from '@/components/company-signup-fields';
-import { GoogleSignInButton } from '@/components/google-sign-in-button';
+import { AuthDivider, GoogleSignInButton } from '@/components/google-sign-in-button';
 
 /**
  * Registro de un comercio nuevo desde la app, con la misma API que /register
@@ -126,12 +126,12 @@ export default function RegisterScreen() {
           afterSignIn={{ pathname: '/create-company', params: form.plan ? { plan: form.plan } : {} }}
         />
         {googleError ? <Text accessibilityRole="alert" style={[styles.small, { color: palette.danger }]}>{googleError}</Text> : null}
-        <Text style={[styles.small, styles.centerText, { color: colors.muted }]}>o con tu correo y contraseña</Text>
+        <AuthDivider text="o con tu correo y contraseña" />
       </View>
       <Section title="Tu cuenta" icon="person-outline">
-        <Field label="Nombre completo" value={form.fullName} onChangeText={(value) => set({ fullName: value })} placeholder="Ej. María González" autoCapitalize="words" maxLength={120} error={issues.fullName} />
-        <Field label="Email" value={form.email} onChangeText={(value) => set({ email: value.trim() })} placeholder="nombre@tucomercio.com" keyboardType="email-address" autoCapitalize="none" maxLength={254} error={issues.email} />
-        <Field label="Contraseña" value={form.password} onChangeText={(value) => set({ password: value })} placeholder={`Mínimo ${registrationOptions?.companyPasswordMinLength ?? 8} caracteres`} autoCapitalize="none" maxLength={72} error={issues.password} secure={!showPassword} />
+        <Field label="Nombre completo" value={form.fullName} onChangeText={(value) => set({ fullName: value })} placeholder="Ej. María González" autoCapitalize="words" autoComplete="name" textContentType="name" maxLength={120} error={issues.fullName} />
+        <Field label="Email" value={form.email} onChangeText={(value) => set({ email: value.trim() })} placeholder="nombre@tucomercio.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" maxLength={254} error={issues.email} />
+        <Field label="Contraseña" value={form.password} onChangeText={(value) => set({ password: value })} placeholder={`Mínimo ${registrationOptions?.companyPasswordMinLength ?? 8} caracteres`} autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" maxLength={72} error={issues.password} secure={!showPassword} />
         <View style={styles.checks}>
           {passwordChecks(form.password, registrationOptions?.companyPasswordMinLength ?? 8).map((check) => (
             <View key={check.label} style={styles.check}>
@@ -140,7 +140,7 @@ export default function RegisterScreen() {
             </View>
           ))}
         </View>
-        <Field label="Repetí la contraseña" value={form.confirmPassword} onChangeText={(value) => set({ confirmPassword: value })} autoCapitalize="none" maxLength={72} error={issues.confirmPassword} secure={!showPassword} />
+        <Field label="Repetí la contraseña" value={form.confirmPassword} onChangeText={(value) => set({ confirmPassword: value })} autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" maxLength={72} error={issues.confirmPassword} secure={!showPassword} />
         <Pressable onPress={() => setShowPassword((value) => !value)} accessibilityRole="button" hitSlop={8}>
           <Text style={[styles.link, { color: palette.primary }]}>{showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}</Text>
         </Pressable>

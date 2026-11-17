@@ -31,7 +31,7 @@ import { useSession } from '@/lib/session';
 import { isSessionMfaPending } from '@/lib/mfa-model';
 import { supabase } from '@/lib/supabase';
 import { MfaCodeCard } from '@/components/mfa-code-card';
-import { GoogleSignInButton } from '@/components/google-sign-in-button';
+import { AuthDivider, GoogleSignInButton } from '@/components/google-sign-in-button';
 import { setPostAuthRoute, type PostAuthRoute } from '@/lib/post-auth-route';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -240,11 +240,7 @@ export default function SignInScreen() {
                   <Ionicons name="checkmark-circle" size={20} color={palette.success} />
                   <Text style={[styles.registeredText, { color: colors.text }]}>{registered}</Text>
                 </View>
-              ) : (
-                <Text style={[styles.brandSub, { color: colors.muted }]}>
-                  Por seguridad, ya no guardamos tu contraseña para el acceso biométrico. Ingresá con tu email y contraseña.
-                </Text>
-              )}
+              ) : null}
 
               {/* Tarjeta de Formulario Principal */}
               {mfaPending ? (
@@ -266,6 +262,10 @@ export default function SignInScreen() {
                     Comprá, consultá tus pedidos o gestioná tu negocio.
                   </Text>
                 </View>
+
+                {/* Google arriba: es lo más rápido y no necesita contraseña. */}
+                <GoogleSignInButton disabled={busy} afterSignIn={afterSignIn} onError={setError} onDone={() => { void offerAfterGoogle(); }} />
+                <AuthDivider />
 
                 {/* Campo Email */}
                 <View style={styles.inputGroup}>
@@ -482,17 +482,18 @@ export default function SignInScreen() {
                 </Pressable>
 
                 {hint && <Text style={[styles.formHint, { color: colors.muted }]}>{hint}</Text>}
-
-                <View style={styles.dividerRow}>
-                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                  <Text style={[styles.dividerLabel, { color: colors.muted }]}>o</Text>
-                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                </View>
-                <GoogleSignInButton disabled={busy} afterSignIn={afterSignIn} onError={setError} onDone={() => { void offerAfterGoogle(); }} />
               </View>
               )}
 
-              <Pressable accessibilityRole="button" onPress={() => router.push('/join' as never)} style={{ padding: 16, alignItems: 'center' }}><Text style={{ color: palette.primary, fontWeight: '700' }}>¿No tenés cuenta? Registrate</Text></Pressable>
+              <View style={styles.signupRow}>
+                <Text style={[styles.signupText, { color: colors.muted }]}>¿Todavía no tenés cuenta?</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/join' as never)}
+                  style={({ pressed }) => [styles.signupButton, { borderColor: palette.primary, opacity: pressed ? 0.8 : 1 }]}>
+                  <Text style={[styles.signupButtonText, { color: palette.primary }]}>Crear una cuenta gratis</Text>
+                </Pressable>
+              </View>
               {/* Pie de pantalla / Seguridad */}
               <View style={styles.footerContainer}>
                 <View style={styles.securityBadge}>
@@ -512,6 +513,10 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
+  signupRow: { alignItems: 'center', gap: 8, paddingVertical: 8 },
+  signupText: { fontSize: 14 },
+  signupButton: { borderWidth: 1.5, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 20, minHeight: 48, justifyContent: 'center' },
+  signupButtonText: { fontSize: 15, fontWeight: '700' },
   registeredCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 14, padding: 12 },
   registeredText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 20 },
   root: { flex: 1 },

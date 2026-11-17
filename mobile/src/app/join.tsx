@@ -1,11 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { WebsiteScreen } from '@/components/website/website-ui';
+import { AuthDivider, GoogleSignInButton } from '@/components/google-sign-in-button';
 import { palette, usePalette } from '@/lib/palette';
 export default function JoinScreen() {
   const colors = usePalette();
+  const [googleError, setGoogleError] = useState<string | null>(null);
   return <WebsiteScreen title="Crear una cuenta" subtitle="Elegí cómo querés usar MiTiendaPy">
+    {/* Atajo para comprar: con Google la cuenta queda creada en un paso. */}
+    <GoogleSignInButton label="Continuar con Google" hint="Para comprar y reservar, sin contraseña" onError={setGoogleError} afterSignIn={{ pathname: '/' }} />
+    {googleError ? <Text accessibilityRole="alert" style={{ color: palette.danger, fontWeight: '600' }}>{googleError}</Text> : null}
+    <AuthDivider text="o elegí el tipo de cuenta" />
     {[
       { title: 'Quiero comprar o reservar', description: 'Tu cuenta personal. No necesitás una empresa ni un plan.', icon: 'person-outline' as const, path: '/register-customer' },
       { title: 'Quiero registrar mi empresa', description: 'Creá tu comercio, elegí un plan y configurá tu negocio.', icon: 'storefront-outline' as const, path: '/register' },
