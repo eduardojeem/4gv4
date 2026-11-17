@@ -16,8 +16,11 @@ export function GoogleSignInButton({
   onError,
   onDone,
   afterSignIn,
+  hint,
 }: {
   label?: string;
+  /** Texto chico debajo del botón (p. ej. «Sin contraseña»). */
+  hint?: string;
   disabled?: boolean;
   onError: (message: string | null) => void;
   onDone?: () => void;
@@ -65,15 +68,35 @@ export function GoogleSignInButton({
         { borderColor: colors.border, backgroundColor: colors.card, opacity: off ? 0.6 : pressed ? 0.85 : 1 },
       ]}>
       <View style={styles.row}>
-        {busy ? <ActivityIndicator size="small" /> : <Ionicons name="logo-google" size={18} color="#4285F4" />}
+        {busy ? <ActivityIndicator size="small" /> : <Ionicons name="logo-google" size={20} color="#4285F4" />}
         <Text style={[styles.text, { color: colors.text }]}>{busy ? 'Abriendo Google…' : label}</Text>
       </View>
+      {hint && !busy ? <Text style={[styles.hint, { color: colors.muted }]}>{hint}</Text> : null}
     </Pressable>
   );
 }
 
+/** Separador «o con tu correo» entre Google y el formulario. */
+export function AuthDivider({ text = 'o con tu correo' }: { text?: string }) {
+  const colors = usePalette();
+  return (
+    <View style={styles.divider} accessibilityRole="text">
+      <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+      <Text style={[styles.dividerText, { color: colors.muted }]}>{text}</Text>
+      <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  button: { minHeight: 52, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  button: {
+    minHeight: 54, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 8,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+  },
+  hint: { fontSize: 12, marginTop: 2 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerText: { fontSize: 13, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   text: { fontSize: 16, fontWeight: '700' },
 });
