@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/bottom-sheet';
+import { DocumentActions } from '@/components/document-actions';
 import { PanelAccessState } from '@/components/panel-access-state';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
@@ -239,6 +240,9 @@ export default function OrderDetail() {
             <Text style={[styles.noticeText, { color: '#16A34A' }]}>{notice}</Text>
           </View>
         )}
+
+        {/* Comprobante del pedido: imprimir (58/80 mm o A4), PDF o WhatsApp. Mismo documento que la web. */}
+        <DocumentActions path={'/api/orders/' + encodeURIComponent(order.id) + '/receipt'} title="Comprobante del pedido" whatsappPdf variants={false} />
 
         {/* Estado y origen */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>

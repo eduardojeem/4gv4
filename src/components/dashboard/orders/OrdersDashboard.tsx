@@ -34,6 +34,7 @@ import type { CustomerOrder, FulfillmentType, OrderChannel, OrderStatus, Payment
 import { CreateOrderDialog } from './CreateOrderDialog'
 import { EditOrderDialog } from './EditOrderDialog'
 import { ShippingLabelDialog } from './ShippingLabelDialog'
+import { OrderReceiptPrintButton } from './OrderReceiptPrintButton'
 import { formatDate, formatMoney } from './format'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { ORDERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
@@ -1641,10 +1642,8 @@ function OrderDetailDialog({
                     className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-blue-500/30 bg-blue-500/8 text-blue-700 dark:text-blue-300 hover:bg-blue-500/15">
                     <Truck className="h-3.5 w-3.5" />Rótulo de envío
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => window.print()}
-                    className="w-full h-8 rounded-xl text-[11px] font-semibold gap-1.5 border-border/70 hover:bg-accent">
-                    <Printer className="h-3.5 w-3.5" />Imprimir detalle
-                  </Button>
+                  {/* Comprobante del pedido (58/80 mm o A4); antes se imprimía la pantalla. */}
+                  <OrderReceiptPrintButton orderId={order.id} />
                   {!isTerminal && onCancelRequest && (
                     <Button
                       type="button"
