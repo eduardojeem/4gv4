@@ -23,5 +23,7 @@ module.exports = ({ config }) => {
       ...config.android,
       ...(file ? { googleServicesFile: file } : {}),
     },
+    // Pantallas grandes: quita la orientación fija del escáner de ML Kit (aviso de Play Console).
+    plugins: [...(config.plugins ?? []), './plugins/with-large-screen-scanner'],
   };
 };
