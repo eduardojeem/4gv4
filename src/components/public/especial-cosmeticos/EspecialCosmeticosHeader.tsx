@@ -461,7 +461,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                                 Set Rutina Glow Completa
                               </p>
                               <Link
-                                href={`${prefix}/inicio#ofertas`}
+                                href={`${prefix}/ofertas`}
                                 className="text-[11px] font-semibold text-rose-600 hover:underline inline-flex items-center gap-1"
                               >
                                 <span>Ver Oferta</span>
@@ -502,7 +502,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
             {/* Ofertas Especiales con Badge llamativo */}
             <Link
-              href={`${prefix}/inicio#ofertas`}
+              href={`${prefix}/ofertas`}
               className={cn(
                 'inline-flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors relative py-1',
                 isOffers
@@ -761,7 +761,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               </Link>
 
               <Link
-                href={`${prefix}/inicio#ofertas`}
+                href={`${prefix}/ofertas`}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
               >

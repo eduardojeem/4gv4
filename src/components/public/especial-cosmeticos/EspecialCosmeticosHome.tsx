@@ -589,12 +589,22 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
               </p>
             </div>
             
-            <div className="flex items-center gap-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-rose-200/80 dark:border-zinc-800 shadow-sm">
-              <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-              <div className="text-xs">
-                <span className="font-bold text-stone-900 dark:text-stone-100 block">Stock Disponible</span>
-                <span className="text-stone-500 dark:text-stone-400">Entrega rápida en Asunción y todo el país</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-rose-200/80 dark:border-zinc-800 shadow-sm">
+                <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="text-xs">
+                  <span className="font-bold text-stone-900 dark:text-stone-100 block">Stock Disponible</span>
+                  <span className="text-stone-500 dark:text-stone-400">Entrega rápida en Asunción y todo el país</span>
+                </div>
               </div>
+
+              <Link
+                href={`${prefix}/ofertas`}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white/90 dark:bg-zinc-900/90 hover:bg-rose-50 dark:hover:bg-zinc-800 px-5 py-3 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200/90 dark:border-zinc-800 shadow-sm transition-all"
+              >
+                <span>Ver Catálogo Completo de Ofertas</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
 
