@@ -25,7 +25,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
-import { buildOrganizationPatch, organizationEditDefaults, ORGANIZATION_FIELD_LABELS, type OrganizationEditValues } from '@/lib/superadmin/organization-edit'
+import { buildOrganizationPatch, organizationEditDefaults, organizationPatchPayload, toDateInput, ORGANIZATION_FIELD_LABELS, type OrganizationEditValues } from '@/lib/superadmin/organization-edit'
+import { ORGANIZATION_MODULE_KEYS, ORGANIZATION_PLAN_CODES, RESTRICTIVE_STATUSES, planCodeOf } from '@/lib/superadmin/organization-update'
+import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
+import { createClient } from '@/lib/supabase/client'
 import { ORGANIZATION_CURRENCIES, ORGANIZATION_TIMEZONES, timezoneOffsetLabel } from '@/lib/superadmin/create-organization'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 
@@ -53,7 +56,8 @@ type Props = {
   onSuccess?: () => void
 }
 
-const PLAN_OPTIONS = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE']
+// Respaldo si no se pueden leer los planes vigentes de la base.
+const PLAN_OPTIONS: readonly string[] = ORGANIZATION_PLAN_CODES
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Activa' },
   { value: 'trialing', label: 'En Prueba (Trial)' },
@@ -72,6 +76,7 @@ export const VERTICAL_OPTIONS = [
   { value: 'cosmetics', label: 'Cosmética & Belleza', icon: '💄' },
   { value: 'hardware', label: 'Ferretería & Construcción', icon: '🔨' },
   { value: 'barbershop', label: 'Barbería & Peluquería', icon: '💈' },
+  { value: 'beauty_services', label: 'Belleza & Cuidado personal', icon: '💅' },
   { value: 'other', label: 'Otros Rubros', icon: '🏷️' },
 ]
 
@@ -83,7 +88,7 @@ export const OPERATING_MODELS = [
   { value: 'mixed', label: 'Negocio Mixto' },
 ]
 
-export const AVAILABLE_MODULES = [
+export const AVAILABLE_MODULES: { key: (typeof ORGANIZATION_MODULE_KEYS)[number]; label: string; desc: string }[] = [
   { key: 'pos', label: moduleDisplayName('pos'), desc: 'Caja rápida y ticket' },
   { key: 'inventory', label: moduleDisplayName('inventory'), desc: 'Control de existencias' },
   { key: 'crm', label: moduleDisplayName('crm'), desc: 'Fidelización e historial' },
@@ -116,6 +121,10 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
   const [inheritModules, setInheritModules] = useState(true)
   const [enabledModules, setEnabledModules] = useState<string[]>([])
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false)
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
+  const [periodEndsAt, setPeriodEndsAt] = useState<string | null>(null)
+  // Planes vigentes (los desactivados no se ofrecen, salvo el que ya tiene).
+  const [activePlans, setActivePlans] = useState<string[] | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -135,18 +144,40 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       setInheritModules(organization.enabled_modules == null)
       setEnabledModules(organization.enabled_modules ?? organization.effective_modules ?? [])
       setCancelAtPeriodEnd(Boolean(organization.cancel_at_period_end))
+      setTrialEndsAt(toDateInput(organization.trial_ends_at))
+      setPeriodEndsAt(toDateInput(organization.current_period_ends_at))
       setError(null)
       setShowConfirmation(false)
     }
   }, [organization, open])
 
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    void (async () => {
+      try {
+        const { data, error } = await createClient().from('subscription_plans').select('tier').eq('is_active', true)
+        if (!active || error || !Array.isArray(data)) return
+        const codes = data.map((row) => planCodeOf(String(row.tier ?? ''))).filter((code): code is string => Boolean(code))
+        setActivePlans(codes.length ? Array.from(new Set(codes)) : null)
+      } catch {
+        // Sin la lista se ofrecen los planes conocidos.
+      }
+    })()
+    return () => { active = false }
+  }, [open])
+
   if (!organization) return null
 
   // Change detection for danger/confirmation prompts
   const isSlugChanged = slug.trim() !== organization.slug
-  const isDangerousStatus = status === 'suspended' || status === 'cancelled' || status === 'past_due'
+  // Todos los estados que dejan al comercio sin operar (antes faltaban «Expirada» e «Impaga»).
+  const isDangerousStatus = RESTRICTIVE_STATUSES.has(status)
+  const statusLabel = STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status
+  const planOptions = Array.from(new Set([...(activePlans ?? PLAN_OPTIONS), plan]))
+  const today = toDateInput(new Date().toISOString()) ?? ''
   
-  const draft: OrganizationEditValues = { name, slug, plan, status, currency, timezone, business_vertical: businessVertical, operating_model: operatingModel, enabled_modules: inheritModules ? null : enabledModules, cancel_at_period_end: cancelAtPeriodEnd }
+  const draft: OrganizationEditValues = { name, slug, plan, status, currency, timezone, business_vertical: businessVertical, operating_model: operatingModel, enabled_modules: inheritModules ? null : enabledModules, cancel_at_period_end: cancelAtPeriodEnd, trial_ends_at: trialEndsAt, current_period_ends_at: periodEndsAt }
   const changes = buildOrganizationPatch(organization, draft)
   const originalValues = organizationEditDefaults(organization)
   const hasChanges = Object.keys(changes).length > 0
@@ -156,6 +187,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
     if (value === 'sin_registro') return 'Sin suscripción'
     if (key === 'plan') return planLabel(String(value), planNames)
     if (key === 'enabled_modules') return (value as string[]).map(moduleDisplayName).join(', ') || 'Ninguna'
+    if (key === 'trial_ends_at' || key === 'current_period_ends_at') return new Date(`${value}T12:00:00`).toLocaleDateString('es-PY', { day: '2-digit', month: 'long', year: 'numeric' })
     if (typeof value === 'boolean') return value ? 'Sí' : 'No'
     if (key === 'status') return STATUS_OPTIONS.find(item => item.value === value)?.label || String(value)
     if (key === 'business_vertical') return VERTICAL_OPTIONS.find(item => item.value === value)?.label || String(value)
@@ -180,8 +212,22 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       setError('La dirección pública es obligatoria.')
       return
     }
-    if (!/^[a-z0-9-]+$/.test(slug.trim())) {
-      setError('El slug solo puede contener letras minúsculas, números y guiones.')
+    // Las mismas reglas que el registro (incluye direcciones reservadas del sistema).
+    if (slug.trim() !== organization?.slug) {
+      const slugCheck = validateTenantSlug(slug.trim())
+      if (slugCheck.ok === false) {
+        setError(slugCheck.message)
+        return
+      }
+    }
+    // El bloqueo depende de la fecha y del pago, no solo del estado: sin fecha
+    // futura, «Activa» o «En prueba» seguían bloqueando el comercio.
+    if (status === 'active' && (changes.status !== undefined || changes.current_period_ends_at !== undefined) && (!periodEndsAt || periodEndsAt < today)) {
+      setError('Para activarla, indicá hasta qué fecha queda activa (hoy o después).')
+      return
+    }
+    if (status === 'trialing' && (changes.status !== undefined || changes.trial_ends_at !== undefined) && (!trialEndsAt || trialEndsAt < today)) {
+      setError('Para dejarla en prueba, indicá hasta qué fecha dura la prueba (hoy o después).')
       return
     }
 
@@ -202,7 +248,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       const res = await fetch(`/api/superadmin/organizations/${organization?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes),
+        body: JSON.stringify(organizationPatchPayload(changes)),
       })
 
       const data = await res.json().catch(() => ({}))
@@ -323,8 +369,8 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
 
           </div>
         ) : (
-          /* 🛠️ STEP 1: MAIN EDIT FORM */
-          <form onSubmit={handleFormSubmit} className="flex min-h-0 flex-1 flex-col"><div className="flex-1 space-y-6 overflow-y-auto bg-background p-5">
+          /* 🛠️ STEP 1: MAIN EDIT FORM (noValidate: los avisos los da el formulario, en español y con el motivo) */
+          <form onSubmit={handleFormSubmit} noValidate className="flex min-h-0 flex-1 flex-col"><div className="flex-1 space-y-6 overflow-y-auto bg-background p-5">
             
             {/* Real-time Critical Impact Alert Banners */}
             {isSlugChanged && (
@@ -345,7 +391,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 <div className="space-y-0.5">
                   <strong className="font-semibold block">Alerta de Suspensión / Estado Restrictivo</strong>
                   <p>
-                    Marcar la organización como <strong>{status}</strong> restringirá las ventas y el acceso operativo para todos los miembros.
+                    Marcar la organización como <strong>{statusLabel}</strong> restringirá las ventas y el acceso operativo para todos los miembros.
                   </p>
                 </div>
               </div>
@@ -440,7 +486,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {Array.from(new Set([...PLAN_OPTIONS, plan])).map((p) => (
+                    {planOptions.map((p) => (
                       <SelectItem key={p} value={p} className="text-xs font-bold">
                         {planLabel(p, planNames)}
                       </SelectItem>
@@ -467,6 +513,21 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   </SelectContent>
                 </Select>
               </div>
+
+              {status === 'active' && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-org-period-end" className="text-xs font-bold text-foreground/80">Activa hasta</Label>
+                  <Input id="edit-org-period-end" type="date" min={today} value={periodEndsAt ?? ''} onChange={(e) => setPeriodEndsAt(e.target.value || null)} className="h-11 w-full rounded-xl text-sm font-medium" />
+                  <p className="text-xs text-muted-foreground">Al activarla se marca el pago como al día. Después de esta fecha vuelve a pedir renovación.</p>
+                </div>
+              )}
+              {status === 'trialing' && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-org-trial-end" className="text-xs font-bold text-foreground/80">Prueba hasta</Label>
+                  <Input id="edit-org-trial-end" type="date" min={today} value={trialEndsAt ?? ''} onChange={(e) => setTrialEndsAt(e.target.value || null)} className="h-11 w-full rounded-xl text-sm font-medium" />
+                  <p className="text-xs text-muted-foreground">Después de esta fecha la prueba termina y pide elegir un plan.</p>
+                </div>
+              )}
 
               <div className="sm:col-span-2 border-t border-border pt-5"><h3 className="text-base font-semibold">3. Moneda y horarios</h3><p className="mt-1 text-sm text-muted-foreground">Solo se actualizan si los cambiás.</p></div>
               <div className="space-y-1.5">
@@ -525,6 +586,14 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                 Estas opciones no agregan funciones que el plan no incluya.
               </p>
 
+              {organization.enabled_modules != null && (
+                <div className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3">
+                  <span className="text-sm font-medium">{inheritModules ? 'Se van a usar las funciones del plan' : 'Funciones personalizadas'}<span className="mt-1 block text-xs font-normal text-muted-foreground">{inheritModules ? 'Al guardar se descarta la personalización.' : 'Podés volver a las que incluye el plan.'}</span></span>
+                  <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs font-bold" onClick={() => setInheritModules((value) => !value)}>
+                    {inheritModules ? 'Seguir personalizando' : 'Volver a las funciones del plan'}
+                  </Button>
+                </div>
+              )}
               {organization.enabled_modules == null && <label className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3"><span className="text-sm font-medium">Conservar las funciones del plan<span className="mt-1 block text-xs font-normal text-muted-foreground">Desactivá esta opción solo si querés personalizarlas.</span></span><Switch checked={inheritModules} onCheckedChange={setInheritModules}/></label>}
               {(!inheritModules || Boolean(organization.effective_modules?.length)) && <div className={cn('grid gap-2 sm:grid-cols-2', inheritModules && 'opacity-60')}>
                 {AVAILABLE_MODULES.map((mod) => {
