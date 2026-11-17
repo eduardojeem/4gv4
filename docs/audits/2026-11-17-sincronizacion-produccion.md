@@ -28,3 +28,7 @@ La publicación queda condicionada a pruebas completas, tipos, lint, build/previ
 - Se corrigió el desborde del encabezado cosmético a 375 px: marca flexible, nombre truncado visualmente, controles visibles y estado accesible del menú.
 - Chrome aprobó ocho escenarios cosméticos: 375/1280 px, claro/oscuro, catálogo con producto y catálogo vacío, apertura/cierre del menú móvil, sin desbordamiento ni errores JavaScript.
 - La candidata inicial compiló correctamente en Vercel y /paravos/inicio respondió 200. Las ofertas guardadas por el comercio se conservan; se elimina la generación de ofertas ficticias desde la plantilla.
+
+## Cambios concurrentes incorporados
+
+Se integra también feb0a398: carrusel boutique propio y diseño separado de ofertas de Gemini. Se conserva el estilo visual, pero la grilla usa ofertas reales del catálogo; los productos sintéticos no regresan. Se corrigen y prueban índice seguro al quitar banners, pausa manual persistente, movimiento reducido, pausa por foco y enlace de compra por comercio. El tag release/web-2026-11-17-cut conserva el corte anterior como respaldo; no implica detener la publicación solicitada.

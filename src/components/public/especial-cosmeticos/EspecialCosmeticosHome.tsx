@@ -21,7 +21,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
-import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { EspecialCosmeticosCarousel } from './EspecialCosmeticosCarousel'
 import { ProductCard } from '@/components/public/ProductCard'
 import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
 import { fetchPublicProducts, newestProductsKey, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
@@ -93,18 +93,9 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
     <div className="flex flex-col min-h-screen bg-[#FFFDFB] text-stone-800 dark:bg-zinc-950 dark:text-stone-100">
       <h1 className="sr-only">{storeName} - Cosmética & Skincare Premium</h1>
 
-      {/* ── 0. BANNERS DEL CARRUSEL PROMOCIONAL (ROTATIVO) ── */}
+      {/* ── 0. BANNERS DEL CARRUSEL PROMOCIONAL REDISEÑADO ── */}
       {hasConfiguredSlides && settings.promotional_carousel && (
-        <section className="relative w-full border-b border-rose-100 dark:border-zinc-800 bg-[#FFF5F6]/40 dark:bg-zinc-900/40">
-          <PromotionalCarousel
-            settings={{
-              ...settings.promotional_carousel,
-              enabled: true,
-              layoutMode: settings.promotional_carousel.layoutMode || 'contained',
-            }}
-            isPageLead
-          />
-        </section>
+        <EspecialCosmeticosCarousel settings={settings.promotional_carousel} />
       )}
 
       {/* ── 1. HERO SECTION BOUTIQUE GLOWORA ── */}
@@ -145,10 +136,10 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
-                  href={`${prefix}/inicio#rutina`}
+                  href={`${prefix}/inicio#categorias`}
                   className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white/80 px-6 py-3.5 text-sm font-semibold text-stone-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200 dark:hover:bg-zinc-800 transition-colors shadow-2xs"
                 >
-                  <span>▷ Ver Rutina Paso a Paso</span>
+                  <span>Ver categorías</span>
                 </Link>
               </div>
 
@@ -360,9 +351,9 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
         </div>
       </section>
 
-      {offers.length > 0 && <section id="ofertas" className="scroll-mt-20 border-t border-rose-100 bg-rose-50/30 py-16 dark:border-zinc-800 dark:bg-zinc-900/60">
+      {offers.length > 0 && <section id="ofertas" className="scroll-mt-20 relative overflow-hidden border-y border-rose-200/80 bg-gradient-to-b from-[#FFF0F3] via-[#FFF7F9] to-[#FFFDFB] py-20 sm:py-28 dark:border-zinc-800 dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h3 className="mb-8 font-serif text-3xl font-bold">Ofertas del comercio</h3>
+          <h3 className="mb-3 font-serif text-3xl font-bold sm:text-5xl">Ofertas del comercio</h3><p className="mb-8 text-sm text-stone-600 dark:text-stone-300">Productos con descuentos publicados por esta tienda.</p>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">{offers.map(product => <ProductCard key={product.id} product={product} />)}</div>
         </div>
       </section>}
@@ -441,7 +432,7 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
                   <Instagram className="h-5 w-5 text-rose-500 mb-2" />
                   <h5 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">Comunidad</h5>
                   <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                    @{company.instagram ? company.instagram.replace(/^@/, '') : 'No publicado'}
+                    {company.instagram ? '@' + company.instagram.replace(/^@/, '') : 'No publicado'}
                   </p>
                 </div>
               </div>
@@ -470,7 +461,7 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
                   <div className="space-y-2">
                     <MapPin className="h-8 w-8 text-rose-500 mx-auto" />
                     <p className="font-serif text-sm font-bold text-stone-800 dark:text-stone-200">
-                      Showroom y Tienda Física
+                      Ubicación del comercio
                     </p>
                     <p className="text-xs text-stone-500">{address || 'Dirección no publicada'}</p>
                   </div>

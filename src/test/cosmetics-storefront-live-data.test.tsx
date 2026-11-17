@@ -5,7 +5,7 @@ vi.mock('swr',()=>({default:()=>({data:state.products,isLoading:state.loading,er
 vi.mock('next/navigation',()=>({usePathname:()=>'/prueba/inicio'}))
 vi.mock('@/components/public/storefront-style-context',()=>({useStorefrontCompanyInfo:()=>state.company}))
 vi.mock('@/hooks/usePublicCategories',()=>({usePublicCategories:()=>({categories:state.categories})}))
-vi.mock('@/components/public/inicio/PromotionalCarousel',()=>({PromotionalCarousel:()=> <div data-testid="configured-carousel">Banner configurado</div>}))
+vi.mock('@/components/public/especial-cosmeticos/EspecialCosmeticosCarousel',()=>({EspecialCosmeticosCarousel:()=> <div data-testid="configured-carousel">Banner configurado</div>}))
 vi.mock('@/components/public/ProductCard',()=>({ProductCard:({product}:{product:{id:string;name:string}})=><div data-testid="real-product">{product.name}</div>}))
 vi.mock('@/components/public/FloatingWhatsAppButton',()=>({FloatingWhatsAppButton:({fallbackPhone}:{fallbackPhone:string})=><a href={'https://wa.me/'+fallbackPhone}>WhatsApp real</a>}))
 vi.mock('@/components/ui/app-image',()=>({AppImage:()=>null}))
