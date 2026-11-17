@@ -9,6 +9,7 @@ import { Notice, WebsiteScreen, websiteStyles } from '@/components/website/websi
 import { ApiError } from '@/lib/api';
 import { palette, usePalette } from '@/lib/palette';
 import { createOwnCompany, registerFieldErrors } from '@/lib/registration';
+import { refreshMarketplaceAccount } from '@/lib/marketplace-account';
 import { companyIssues, emptyCompanyForm, ownCompanyPayload, storeSlugOf, type CompanyForm } from '@/lib/registration-model';
 import { useSession } from '@/lib/session';
 import { websiteErrorMessage } from '@/lib/website-admin';
@@ -65,6 +66,8 @@ export default function CreateCompanyScreen() {
       const fields = registerFieldErrors(cause);
       if (Object.keys(fields).length) setServerErrors(fields as Partial<Record<keyof CompanyForm, string>>);
       const alreadyHas = cause instanceof ApiError && cause.body?.code === 'ALREADY_HAS_COMPANY';
+      // Ya tenía comercio (p. ej. lo creó en la web): la cuenta del marketplace estaba desactualizada.
+      if (alreadyHas) refreshMarketplaceAccount();
       Alert.alert(
         alreadyHas ? 'Ya tenés un comercio' : 'No pudimos crear tu comercio',
         cause instanceof ApiError && cause.status >= 400 && cause.status < 500 && cause.message ? cause.message : websiteErrorMessage(cause, 'Revisá tu conexión e intentá nuevamente.'),

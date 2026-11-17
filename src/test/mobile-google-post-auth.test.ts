@@ -48,3 +48,13 @@ describe('cuenta sin comercio', () => {
     expect(read('mobile/src/components/saas/shell.tsx')).toContain("account.business.state === 'none'")
   })
 })
+
+describe('la cuenta del marketplace se actualiza al crear el comercio', () => {
+  it('create-company y el regreso a la app vuelven a pedir si tiene comercio', () => {
+    const account = read('mobile/src/lib/marketplace-account.ts')
+    expect(account).toContain('export function refreshMarketplaceAccount()')
+    expect(account).toMatch(/AppState\.addEventListener\('change'[\s\S]*reload\(\)/)
+    expect(read('mobile/src/lib/registration.ts')).toMatch(/refreshSession\(\)[\s\S]*refreshMarketplaceAccount\(\)/)
+    expect(read('mobile/src/app/create-company.tsx')).toContain('if (alreadyHas) refreshMarketplaceAccount()')
+  })
+})

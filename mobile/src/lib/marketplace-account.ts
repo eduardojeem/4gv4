@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { apiFetch } from './api';
 import { accountDataFor, businessFromResponse, type BusinessAccess, type BusinessOrg } from './marketplace-account-model';
@@ -29,6 +30,14 @@ export type MarketplaceAccount = {
   business: BusinessAccess;
   reload: () => void;
 };
+
+// Cada pantalla que usa la cuenta tiene su propia copia. Cuando algo la cambia
+// (se creó el comercio), todas se vuelven a pedir: antes quedaban con «sin
+// comercio» hasta cerrar sesión y el marketplace seguía ofreciendo crearlo.
+const accountListeners = new Set<() => void>();
+export function refreshMarketplaceAccount() {
+  accountListeners.forEach((listener) => listener());
+}
 
 type Loaded = {
   userId: string;
@@ -73,6 +82,17 @@ export function useMarketplaceAccount(): MarketplaceAccount {
   }, [userId, attempt]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // Se actualiza al crear el comercio y al volver a la app (pudo crearlo en la web).
+  useEffect(() => {
+    if (!userId) return undefined;
+    accountListeners.add(reload);
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') reload(); });
+    return () => {
+      accountListeners.delete(reload);
+      subscription.remove();
+    };
+  }, [userId, reload]);
 
   if (!userId) {
     return { kind: 'guest', status: 'idle', userId: null, email: null, fullName: null, avatarUrl: null, business: { state: 'none' }, reload };
