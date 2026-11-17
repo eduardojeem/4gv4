@@ -23,7 +23,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
-import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { EspecialCosmeticosCarousel } from './EspecialCosmeticosCarousel'
 import { ProductCard } from '@/components/public/ProductCard'
 import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
 import { fetchPublicProducts, newestProductsKey, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
@@ -189,8 +189,10 @@ const COSMETICS_DEALS = [
     discount: '-25% OFF',
     originalPrice: 425000,
     salePrice: 318000,
+    savings: 107000,
     image: IMG_SPA,
     description: 'Los 3 pasos fundamentales para lograr piel radiante y equilibrada todos los días.',
+    highlights: ['Limpiador Botánico 150ml', 'Sérum Ácido Hialurónico 30ml', 'Crema Hidratante Péptidos 50g'],
   },
   {
     id: 'deal-2',
@@ -199,8 +201,10 @@ const COSMETICS_DEALS = [
     discount: '-30% OFF',
     originalPrice: 320000,
     salePrice: 224000,
+    savings: 96000,
     image: IMG_PEDESTAL,
     description: 'Máxima protección antioxidante contra el fotoenvejecimiento y tono apagado.',
+    highlights: ['Protector Solar Toque Seco FPS 50+', 'Sérum Activo Vitamina C 15%', 'Efecto iluminador instantáneo'],
   },
   {
     id: 'deal-3',
@@ -209,8 +213,10 @@ const COSMETICS_DEALS = [
     discount: '-20% OFF',
     originalPrice: 250000,
     salePrice: 200000,
+    savings: 50000,
     image: IMG_SERUM,
     description: 'Masaje linfático facial y nutrición nocturna profunda para despertar descansada.',
+    highlights: ['Aceite Rosa Mosqueta Puro 30ml', 'Gua Sha de Cuarzo Rosa Natural', 'Caja de presentación boutique'],
   },
 ]
 
@@ -275,18 +281,9 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
     <div className="flex flex-col min-h-screen bg-[#FFFDFB] text-stone-800 dark:bg-zinc-950 dark:text-stone-100">
       <h1 className="sr-only">{storeName} - Cosmética & Skincare Premium</h1>
 
-      {/* ── 0. BANNERS DEL CARRUSEL PROMOCIONAL (ROTATIVO) ── */}
+      {/* ── 0. BANNERS DEL CARRUSEL PROMOCIONAL REDISEÑADO ── */}
       {hasConfiguredSlides && settings.promotional_carousel && (
-        <section className="relative w-full border-b border-rose-100 dark:border-zinc-800 bg-[#FFF5F6]/40 dark:bg-zinc-900/40">
-          <PromotionalCarousel
-            settings={{
-              ...settings.promotional_carousel,
-              enabled: true,
-              layoutMode: settings.promotional_carousel.layoutMode || 'contained',
-            }}
-            isPageLead
-          />
-        </section>
+        <EspecialCosmeticosCarousel settings={settings.promotional_carousel} />
       )}
 
       {/* ── 1. HERO SECTION BOUTIQUE GLOWORA ── */}
@@ -569,65 +566,108 @@ export function EspecialCosmeticosHome({ settings, branches = [] }: EspecialCosm
         </div>
       </section>
 
-      {/* ── 5. SECCIÓN DE OFERTAS CON DESCUENTOS DESTACADOS ── */}
-      <section id="ofertas" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-            <div>
-              <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
-                Oportunidades de la Semana ⏳
-              </span>
-              <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-2">
-                Kits & Ofertas Especiales
+      {/* ── 5. SECCIÓN DE OFERTAS EXCLUSIVAS (SECCIÓN APARTE REDISEÑADA) ── */}
+      <section id="ofertas" className="scroll-mt-20 relative py-20 sm:py-28 overflow-hidden bg-gradient-to-b from-[#FFF0F3] via-[#FFF7F9] to-[#FFFDFB] dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950 border-y border-rose-200/80 dark:border-zinc-800">
+        {/* Halos decorativos de fondo */}
+        <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-rose-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-pink-300/20 blur-3xl" />
+
+        <div className="container relative z-10 mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Encabezado editorial de ofertas */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 lg:mb-16 gap-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1 text-xs font-bold tracking-wider text-white shadow-md shadow-rose-950/15 uppercase">
+                <span>⚡ OPORTUNIDADES LIMITADAS</span>
+                <span className="h-1 w-1 rounded-full bg-white" />
+                <span>HASTA 30% OFF</span>
+              </div>
+              <h3 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-[1.15]">
+                Kits & Tratamientos en Oferta
               </h3>
+              <p className="max-w-xl text-sm sm:text-base text-stone-600 dark:text-stone-300">
+                Selección de rutinas completas diseñadas por cosmetólogas con descuento directo ya aplicado al carrito.
+              </p>
             </div>
-            <span className="text-xs font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-full border border-rose-200">
-              Descuentos automáticos al carrito
-            </span>
+            
+            <div className="flex items-center gap-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-rose-200/80 dark:border-zinc-800 shadow-sm">
+              <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="text-xs">
+                <span className="font-bold text-stone-900 dark:text-stone-100 block">Stock Disponible</span>
+                <span className="text-stone-500 dark:text-stone-400">Entrega rápida en Asunción y todo el país</span>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Grilla de tarjetas de ofertas boutique */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {COSMETICS_DEALS.map((deal) => (
               <div
                 key={deal.id}
-                className="group flex flex-col justify-between overflow-hidden rounded-3xl border border-rose-200/80 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:shadow-xl hover:border-rose-300"
+                className="group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border border-rose-200/90 bg-white/95 dark:bg-zinc-900/90 dark:border-zinc-800/90 p-6 shadow-md hover:shadow-2xl hover:border-rose-300 dark:hover:border-rose-900/50 transition-all duration-500 hover:-translate-y-1.5 backdrop-blur-xs"
               >
+                {/* Imagen del Kit con zoom hover */}
                 <div>
-                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-rose-50 dark:bg-zinc-800">
-                    <AppImage src={deal.image} alt={deal.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                    {/* Badge de porcentaje OFF */}
-                    <span className="absolute top-3 right-3 rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-md">
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-rose-50/50 dark:bg-zinc-800/50">
+                    <AppImage
+                      src={deal.image}
+                      alt={deal.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                    {/* Badge de descuento en esquina superior derecha */}
+                    <div className="absolute top-3 right-3 rounded-full bg-rose-600 px-3.5 py-1 text-xs font-black text-white shadow-lg shadow-rose-950/20">
                       {deal.discount}
-                    </span>
-                    <span className="absolute top-3 left-3 rounded-full bg-stone-900/80 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-semibold text-white uppercase">
+                    </div>
+                    {/* Tag de categoría en esquina superior izquierda */}
+                    <div className="absolute top-3 left-3 rounded-full bg-stone-950/80 backdrop-blur-xs px-3 py-1 text-[10px] font-bold text-white uppercase tracking-wider">
                       {deal.tag}
-                    </span>
+                    </div>
                   </div>
 
-                  <div className="pt-4 space-y-2">
-                    <h4 className="font-serif text-base font-bold text-stone-900 dark:text-stone-100 line-clamp-1">
+                  {/* Textos descriptivos */}
+                  <div className="pt-5 space-y-3">
+                    <h4 className="font-serif text-lg font-bold text-stone-900 dark:text-stone-100 line-clamp-1 group-hover:text-rose-600 transition-colors">
                       {deal.name}
                     </h4>
-                    <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-2">
+                    <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-400 line-clamp-2">
                       {deal.description}
                     </p>
+
+                    {/* Micro-beneficios del kit */}
+                    <ul className="pt-2 space-y-1.5 border-t border-rose-100 dark:border-zinc-800/80">
+                      {deal.highlights.map((h, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/80 dark:text-rose-300 text-[10px]">
+                            ✓
+                          </span>
+                          <span className="line-clamp-1">{h}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-rose-100 dark:border-zinc-800 mt-4 flex items-center justify-between">
+                {/* Precios y botón de compra */}
+                <div className="pt-5 border-t border-rose-100 dark:border-zinc-800 mt-6 flex items-center justify-between gap-4">
                   <div>
-                    <span className="block text-[11px] text-stone-400 line-through">
-                      Gs. {deal.originalPrice.toLocaleString('es-PY')}
-                    </span>
-                    <span className="font-serif text-lg font-bold text-rose-600 dark:text-rose-400">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-stone-400 line-through">
+                        Gs. {deal.originalPrice.toLocaleString('es-PY')}
+                      </span>
+                      <span className="rounded-md bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                        Ahorrás Gs. {deal.savings.toLocaleString('es-PY')}
+                      </span>
+                    </div>
+                    <span className="font-serif text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 block mt-0.5">
                       Gs. {deal.salePrice.toLocaleString('es-PY')}
                     </span>
                   </div>
+
                   <Link
-                    href={`${prefix}/inicio#productos`}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 shadow-sm transition-colors"
-                    aria-label={`Comprar ${deal.name}`}
+                    href={`${prefix}/productos`}
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-600 px-5 py-3 text-xs font-bold text-white shadow-md shadow-rose-950/15 hover:from-rose-600 hover:to-pink-700 hover:shadow-lg transition-all"
                   >
+                    <span>Comprar</span>
                     <ShoppingBag className="h-4 w-4" />
                   </Link>
                 </div>
