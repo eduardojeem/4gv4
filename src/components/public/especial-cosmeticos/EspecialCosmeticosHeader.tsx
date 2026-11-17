@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -14,21 +14,18 @@ import {
   Layers,
   LogIn,
   LogOut,
-  MapPin,
   Menu,
-  Phone,
   Search,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
   Sun,
   User,
-  UserPlus,
   X,
   Zap,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,7 +41,6 @@ import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-c
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/contexts/auth-context'
 import { useHydrated } from '@/hooks/use-hydrated'
-import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
@@ -146,7 +142,6 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
   const company = useStorefrontCompanyInfo(settings?.company_info)
   const { user, signOut } = useAuth()
   const hydrated = useHydrated()
-  const { categories: liveCategories } = usePublicCategories()
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileProductsOpen, setMobileProductsOpen] = useState(false)
@@ -159,6 +154,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
   const megaTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [prevPathname, setPrevPathname] = useState(pathname)
+
+  // Cerrar menús al cambiar de ruta
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    if (mobileMenuOpen) setMobileMenuOpen(false)
+    if (megaMenuOpen) setMegaMenuOpen(false)
+    if (isSearchOpen) setIsSearchOpen(false)
+  }
 
   const slug = getTenantSlugFromPathname(pathname)
   const prefix = slug ? `/${slug}` : ''
@@ -174,16 +178,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
   // Auto focus search input when opened
   useEffect(() => {
     if (isSearchOpen) {
-      setTimeout(() => searchInputRef.current?.focus(), 50)
+      const timer = setTimeout(() => searchInputRef.current?.focus(), 50)
+      return () => clearTimeout(timer)
     }
   }, [isSearchOpen])
-
-  // Close menus on path change
-  useEffect(() => {
-    setMobileMenuOpen(false)
-    setMegaMenuOpen(false)
-    setIsSearchOpen(false)
-  }, [pathname])
 
   const storeName = company?.name?.trim() || 'Paravos Cosméticos'
   const slogan = company?.slogan?.trim() || 'Alta Cosmética & Cuidado Botánico'
@@ -505,7 +503,12 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             {/* Ofertas Especiales con Badge llamativo */}
             <Link
               href={`${prefix}/inicio#ofertas`}
-              className="inline-flex items-center gap-1.5 text-sm font-medium tracking-wide text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400 transition-colors relative py-1"
+              className={cn(
+                'inline-flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors relative py-1',
+                isOffers
+                  ? 'text-rose-600 font-semibold dark:text-rose-400 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
+                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+              )}
             >
               <span>Ofertas</span>
               <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs animate-pulse">
