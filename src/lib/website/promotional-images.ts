@@ -2,6 +2,8 @@ const TEMPLATE_NAMES = [
   'hero-barberia-turnos', 'hero-barberia-combo', 'hero-barberia-insumos',
   'hero-barberia-barba', 'hero-barberia-spa', 'hero-linea-corporativa',
   'hero-moda-esenciales', 'hero-moda-urbana',
+  'hero-cosmetica-modelo', 'hero-cosmetica-pedestal', 'hero-cosmetica-serum',
+  'hero-cosmetica-spa', 'hero-cosmetica-boutique',
 ] as const
 
 /** Compatibility for saved template URLs; uploaded or external photos are never rewritten. */
