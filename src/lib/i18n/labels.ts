@@ -95,6 +95,7 @@ export function customerStatusLabel(value: string | null | undefined) {
 /** Medio de pago. Conviven variantes en ingles y español en la misma columna. */
 const PAYMENT_METHOD: Record<string, string> = {
   cash: 'Efectivo',
+  store_credit: 'Saldo a favor',
   efectivo: 'Efectivo',
   card: 'Tarjeta',
   tarjeta: 'Tarjeta',

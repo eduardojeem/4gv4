@@ -134,6 +134,7 @@ export default function MarketplaceScreen() {
   // Cuenta y comercio del usuario: los mismos datos que el menú del avatar,
   // atados a la sesión (al cambiar de cuenta no queda el negocio anterior).
   const account = useMarketplaceAccount();
+  const reloadAccount = account.reload;
   const org = account.business.state === 'member' ? account.business.organization : null;
   const panelAllowed = canOpenBusinessPanel(account.business);
 
@@ -333,9 +334,10 @@ export default function MarketplaceScreen() {
   }, [attempt, catalogRequest, locationReady]);
 
   const reload = useCallback(() => {
+    reloadAccount();
     setRefreshing(true);
     setAttempt((n) => n + 1);
-  }, []);
+  }, [reloadAccount]);
 
   // Cambiar pestaña dentro del mismo layout con scroll automático al inicio
   const handleTabPress = async (tab: NavTab) => {

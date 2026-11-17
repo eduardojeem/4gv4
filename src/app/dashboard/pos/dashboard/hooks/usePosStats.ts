@@ -78,7 +78,7 @@ export function usePosStats(dateRange: DateRange | undefined) {
         if (parsed.data.dailySales.length !== expectedDays.length || dailyBuckets.size !== expectedDays.length || expectedDays.some(day=>!dailyBuckets.has(day))) throw new Error('El resumen diario está incompleto. Reintentá la consulta.')
         return parsed.data
       }, { force, signal })
-      if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return
+      if (signal?.aborted || currentScope.current !== scope || keyRef.current !== key) return false
       const expectedDays = eachDayOfInterval({start:new Date(from),end:new Date(to)}).map(day=>format(day,'yyyy-MM-dd'))
       const dailyBuckets = new Map(raw.dailySales.map(day=>[day.bucket_day,day]))
       const costHidden = raw.costHidden
@@ -92,8 +92,10 @@ export function usePosStats(dateRange: DateRange | undefined) {
         paymentMethods: raw.paymentMethods.map(method => ({ ...method, color: colors[method.name] ?? '#6b7280' })),
         profitStats: { ...profit, itemsWithoutCost: raw.itemsWithoutCost }, warnings: raw.itemsWithoutCost ? [`${raw.itemsWithoutCost} ítem(s) vendidos no tienen precio de compra cargado: el margen no está disponible.`] : [] }
       setSnapshot({key,stats:next})
+      return true
     } catch (cause) {
       if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setError(cause instanceof Error ? cause : new Error('No se pudo cargar el resumen'))
+      return false
     } finally { if (!signal?.aborted && currentScope.current === scope && keyRef.current === key) setLoading(false) }
   }, [organizationLoading, organizationId, scopeOrganizationId, from, to, key, branchId, scope, currentScope, supabase, setError, timezone])
   useEffect(() => {
@@ -119,6 +121,6 @@ export function usePosStats(dateRange: DateRange | undefined) {
       throw failure
     } finally { if (keyRef.current === requestKey) setDetailsLoadingKey(null) }
   }, [fetchFullDetails, key, currentScope, scope, detailSnapshot, snapshot])
-  const refetch = useCallback(async () => { setDetailSnapshot(null); await fetchSummary(true) }, [fetchSummary])
+  const refetch = useCallback(async () => { setDetailSnapshot(null); if (!await fetchSummary(true)) throw new Error('No se pudo actualizar el resumen del POS.') }, [fetchSummary])
   return { stats, loading: organizationLoading || loading || (!currentKey && !error), error, refetch, detailsLoaded, detailsLoading, detailsError, loadDetails }
 }

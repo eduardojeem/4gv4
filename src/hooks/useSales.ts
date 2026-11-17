@@ -44,7 +44,7 @@ export interface SalesStats {
     top_products: Array<{ name: string; quantity: number }>
 }
 
-export function useSales() {
+export function useSales(autoLoad = true) {
     const [sales, setSales] = useState<Sale[]>([])
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState<SalesStats>({
@@ -268,8 +268,8 @@ export function useSales() {
 
     // Sin Realtime: sales no está en la publicación supabase_realtime.
     useEffect(() => {
-        fetchSales()
-    }, [fetchSales])
+        if (autoLoad) void fetchSales()
+    }, [fetchSales, autoLoad])
 
     return {
         sales,
