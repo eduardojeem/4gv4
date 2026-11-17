@@ -54,7 +54,9 @@ type Colors = ReturnType<typeof usePalette>;
 
 export default function RepairDetail() {
   const colors = usePalette();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, nuevo } = useLocalSearchParams<{ id: string; nuevo?: string }>();
+  // Recién registrada: se ofrece imprimir el comprobante para el cliente.
+  const [justCreated, setJustCreated] = useState(nuevo === '1');
   const [repair, setRepair] = useState<Repair | undefined>(() => (id ? cachedRepair(id) : undefined));
   const [settledId, setSettledId] = useState<string | null>(() => (repair && id ? id : null));
   const [refreshing, setRefreshing] = useState(false);
@@ -195,7 +197,20 @@ export default function RepairDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
-        {can('repairs.orders.read')&&<DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>}
+        {justCreated && can('repairs.orders.read') ? (
+          <View style={[styles.card, { backgroundColor: `${palette.success}12`, borderColor: palette.success }]}>
+            <View style={styles.rowBetween}>
+              <View style={styles.flex}>
+                <Text style={[styles.createdTitle, { color: colors.text }]}>Reparación registrada</Text>
+                <Text style={[styles.createdText, { color: colors.muted }]}>Imprimí o enviá el comprobante al cliente al recibir el equipo.</Text>
+              </View>
+              <Pressable onPress={() => setJustCreated(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar aviso">
+                <Ionicons name="close" size={20} color={colors.muted} />
+              </Pressable>
+            </View>
+            <DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>
+          </View>
+        ) : can('repairs.orders.read')&&<DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>}
         {/* Estado y avance */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rowBetween}>
@@ -612,6 +627,8 @@ const styles = StyleSheet.create({
   topTitle: { fontSize: 17, fontWeight: '800' },
   content: { padding: 16, gap: 14, paddingBottom: 32 },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
+  createdTitle: { fontSize: 16, fontWeight: '800' },
+  createdText: { fontSize: 13, marginTop: 2 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardActionText: { fontSize: 13, fontWeight: '800' },

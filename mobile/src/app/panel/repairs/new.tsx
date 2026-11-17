@@ -112,7 +112,8 @@ export default function NewRepairScreen() {
 
   useEffect(() => {
     if (createdRepairId) {
-      router.replace(`/panel/repairs/${createdRepairId}` as never);
+      // El detalle abre con el comprobante a mano para imprimirlo al recibir el equipo.
+      router.replace({ pathname: `/panel/repairs/${createdRepairId}`, params: { nuevo: '1' } } as never);
     }
   }, [createdRepairId]);
 
