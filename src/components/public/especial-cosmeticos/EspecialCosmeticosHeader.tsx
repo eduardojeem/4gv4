@@ -276,9 +276,9 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
         {/* ── 2. Barra principal de navegación ── */}
         <div className="container mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
           {/* Logo & Marca */}
-          <Link href={`${prefix}/inicio`} className="flex items-center gap-3 group shrink-0">
+          <Link href={`${prefix}/inicio`} className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-3 lg:max-w-xs">
             {logoUrl && !logoError ? (
-              <div className="relative h-11 w-11 overflow-hidden rounded-full border border-rose-200/80 shadow-xs bg-white">
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11 border border-rose-200/80 shadow-xs bg-white">
                 <AppImage
                   src={logoUrl}
                   alt={storeName}
@@ -288,7 +288,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 />
               </div>
             ) : (
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-tr from-rose-100 via-pink-50 to-amber-100 border border-rose-200/80 shadow-xs group-hover:scale-105 transition-transform duration-300">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-11 sm:w-11 bg-gradient-to-tr from-rose-100 via-pink-50 to-amber-100 border border-rose-200/80 shadow-xs group-hover:scale-105 transition-transform duration-300">
                 <svg
                   className="h-6 w-6 text-rose-600"
                   viewBox="0 0 24 24"
@@ -307,11 +307,11 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 </svg>
               </div>
             )}
-            <div className="flex flex-col">
-              <span className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50 group-hover:text-rose-600 transition-colors">
+            <div className="flex min-w-0 flex-col">
+              <span title={storeName} className="truncate font-serif text-base sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50 group-hover:text-rose-600 transition-colors">
                 {storeName}
               </span>
-              <span className="text-[10px] font-medium tracking-[0.18em] uppercase text-rose-600/90 dark:text-rose-400">
+              <span className="hidden truncate text-[10px] font-medium tracking-[0.18em] sm:block uppercase text-rose-600/90 dark:text-rose-400">
                 {slogan}
               </span>
             </div>
@@ -541,7 +541,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
           </nav>
 
           {/* Acciones del encabezado: Buscador, Favoritos, Carrito, Usuario */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
             {/* Buscador expandible con sugerencias rápidas */}
             <div className="relative">
               {isSearchOpen ? (
@@ -655,6 +655,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="flex h-9 w-9 items-center justify-center rounded-full text-stone-700 hover:bg-rose-50 dark:text-stone-300 dark:hover:bg-zinc-800 lg:hidden"
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="cosmetics-mobile-menu"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -663,7 +665,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
         {/* ── 3. Menú Móvil Desplegable (Drawer Completo) ── */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-rose-100 bg-[#FFFDFB] px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950 shadow-2xl animate-in slide-in-from-top-2 duration-200">
+          <div id="cosmetics-mobile-menu" className="lg:hidden border-t border-rose-100 bg-[#FFFDFB] px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950 shadow-2xl animate-in slide-in-from-top-2 duration-200">
             {/* Buscador visible integrado en móvil */}
             <form onSubmit={handleSearchSubmit} className="relative mb-4">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />

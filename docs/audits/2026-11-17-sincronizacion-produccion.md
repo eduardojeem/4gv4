@@ -21,3 +21,10 @@ Proyecto Vercel 4gv4, team_oGfcm0pWJoWCZVaVgyFNhi2T / prj_7Mr3VuY5H1beIA2dYPTT66
 El workflow manual Deploy de GitHub falla por ausencia de secretos VERCEL_TOKEN/ORG_ID/PROJECT_ID; la integración Git de Vercel sí publica main correctamente. No se solicitan ni copian secretos: se verifica y usa el mecanismo Git existente.
 
 La publicación queda condicionada a pruebas completas, tipos, lint, build/preview y revisión del commit exacto. Se documentará el resultado y el identificador de producción al finalizar. No equivale a una prueba física de impresora o teléfono.
+
+## Revisión adicional
+
+- Se inventariaron worktrees sin modificarlas. Las copias antiguas con modificaciones entre agosto y el 7 de noviembre quedan preservadas fuera de esta publicación; la copia POS del 17 de noviembre ya se recuperó en la candidata. No se mezclan snapshots incompletos con miles de eliminaciones.
+- Se corrigió el desborde del encabezado cosmético a 375 px: marca flexible, nombre truncado visualmente, controles visibles y estado accesible del menú.
+- Chrome aprobó ocho escenarios cosméticos: 375/1280 px, claro/oscuro, catálogo con producto y catálogo vacío, apertura/cierre del menú móvil, sin desbordamiento ni errores JavaScript.
+- La candidata inicial compiló correctamente en Vercel y /paravos/inicio respondió 200. Las ofertas guardadas por el comercio se conservan; se elimina la generación de ofertas ficticias desde la plantilla.
