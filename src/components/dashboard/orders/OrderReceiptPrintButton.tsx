@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { fitThermalPage } from '@/lib/printing/thermal-page'
 
 type Paper = '58mm' | '80mm' | 'A4'
 const PAPERS: { value: Paper; label: string; hint: string }[] = [
@@ -54,6 +55,8 @@ export function OrderReceiptPrintButton({ orderId, className }: { orderId: strin
       const cleanup = () => window.setTimeout(() => frame.remove(), 1000)
       frame.onload = () => {
         try {
+          // Rollo térmico: la página mide lo que mide el comprobante (corta justo al final).
+          if (paper !== 'A4') fitThermalPage(frame.contentDocument, paper === '58mm' ? 58 : 80)
           frame.contentWindow?.focus()
           frame.contentWindow?.print()
         } finally {

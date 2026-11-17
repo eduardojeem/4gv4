@@ -348,6 +348,8 @@ const printWhenReady = (printWindow: Window, fallbackDelay = 1500): void => {
     if (printed) return
     printed = true
     try {
+      // Ticket de 80 mm: la página mide lo que mide el ticket (sin papel en blanco antes del corte).
+      fitThermalPage(printWindow.document, 80)
       printWindow.focus()
       printWindow.print()
     } catch (error) {
@@ -1391,6 +1393,7 @@ const showShareModal = (text: string): void => {
     }
   })
 }
+import { fitThermalPage } from '@/lib/printing/thermal-page'
 import { config } from './config'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'

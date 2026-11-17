@@ -1,3 +1,4 @@
+import { fitThermalPageScript } from '@/lib/printing/thermal-page'
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
 import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
@@ -562,6 +563,8 @@ export const generateRepairReceiptHTML = (
   const paperPref = paperOverride || settings.paperFormat || '80mm'
   const isA4 = paperPref === 'A4'
   const pageSizeValue = isA4 ? 'A4' : `${paperPref} auto`
+  // Rollo térmico: antes de imprimir se fija el largo exacto del comprobante.
+  const thermalFit = isA4 ? '' : fitThermalPageScript(paperPref === '58mm' ? 58 : 80)
   const bodyWidthValue = isA4 ? 'auto' : (paperPref === '58mm' ? '48mm' : '72mm')
   const baseFontSize = isA4 ? '14px' : (paperPref === '58mm' ? '11px' : '13px')
   const basePadding = isA4 ? '10mm' : '3mm'
@@ -852,7 +855,7 @@ export const generateRepairReceiptHTML = (
       </head>
       <body>
         <script>
-          window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 250); });
+          window.addEventListener('load', function() { setTimeout(function() { ${thermalFit}window.print(); }, 250); });
           window.addEventListener('afterprint', function() { window.close(); });
         </script>
         <div class="header">
@@ -980,7 +983,7 @@ export const generateRepairReceiptHTML = (
       </head>
       <body>
         <script>
-          window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 250); });
+          window.addEventListener('load', function() { setTimeout(function() { ${thermalFit}window.print(); }, 250); });
           window.addEventListener('afterprint', function() { window.close(); });
         </script>
         <div class="header">
@@ -1106,7 +1109,7 @@ export const generateRepairReceiptHTML = (
     <body>
       <script>
         window.addEventListener('load', function() {
-          setTimeout(function() { window.print(); }, 250);
+          setTimeout(function() { ${thermalFit}window.print(); }, 250);
         });
         window.addEventListener('afterprint', function() {
           window.close();
