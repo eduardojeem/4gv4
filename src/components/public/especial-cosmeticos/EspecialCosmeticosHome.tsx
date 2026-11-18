@@ -32,12 +32,13 @@ import { ProductCard } from '@/components/public/ProductCard'
 import { fetchPublicProducts, newestProductsKey, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { getCompanyMapsEmbedSrc, getDirectionsHref } from '@/lib/website/company-maps-url'
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
-import { categoryCards, cityFromAddress, firstProductImage, offerCards } from './cosmetics-home-data'
+import { categoryCards, cityFromAddress, offerCards, productPhoto, type CosmeticsProductPhoto } from './cosmetics-home-data'
 import './especial-cosmeticos.css'
 
 interface EspecialCosmeticosHomeProps {
@@ -70,6 +71,28 @@ const TRUST_TONES = [
 
 const formatGs = (value: number) => `Gs. ${value.toLocaleString('es-PY')}`
 
+/** Etiqueta sobre una foto grande: qué producto es, cuánto sale y enlace a su página. */
+function PhotoProductTag({ photo, href }: { photo: CosmeticsProductPhoto; href: string }) {
+  return (
+    <Link
+      href={href}
+      className="group/tag absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-150/70 bg-white/95 p-3.5 shadow-lg backdrop-blur-md transition-colors hover:border-rose-300 dark:border-zinc-700 dark:bg-zinc-900/95 sm:bottom-6 sm:left-6 sm:right-6 sm:p-4"
+    >
+      <div className="min-w-0">
+        <p className="font-serif text-sm font-bold text-stone-900 line-clamp-1 group-hover/tag:text-rose-600 dark:text-stone-100">
+          {photo.name}
+        </p>
+        {photo.price !== null && (
+          <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{formatGs(photo.price)}</p>
+        )}
+      </div>
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-500 px-3 py-1.5 text-[11px] font-bold text-white">
+        Ver <ArrowRight className="h-3 w-3" />
+      </span>
+    </Link>
+  )
+}
+
 /**
  * Inicio de la plantilla «Especial Cosméticos». Todo lo que muestra sale de la
  * tienda: productos, ofertas, categorías, contacto y horarios. Antes, si la
@@ -86,16 +109,24 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
   const prefix = slug ? `/${slug}` : ''
   const hasCatalog = capabilities?.hasCatalog !== false
 
-  const { data: products, isLoading: productsLoading, error: productsError } = useSWR(
+  const { data: productsData, isLoading: productsFetching, error: productsError } = useSWR(
     hasCatalog ? newestProductsKey(slug) : null,
     fetchPublicProducts,
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
-  const { data: offerProducts } = useSWR(
+  const { data: offerData } = useSWR(
     hasCatalog ? withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', slug) : null,
     fetchPublicProducts,
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
+
+  // La caché de SWR es global: en el navegador los productos pueden estar desde
+  // el primer dibujo y en el servidor no (error de hidratación). Hasta hidratar
+  // se dibuja lo mismo que el servidor.
+  const hydrated = useHydrated()
+  const products = hydrated ? productsData : undefined
+  const offerProducts = hydrated ? offerData : undefined
+  const productsLoading = !hydrated || productsFetching
 
   const offers = useMemo(() => offerCards(offerProducts), [offerProducts])
   const maxDiscount = offers.reduce((max, offer) => Math.max(max, offer.discountPercent), 0)
@@ -117,9 +148,10 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
   const directionsHref = address || company?.mapsUrl ? getDirectionsHref(company?.mapsUrl, address) : null
   const hasLocation = Boolean(address || company?.mapsUrl)
 
-  const heroImage = firstProductImage(products)
-  const editorialImage = firstProductImage(products, 1)
-  const storyImage = firstProductImage(products, 2)
+  const heroPhoto = productPhoto(products)
+  const editorialPhoto = productPhoto(products, 1)
+  const storyPhoto = productPhoto(products, 2)
+  const productHref = (id: string) => `${prefix}/productos/${encodeURIComponent(id)}`
 
   const trustItems = settings.trust_bar?.enabled === false
     ? []
@@ -196,14 +228,18 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
 
               <div className="relative mx-auto w-full max-w-lg lg:max-w-none">
                 <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-rose-200/80 bg-gradient-to-br from-rose-100 via-pink-50 to-amber-50 shadow-2xl shadow-rose-950/10 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 dark:border-zinc-800">
-                  {heroImage ? (
-                    <AppImage
-                      src={heroImage}
-                      alt={`Productos de ${storeName}`}
-                      fill
-                      priority
-                      className="object-cover transition-transform duration-700 hover:scale-105"
-                    />
+                  {heroPhoto ? (
+                    <>
+                      <AppImage
+                        src={heroPhoto.image}
+                        alt={heroPhoto.name}
+                        fill
+                        priority
+                        className="object-cover transition-transform duration-700 hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
+                      <PhotoProductTag photo={heroPhoto} href={productHref(heroPhoto.id)} />
+                    </>
                   ) : (
                     <div className="flex h-full items-center justify-center">
                       <Sparkles className="h-16 w-16 text-rose-300" />
@@ -290,7 +326,7 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
       {/* ── 4. TU CUIDADO DIARIO: texto de la plantilla + cifras reales de la tienda ── */}
       <section id="rutina" className="scroll-mt-20 py-16 bg-gradient-to-r from-rose-50 via-[#FFF5F6] to-pink-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-y border-rose-150/80 dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className={`grid items-center gap-10 ${editorialImage ? 'lg:grid-cols-2' : ''}`}>
+          <div className={`grid items-center gap-10 ${editorialPhoto ? 'lg:grid-cols-2' : ''}`}>
             <div className="space-y-5 text-center lg:text-left">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-200/80 px-3 py-1 text-xs font-bold text-rose-800 dark:bg-rose-950 dark:text-rose-200">
                 <Sparkles className="h-3 w-3 text-rose-600" />
@@ -327,10 +363,19 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
               </div>
             </div>
 
-            {editorialImage && (
-              <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-xl dark:border-zinc-800">
-                <AppImage src={editorialImage} alt={`Productos de ${storeName}`} fill className="object-cover" />
-              </div>
+            {editorialPhoto && (
+              <figure className="space-y-3">
+                <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-xl dark:border-zinc-800">
+                  <AppImage src={editorialPhoto.image} alt={editorialPhoto.name} fill className="object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
+                  <PhotoProductTag photo={editorialPhoto} href={productHref(editorialPhoto.id)} />
+                </div>
+                {editorialPhoto.description && (
+                  <figcaption className="px-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                    {editorialPhoto.description}
+                  </figcaption>
+                )}
+              </figure>
             )}
           </div>
         </div>
@@ -484,20 +529,16 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
       {/* ── 7. NOSOTROS: descripción, horarios e Instagram que cargó el comercio ── */}
       <section id="nosotros" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFF9F9] dark:bg-zinc-900/60 border-t border-rose-100 dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className={`grid items-center gap-12 ${storyImage ? 'lg:grid-cols-2' : ''}`}>
-            {storyImage && (
+          <div className={`grid items-center gap-12 ${storyPhoto ? 'lg:grid-cols-2' : ''}`}>
+            {storyPhoto && (
               <div className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-xl dark:border-zinc-800">
-                <AppImage src={storyImage} alt={`Productos de ${storeName}`} fill className="object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/60 via-transparent to-transparent flex items-end p-6">
-                  <div className="text-white">
-                    <p className="font-serif text-lg font-bold">{storeName}</p>
-                    {city && <p className="text-xs text-white/80">{city}</p>}
-                  </div>
-                </div>
+                <AppImage src={storyPhoto.image} alt={storyPhoto.name} fill className="object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
+                <PhotoProductTag photo={storyPhoto} href={productHref(storyPhoto.id)} />
               </div>
             )}
 
-            <div className={`space-y-5 ${storyImage ? '' : 'mx-auto max-w-2xl text-center'}`}>
+            <div className={`space-y-5 ${storyPhoto ? '' : 'mx-auto max-w-2xl text-center'}`}>
               <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
                 Nosotros
               </span>
@@ -509,7 +550,7 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
               </p>
 
               {(hours?.weekdays?.trim() || instagram) && (
-                <div className={`grid gap-4 pt-2 ${hours?.weekdays?.trim() && instagram ? 'grid-cols-2' : 'grid-cols-1 max-w-xs'} ${storyImage ? '' : 'mx-auto'}`}>
+                <div className={`grid gap-4 pt-2 ${hours?.weekdays?.trim() && instagram ? 'grid-cols-2' : 'grid-cols-1 max-w-xs'} ${storyPhoto ? '' : 'mx-auto'}`}>
                   {hours?.weekdays?.trim() && (
                     <div className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-rose-150/60 dark:border-zinc-700 text-left">
                       <Clock className="h-5 w-5 text-rose-500 mb-2" />

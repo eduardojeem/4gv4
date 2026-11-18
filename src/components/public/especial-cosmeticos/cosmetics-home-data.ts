@@ -93,10 +93,40 @@ export function categoryCards(
     .slice(0, limit)
 }
 
-/** Primera imagen real de los productos (para no usar fotos de otras marcas). */
-export function firstProductImage(products: readonly PublicProduct[] | null | undefined, skip = 0): string | null {
-  const images = (products || [])
-    .map((product) => product.image || product.images?.[0] || null)
-    .filter((image): image is string => Boolean(image))
-  return images[skip] ?? images[0] ?? null
+export interface CosmeticsProductPhoto {
+  id: string
+  name: string
+  image: string
+  /** Precio que paga el cliente (el de oferta si tiene); null si está oculto. */
+  price: number | null
+  description: string
+}
+
+/**
+ * Las fotos grandes del inicio son de productos reales, y cada una sabe de
+ * qué producto es: así la foto lleva su nombre, precio y enlace (antes eran
+ * imágenes «mudas» con un texto genérico).
+ */
+export function productPhoto(products: readonly PublicProduct[] | null | undefined, skip = 0): CosmeticsProductPhoto | null {
+  const withImage = (products || []).filter((product) => product.image || product.images?.[0])
+  const product = withImage[skip] ?? withImage[0]
+  if (!product) return null
+  const offer = Number(product.offer_price)
+  const price = Number(product.sale_price)
+  return {
+    id: product.id,
+    name: product.name,
+    image: (product.image || product.images?.[0]) as string,
+    price: product.hide_price ? null : offer > 0 && offer < price ? offer : price > 0 ? price : null,
+    description: shortDescription(product.description),
+  }
+}
+
+/** La descripción del producto recortada a una línea o dos, sin cortar palabras. */
+export function shortDescription(text: string | null | undefined, max = 120): string {
+  const clean = (text || '').replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+  const cut = clean.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:]+$/, '')}…`
 }

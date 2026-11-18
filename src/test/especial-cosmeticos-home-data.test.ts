@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 import {
   categoryCards,
   cityFromAddress,
-  firstProductImage,
+  productPhoto,
+  shortDescription,
   offerCards,
 } from '@/components/public/especial-cosmeticos/cosmetics-home-data'
 import type { PublicProduct } from '@/types/public'
@@ -53,12 +54,28 @@ describe('inicio Especial Cosméticos: datos reales', () => {
     ])
   })
 
-  it('las fotos salen de los productos de la tienda', () => {
-    const list = [product({ id: '1', image: 'a.webp' }), product({ id: '2', images: ['b.webp'] })]
-    expect(firstProductImage(list)).toBe('a.webp')
-    expect(firstProductImage(list, 1)).toBe('b.webp')
-    expect(firstProductImage(list, 5)).toBe('a.webp')
-    expect(firstProductImage([])).toBeNull()
+  it('cada foto grande sabe de qué producto es: nombre, precio que se paga y descripción corta', () => {
+    const list = [
+      product({ id: 'sin-foto', name: 'Sin foto' }),
+      product({ id: '1', name: 'Sérum Vitamina C', image: 'a.webp', sale_price: 175000, offer_price: 145000, has_offer: true, description: 'Antioxidante   con ácido ferúlico.' }),
+      product({ id: '2', name: 'Bálsamo', images: ['b.webp'], sale_price: 48000 }),
+      product({ id: '3', name: 'Oculto', image: 'c.webp', hide_price: true }),
+    ]
+    expect(productPhoto(list)).toEqual({ id: '1', name: 'Sérum Vitamina C', image: 'a.webp', price: 145000, description: 'Antioxidante con ácido ferúlico.' })
+    expect(productPhoto(list, 1)).toMatchObject({ id: '2', image: 'b.webp', price: 48000, description: '' })
+    expect(productPhoto(list, 2)).toMatchObject({ id: '3', price: null })
+    expect(productPhoto(list, 9)?.id).toBe('1')
+    expect(productPhoto([])).toBeNull()
+  })
+
+  it('la descripción corta no corta palabras', () => {
+    expect(shortDescription('Hidratación profunda.')).toBe('Hidratación profunda.')
+    const long = 'Hidratación multicapa profunda con tres pesos moleculares de ácido hialurónico para devolver elasticidad y luminosidad a la piel cansada.'
+    const short = shortDescription(long, 60)
+    expect(short.endsWith('…')).toBe(true)
+    expect(short.length).toBeLessThanOrEqual(61)
+    expect(long.startsWith(short.slice(0, -1))).toBe(true)
+    expect(shortDescription(null)).toBe('')
   })
 })
 
@@ -94,5 +111,14 @@ describe('la plantilla no inventa datos', () => {
 
   it('un solo botón de WhatsApp (el del diseño general)', () => {
     expect(home).not.toContain('<FloatingWhatsAppButton')
+  })
+})
+
+describe('fotos con nombre', () => {
+  const home = readFileSync(resolve(process.cwd(), 'src/components/public/especial-cosmeticos/EspecialCosmeticosHome.tsx'), 'utf8')
+  it('las fotos grandes describen el producto y llevan a su página', () => {
+    expect(home).not.toContain('alt={`Productos de ${storeName}`}')
+    expect(home.match(/<PhotoProductTag /g)?.length).toBe(3)
+    expect(home).toContain('alt={heroPhoto.name}')
   })
 })
