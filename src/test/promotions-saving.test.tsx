@@ -232,7 +232,9 @@ describe('el service worker y las respuestas de la API', () => {
   const policy = leer('src/lib/pwa/cache-policy.ts')
 
   it('las llamadas a la API no se guardan en la caché del service worker', () => {
-    expect(worker).toContain('handler: new NetworkOnly()')
+    // Lo que no es estático no pasa por el worker: va directo a la red, sin caché.
+    expect(worker).not.toContain('matcher: () => true')
+    expect(worker).not.toContain('new NetworkOnly()')
     expect(policy).toContain("url.pathname.startsWith('/_next/static/')")
     expect(worker).toContain('names.filter(obsoletePrivateCache)')
   })
