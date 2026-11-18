@@ -1,7 +1,7 @@
 // @vitest-environment node
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, expect, it, vi } from 'vitest'
-const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any,skuRace:false,branch:null as string|null,branchReadError:false}))
+const state=vi.hoisted(()=>({org:'B',membership:'seller',globalRole:'admin',grants:[] as {organization_id:string;permission:string}[],writes:[] as any[],queries:[] as any[],rpcCalls:[] as any[],createdProduct:null as any,skuRace:false,catalogMissing:false,branch:null as string|null,branchReadError:false}))
 vi.mock('server-only',()=>({}))
 vi.mock('@/lib/api/withTenantAuth',()=>({withTenantAuth:(_options:any,handler:any)=>(request:any,context?:any)=>handler(request,{user:{id:'user',role:state.globalRole},organization:{id:state.org,role:state.membership,slug:'shop'}},context)}))
 function query(table:string){
@@ -27,7 +27,8 @@ function query(table:string){
 }
 vi.mock('@/lib/supabase/admin',()=>({createAdminSupabase:()=>({from:query,rpc:async(name:string,args:any)=>{
  state.rpcCalls.push({name,args})
- if(name==='create_simple_product_atomic'){
+ if(name==='create_simple_product_atomic'||name==='create_product_catalog_atomic'){
+  if(name==='create_product_catalog_atomic'&&state.catalogMissing)return {data:null,error:{code:'PGRST202',message:'missing function'}}
   if(state.skuRace)return {data:null,error:{code:'23505',message:'SKU conflict'}}
   const product=args.p_product
   state.createdProduct={id:'created-product',name:product.name,sale_price:product.sale_price,purchase_price:product.purchase_price??null,foreign_purchase_price:product.foreign_purchase_price??null,stock_quantity:product.stock_quantity??0}
@@ -54,13 +55,26 @@ import {PUT as updateVariants} from '../variants/route'
 import {GET as access} from './access/route'
 const request=(body?:any)=>({url:'https://app/api/products',headers:new Headers(),json:async()=>body}) as any
 const params=(id='product')=>({params:Promise.resolve({id})})
-beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null;state.skuRace=false;state.branch=null;state.branchReadError=false})
+beforeEach(()=>{state.org='B';state.membership='seller';state.globalRole='admin';state.grants=[];state.writes=[];state.queries=[];state.rpcCalls=[];state.createdProduct=null;state.skuRace=false;state.catalogMissing=false;state.branch=null;state.branchReadError=false})
 
 it('POST reports the authoritative SKU constraint race as 409',async()=>{
  state.skuRace=true
  const response=await create(request({name:'Synthetic race',sku:' abc ',sale_price:100,stock_quantity:0,min_stock:0}))
  expect(response.status).toBe(409)
  expect(state.rpcCalls.find(c=>c.name==='create_simple_product_atomic').args.p_product).toMatchObject({organization_id:'B',sku:'ABC'})
+})
+it('crea características en la misma transacción del producto', async () => {
+ const response = await create(request({ name: 'Crema', sku: 'COS-1', sale_price: 100, stock_quantity: 0, min_stock: 0, product_details: { skin_type: 'Mixta' } }))
+ expect(response.status).toBe(201)
+ expect(state.rpcCalls.find(c => c.name === 'create_product_catalog_atomic')?.args.p_product).toMatchObject({ organization_id: 'B', product_details: { skin_type: 'Mixta' } })
+ expect(state.rpcCalls.some(c => c.name === 'create_simple_product_atomic')).toBe(false)
+})
+it('no crea el producto si falta la función de catálogo', async () => {
+ state.catalogMissing = true
+ const response = await create(request({ name: 'Crema', sku: 'COS-1', sale_price: 100, stock_quantity: 0, min_stock: 0, product_details: { skin_type: 'Mixta' } }))
+ expect(response.status).toBe(503)
+ expect((await response.json()).code).toBe('CATALOG_MIGRATION_REQUIRED')
+ expect(state.createdProduct).toBeNull()
 })
 it('both update APIs persist normalized SKU and report DB conflicts as 409',async()=>{
  const id='11111111-1111-4111-8111-111111111111'

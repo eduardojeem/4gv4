@@ -560,10 +560,14 @@ export function SourcesBrowser() {
                 onClose={() => setDetail(null)}
                 onReprint={() => {
                     if (detail?.type === 'sale') {
-                        printReceipt(buildReprintReceiptData(detail.sale), companyInfo)
-                        toast.success('Reimpresión enviada', {
-                            description: `${detail.sale.code ?? 'Venta'} · marcado como REIMPRESIÓN`,
-                        })
+                        try {
+                            printReceipt(buildReprintReceiptData(detail.sale), companyInfo)
+                            toast.success('Reimpresión enviada', {
+                                description: `${detail.sale.code ?? 'Venta'} · marcado como REIMPRESIÓN`,
+                            })
+                        } catch (error) {
+                            toast.error(error instanceof Error ? error.message : 'No se pudo preparar el comprobante.')
+                        }
                     }
                 }}
                 onClaim={() => {

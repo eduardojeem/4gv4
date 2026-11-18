@@ -33,9 +33,9 @@ describe('topes de crédito compartidos', () => {
   it('los formularios no dejan guardar recargos por encima del tope', () => {
     expect(CreditPlanDefaultSchema.safeParse({ count: 12, rate: 101 }).success).toBe(false)
     expect(CreditPlanDefaultSchema.safeParse({ count: 12, rate: 100 }).success).toBe(true)
-    const plans = productSchema.shape.installments_plans
-    expect(plans.safeParse([{ count: 12, rate: 101 }]).success).toBe(false)
-    expect(plans.safeParse([{ count: 12, rate: 100 }]).success).toBe(true)
+    const parsePlans = (rate: number) => productSchema.safeParse({ name: 'Producto', sku: 'SKU-1', category_id: 'category', sale_price: 100, stock_quantity: 0, min_stock: 0, installments_plans: [{ count: 12, rate }] })
+    expect(parsePlans(101).success).toBe(false)
+    expect(parsePlans(100).success).toBe(true)
   })
 })
 

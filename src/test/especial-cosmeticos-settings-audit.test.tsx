@@ -5,7 +5,7 @@ import type { WebsiteSettings } from '@/types/website-settings'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/paravos',
+  usePathname: () => '/paravos/inicio',
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }))
@@ -71,8 +71,7 @@ const baseSettings: WebsiteSettings = {
     badge: 'Edición Limitada',
     title: 'Belleza y Cuidado Natural',
     subtitle: 'Los mejores cosméticos cruelty-free traídos especialmente para vos.',
-    ctaText: 'Ver Productos Exclusivos',
-    ctaHref: '/paravos/productos?coleccion=exclusiva',
+    ctaPrimaryText: 'Ver Productos Exclusivos',
   },
   promotional_carousel: {
     enabled: false,
@@ -134,7 +133,7 @@ describe('EspecialCosmeticosHome — Auditoría de configuraciones de /admin/web
       screen.getByText('Los mejores cosméticos cruelty-free traídos especialmente para vos.')
     ).toBeInTheDocument()
     const ctaButton = screen.getByRole('link', { name: /Ver Productos Exclusivos/i })
-    expect(ctaButton).toHaveAttribute('href', '/paravos/productos?coleccion=exclusiva')
+    expect(ctaButton).toHaveAttribute('href', '/paravos/productos')
   })
 
   it('oculta el hero cuando hero_content.enabled es false', () => {

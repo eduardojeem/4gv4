@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/private-cache-context'
 import { usePalette } from '@/lib/palette'
 type Draft = { phone: string; message: string; preparedAt: string; epoch: number; repairId: string }
-export function RepairWhatsAppActions({ repairId }: { repairId: string }) {
+export function RepairWhatsAppActions({ repairId,compact=false }: { repairId: string;compact?:boolean }) {
   const c = usePalette(),
     scope = useSyncExternalStore(subscribePrivateCacheContext, getPrivateCacheContext),
     sequence = useRef(0),
@@ -67,6 +67,7 @@ export function RepairWhatsAppActions({ repairId }: { repairId: string }) {
     <View style={{ gap: 8 }}>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Avisar estado por WhatsApp"
         disabled={busy}
         onPress={() => void prepare()}
         style={{
@@ -81,7 +82,7 @@ export function RepairWhatsAppActions({ repairId }: { repairId: string }) {
         {busy ? (
           <ActivityIndicator color={c.text} />
         ) : (
-          <Text style={{ color: c.text, fontWeight: '700' }}>Avisar estado por WhatsApp</Text>
+          <Text style={{ color: c.text, fontWeight: '700' }}>{compact?'WhatsApp':'Avisar estado por WhatsApp'}</Text>
         )}
       </Pressable>
       {failure && !current && (

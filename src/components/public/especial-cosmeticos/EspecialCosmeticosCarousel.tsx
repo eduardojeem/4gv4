@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -16,6 +16,15 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { prefixPublicTenantPath } from '@/lib/public/tenant-path-shared'
 import { cn } from '@/lib/utils'
 import type { PromotionalCarouselSettings } from '@/types/website-settings'
+
+const reducedMotionQuery = '(prefers-reduced-motion: reduce)'
+function subscribeReducedMotion(listener: () => void) {
+  const media = window.matchMedia?.(reducedMotionQuery)
+  media?.addEventListener('change', listener)
+  return () => media?.removeEventListener('change', listener)
+}
+const getReducedMotion = () => window.matchMedia?.(reducedMotionQuery).matches ?? false
+const getServerReducedMotion = () => true
 
 interface EspecialCosmeticosCarouselProps {
   settings?: PromotionalCarouselSettings
@@ -123,12 +132,16 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
 
   const slides = settings?.slides?.filter((slide) => slide.active) ?? []
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isPaused, setIsPaused] = useState(false)
+  const [userPaused, setUserPaused] = useState(false)
+  const [hoverPaused, setHoverPaused] = useState(false)
+  const [focusPaused, setFocusPaused] = useState(false)
+  const prefersReducedMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, getServerReducedMotion)
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const slideCount = slides.length
-  const intervalSeconds = Math.max(4, settings?.intervalSeconds || 6)
+  const intervalSeconds = Math.min(15, Math.max(5, settings?.intervalSeconds || 6))
+  const safeIndex = slideCount > 0 ? currentIndex % slideCount : 0
 
   const nextSlide = useCallback(() => {
     if (slideCount <= 1) return
@@ -146,12 +159,12 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
 
   // Autoplay
   useEffect(() => {
-    if (slideCount <= 1 || isPaused || settings?.autoplay === false) return
+    if (!settings?.enabled || slideCount <= 1 || userPaused || hoverPaused || focusPaused || prefersReducedMotion || settings.autoplay !== true) return
     timerRef.current = setTimeout(nextSlide, intervalSeconds * 1000)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [currentIndex, isPaused, nextSlide, slideCount, intervalSeconds, settings?.autoplay])
+  }, [currentIndex, userPaused, hoverPaused, focusPaused, prefersReducedMotion, nextSlide, slideCount, intervalSeconds, settings?.autoplay, settings?.enabled])
 
   if (!settings?.enabled || slideCount === 0) {
     return null
@@ -161,7 +174,7 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
   const isFullBleed = layoutMode === 'full'
   const isCompact = layoutMode === 'compact'
 
-  const currentSlide = slides[currentIndex]
+  const currentSlide = slides[safeIndex]
   const isExternal = /^https?:\/\//i.test(currentSlide.ctaHref || '')
   const ctaHref = isExternal
     ? currentSlide.ctaHref || '#'
@@ -207,11 +220,11 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
 
   // Manejo de gestos táctiles
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX)
+    setTouchStart(e.targetTouches[0]?.clientX ?? null)
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStart === null) return
+    if (touchStart === null || !e.changedTouches[0]) return
     const touchEnd = e.changedTouches[0].clientX
     const diff = touchStart - touchEnd
     if (diff > 50) nextSlide()
@@ -239,8 +252,13 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
             }
           : undefined
       }
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
+      onMouseEnter={() => setHoverPaused(true)}
+      onMouseLeave={() => setHoverPaused(false)}
+      tabIndex={0}
+      aria-roledescription="carrusel"
+      onFocus={() => setFocusPaused(true)}
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusPaused(false) }}
+      onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); if (event.key === 'ArrowRight') nextSlide(); else prevSlide() } }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -267,11 +285,11 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
         >
           {/* Slides de imagen en cross-fade */}
           {slides.map((slide, idx) => {
-            const isActive = idx === currentIndex
+            const isActive = idx === safeIndex
             return (
               <div
                 key={slide.id || idx}
-                className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                className={`absolute inset-0 transition-opacity duration-700 ease-in-out motion-reduce:transition-none ${
                   isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                 }`}
                 aria-hidden={!isActive}
@@ -412,17 +430,18 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
               {/* Botón Pausa / Reproducir */}
               <button
                 type="button"
-                onClick={() => setIsPaused((prev) => !prev)}
-                className="text-white/80 hover:text-white transition-colors"
-                aria-label={isPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
+                onClick={() => setUserPaused((prev) => !prev)}
+                aria-pressed={userPaused}
+                className="flex min-h-11 min-w-11 items-center justify-center text-white/80 transition-colors hover:text-white"
+                aria-label={userPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
               >
-                {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                {userPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
               </button>
 
               {/* Indicadores de cápsula */}
               <div className="flex items-center gap-1.5">
                 {slides.map((_, idx) => {
-                  const isActive = idx === currentIndex
+                  const isActive = idx === safeIndex
                   return (
                     <button
                       key={idx}
@@ -445,7 +464,7 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
 
               {/* Contador numérico */}
               <span className="text-[10px] font-mono text-white/70">
-                {currentIndex + 1}/{slideCount}
+                {safeIndex + 1}/{slideCount}
               </span>
             </div>
           )}

@@ -380,11 +380,11 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
         {/* ── 2. Barra principal de navegación ── */}
         <div className="container mx-auto flex items-center justify-between gap-4 px-4 sm:px-6">
           {/* Logo & Marca */}
-          <Link href={`${prefix}/inicio`} className="flex items-center gap-3 group shrink-0">
+          <Link href={`${prefix}/inicio`} className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-3 lg:max-w-xs">
             {logoUrl && !logoError ? (
               <div
                 className={cn(
-                  'relative h-11 w-11 overflow-hidden rounded-full border shadow-xs bg-white',
+                  'relative h-9 w-9 shrink-0 sm:h-11 sm:w-11 overflow-hidden rounded-full border shadow-xs bg-white',
                   isAccent ? 'border-white/40' : isDark ? 'border-stone-700' : 'border-rose-200/80'
                 )}
               >
@@ -399,7 +399,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             ) : (
               <div
                 className={cn(
-                  'flex h-11 w-11 items-center justify-center rounded-full shadow-xs group-hover:scale-105 transition-transform duration-300',
+                  'flex h-9 w-9 shrink-0 sm:h-11 sm:w-11 items-center justify-center rounded-full shadow-xs group-hover:scale-105 transition-transform duration-300',
                   isAccent
                     ? 'bg-white/15 text-white border border-white/30'
                     : isDark
@@ -425,10 +425,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 </svg>
               </div>
             )}
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col">
               <span
                 className={cn(
-                  'font-serif text-xl sm:text-2xl font-bold tracking-tight transition-colors',
+                  'truncate font-serif text-base sm:text-2xl font-bold tracking-tight transition-colors',
                   isAccent
                     ? 'text-white'
                     : isDark
@@ -718,7 +718,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
           </nav>
 
           {/* Acciones del encabezado: Buscador, Favoritos, Carrito, Usuario */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
             {/* Buscador expandible con sugerencias rápidas */}
             <div className="relative">
               {isSearchOpen ? (
@@ -885,6 +885,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   : 'text-stone-700 hover:bg-rose-50 dark:text-stone-300 dark:hover:bg-zinc-800'
               )}
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="cosmetics-mobile-menu"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -893,7 +895,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
         {/* ── 3. Menú Móvil Desplegable (Drawer Completo) ── */}
         {mobileMenuOpen && (
-          <div
+          <div id="cosmetics-mobile-menu"
             className={cn(
               'lg:hidden border-t px-5 py-4 shadow-2xl animate-in slide-in-from-top-2 duration-200',
               isAccent

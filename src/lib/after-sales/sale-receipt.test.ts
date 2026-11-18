@@ -79,8 +79,17 @@ describe('normalizeReceiptPaymentMethod', () => {
     expect(normalizeReceiptPaymentMethod('credito')).toBe('credit')
   })
 
-  it('falls back to cash for anything unrecognized', () => {
-    expect(normalizeReceiptPaymentMethod(null)).toBe('cash')
-    expect(normalizeReceiptPaymentMethod('qr')).toBe('cash')
+  it('rechaza métodos desconocidos y reconoce QR', () => {
+    expect(() => normalizeReceiptPaymentMethod(null)).toThrow()
+    expect(normalizeReceiptPaymentMethod('qr')).toBe('transfer')
   })
+})
+
+it('conserva saldo a favor y cantidades fraccionarias', () => {
+ const receipt=buildReprintReceiptData({...sale, items:[{...sale.items[0],quantity:0.5}], payments:[{method:'store_credit',amount:450000}]})
+ expect(receipt.payments[0].method).toBe('store_credit')
+ expect(receipt.items[0].quantity).toBe(0.5)
+})
+it('no inventa efectivo cuando falta el desglose mixto', () => {
+ expect(()=>buildReprintReceiptData({...sale,paymentMethod:'mixed',payments:[]})).toThrow()
 })

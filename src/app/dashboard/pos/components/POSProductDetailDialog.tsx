@@ -38,6 +38,8 @@ import type { Product } from '@/types/product-unified'
 import type { ProductVariant, ProductWithVariants, VariantAttributeValue } from '@/types/product-variants'
 import { getProductCreditPlans, type ProductCreditPlan } from '../lib/product-credit'
 import { buildCreditEligibility } from '../lib/credit-eligibility'
+import { ProductBusinessDetails } from '@/components/dashboard/products/ProductBusinessDetails'
+import type { ProductVisibilitySaved } from '@/components/dashboard/products/ProductVisibilityControl'
 
 const COLOR_HEX_MAP: Record<string, string> = {
   blanco: '#ffffff',
@@ -84,6 +86,7 @@ function resolveColorHex(colorName: string, explicitHex?: string): string | null
 }
 
 interface POSProductDetailDialogProps {
+  onProductVisibilitySaved?: ProductVisibilitySaved
   product: Product | null
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -118,6 +121,7 @@ export function POSProductDetailDialog({
   wholesaleDiscountRate = 10,
   autoScrollToCredit = false,
   formatCurrency = defaultFormatCurrency,
+  onProductVisibilitySaved,
 }: POSProductDetailDialogProps) {
   const [quantity, setQuantity] = useState(1)
   const [copiedBarcode, setCopiedBarcode] = useState(false)
@@ -809,6 +813,13 @@ export function POSProductDetailDialog({
                   </div>
                 </div>
               )}
+
+              <ProductBusinessDetails
+                product={{ ...product, variants: productWithVariants?.variants ?? product.variants }}
+                variantId={selectedVariant?.id}
+                selectedAttributes={selectedVariant?.attributes}
+                onVisibilitySaved={onProductVisibilitySaved}
+              />
 
               {/* Descripción corta si existe */}
               {product.description && (

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -57,6 +57,9 @@ export default function RepairDetail() {
   const { id, nuevo } = useLocalSearchParams<{ id: string; nuevo?: string }>();
   // Recién registrada: se ofrece imprimir el comprobante para el cliente.
   const [justCreated, setJustCreated] = useState(nuevo === '1');
+  const [detailTab,setDetailTab]=useState<'overview'|'service'|'payments'>('overview');
+  const [documentsOpen,setDocumentsOpen]=useState(false);
+  const detailScroll=useRef<ScrollView>(null);
   const [repair, setRepair] = useState<Repair | undefined>(() => (id ? cachedRepair(id) : undefined));
   const [settledId, setSettledId] = useState<string | null>(() => (repair && id ? id : null));
   const [refreshing, setRefreshing] = useState(false);
@@ -93,6 +96,7 @@ export default function RepairDetail() {
       setRepair(data);
       setFetchError(null);
     } catch {
+      setFetchError('No se pudo actualizar. Estás viendo la última información cargada.');
       // keep current data
     } finally {
       setRefreshing(false);
@@ -131,12 +135,14 @@ export default function RepairDetail() {
   }
 
   const status = STATUS[repair.status] ?? STATUS.recibido;
-  const { total, paid, balance, quoted } = money(repair);
+  const { total, paid, balance, quoted: positiveQuote } = money(repair);
+  const quoted = positiveQuote || repair.final_cost != null;
   // «Listo» no se elige a mano: lo pone la verificación técnica, como en la web.
   const canVerify = can('repairs.orders.update') && QUALITY_ROLES.includes(panel?.organization.role ?? '') && (repair.status === 'reparacion' || repair.status === 'listo');
-  const next = (NEXT_STATUSES[repair.status] ?? []).filter((stage) => stage !== 'listo');
+  const next = (NEXT_STATUSES[repair.status] ?? []).filter((stage) => stage !== 'listo' && can(stage === 'entregado' ? 'repairs.orders.deliver' : 'repairs.orders.update'));
+  const canDeliver = repair.status === 'listo' && can('repairs.orders.deliver');
   // Entregada o cancelada ya no se edita (la API rechaza cambios en una cancelada).
-  const editable = repair.status !== 'entregado' && repair.status !== 'cancelado';
+  const editable = repair.status !== 'entregado' && repair.status !== 'cancelado' && can('repairs.orders.update');
   const lastCheck = Array.isArray(repair.qualityCheck) ? repair.qualityCheck[0] : repair.qualityCheck;
   const lastCheckOption = QUALITY_RESULTS.find((item) => item.key === lastCheck?.result);
   const phone = repair.customer?.phone?.trim();
@@ -189,14 +195,17 @@ export default function RepairDetail() {
         </Pressable>
         <View style={styles.flex}>
           <Text style={[styles.ticket, { color: colors.muted }]}>{ticketOf(repair)}</Text>
-          <Text numberOfLines={1} style={[styles.topTitle, { color: colors.text }]}>{deviceName(repair)}</Text>
+          <Text numberOfLines={1} style={[styles.topTitle, { color: colors.text }]}>Detalle de reparación</Text>
         </View>
+        {can('repairs.orders.read')&&<Pressable accessibilityRole="button" accessibilityLabel="Abrir comprobante de reparación" onPress={()=>setDocumentsOpen(true)} style={styles.iconBtn}><Ionicons name="print-outline" size={21} color={colors.text}/></Pressable>}
         <Pressable onPress={() => openWeb(webDetail)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Abrir en la web" style={styles.iconBtn}>
           <Ionicons name="open-outline" size={21} color={colors.text} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
+      <ScrollView ref={detailScroll} contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
+        {fetchError&&<View accessibilityRole="alert" style={[styles.outcome,{borderColor:colors.border,backgroundColor:colors.card}]}><Text style={[styles.small,{color:colors.muted}]}>{fetchError}</Text></View>}
+        {/* Estado, identidad y saldo: resumen común a las tres vistas */}
         {justCreated && can('repairs.orders.read') ? (
           <View style={[styles.card, { backgroundColor: `${palette.success}12`, borderColor: palette.success }]}>
             <View style={styles.rowBetween}>
@@ -210,8 +219,7 @@ export default function RepairDetail() {
             </View>
             <DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>
           </View>
-        ) : can('repairs.orders.read')&&<DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Comprobante de reparación" whatsappPdf/>}
-        {/* Estado y avance */}
+        ) : null}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rowBetween}>
             <View style={[styles.badge, { backgroundColor: `${status.color}1A` }]}>
@@ -222,6 +230,14 @@ export default function RepairDetail() {
               Ingresó hace {daysSince(repair.created_at)} {daysSince(repair.created_at) === 1 ? 'día' : 'días'}
             </Text>
           </View>
+          <View style={styles.identityRow}>
+            <View style={[styles.deviceIcon,{backgroundColor:colors.background}]}><Ionicons name={DEVICE_ICONS[repair.device_type??'']??'hardware-chip-outline'} size={26} color={colors.accent}/></View>
+            <View style={styles.flex}><Text style={[styles.deviceHeading,{color:colors.text}]}>{deviceName(repair)}</Text><Text style={[styles.small,{color:colors.muted}]}>{customerName(repair)}</Text></View>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Ver pagos y saldo de la reparación" onPress={()=>setDetailTab('payments')} style={[styles.balanceOverview,{backgroundColor:colors.background,borderColor:colors.border}]}>
+            <View style={styles.flex}><Text style={[styles.small,{color:colors.muted}]}>{quoted?'Saldo de la reparación':'Presupuesto'}</Text><Text style={[styles.balanceAmount,{color:quoted&&balance>0?colors.text:colors.muted}]}>{quoted?formatGs(balance):'Por definir'}</Text></View>
+            <View style={styles.balanceAside}><Text style={[styles.small,{color:colors.muted}]}>{paid>0?'Pagado '+formatGs(paid):'Sin pagos registrados'}</Text><Text style={[styles.small,{color:colors.accent,fontWeight:'700'}]}>Ver pagos →</Text></View>
+          </Pressable>
           {repair.status !== 'cancelado' && (
             <View style={styles.timeline}>
               {TIMELINE.map((step, index) => {
@@ -236,7 +252,7 @@ export default function RepairDetail() {
                       </View>
                     </View>
                     <Text numberOfLines={1} style={[styles.stepLabel, { color: done ? colors.text : colors.muted }, index === stepIndex && styles.bold]}>
-                      {STATUS[step].label.replace(' para retirar', '').replace('En reparación', 'Reparación')}
+                      {repair.status==='pausado'&&index===stepIndex?'En pausa':STATUS[step].label.replace(' para retirar', '').replace('En reparación', 'Reparación')}
                     </Text>
                   </View>
                 );
@@ -257,9 +273,36 @@ export default function RepairDetail() {
             </Text>
           )}
           {repair.status === 'pausado' && (
-            <Text style={[styles.small, { color: STATUS.pausado.color }]}>Pausada: posiblemente esperando repuestos o la aprobación del cliente.</Text>
+            <Text style={[styles.small, { color: STATUS.pausado.color }]}>El trabajo está en pausa. Revisá el diagnóstico para conocer el motivo registrado.</Text>
           )}
         </View>
+
+
+        <View style={styles.quickActions}>
+          {can('repairs.orders.read')&&<Pressable accessibilityRole="button" accessibilityLabel="Ver opciones de comprobante" onPress={()=>setDocumentsOpen(true)} style={[styles.quickDocument,{backgroundColor:colors.card,borderColor:colors.border}]}><Ionicons name="print-outline" size={18} color={colors.text}/><Text style={[styles.actionText,{color:colors.text}]}>Imprimir / PDF</Text></Pressable>}
+          <View style={styles.flex}><RepairWhatsAppActions repairId={repair.id} compact/></View>
+        </View>
+        <View accessibilityRole="tablist" style={[styles.detailTabs,{backgroundColor:colors.card,borderColor:colors.border}]}>
+          {([{key:'overview',label:'Resumen',icon:'grid-outline'},{key:'service',label:'Servicio',icon:'construct-outline'},{key:'payments',label:'Pagos',icon:'wallet-outline'}] as const).map(tab=><Pressable key={tab.key} accessibilityRole="tab" accessibilityState={{selected:detailTab===tab.key}} onPress={()=>{setDetailTab(tab.key);detailScroll.current?.scrollTo({y:0,animated:true});}} style={[styles.detailTab,{backgroundColor:detailTab===tab.key?colors.accentSoft:'transparent'}]}><Ionicons name={tab.icon} size={17} color={detailTab===tab.key?colors.accent:colors.muted}/><Text style={[styles.detailTabText,{color:detailTab===tab.key?colors.accent:colors.muted}]}>{tab.label}</Text></Pressable>)}
+        </View>
+        {detailTab==='overview'&&<>
+        {/* Cliente */}
+        <Card title="Cliente" icon="person-outline" colors={colors}>
+          <Text style={[styles.customer, { color: colors.text }]}>{customerName(repair)}</Text>
+          {phone ? <Text style={[styles.small, { color: colors.muted }]}>{phone}</Text> : null}
+          {phone ? (
+            <View style={styles.contactRow}>
+              <Pressable onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`)} style={[styles.contact, { borderColor: colors.border }]}>
+                <Ionicons name="call-outline" size={18} color={colors.text} />
+                <Text style={[styles.actionText, { color: colors.text }]}>Llamar</Text>
+              </Pressable>
+
+            </View>
+          ) : (
+            <Text style={[styles.small, { color: colors.muted }]}>Sin teléfono cargado.</Text>
+          )}
+
+        </Card>
 
         {/* Acciones de estado */}
         {notice && (
@@ -269,7 +312,7 @@ export default function RepairDetail() {
           </View>
         )}
 
-        {(next.length > 0 || repair.status === 'listo' || canVerify) && (
+        {(next.length > 0 || canDeliver || canVerify) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Cambiar estado</Text>
             <View style={styles.actions}>
@@ -333,6 +376,18 @@ export default function RepairDetail() {
           </View>
         )}
 
+        <Card title="Garantía" icon="shield-checkmark-outline" colors={colors}>
+          <Field label="Duración" value={warranty.duration} colors={colors} />
+          <Field label="Estado" value={warranty.status} colors={colors} />
+          {Number(repair.warranty_months) > 0 && <Field label="Cobertura" value={warranty.coverage} colors={colors} />}
+          {warranty.expiresAt && <Field label="Vence el" value={warranty.expiresAt} colors={colors} />}
+          {warranty.status === 'Pendiente de entrega' && <Text style={[styles.small, { color: colors.muted }]}>El plazo comienza cuando se entrega el equipo.</Text>}
+          {warranty.notes && <Block label="Condiciones" value={warranty.notes} colors={colors} />}
+        </Card>
+
+
+        </>}
+        {detailTab==='service'&&<>
         {/* Equipo */}
         <Card
           title="Equipo"
@@ -348,33 +403,33 @@ export default function RepairDetail() {
           {repair.diagnosis ? <Block label="Diagnóstico" value={repair.diagnosis} colors={colors} /> : null}
         </Card>
 
-        <Card title="Garantía" icon="shield-checkmark-outline" colors={colors}>
-          <Field label="Duración" value={warranty.duration} colors={colors} />
-          <Field label="Estado" value={warranty.status} colors={colors} />
-          {Number(repair.warranty_months) > 0 && <Field label="Cobertura" value={warranty.coverage} colors={colors} />}
-          {warranty.expiresAt && <Field label="Vence el" value={warranty.expiresAt} colors={colors} />}
-          {warranty.status === 'Pendiente de entrega' && <Text style={[styles.small, { color: colors.muted }]}>El plazo comienza cuando se entrega el equipo.</Text>}
-          {warranty.notes && <Block label="Condiciones" value={warranty.notes} colors={colors} />}
-        </Card>
-
-        {/* Cliente */}
-        <Card title="Cliente" icon="person-outline" colors={colors}>
-          <Text style={[styles.customer, { color: colors.text }]}>{customerName(repair)}</Text>
-          {phone ? <Text style={[styles.small, { color: colors.muted }]}>{phone}</Text> : null}
-          {phone ? (
-            <View style={styles.contactRow}>
-              <Pressable onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`)} style={[styles.contact, { borderColor: colors.border }]}>
-                <Ionicons name="call-outline" size={18} color={colors.text} />
-                <Text style={[styles.actionText, { color: colors.text }]}>Llamar</Text>
-              </Pressable>
-
-            </View>
-          ) : (
-            <Text style={[styles.small, { color: colors.muted }]}>Sin teléfono cargado.</Text>
+        {/* Técnico */}
+        <Card
+          title="Técnico"
+          icon="construct-outline"
+          colors={colors}
+          action={editable ? { label: repair.technician_id ? 'Cambiar' : 'Asignar', icon: 'person-add-outline', onPress: () => setEditor('edit') } : undefined}>
+          <Text style={[styles.customer, { color: repair.technician?.full_name ? colors.text : colors.muted }]}>
+            {repair.technician?.full_name ?? 'Sin técnico asignado'}
+          </Text>
+          {!repair.technician_id && (
+            <Text style={[styles.small, { color: colors.muted }]}>Para pasar a reparación hace falta un técnico asignado.</Text>
           )}
-          <RepairWhatsAppActions repairId={repair.id}/>
         </Card>
 
+        {/* Fotos */}
+        {repair.images && repair.images.length > 0 && (
+          <Card title={`Fotos (${repair.images.length})`} icon="images-outline" colors={colors}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
+              {repair.images.map((image) => (
+                <Image key={image.id} source={image.image_url} style={[styles.photo, { backgroundColor: colors.background }]} contentFit="cover" transition={150} />
+              ))}
+            </ScrollView>
+          </Card>
+        )}
+
+        </>}
+        {detailTab==='payments'&&<>
         {/* Costos */}
         <Card
           title="Costos"
@@ -418,31 +473,11 @@ export default function RepairDetail() {
           )}
         </Card>
 
-        {/* Técnico */}
-        <Card
-          title="Técnico"
-          icon="construct-outline"
-          colors={colors}
-          action={editable ? { label: repair.technician_id ? 'Cambiar' : 'Asignar', icon: 'person-add-outline', onPress: () => setEditor('edit') } : undefined}>
-          <Text style={[styles.customer, { color: repair.technician?.full_name ? colors.text : colors.muted }]}>
-            {repair.technician?.full_name ?? 'Sin técnico asignado'}
-          </Text>
-          {!repair.technician_id && (
-            <Text style={[styles.small, { color: colors.muted }]}>Para pasar a reparación hace falta un técnico asignado.</Text>
-          )}
-        </Card>
 
-        {/* Fotos */}
-        {repair.images && repair.images.length > 0 && (
-          <Card title={`Fotos (${repair.images.length})`} icon="images-outline" colors={colors}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
-              {repair.images.map((image) => (
-                <Image key={image.id} source={image.image_url} style={[styles.photo, { backgroundColor: colors.background }]} contentFit="cover" transition={150} />
-              ))}
-            </ScrollView>
-          </Card>
-        )}
+        </>}
       </ScrollView>
+      {documentsOpen&&<BottomSheet visible title="Comprobante de reparación" onClose={()=>setDocumentsOpen(false)}><DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Formato y envío" whatsappPdf/></BottomSheet>}
+
 
       {editor === 'edit' && (
         <EditRepairSheet repair={repair} visible onClose={() => setEditor(null)} onSaved={(updated) => applyUpdate(updated, 'Cambios guardados.')} />
@@ -612,6 +647,17 @@ function AccessInfoField({ repair, colors }: { repair: Repair; colors: Colors })
 }
 
 const styles = StyleSheet.create({
+  identityRow:{flexDirection:'row',gap:12,alignItems:'center'},
+  deviceIcon:{height:52,width:52,borderRadius:14,alignItems:'center',justifyContent:'center'},
+  deviceHeading:{fontSize:22,lineHeight:28,fontWeight:'800'},
+  balanceOverview:{flexDirection:'row',gap:10,alignItems:'center',padding:12,borderWidth:StyleSheet.hairlineWidth,borderRadius:12},
+  balanceAmount:{fontSize:22,fontWeight:'800',marginTop:3},
+  balanceAside:{flex:1,alignItems:'flex-end',gap:5},
+  quickActions:{flexDirection:'row',gap:10,alignItems:'stretch'},
+  quickDocument:{flex:1,minHeight:48,paddingHorizontal:10,paddingVertical:12,borderWidth:1,borderRadius:12,flexDirection:'row',gap:7,alignItems:'center',justifyContent:'center'},
+  detailTabs:{flexDirection:'row',padding:4,gap:4,borderRadius:14,borderWidth:StyleSheet.hairlineWidth},
+  detailTab:{flex:1,minHeight:48,borderRadius:10,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:5},
+  detailTabText:{fontSize:13,fontWeight:'700'},
   flex: { flex: 1 },
   accessFieldWrap: { width: '100%', gap: 8 },
   accessValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -622,7 +668,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
   outline: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 6 },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   ticket: { fontSize: 12, fontWeight: '700' },
   topTitle: { fontSize: 17, fontWeight: '800' },
   content: { padding: 16, gap: 14, paddingBottom: 32 },
@@ -661,7 +707,7 @@ const styles = StyleSheet.create({
   customer: { fontSize: 16, fontWeight: '800' },
   contactRow: { flexDirection: 'row', gap: 10 },
   contact: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 11 },
-  moneyRow: { flexDirection: 'row', gap: 10 },
+  moneyRow: { flexDirection: 'row', flexWrap:'wrap', gap: 12 },
   moneyValue: { fontSize: 15, fontWeight: '800', marginTop: 2 },
   photos: { gap: 8 },
   photo: { width: 110, height: 110, borderRadius: 12 },

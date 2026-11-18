@@ -132,3 +132,7 @@ describe('valores desconocidos', () => {
     expect(customerSegmentLabel('   ')).toBe('')
   })
 })
+
+it('traduce el saldo a favor sin confundirlo con efectivo', () => {
+ expect(paymentMethodLabel('store_credit')).toBe('Saldo a favor')
+})

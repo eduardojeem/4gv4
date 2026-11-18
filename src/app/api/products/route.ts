@@ -642,7 +642,8 @@ export const POST = withTenantAuth({ permission: 'products.create', module: ['in
       }
 
       const admin = createAdminSupabase()
-      const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
+      const catalogCreate = Boolean(validated.product_details || validated.initial_batch || validated.initial_batches?.length)
+      const { data: saved, error: saveError } = await admin.rpc(catalogCreate ? 'create_product_catalog_atomic' : 'save_product_with_variants', {
         p_product: {
           ...validated,
           organization_id: organization.id,
@@ -654,6 +655,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: ['in
       })
 
       if (saveError) {
+        if (catalogCreate && (saveError.code === 'PGRST202' || saveError.code === '42883')) return NextResponse.json({ success: false, error: 'Falta activar la migración de características y lotes por variante. No se creó el producto.', code: 'CATALOG_MIGRATION_REQUIRED' }, { status: 503 })
         const code = getVariantErrorCode(saveError)
         logger.error('Failed to create product with variants', {
           code: code ?? saveError.code,
@@ -725,13 +727,16 @@ export const POST = withTenantAuth({ permission: 'products.create', module: ['in
       return NextResponse.json({ success: false, error: 'Seleccioná una sucursal para asignar el stock inicial.', code: 'BRANCH_REQUIRED' }, { status: 400 })
     }
     const admin = createAdminSupabase()
-    const { data: created, error } = await admin.rpc('create_simple_product_atomic', {
+    const catalogCreate = Boolean(validated.product_details)
+    const { data: created, error } = await admin.rpc(catalogCreate ? 'create_product_catalog_atomic' : 'create_simple_product_atomic', {
+      ...(catalogCreate ? { p_variants: [] } : {}),
       p_product: { ...validated, organization_id: organization.id },
       p_branch_id: targetBranchId,
       p_actor_id: user.id,
     })
 
     if (error) {
+      if (catalogCreate && (error.code === 'PGRST202' || error.code === '42883')) return NextResponse.json({ success: false, error: 'Falta activar la migración de características del producto. No se creó el producto.', code: 'CATALOG_MIGRATION_REQUIRED' }, { status: 503 })
       logger.error('Failed to create product atomically', { code: error.code, message: error.message })
       const message = error.message ?? ''
       if (message.includes('PRODUCT_REFERENCE_FORBIDDEN')) {
@@ -832,6 +837,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: ['inv
     }
     
     // Validate input with Zod
+    if (body.product_details !== undefined || body.initial_batches !== undefined) return NextResponse.json({ success: false, error: 'Las características se guardan desde su propio panel y los lotes desde Inventario.', code: 'CATALOG_SEPARATE_UPDATE' }, { status: 400 })
     const validationResult = productUpdateSchema.safeParse(body)
     
     if (!validationResult.success) {
@@ -881,6 +887,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: ['inv
     }
 
     if(!canUseCatalogRecord(organization.catalogServicesOnly,existingProduct,validated)) return NextResponse.json({success:false,error:'Esta cuenta solo puede gestionar servicios. Habilitá Inventario para gestionar productos físicos.',code:'CATALOG_TYPE_FORBIDDEN'},{status:403})
+    if (validated.unit_measure === 'servicio' && existingProduct.unit_measure !== 'servicio') return NextResponse.json({ success: false, error: 'Creá el servicio por separado para conservar el inventario y el historial del producto.', code: 'PRODUCT_KIND_CHANGE_FORBIDDEN' }, { status: 409 })
+    if ((validated.unit_measure ?? existingProduct.unit_measure) === 'servicio' && (Number(validated.stock_quantity ?? 0) > 0 || validated.has_variants === true)) return NextResponse.json({ success: false, error: 'Los servicios no llevan stock ni variantes.', code: 'SERVICE_INVENTORY_FORBIDDEN' }, { status: 400 })
     const fixedPlanIssues = fixedProductPlanErrors({ ...existingProduct, ...validated } as unknown as Parameters<typeof fixedProductPlanErrors>[0])
     if (fixedPlanIssues.length) return NextResponse.json({ success: false, error: 'Revisá los planes por monto: no son compatibles con el precio del producto.', details: fixedPlanIssues.map(issue => ({ field: 'installments_plans.' + issue.index + '.installmentAmount', message: issue.message })) }, { status: 400 })
 
