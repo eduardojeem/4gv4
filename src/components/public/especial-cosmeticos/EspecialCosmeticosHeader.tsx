@@ -460,7 +460,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                                 Productos del comercio
                               </p>
                               <Link
-                                href={`${prefix}/productos`}
+                                href={`${prefix}/ofertas`}
                                 className="text-[11px] font-semibold text-rose-600 hover:underline inline-flex items-center gap-1"
                               >
                                 <span>Ver productos</span>
@@ -501,7 +501,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
             {/* Ofertas Especiales con Badge llamativo */}
             <Link
-              href={`${prefix}/productos`}
+              href={`${prefix}/ofertas`}
               className={cn(
                 'inline-flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors relative py-1',
                 isOffers
@@ -762,7 +762,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               </Link>
 
               <Link
-                href={`${prefix}/productos`}
+                href={`${prefix}/ofertas`}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
               >

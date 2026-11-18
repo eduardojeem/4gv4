@@ -4,17 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Clock,
-  Heart,
   Mail,
   MapPin,
   Phone,
-  Sparkles,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
-import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { socialProfileUrl } from '@/lib/public/social-links'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -31,16 +28,15 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
   const { settings } = useWebsiteSettings()
   const effectiveSettings = settings ?? initialSettings
   const company = useStorefrontCompanyInfo(effectiveSettings?.company_info)
-  const { categories } = usePublicCategories()
 
   const slug = getTenantSlugFromPathname(pathname)
   const prefix = slug ? `/${slug}` : ''
-  const storeName = company?.name?.trim() || 'Glowora'
+  const storeName = company?.name?.trim() || 'Tu tienda'
   const slogan = company?.slogan?.trim() || 'Alta Cosmética & Skincare'
   const logoUrl = company?.logoUrl?.trim() || ''
   const phone = company?.phone?.trim() || ''
   const email = company?.email?.trim() || ''
-  const address = company?.address?.trim() || 'Avda. Santa Teresa c/ Herminio Maldonado, Asunción'
+  const address = company?.address?.trim() || ''
   const mapsHref = getCompanyMapsHref(company?.mapsUrl, address)
 
   const rawWhatsapp = (company?.whatsapp || company?.phone || '').trim()
@@ -52,9 +48,9 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
   const tiktokUrl = company?.tiktok ? socialProfileUrl(company.tiktok, 'tiktok') : ''
 
   const hours = company?.hours ?? {
-    weekdays: 'Lun a Vie: 08:30 - 19:30',
-    saturday: 'Sáb: 09:00 - 18:00',
-    sunday: 'Domingos cerrado',
+    weekdays: '',
+    saturday: '',
+    sunday: '',
   }
 
   return (
@@ -98,7 +94,7 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
               </div>
             </Link>
             <p className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
-              Cosmética dermatológica y skincare de alta gama. Fórmulas botánicas seleccionadas para realzar tu belleza natural con resultados visibles y seguros.
+              Consultá los productos publicados en el catálogo y los canales de atención de esta tienda.
             </p>
             {/* Redes sociales */}
             <div className="flex items-center gap-2 pt-2">
@@ -171,7 +167,7 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
                 </Link>
               </li>
               <li>
-                <Link href={`${prefix}/inicio#ofertas`} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors">
+                <Link href={`${prefix}/ofertas`} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors">
                   Ofertas Especiales
                 </Link>
               </li>
@@ -198,14 +194,14 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
                 <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-stone-900 dark:text-stone-200">Lunes a Viernes</p>
-                  <p className="text-stone-500">{hours.weekdays || '08:30 a 19:30 hs'}</p>
+                  <p className="text-stone-500">{hours.weekdays || 'No publicado'}</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium text-stone-900 dark:text-stone-200">Sábados</p>
-                  <p className="text-stone-500">{hours.saturday || '09:00 a 18:00 hs'}</p>
+                  <p className="text-stone-500">{hours.saturday || 'No publicado'}</p>
                 </div>
               </div>
               {hours.sunday && (

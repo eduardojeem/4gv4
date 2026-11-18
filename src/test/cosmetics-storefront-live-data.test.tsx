@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 const state=vi.hoisted(()=>({products:[] as unknown[],loading:false,error:null as Error|null,categories:[] as unknown[],company:{name:'Comercio de prueba',slug:'prueba'} as Record<string,unknown>}))
+vi.mock('@/hooks/useWebsiteSettings',()=>({useWebsiteSettings:()=>({settings:null})}))
+vi.mock('@/components/legal/LegalFooterLinks',()=>({LegalFooterLinks:()=>null}))
 vi.mock('swr',()=>({default:()=>({data:state.products,isLoading:state.loading,error:state.error})}))
 vi.mock('next/navigation',()=>({usePathname:()=>'/prueba/inicio'}))
 vi.mock('@/components/public/storefront-style-context',()=>({useStorefrontCompanyInfo:()=>state.company}))
@@ -9,6 +11,7 @@ vi.mock('@/components/public/especial-cosmeticos/EspecialCosmeticosCarousel',()=
 vi.mock('@/components/public/ProductCard',()=>({ProductCard:({product}:{product:{id:string;name:string}})=><div data-testid="real-product">{product.name}</div>}))
 vi.mock('@/components/public/FloatingWhatsAppButton',()=>({FloatingWhatsAppButton:({fallbackPhone}:{fallbackPhone:string})=><a href={'https://wa.me/'+fallbackPhone}>WhatsApp real</a>}))
 vi.mock('@/components/ui/app-image',()=>({AppImage:()=>null}))
+import { EspecialCosmeticosFooter } from '@/components/public/especial-cosmeticos/EspecialCosmeticosFooter'
 import { EspecialCosmeticosHome } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHome'
 import type {WebsiteSettings} from '@/types/website-settings'
 beforeEach(()=>{state.products=[];state.loading=false;state.error=null;state.categories=[];state.company={name:'Comercio de prueba',slug:'prueba'}})
@@ -50,4 +53,16 @@ it('muestra el carrusel configurado sin recurrir a ofertas inventadas',()=>{
 it.each([{enabled:false,slides:[{id:'b',active:true}]},{enabled:true,slides:[{id:'b',active:false}]}])('respeta el carrusel oculto o sin banners activos',promotional_carousel=>{
  show({promotional_carousel})
  expect(screen.queryByTestId('configured-carousel')).toBeNull()
+})
+
+it('el pie de página no inventa dirección ni horarios del comercio',()=>{
+ const {container}=render(<EspecialCosmeticosFooter/>)
+ expect(screen.queryByText(/Santa Teresa/)).toBeNull()
+ expect(screen.queryByText(/08:30/)).toBeNull()
+ expect(container.querySelector('a[href*="maps"]')).toBeNull()
+})
+it('las ofertas del comercio llevan a su página propia',()=>{
+ state.products=[{id:'p1',name:'Producto real',has_offer:true,offer_price:80,sale_price:100}]
+ show()
+ expect(screen.getByRole('link',{name:'Ver todas las ofertas'})).toHaveAttribute('href','/prueba/ofertas')
 })

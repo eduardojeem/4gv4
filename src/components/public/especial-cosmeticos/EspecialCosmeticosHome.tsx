@@ -353,7 +353,7 @@ export function EspecialCosmeticosHome({ settings }: EspecialCosmeticosHomeProps
 
       {offers.length > 0 && <section id="ofertas" className="scroll-mt-20 relative overflow-hidden border-y border-rose-200/80 bg-gradient-to-b from-[#FFF0F3] via-[#FFF7F9] to-[#FFFDFB] py-20 sm:py-28 dark:border-zinc-800 dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h3 className="mb-3 font-serif text-3xl font-bold sm:text-5xl">Ofertas del comercio</h3><p className="mb-8 text-sm text-stone-600 dark:text-stone-300">Productos con descuentos publicados por esta tienda.</p>
+          <h3 className="mb-3 font-serif text-3xl font-bold sm:text-5xl">Ofertas del comercio</h3><p className="mb-8 text-sm text-stone-600 dark:text-stone-300">Productos con descuentos publicados por esta tienda.</p><Link href={`${prefix}/ofertas`} className="mb-6 inline-flex items-center gap-2 font-semibold text-rose-600">Ver todas las ofertas <ArrowRight className="h-4 w-4" /></Link>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">{offers.map(product => <ProductCard key={product.id} product={product} />)}</div>
         </div>
       </section>}

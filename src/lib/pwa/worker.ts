@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from 'serwist'
+import { CacheFirst, ExpirationPlugin, Serwist } from 'serwist'
 import { isPublicStaticAsset, obsoletePrivateCache } from './cache-policy'
 
 declare const self: ServiceWorkerGlobalScope
@@ -17,7 +17,11 @@ const worker = new Serwist({
         plugins: [new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * 24 * 60 * 60 })],
       }),
     },
-    { matcher: () => true, handler: new NetworkOnly() },
+    // Nada más pasa por el service worker: las páginas, la API y los scripts de
+    // otros sitios van directo a la red. Antes una regla «todo, solo red» los
+    // interceptaba: el worker pedía él mismo el script de Cloudflare (y la CSP
+    // lo bloqueaba por connect-src) y una navegación cortada terminaba en
+    // «no-response» en vez de la página de error normal del navegador.
   ],
 })
 

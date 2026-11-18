@@ -167,8 +167,7 @@ export function useSales(autoLoad = true) {
             *,
             products (name, sku)
           ),
-          sale_payments (id, payment_index, payment_method, amount, reference, card_last4, created_at),
-          payments (*)
+          sale_payments (id, payment_index, payment_method, amount, reference, card_last4, created_at)
                 `)
                 .eq('id', saleId)
                 .eq('organization_id', organization.id)
@@ -177,6 +176,21 @@ export function useSales(autoLoad = true) {
             const { data, error } = await query.single()
 
             if (error) throw error
+
+            // Ventas viejas: sus pagos están en la tabla anterior `payments`. En
+            // producción ya no tiene relación declarada con `sales`, así que pedirla
+            // dentro de la misma consulta daba 400 y no se abría ninguna venta.
+            // Se consulta aparte y solo si la venta no tiene pagos nuevos.
+            if (data && !(Array.isArray(data.sale_payments) && data.sale_payments.length)) {
+                const legacy = await supabase
+                    .from('payments')
+                    .select('*')
+                    .eq('sale_id', saleId)
+                    .eq('organization_id', organization.id)
+                if (!legacy.error && Array.isArray(legacy.data)) {
+                    return { ...data, payments: legacy.data }
+                }
+            }
 
             return data
         } catch (error: unknown) {

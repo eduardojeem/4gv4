@@ -32,3 +32,7 @@ La publicación queda condicionada a pruebas completas, tipos, lint, build/previ
 ## Cambios concurrentes incorporados
 
 Se integra también feb0a398: carrusel boutique propio y diseño separado de ofertas de Gemini. Se conserva el estilo visual, pero la grilla usa ofertas reales del catálogo; los productos sintéticos no regresan. Se corrigen y prueban índice seguro al quitar banners, pausa manual persistente, movimiento reducido, pausa por foco y enlace de compra por comercio. El tag release/web-2026-11-17-cut conserva el corte anterior como respaldo; no implica detener la publicación solicitada.
+
+## Integración posterior a la finalización de Gemini
+
+Se incorpora main 3ec2511e: enlaces a /ofertas de Gemini y PR #135 de Claude (consulta del detalle POS sin relación inexistente payments; consulta legacy separada y filtrada; service worker solo para estáticos). Se preservan useSales(false), el diseño adaptable y ofertas del catálogo real. También se retiran dirección y horarios ficticios del footer. La publicación sigue limitada a web/API.
