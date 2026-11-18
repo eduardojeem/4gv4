@@ -1096,6 +1096,7 @@ export function CompanyInfoForm() {
         open={logoMediaOpen}
         onOpenChange={setLogoMediaOpen}
         filterSection="logo"
+        currentActiveUrl={formData.logoUrl}
         title="Historial de Logos e Imágenes"
         description="Seleccioná un logo o imagen previamente subida o eliminá archivos definitivamente para liberar espacio (máx. 20)."
         onSelect={(url) => {

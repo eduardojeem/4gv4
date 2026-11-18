@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,8 @@ import {
   ExternalLink,
   X,
   Maximize2,
+  ArrowUpDown,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WebsiteMediaItem, WebsiteMediaSection } from '@/types/website-settings'
@@ -59,12 +61,15 @@ const SECTION_LABELS: Record<WebsiteMediaSection, string> = {
   general: 'General',
 }
 
+type SortOption = 'newest' | 'oldest' | 'largest' | 'name'
+
 interface WebsiteMediaLibraryDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   trigger?: React.ReactNode
   onSelect?: (url: string, item: WebsiteMediaItem) => void
   filterSection?: WebsiteMediaSection
+  currentActiveUrl?: string
   title?: string
   description?: string
 }
@@ -75,6 +80,7 @@ export function WebsiteMediaLibraryDialog({
   trigger,
   onSelect,
   filterSection: initialFilterSection,
+  currentActiveUrl,
   title = 'Historial de Logos e Imágenes',
   description = 'Reutilizá imágenes ya subidas con máxima nitidez o eliminalas definitivamente para liberar espacio.',
 }: WebsiteMediaLibraryDialogProps) {
@@ -95,6 +101,12 @@ export function WebsiteMediaLibraryDialog({
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'large' | 'medium'>('large')
   const [canvasBg, setCanvasBg] = useState<'checker' | 'dark' | 'light'>('checker')
+  const [sortBy, setSortBy] = useState<SortOption>('newest')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // Drag and drop state
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const dragCounter = useRef(0)
 
   // Lightbox / Vista previa ampliada
   const [previewItem, setPreviewItem] = useState<WebsiteMediaItem | null>(null)
@@ -130,11 +142,8 @@ export function WebsiteMediaLibraryDialog({
     }
   }, [isOpen, fetchMedia])
 
-  // Subir imagen directa desde el modal
-  const handleDirectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  // Subir archivo reutilizable (para drag & drop e input file)
+  const uploadFile = async (file: File) => {
     if (count >= MAX_ITEMS) {
       toast.error(`Límite alcanzado: máximo ${MAX_ITEMS} imágenes por organización`)
       return
@@ -172,6 +181,55 @@ export function WebsiteMediaLibraryDialog({
     }
   }
 
+  // Manejo de drag and drop
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current += 1
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current -= 1
+    if (dragCounter.current <= 0) {
+      setIsDraggingOver(false)
+      dragCounter.current = 0
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+    dragCounter.current = 0
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Solo se admiten archivos de imagen (PNG, JPG, WebP, SVG, AVIF)')
+      return
+    }
+
+    await uploadFile(file)
+  }
+
+  const handleDirectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      await uploadFile(file)
+    }
+  }
+
   // Eliminar definitivamente
   const handleConfirmDelete = async () => {
     if (!itemToDelete) return
@@ -203,11 +261,13 @@ export function WebsiteMediaLibraryDialog({
     }
   }
 
-  // Copiar URL al portapapeles
-  const handleCopyUrl = async (url: string) => {
+  // Copiar URL al portapapeles con feedback instantáneo
+  const handleCopyUrl = async (id: string, url: string) => {
     try {
       await navigator.clipboard.writeText(url)
+      setCopiedId(id)
       toast.success('Enlace copiado al portapapeles')
+      setTimeout(() => setCopiedId(null), 2000)
     } catch {
       toast.error('No se pudo copiar el enlace')
     }
@@ -217,16 +277,42 @@ export function WebsiteMediaLibraryDialog({
   const isNearLimit = count >= 16 && !isAtLimit
   const progressPercent = Math.min(100, Math.round((count / MAX_ITEMS) * 100))
 
-  const filteredItems = items.filter((item) => {
-    if (activeTab !== 'all' && item.section !== activeTab) return false
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      const matchName = item.name.toLowerCase().includes(q)
-      const matchSection = item.section ? SECTION_LABELS[item.section].toLowerCase().includes(q) : false
-      return matchName || matchSection
-    }
-    return true
-  })
+  const isItemActive = useCallback(
+    (item?: WebsiteMediaItem | null) => {
+      if (!item || !currentActiveUrl) return false
+      return item.url === currentActiveUrl || (item.path && currentActiveUrl.includes(item.path))
+    },
+    [currentActiveUrl]
+  )
+
+  const sortedAndFilteredItems = useMemo(() => {
+    const filtered = items.filter((item) => {
+      if (activeTab !== 'all' && item.section !== activeTab) return false
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase()
+        const matchName = item.name.toLowerCase().includes(q)
+        const matchSection = item.section ? SECTION_LABELS[item.section].toLowerCase().includes(q) : false
+        return matchName || matchSection
+      }
+      return true
+    })
+
+    return filtered.sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      }
+      if (sortBy === 'oldest') {
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+      }
+      if (sortBy === 'largest') {
+        return (b.size || 0) - (a.size || 0)
+      }
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name)
+      }
+      return 0
+    })
+  }, [items, activeTab, searchQuery, sortBy])
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return null
@@ -245,6 +331,16 @@ export function WebsiteMediaLibraryDialog({
     }
   }
 
+  const getImageFormat = (item: WebsiteMediaItem) => {
+    const ext = (item.name.split('.').pop() || item.url.split('.').pop() || '').toLowerCase()
+    if (ext === 'png') return { label: 'PNG', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' }
+    if (ext === 'webp') return { label: 'WEBP', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' }
+    if (ext === 'svg') return { label: 'SVG', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' }
+    if (ext === 'jpg' || ext === 'jpeg') return { label: 'JPG', color: 'bg-muted text-muted-foreground border-border' }
+    if (ext === 'gif') return { label: 'GIF', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' }
+    return { label: ext.toUpperCase() || 'IMG', color: 'bg-muted text-muted-foreground border-border' }
+  }
+
   // Clases para el lienzo según modo de fondo
   const canvasBgClass =
     canvasBg === 'dark'
@@ -257,7 +353,26 @@ export function WebsiteMediaLibraryDialog({
     <>
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-        <DialogContent className="max-w-5xl xl:max-w-6xl w-[96vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-2xl border-border shadow-2xl">
+        <DialogContent
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className="max-w-5xl xl:max-w-6xl w-[96vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-2xl border-border shadow-2xl relative"
+        >
+          {/* Overlay de Drag and Drop activo */}
+          {isDraggingOver && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm border-4 border-dashed border-primary rounded-2xl p-6 text-center animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-xl mb-4 animate-bounce">
+                <Upload className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-black text-foreground">Soltá la imagen aquí</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                Se subirá automáticamente al historial de tu organización.
+              </p>
+            </div>
+          )}
+
           {/* Header Superior */}
           <DialogHeader className="p-4 sm:p-5 border-b bg-background shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -278,7 +393,7 @@ export function WebsiteMediaLibraryDialog({
                   size="sm"
                   onClick={fetchMedia}
                   disabled={isLoading}
-                  className="h-8 gap-1.5 text-xs"
+                  className="h-8 gap-1.5 text-xs font-semibold"
                   title="Recargar imágenes"
                 >
                   <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
@@ -290,7 +405,7 @@ export function WebsiteMediaLibraryDialog({
                   size="sm"
                   onClick={() => uploadInputRef.current?.click()}
                   disabled={isUploading || isAtLimit}
-                  className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                  className="h-8 gap-1.5 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
                 >
                   {isUploading ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -323,7 +438,10 @@ export function WebsiteMediaLibraryDialog({
                     </Badge>
                   )}
                   {isNearLimit && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500 text-amber-600 bg-amber-500/10 font-semibold">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 border-amber-500 text-amber-600 bg-amber-500/10 font-semibold"
+                    >
                       Espacio reducido
                     </Badge>
                   )}
@@ -334,7 +452,11 @@ export function WebsiteMediaLibraryDialog({
                 value={progressPercent}
                 className={cn(
                   'h-2',
-                  isAtLimit ? '[&>div]:bg-destructive' : isNearLimit ? '[&>div]:bg-amber-500' : '[&>div]:bg-primary'
+                  isAtLimit
+                    ? '[&>div]:bg-destructive'
+                    : isNearLimit
+                    ? '[&>div]:bg-amber-500'
+                    : '[&>div]:bg-primary'
                 )}
               />
               {isAtLimit && (
@@ -347,7 +469,7 @@ export function WebsiteMediaLibraryDialog({
               )}
             </div>
 
-            {/* Controles de Filtros, Búsqueda y Visualización */}
+            {/* Controles de Filtros, Búsqueda, Ordenamiento y Visualización */}
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-3 pt-2 border-t border-border/60">
               {/* Categorías */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
@@ -363,7 +485,9 @@ export function WebsiteMediaLibraryDialog({
                 >
                   Todas ({items.length})
                 </button>
-                {(['logo', 'promotions', 'announcements', 'brands', 'gallery', 'team', 'general'] as WebsiteMediaSection[]).map((sec) => {
+                {(
+                  ['logo', 'promotions', 'announcements', 'brands', 'gallery', 'team', 'general'] as WebsiteMediaSection[]
+                ).map((sec) => {
                   const secCount = items.filter((it) => it.section === sec).length
                   if (secCount === 0 && activeTab !== sec) return null
                   return (
@@ -384,15 +508,15 @@ export function WebsiteMediaLibraryDialog({
                 })}
               </div>
 
-              {/* Búsqueda y visualización */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Búsqueda, orden y visualización */}
+              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                 {/* Buscador */}
-                <div className="relative w-full sm:w-48">
+                <div className="relative w-full sm:w-44">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar imagen..."
+                    placeholder="Buscar..."
                     className="h-8 pl-8 pr-2 text-xs bg-muted/30"
                   />
                   {searchQuery && (
@@ -406,14 +530,36 @@ export function WebsiteMediaLibraryDialog({
                   )}
                 </div>
 
+                {/* Ordenamiento Inteligente */}
+                <div className="flex items-center gap-1 rounded-lg border bg-muted/30 px-2 py-1 text-xs">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <select
+                    aria-label="Ordenar imágenes"
+                    title="Ordenar imágenes"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="bg-transparent text-[11px] font-semibold text-foreground border-0 outline-none cursor-pointer"
+                  >
+                    <option value="newest">Recientes</option>
+                    <option value="oldest">Antiguas</option>
+                    <option value="largest">Mayor tamaño</option>
+                    <option value="name">Nombre</option>
+                  </select>
+                </div>
+
                 {/* Selector de Fondo para Logos con Transparencia */}
-                <div className="hidden sm:flex items-center rounded-lg border bg-muted/30 p-0.5" title="Fondo del visor (ideal para logos transparentes)">
+                <div
+                  className="hidden sm:flex items-center rounded-lg border bg-muted/30 p-0.5"
+                  title="Fondo del visor (ideal para logos transparentes)"
+                >
                   <button
                     type="button"
                     onClick={() => setCanvasBg('checker')}
                     className={cn(
                       'p-1.5 rounded-md text-[10px] font-semibold transition-colors',
-                      canvasBg === 'checker' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      canvasBg === 'checker'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                     title="Fondo patrón transparente"
                   >
@@ -424,7 +570,9 @@ export function WebsiteMediaLibraryDialog({
                     onClick={() => setCanvasBg('light')}
                     className={cn(
                       'p-1.5 rounded-md text-[10px] font-semibold transition-colors flex items-center gap-1',
-                      canvasBg === 'light' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      canvasBg === 'light'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                     title="Fondo blanco"
                   >
@@ -435,7 +583,9 @@ export function WebsiteMediaLibraryDialog({
                     onClick={() => setCanvasBg('dark')}
                     className={cn(
                       'p-1.5 rounded-md text-[10px] font-semibold transition-colors flex items-center gap-1',
-                      canvasBg === 'dark' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      canvasBg === 'dark'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                     title="Fondo oscuro"
                   >
@@ -450,9 +600,11 @@ export function WebsiteMediaLibraryDialog({
                     onClick={() => setViewMode('large')}
                     className={cn(
                       'p-1.5 rounded-md text-xs transition-colors',
-                      viewMode === 'large' ? 'bg-background text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      viewMode === 'large'
+                        ? 'bg-background text-primary shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
-                    title="Vista en tarjetas grandes (máxima visibilidad)"
+                    title="Vista en tarjetas grandes"
                   >
                     <Grid2X2 className="h-3.5 w-3.5" />
                   </button>
@@ -461,7 +613,9 @@ export function WebsiteMediaLibraryDialog({
                     onClick={() => setViewMode('medium')}
                     className={cn(
                       'p-1.5 rounded-md text-xs transition-colors',
-                      viewMode === 'medium' ? 'bg-background text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      viewMode === 'medium'
+                        ? 'bg-background text-primary shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                     title="Vista compacta"
                   >
@@ -473,13 +627,26 @@ export function WebsiteMediaLibraryDialog({
           </DialogHeader>
 
           {/* Galería de Imágenes */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/10">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/10 relative">
+            {/* Barra rápida de dropzone informativa */}
+            {!isAtLimit && (
+              <div
+                onClick={() => uploadInputRef.current?.click()}
+                className="hidden sm:flex items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-background/50 hover:bg-muted/40 hover:border-primary/50 py-2.5 px-4 text-xs text-muted-foreground transition-all cursor-pointer mb-4 shadow-2xs"
+              >
+                <Upload className="h-4 w-4 text-primary" />
+                <span>
+                  Arrastrá y soltá una imagen aquí, o <strong className="text-primary hover:underline font-bold">explorá tus archivos</strong>
+                </span>
+              </div>
+            )}
+
             {isLoading && items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                 <Loader2 className="h-9 w-9 animate-spin mb-3 text-primary" />
                 <p className="text-sm font-medium">Cargando biblioteca de imágenes...</p>
               </div>
-            ) : filteredItems.length === 0 ? (
+            ) : sortedAndFilteredItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border-2 border-dashed p-8 bg-card">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-3">
                   <ImageIcon className="h-7 w-7 text-muted-foreground" />
@@ -492,18 +659,33 @@ export function WebsiteMediaLibraryDialog({
                     ? 'Aún no has subido imágenes para tu sitio web. Las fotos que subas en el logo, carrusel o avisos quedarán guardadas aquí automáticamente.'
                     : 'No hay imágenes bajo esta categoría. Probá seleccionando "Todas".'}
                 </p>
-                {!isAtLimit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-5 gap-2"
-                    onClick={() => uploadInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4" />
-                    Subir nueva imagen
-                  </Button>
-                )}
+                <div className="mt-5 flex items-center gap-2">
+                  {(searchQuery || activeTab !== 'all') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery('')
+                        setActiveTab('all')
+                      }}
+                      className="text-xs font-semibold"
+                    >
+                      Restablecer filtros
+                    </Button>
+                  )}
+                  {!isAtLimit && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="gap-2 text-xs font-bold"
+                      onClick={() => uploadInputRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4" />
+                      Subir nueva imagen
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               <div
@@ -514,14 +696,19 @@ export function WebsiteMediaLibraryDialog({
                     : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
                 )}
               >
-                {filteredItems.map((item) => {
+                {sortedAndFilteredItems.map((item) => {
                   const sizeLabel = formatFileSize(item.size)
                   const dateLabel = formatDate(item.createdAt)
+                  const formatBadge = getImageFormat(item)
+                  const active = isItemActive(item)
 
                   return (
                     <div
                       key={item.id}
-                      className="group relative flex flex-col rounded-2xl border bg-card overflow-hidden transition-all duration-200 hover:border-primary/60 hover:shadow-md"
+                      className={cn(
+                        'group relative flex flex-col rounded-2xl border bg-card overflow-hidden transition-all duration-200 shadow-2xs hover:shadow-md',
+                        active ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'hover:border-primary/60'
+                      )}
                     >
                       {/* Contenedor de la Imagen con Alta Visibilidad */}
                       <div
@@ -541,12 +728,30 @@ export function WebsiteMediaLibraryDialog({
                           loading="lazy"
                         />
 
-                        {/* Etiqueta de Sección */}
-                        {item.section && (
-                          <span className="absolute top-2.5 left-2.5 rounded-lg bg-black/75 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-xs border border-white/10 shadow-xs">
-                            {SECTION_LABELS[item.section]}
-                          </span>
-                        )}
+                        {/* Badges superiores: Sección y Estado Activo */}
+                        <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1.5">
+                          {item.section && (
+                            <span className="rounded-lg bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs border border-white/10 shadow-xs">
+                              {SECTION_LABELS[item.section]}
+                            </span>
+                          )}
+                          {active && (
+                            <span className="rounded-lg bg-emerald-500 text-white px-2 py-0.5 text-[10px] font-bold shadow-xs flex items-center gap-1">
+                              <Check className="h-2.5 w-2.5" />
+                              En uso
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Badge de Formato (PNG/WEBP/SVG/JPG) */}
+                        <span
+                          className={cn(
+                            'absolute top-2.5 right-2.5 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border shadow-2xs backdrop-blur-xs',
+                            formatBadge.color
+                          )}
+                        >
+                          {formatBadge.label}
+                        </span>
 
                         {/* Botón flotante de lupa / ampliar al hacer hover */}
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[1px]">
@@ -568,7 +773,7 @@ export function WebsiteMediaLibraryDialog({
                             {item.name}
                           </p>
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
-                            {sizeLabel && <span className="font-mono">{sizeLabel}</span>}
+                            {sizeLabel && <span className="font-mono font-medium">{sizeLabel}</span>}
                             {sizeLabel && dateLabel && <span>•</span>}
                             {dateLabel && <span>{dateLabel}</span>}
                           </div>
@@ -580,14 +785,19 @@ export function WebsiteMediaLibraryDialog({
                             <Button
                               type="button"
                               size="sm"
-                              className="h-8 flex-1 gap-1.5 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                              className={cn(
+                                'h-8 flex-1 gap-1.5 text-xs font-bold shadow-xs',
+                                active
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                  : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                              )}
                               onClick={() => {
                                 onSelect(item.url, item)
                                 handleOpenChange(false)
                               }}
                             >
                               <Check className="h-3.5 w-3.5" />
-                              <span>Usar imagen</span>
+                              <span>{active ? 'Seleccionada' : 'Usar imagen'}</span>
                             </Button>
                           )}
 
@@ -595,11 +805,20 @@ export function WebsiteMediaLibraryDialog({
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            className={cn(
+                              'h-8 w-8 shrink-0 transition-colors',
+                              copiedId === item.id
+                                ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            )}
                             title="Copiar URL directa"
-                            onClick={() => handleCopyUrl(item.url)}
+                            onClick={() => handleCopyUrl(item.id, item.url)}
                           >
-                            <Copy className="h-3.5 w-3.5" />
+                            {copiedId === item.id ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-600 animate-in zoom-in" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
                           </Button>
 
                           <Button
@@ -647,6 +866,11 @@ export function WebsiteMediaLibraryDialog({
                 <Badge variant="outline" className="shrink-0 font-semibold">
                   {previewItem.section ? SECTION_LABELS[previewItem.section] : 'Imagen'}
                 </Badge>
+                {isItemActive(previewItem) && (
+                  <Badge className="bg-emerald-500 text-white shrink-0 font-bold text-[10px]">
+                    En uso activo
+                  </Badge>
+                )}
                 <DialogTitle className="text-sm font-bold text-foreground truncate" title={previewItem.name}>
                   {previewItem.name}
                 </DialogTitle>
@@ -725,8 +949,16 @@ export function WebsiteMediaLibraryDialog({
             {/* Footer con Metadatos y Acciones */}
             <div className="p-4 border-t bg-background flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
-                {previewItem.size && <span>Peso: <strong className="text-foreground">{formatFileSize(previewItem.size)}</strong></span>}
-                {previewItem.createdAt && <span>Fecha: <strong className="text-foreground">{formatDate(previewItem.createdAt)}</strong></span>}
+                {previewItem.size && (
+                  <span>
+                    Peso: <strong className="text-foreground font-mono">{formatFileSize(previewItem.size)}</strong>
+                  </span>
+                )}
+                {previewItem.createdAt && (
+                  <span>
+                    Fecha: <strong className="text-foreground">{formatDate(previewItem.createdAt)}</strong>
+                  </span>
+                )}
                 <span className="truncate max-w-[240px] font-mono text-[10px]" title={previewItem.path}>
                   {previewItem.path}
                 </span>
@@ -737,20 +969,21 @@ export function WebsiteMediaLibraryDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5 text-xs font-semibold"
-                  onClick={() => handleCopyUrl(previewItem.url)}
+                  className={cn(
+                    'h-8 gap-1.5 text-xs font-semibold',
+                    copiedId === previewItem.id && 'border-emerald-500 text-emerald-600 bg-emerald-500/10'
+                  )}
+                  onClick={() => handleCopyUrl(previewItem.id, previewItem.url)}
                 >
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>Copiar URL</span>
+                  {copiedId === previewItem.id ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  <span>{copiedId === previewItem.id ? 'Copiado' : 'Copiar URL'}</span>
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs font-semibold"
-                  asChild
-                >
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-semibold" asChild>
                   <a href={previewItem.url} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-3.5 w-3.5" />
                     <span>Abrir original</span>
@@ -777,7 +1010,7 @@ export function WebsiteMediaLibraryDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10"
+                  className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10 font-medium"
                   onClick={() => setItemToDelete(previewItem)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -799,14 +1032,20 @@ export function WebsiteMediaLibraryDialog({
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-xs leading-relaxed text-muted-foreground pt-1">
               <p>
-                Esta acción eliminará el archivo de forma permanente del almacenamiento en la nube y <strong>liberará 1 espacio</strong> en tu cuota (máximo 20 imágenes).
+                Esta acción eliminará el archivo de forma permanente del almacenamiento en la nube y{' '}
+                <strong>liberará 1 espacio</strong> en tu cuota (máximo {MAX_ITEMS} imágenes).
               </p>
-              <p className="font-semibold text-foreground">
-                Archivo: {itemToDelete?.name}
-              </p>
-              <p className="text-amber-600 dark:text-amber-400">
-                ⚠️ Si esta imagen está actualmente en uso en tu logo, carrusel o aviso publicado, dejará de verse en la tienda pública.
-              </p>
+              <p className="font-semibold text-foreground">Archivo: {itemToDelete?.name}</p>
+
+              {isItemActive(itemToDelete) ? (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive font-bold">
+                  ⚠️ ¡Atención! Esta imagen está actualmente seleccionada como recurso activo en tu tienda. Si la eliminás definitivamente, dejará de verse en la tienda pública.
+                </div>
+              ) : (
+                <p className="text-amber-600 dark:text-amber-400">
+                  ⚠️ Si esta imagen está actualmente en uso en tu logo, carrusel o aviso publicado, dejará de verse en la tienda pública.
+                </p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
