@@ -337,7 +337,7 @@ export function WebsiteNavigation({
                   'ml-1 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none border',
                   badge.tone === 'emerald' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
                   badge.tone === 'amber' && 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-                  badge.tone === 'blue' && 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400',
+                  badge.tone === 'blue' && 'border-border/80 bg-muted text-foreground',
                   badge.tone === 'muted' && 'border-border/60 bg-muted text-muted-foreground'
                 )}
               >

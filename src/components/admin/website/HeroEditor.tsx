@@ -691,15 +691,15 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           {/* ── Opciones de portada para tu empresa ── */}
           <SectionCard
             icon={Briefcase}
-            tone="indigo"
+            tone="neutral"
             title="Opciones de portada para tu empresa"
             description={`Elegí el enfoque comercial que querés priorizar. Cada opción adapta los títulos, frases y llamadas a la acción para ${company?.name || 'tu negocio'}.`}
             badge={`${companyOptions.length} enfoques listos`}
           >
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-indigo-500/5 border border-indigo-500/20 p-2.5 text-xs text-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/40 border border-border/80 p-2.5 text-xs text-foreground">
                 <span className="flex items-center gap-1.5 font-medium">
-                  <Building2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                   {company?.name ? (
                     <>Adaptado con los datos de: <strong className="text-foreground">{company.name}</strong></>
                   ) : (
@@ -707,7 +707,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                   )}
                 </span>
                 {onNavigate && !company?.name && (
-                  <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px] text-indigo-600 hover:text-indigo-700" onClick={() => onNavigate('company')}>
+                  <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px] text-foreground hover:bg-muted" onClick={() => onNavigate('company')}>
                     Cargar nombre
                   </Button>
                 )}
@@ -722,8 +722,8 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                       className={cn(
                         'group flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all',
                         isActive
-                          ? 'border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500 shadow-sm'
-                          : 'border-border/80 bg-card hover:border-indigo-500/40 hover:bg-muted/30'
+                          ? 'border-foreground/30 bg-muted/60 ring-1 ring-foreground/20 shadow-2xs'
+                          : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
                       )}
                     >
                       <div className="space-y-2">
@@ -733,10 +733,10 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                             <span className="font-bold text-xs text-foreground">{opt.label}</span>
                           </div>
                           <span className={cn(
-                            'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                            'rounded-full px-2 py-0.5 text-[10px] font-semibold border',
                             isActive
-                              ? 'bg-indigo-500 text-white dark:bg-indigo-600'
-                              : 'bg-muted text-muted-foreground'
+                              ? 'bg-foreground text-background border-foreground'
+                              : 'bg-muted text-muted-foreground border-border/80'
                           )}>
                             {isActive ? 'Activa' : opt.badgeLabel}
                           </span>
@@ -752,9 +752,9 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                         </div>
                       </div>
 
-                      <div className="mt-3 pt-2.5 border-t flex items-center justify-between gap-2">
+                      <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                          <MousePointerClick className="h-3 w-3 text-primary" />
+                          <MousePointerClick className="h-3 w-3 text-muted-foreground" />
                           <span className="truncate max-w-[120px]">{opt.hero.ctaPrimaryText}</span>
                         </div>
                         <Button
@@ -764,7 +764,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                           onClick={() => applyCompanyHeroOption(opt)}
                           className={cn(
                             'h-7 px-2.5 text-xs font-semibold gap-1 shrink-0',
-                            isActive && 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            isActive && 'bg-foreground text-background hover:bg-foreground/90'
                           )}
                         >
                           {isActive ? (
@@ -774,7 +774,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                             </>
                           ) : (
                             <>
-                              <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                              <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
                               Aplicar opción
                             </>
                           )}
@@ -787,9 +787,9 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
             </div>
           </SectionCard>
 
-          <section aria-labelledby="hero-presets" className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+          <section aria-labelledby="hero-presets" className="rounded-2xl border border-border/80 bg-muted/20 p-4">
             <h3 id="hero-presets" className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+              <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               Empezá con un texto de tu rubro
             </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">Completa todo de una vez. Después cambiá lo que quieras.</p>
@@ -800,13 +800,13 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                   type="button"
                   aria-label={preset.label}
                   onClick={() => applyHeroPreset(preset)}
-                  className="flex min-w-0 items-start gap-2.5 rounded-xl border bg-background p-3 text-left text-xs transition-colors hover:border-primary/50 hover:bg-primary/5"
+                  className="flex min-w-0 items-start gap-2.5 rounded-xl border border-border/80 bg-background p-3 text-left text-xs transition-colors hover:border-foreground/30 hover:bg-muted/40"
                 >
                   <span aria-hidden="true" className="text-lg leading-none">{preset.icon}</span>
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="font-semibold text-foreground">{preset.label}</span>
-                      {index === 0 && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Recomendado</span>}
+                      {index === 0 && <span className="rounded-full bg-muted border border-border px-1.5 py-0.5 text-[10px] font-semibold text-foreground">Recomendado</span>}
                     </span>
                     <span className="mt-0.5 block truncate text-muted-foreground">{preset.title}</span>
                   </span>
@@ -816,9 +816,9 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
                 <button
                   type="button"
                   onClick={applyBusinessData}
-                  className="flex min-w-0 items-start gap-2.5 rounded-xl border border-dashed bg-background p-3 text-left text-xs transition-colors hover:border-primary/50 hover:bg-primary/5"
+                  className="flex min-w-0 items-start gap-2.5 rounded-xl border border-dashed border-border/80 bg-background p-3 text-left text-xs transition-colors hover:border-foreground/30 hover:bg-muted/40"
                 >
-                  <Wand2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <Wand2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0">
                     <span className="block font-semibold text-foreground">Usar los datos de mi negocio</span>
                     <span className="mt-0.5 block truncate text-muted-foreground">{company?.name || 'Nombre, eslogan y descripción'}</span>
