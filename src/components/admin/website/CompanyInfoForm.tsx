@@ -32,7 +32,8 @@ import {
   ExternalLink,
   HelpCircle, Search,
   Trash2,
-  Images
+  Images,
+  Lock,
 } from 'lucide-react'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
@@ -56,12 +57,25 @@ export function CompanyInfoForm() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoMediaOpen, setLogoMediaOpen] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [showAdvancedLogoUrl, setShowAdvancedLogoUrl] = useState(false)
   const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [confirmPublication, setConfirmPublication] = useState(false)
   const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
   const hasChanges = draft !== null
+
+  const handleCopyLink = () => {
+    if (typeof window === 'undefined') return
+    const host = window.location.host
+    const slug = formData.slug || ''
+    const url = `https://${host}/${slug}`
+    navigator.clipboard.writeText(url)
+    setCopiedLink(true)
+    toast.success('Enlace copiado al portapapeles', { description: url })
+    setTimeout(() => setCopiedLink(false), 2500)
+  }
   const focusInvalidField = useRef(false)
   useEffect(() => {
     if (!focusInvalidField.current) return
@@ -381,6 +395,87 @@ export function CompanyInfoForm() {
         description="Estado de publicación en vivo, dirección web pública y visibilidad en el Marketplace"
       >
         <div className="space-y-6">
+          {/* Hero de Estado de Publicación en tiempo real */}
+          {formData.storefrontPublic === true ? (
+            <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-4 sm:p-5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-emerald-500/20 shadow-md">
+                    <Globe className="h-6 w-6" />
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-background"></span>
+                    </span>
+                  </span>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estado</span>
+                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                        🟢 Tienda En Vivo
+                      </span>
+                    </div>
+                    <h4 className="text-base font-black text-foreground">
+                      Tu tienda está publicada y disponible en internet
+                    </h4>
+                    <p className="text-xs text-muted-foreground truncate font-mono">
+                      https://{typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/{formData.slug || 'mi-empresa'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyLink}
+                    className="h-9 gap-1.5 text-xs font-bold border-emerald-500/30 hover:bg-emerald-500/10 shadow-2xs"
+                  >
+                    {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Clipboard className="h-3.5 w-3.5" />}
+                    {copiedLink ? 'Copiado' : 'Copiar enlace'}
+                  </Button>
+                  {formData.slug && (
+                    <Button
+                      asChild
+                      variant="default"
+                      size="sm"
+                      className="h-9 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                    >
+                      <Link href={`/${formData.slug}`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Visitar tienda
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300">
+                    <Lock className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">Estado</span>
+                      <span className="rounded-full bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                        🔒 Tienda Privada (Borrador)
+                      </span>
+                    </div>
+                    <h4 className="text-base font-black text-foreground">
+                      Tu tienda está oculta para el público
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Nadie puede ver tu catálogo ni realizar pedidos hasta que actives &ldquo;Publicar tienda&rdquo; y guardes los cambios.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Selector de Publicación */}
           <PublicVisibilityCard
             title="Publicar tienda"
             compact
@@ -389,11 +484,31 @@ export function CompanyInfoForm() {
             onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
           />
 
-          <div className="space-y-2">
-            <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
-            <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-              <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground whitespace-nowrap">
-                {typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/
+          {/* Dirección web / Slug */}
+          <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 space-y-3 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <Label htmlFor="slug" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <span>Ruta pública / Enlace web</span>
+                  <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-semibold text-muted-foreground">Tu dirección web</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Es la dirección que compartirás en redes sociales, WhatsApp y folletería comercial.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline cursor-pointer self-start sm:self-auto"
+              >
+                <Clipboard className="h-3.5 w-3.5" />
+                <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar URL completa'}</span>
+              </button>
+            </div>
+
+            <div className="flex overflow-hidden rounded-xl border border-border ring-offset-background focus-within:ring-2 focus-within:ring-primary shadow-xs">
+              <span className="flex shrink-0 items-center border-r bg-muted/60 px-3.5 text-xs font-mono font-medium text-muted-foreground select-none">
+                https://{typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/
               </span>
               <Input
                 id="slug"
@@ -402,18 +517,21 @@ export function CompanyInfoForm() {
                 placeholder="mi-empresa"
                 maxLength={50}
                 aria-invalid={!!errors.slug}
-                className="h-11 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="h-11 border-0 font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 text-sm"
               />
             </div>
+
             {errors.slug ? (
-              <p className="text-xs text-destructive">{errors.slug}</p>
+              <p className="text-xs font-medium text-destructive">{errors.slug}</p>
             ) : (
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                ⚠️ Si cambiás esta ruta, los enlaces antiguos que hayas compartido dejarán de funcionar.
-              </p>
+              <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <Info className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>Si cambiás esta ruta, los enlaces antiguos que hayas compartido previamente en redes o con clientes dejarán de funcionar.</span>
+              </div>
             )}
           </div>
 
+          {/* Marketplace General */}
           <PublicVisibilityCard
             title="Visibilidad en Marketplace General"
             badgeLabel="Directorio Público"
@@ -427,67 +545,115 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Identidad */}
-      <SectionCard id="website-identity" icon={Building2} tone="blue" title="Identidad" description="Nombre y logo de la empresa">
-        <div className="grid gap-8 md:grid-cols-3 md:gap-10">
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
-            <Input
-              id="companyName"
-              value={formData.name || ''}
-              onChange={(e) => handleChange('name', e.target.value)}
-              placeholder="Mi Empresa S.A."
-              maxLength={100}
-              aria-invalid={!!errors.name}
-              className="h-11"
-            />
-            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-          </div>
+      <SectionCard id="website-identity" icon={Building2} tone="blue" title="Identidad" description="Nombre, eslogan, logo y descripción de tu negocio">
+        <div className="space-y-6">
+          {/* Fila superior: Logo y Datos principales */}
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Tarjeta Visual de Logo (5 cols en desktop) */}
+            <div className="lg:col-span-5 rounded-2xl border border-border/80 bg-muted/20 p-4 sm:p-5 flex flex-col justify-between space-y-4 shadow-2xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-sm font-bold text-foreground">Logo de la empresa</Label>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                    {formData.logoUrl ? 'Logo cargado' : 'Opcional'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Se muestra en la cabecera, navegación y comprobantes de tu comercio.
+                </p>
+              </div>
 
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="companySlogan" className="text-sm font-medium">
-              Subtítulo / Eslogan <span className="text-xs font-normal text-muted-foreground">— debajo del nombre</span>
-            </Label>
-            <Input
-              id="companySlogan"
-              value={formData.slogan || ''}
-              onChange={(e) => handleChange('slogan', e.target.value)}
-              placeholder="Reparación y Servicios"
-              maxLength={100}
-              aria-invalid={!!errors.slogan}
-              className="h-11"
-            />
-            {errors.slogan && <p className="text-xs text-destructive">{errors.slogan}</p>}
-          </div>
+              {/* Caja de previsualización de Logo */}
+              <div className="flex items-center gap-4">
+                <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-background/90 p-2 shadow-xs overflow-hidden">
+                  {formData.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={formData.logoUrl}
+                      alt="Logo de la empresa"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary font-black text-lg">
+                        {formData.name ? formData.name.charAt(0).toUpperCase() : <Building2 className="h-5 w-5" />}
+                      </span>
+                      <span className="mt-1 text-[9px] font-semibold text-muted-foreground">Sin logo</span>
+                    </div>
+                  )}
+                </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="logoUrl" className="text-sm font-medium">Logo</Label>
-            <div className="flex items-start gap-3">
-              {formData.logoUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={formData.logoUrl}
-                  alt="Logo"
-                  className="h-11 w-11 shrink-0 rounded-lg border object-contain bg-muted"
-                />
-              )}
-              <div className="flex flex-1 gap-2">
-                <Input
-                  id="logoUrl"
-                  value={formData.logoUrl || ''}
-                  onChange={(e) => handleChange('logoUrl', e.target.value)}
-                  placeholder="https://cdn.miempresa.com/logo.png"
-                  maxLength={500}
-                  className="h-11"
-                />
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={logoUploading}
+                      className="h-8 gap-1.5 text-xs font-bold"
+                    >
+                      {logoUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      <span>{formData.logoUrl ? 'Cambiar logo' : 'Subir logo'}</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLogoMediaOpen(true)}
+                      className="h-8 gap-1.5 text-xs font-semibold"
+                    >
+                      <Images className="h-3.5 w-3.5 text-primary" />
+                      <span>Historial</span>
+                    </Button>
+                  </div>
+
+                  {formData.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleChange('logoUrl', '')}
+                      className="text-destructive text-[11px] font-semibold hover:underline flex items-center gap-1 self-start cursor-pointer"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>Quitar logo</span>
+                    </button>
+                  )}
+
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    Formatos recomendados: PNG o WebP con fondo transparente. Máx. 2MB.
+                  </p>
+                </div>
+              </div>
+
+              {/* Opción para enlace externo de logo */}
+              <div className="pt-2 border-t border-border/50">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={logoUploading}
-                  title="Subir imagen"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                  onClick={() => setShowAdvancedLogoUrl(!showAdvancedLogoUrl)}
+                  className="text-[11px] font-medium text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
                 >
-                  {logoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  <ExternalLink className="h-3 w-3" />
+                  <span>{showAdvancedLogoUrl ? 'Ocultar enlace web' : 'O pegar enlace web (URL)'}</span>
                 </button>
+                {showAdvancedLogoUrl ? (
+                  <div className="mt-2 space-y-1">
+                    <Input
+                      id="logoUrl"
+                      value={formData.logoUrl || ''}
+                      onChange={(e) => handleChange('logoUrl', e.target.value)}
+                      placeholder="https://cdn.miempresa.com/logo.png"
+                      maxLength={500}
+                      className="h-9 text-xs"
+                    />
+                    {errors.logoUrl && <p className="text-xs text-destructive">{errors.logoUrl}</p>}
+                  </div>
+                ) : (
+                  <input
+                    type="hidden"
+                    id="logoUrl"
+                    value={formData.logoUrl || ''}
+                    readOnly
+                  />
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -497,29 +663,109 @@ export function CompanyInfoForm() {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between text-[11px] pt-1">
-              {errors.logoUrl ? (
-                <p className="text-destructive font-medium">{errors.logoUrl}</p>
-              ) : (
-                <p className="text-muted-foreground">PNG/WebP/JPG hasta 2MB con fondo transparente.</p>
-              )}
-              <button
-                type="button"
-                onClick={() => setLogoMediaOpen(true)}
-                className="font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
-              >
-                <Images className="h-3.5 w-3.5" />
-                <span>Elegir del historial</span>
-              </button>
+
+            {/* Campos de Nombre y Eslogan (7 cols en desktop) */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="companyName" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <span>Nombre de la empresa</span>
+                    <span className="text-primary font-black">*</span>
+                  </Label>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {(formData.name || '').length} / 100
+                  </span>
+                </div>
+                <Input
+                  id="companyName"
+                  value={formData.name || ''}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="Mi Empresa S.A."
+                  maxLength={100}
+                  aria-invalid={!!errors.name}
+                  className="h-11 font-semibold text-base"
+                />
+                {errors.name ? (
+                  <p className="text-xs text-destructive font-medium">{errors.name}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Este es el nombre visible principal en el encabezado de tu tienda, tickets y buscador.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="companySlogan" className="text-sm font-bold text-foreground">
+                    Subtítulo / Eslogan
+                  </Label>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {(formData.slogan || '').length} / 100
+                  </span>
+                </div>
+                <Input
+                  id="companySlogan"
+                  value={formData.slogan || ''}
+                  onChange={(e) => handleChange('slogan', e.target.value)}
+                  placeholder="Ej: Especialistas en belleza y cuidado de la piel"
+                  maxLength={100}
+                  aria-invalid={!!errors.slogan}
+                  className="h-11"
+                />
+                {errors.slogan ? (
+                  <p className="text-xs text-destructive font-medium">{errors.slogan}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Aparece justo debajo del nombre de tu negocio en la cabecera.
+                  </p>
+                )}
+              </div>
+
+              {/* Vista rápida en vivo de cómo se verá la cabecera */}
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3">
+                <span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">
+                  Vista rápida de tu cabecera
+                </span>
+                <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-background p-2.5 shadow-2xs">
+                  {formData.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={formData.logoUrl}
+                      alt="Logo"
+                      className="h-9 w-9 shrink-0 rounded-lg object-contain border bg-muted/40 p-0.5"
+                    />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-sm">
+                      {formData.name ? formData.name.charAt(0).toUpperCase() : 'E'}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <p className="text-sm font-extrabold text-foreground truncate">
+                      {formData.name || 'Nombre de tu empresa'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {formData.slogan || 'Subtítulo o eslogan de tu negocio'}
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-primary/10 text-primary font-bold text-[10px] px-2 py-1 shrink-0">
+                    Contacto
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Descripción de la Empresa */}
-          <div className="space-y-2 md:col-span-3">
-            <Label htmlFor="companyDescription" className="text-sm font-medium flex items-center gap-1.5">
-              <span>Descripción de la empresa</span>
-              <span className="text-xs font-normal text-muted-foreground">— Se muestra en el detalle de tu tienda y en el Marketplace</span>
-            </Label>
+          <div className="space-y-2 pt-2 border-t border-border/60">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="companyDescription" className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <span>Descripción de la empresa</span>
+                <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-semibold text-muted-foreground">Marketplace y Ficha</span>
+              </Label>
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {(formData.description || '').length} / 1000
+              </span>
+            </div>
             <Textarea
               id="companyDescription"
               value={formData.description || ''}
@@ -530,7 +776,7 @@ export function CompanyInfoForm() {
               className="resize-y"
             />
             <p className="text-[11px] text-muted-foreground">
-              Esta descripción se mostrará en el directorio de empresas y en el modal de detalles para que los clientes conozcan tu propuesta.
+              Esta descripción se mostrará en el directorio de empresas y en el modal de detalles para que los clientes conozcan tu propuesta de valor.
             </p>
           </div>
         </div>

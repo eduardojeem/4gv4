@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { Check, Eye, Sparkles, X } from 'lucide-react'
+import Link from 'next/link'
+import { Check, ExternalLink, Eye, Laptop, Smartphone, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,6 +60,7 @@ export function StorefrontAppearanceEditor({
   const [previewStyleOverride, setPreviewStyleOverride] = useState<StorefrontStylePreference | null>(null)
   const [suggestionDismissed, setSuggestionDismissed] = useState(false)
   const [previewHeroActive, setPreviewHeroActive] = useState(false)
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
 
   const handleQuickPreview = (style: StorefrontStylePreference) => {
     setPreviewStyleOverride(style)
@@ -361,37 +363,131 @@ export function StorefrontAppearanceEditor({
       </div>
 
       {/* Vista previa fija mientras se edita (adaptada en tiempo real al rubro) */}
-      <aside className="lg:sticky lg:top-4 lg:self-start space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Vista previa ({verticalDef.verticalLabel})</p>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Label htmlFor="previewHeroToggle" className="cursor-pointer text-[11px]">Portada</Label>
-            <Switch
-              id="previewHeroToggle"
-              checked={previewHeroActive}
-              onCheckedChange={setPreviewHeroActive}
-              className="scale-75"
-            />
+      <aside className="lg:sticky lg:top-4 lg:self-start space-y-3">
+        {/* Barra superior de controles de la vista previa */}
+        <div className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-3 shadow-2xs">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-black tracking-tight text-foreground uppercase">
+                Vista previa en vivo
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {verticalDef.icon} {verticalDef.verticalLabel}
+              </p>
+            </div>
+            {/* Selector de dispositivo */}
+            <div className="flex rounded-lg border border-border/80 bg-muted/40 p-0.5" aria-label="Dispositivo de vista previa">
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('desktop')}
+                aria-label="Vista previa en computadora"
+                aria-pressed={previewDevice === 'desktop'}
+                title="Vista computadora"
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer',
+                  previewDevice === 'desktop'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Laptop className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewDevice('mobile')}
+                aria-label="Vista previa en celular"
+                aria-pressed={previewDevice === 'mobile'}
+                title="Vista celular"
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-md transition-all cursor-pointer',
+                  previewDevice === 'mobile'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+            <span className="font-semibold text-foreground/80">Mostrar portada</span>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="previewHeroToggle" className="cursor-pointer text-[11px]">
+                {previewHeroActive ? 'Activa' : 'Oculta'}
+              </Label>
+              <Switch
+                id="previewHeroToggle"
+                checked={previewHeroActive}
+                onCheckedChange={setPreviewHeroActive}
+                className="scale-75"
+              />
+            </div>
           </div>
         </div>
-        <StorefrontAppearancePreview
-          value={value}
-          style={activeStyle}
-          businessVertical={businessVertical}
-          heroEnabled={previewHeroActive}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            setPreviewStyleOverride(null)
-            setPreviewOpen(true)
-          }}
-          className="mt-3 w-full gap-1.5"
-        >
-          <Eye aria-hidden="true" className="h-4 w-4" />
-          {storePath ? 'Ver con mis productos' : 'Comparar plantillas'}
-        </Button>
+
+        {/* Marco de dispositivo */}
+        <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-muted/20 p-2 shadow-sm">
+          {previewDevice === 'desktop' ? (
+            <div className="space-y-1.5">
+              {/* Barra de ventana de navegador simulada */}
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/60 rounded-t-lg border-b border-border/60 text-[10px] text-muted-foreground select-none">
+                <span className="flex gap-1">
+                  <span className="h-2 w-2 rounded-full bg-red-400" />
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <span className="ml-2 font-mono truncate text-[9px] bg-background/80 px-2 py-0.5 rounded border border-border/60">
+                  {storePath ? storePath : `/${value.slug || 'inicio'}`}
+                </span>
+              </div>
+              <StorefrontAppearancePreview
+                value={value}
+                style={activeStyle}
+                businessVertical={businessVertical}
+                heroEnabled={previewHeroActive}
+                device="desktop"
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {/* Celular notch simulado */}
+              <div className="mx-auto flex h-2.5 w-14 rounded-full bg-foreground/20" />
+              <StorefrontAppearancePreview
+                value={value}
+                style={activeStyle}
+                businessVertical={businessVertical}
+                heroEnabled={previewHeroActive}
+                device="mobile"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Acciones principales */}
+        <div className="space-y-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setPreviewStyleOverride(null)
+              setPreviewOpen(true)
+            }}
+            className="w-full gap-1.5 font-bold shadow-xs hover:border-primary/50"
+          >
+            <Eye aria-hidden="true" className="h-4 w-4 text-primary" />
+            {storePath ? 'Ver con mis productos' : 'Comparar plantillas'}
+          </Button>
+
+          {storePath && (
+            <Button asChild variant="outline" size="sm" className="w-full gap-1.5 text-xs font-semibold">
+              <Link href={storePath} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Abrir tienda en nueva pestaña
+              </Link>
+            </Button>
+          )}
+        </div>
       </aside>
 
       {previewOpen && (

@@ -20,18 +20,22 @@ const HEADER_CLASSES = {
 
 /**
  * Maqueta en vivo del borrador: cambia al instante con cada clic, sin cargar la
- * tienda real. Refleja fielmente el rubro, la plantilla y los colores seleccionados.
+ * tienda real. Refleja fielmente el rubro, la plantilla, el dispositivo y los colores seleccionados.
  */
 export function StorefrontAppearancePreview({
   value,
   style,
   businessVertical,
   heroEnabled = false,
+  device = 'desktop',
+  className,
 }: {
   value: Partial<CompanyInfo>
   style: StorefrontStyle
   businessVertical?: string | null
   heroEnabled?: boolean
+  device?: 'desktop' | 'mobile'
+  className?: string
 }) {
   const header = HEADER_CLASSES[headerOptionFor(value.headerStyle)]
   const theme = getBrandTheme(value.brandColor)
@@ -39,12 +43,18 @@ export function StorefrontAppearancePreview({
   const portrait = usesPortraitMedia(style)
   const name = value.name?.trim() || 'Tu tienda'
   const verticalDef = getPremiumHeroForVertical(businessVertical)
+  const isMobile = device === 'mobile'
+  const products = isMobile ? verticalDef.previewProducts.slice(0, 2) : verticalDef.previewProducts
 
   return (
     <BrandColorScope
       brandColor={value.brandColor || 'blue'}
       customBrandColor={value.customBrandColor}
-      className="overflow-hidden rounded-xl border bg-background text-foreground shadow-sm"
+      className={cn(
+        'overflow-hidden rounded-xl border bg-background text-foreground shadow-sm transition-all duration-300',
+        isMobile ? 'max-w-[320px] mx-auto' : 'w-full',
+        className
+      )}
     >
       <div aria-hidden="true" className="select-none">
         {/* Barra superior de contacto */}
@@ -82,7 +92,13 @@ export function StorefrontAppearancePreview({
 
         {/* Portada Premium (si está activa) */}
         {heroEnabled ? (
-          <div className={cn('bg-gradient-to-br px-4 py-5 text-white', theme.hero, style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800', style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30', style === 'especial-cosmeticos' && 'from-rose-500 via-pink-400 to-amber-200 border-b border-rose-300')}>
+          <div className={cn(
+            'bg-gradient-to-br px-4 py-5 text-white',
+            theme.hero,
+            style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800',
+            style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30',
+            style === 'especial-cosmeticos' && 'from-rose-500 via-pink-400 to-amber-200 border-b border-rose-300'
+          )}>
             <span className={cn(STOREFRONT_EYEBROW_CLASS[style], 'text-[9px]', style !== 'sport' && style !== 'tech' && style !== 'market' && 'text-white/80')}>
               {verticalDef.hero.badge || 'Bienvenidos'}
             </span>
@@ -116,7 +132,7 @@ export function StorefrontAppearancePreview({
             </div>
             {/* Chips de categorías del rubro */}
             <div className="flex items-center gap-1 overflow-hidden">
-              {verticalDef.previewChips.slice(0, 4).map((chip, idx) => (
+              {verticalDef.previewChips.slice(0, isMobile ? 3 : 4).map((chip, idx) => (
                 <span
                   key={chip}
                   className={cn(
@@ -147,8 +163,8 @@ export function StorefrontAppearancePreview({
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {verticalDef.previewProducts.map((prod, index) => (
+          <div className={cn('grid gap-2', isMobile ? 'grid-cols-2' : 'grid-cols-3')}>
+            {products.map((prod, index) => (
               <div key={index} className={cn('space-y-1.5 border p-1.5 shadow-2xs', style === 'especial-para-barbero' ? 'rounded-xl border-zinc-200/90 bg-white dark:border-zinc-800 dark:bg-zinc-900' : 'rounded-lg border-border/50 bg-card')}>
                 <div className={cn('relative w-full bg-muted/70 flex items-center justify-center text-muted-foreground/50', radius, portrait ? 'aspect-[3/4]' : style === 'especial-para-barbero' ? 'aspect-square bg-zinc-50 dark:bg-zinc-950' : 'aspect-[4/3]')}>
                   <span className="text-base select-none">{verticalDef.icon}</span>

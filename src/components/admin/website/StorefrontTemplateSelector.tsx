@@ -518,7 +518,7 @@ function TemplateCard({
               </span>
             )}
           </span>
-          <span className="text-xs leading-snug text-muted-foreground line-clamp-1">{option.subtitle}</span>
+          {' '}<span className="text-xs leading-snug text-muted-foreground line-clamp-1">{option.subtitle}</span>{' '}
           {(option.isSuggested || option.isRecommended) && option.status === 'available' && (
             <span className="sr-only">{option.isRecommended ? 'Recomendada' : 'Sugerida'} </span>
           )}
