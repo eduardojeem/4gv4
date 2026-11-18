@@ -1,8 +1,15 @@
+import { redirect } from 'next/navigation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { OrganizationsDashboard, type SuperAdminOrganization } from '@/components/superadmin/organizations/organizations-dashboard'
+import { OrganizationsDashboard } from '@/components/superadmin/organizations/organizations-dashboard'
 import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
-import { getEffectiveOrganizationPlan, summarizeOrganizationMembers } from '@/lib/superadmin/organization-directory'
+import { getEffectiveOrganizationPlan } from '@/lib/superadmin/organization-directory'
+import type { SuperAdminOrganization } from '@/lib/superadmin/organization-list'
+import {
+  loadDirectoryStats,
+  type OrganizationDirectoryStats,
+} from '@/lib/superadmin/organization-directory-stats.server'
 import { loadPlanNames } from '@/lib/superadmin/plan-names'
+import { requireSuperAdmin } from '@/lib/superadmin/auth'
 
 type OrganizationRow = {
   id: string
@@ -16,54 +23,8 @@ type OrganizationRow = {
   business_vertical: string | null
   operating_model: string | null
   enabled_modules: string[] | null
-}
-
-type MemberRow = {
-  organization_id: string
-  user_id: string | null
-  role: string
-  status: string
-}
-
-/** Tope de paginas de `auth.users` que se leen (de a 1000). */
-const AUTH_PAGES_CAP = 20
-/** Organizaciones consultadas a la vez para ultima venta y productos. */
-const ACTIVITY_BATCH = 10
-
-/**
- * Ultimo acceso de cada usuario, de `auth.users`. `null` si no se pudo leer:
- * la tarjeta no afirma «nunca entro» sin el dato.
- */
-async function loadLastSignIns(admin: ReturnType<typeof createAdminSupabase>) {
-  const byUser = new Map<string, string | null>()
-  for (let page = 1; page <= AUTH_PAGES_CAP; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
-    if (error) return null
-    for (const user of data.users) byUser.set(user.id, user.last_sign_in_at ?? null)
-    if (data.users.length < 1000) break
-  }
-  return byUser
-}
-
-/** Ultima venta y productos cargados: si la organizacion opera, no solo como esta configurada. */
-async function loadActivity(admin: ReturnType<typeof createAdminSupabase>, organizationIds: string[]) {
-  const result = new Map<string, { lastSaleAt: string | null; products: number | null }>()
-  for (let index = 0; index < organizationIds.length; index += ACTIVITY_BATCH) {
-    const batch = organizationIds.slice(index, index + ACTIVITY_BATCH)
-    const rows = await Promise.all(batch.map(async (organizationId) => {
-      const [{ data: sale, error: saleError }, { count, error: productsError }] = await Promise.all([
-        admin.from('sales').select('created_at').eq('organization_id', organizationId)
-          .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        admin.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
-      ])
-      return [organizationId, {
-        lastSaleAt: saleError ? null : ((sale as { created_at: string | null } | null)?.created_at ?? null),
-        products: productsError ? null : count ?? 0,
-      }] as const
-    }))
-    rows.forEach(([organizationId, activity]) => result.set(organizationId, activity))
-  }
-  return result
+  storefront_public: boolean | null
+  erased_at: string | null
 }
 
 type SubscriptionRow = {
@@ -77,86 +38,73 @@ type SubscriptionRow = {
   cancel_at_period_end: boolean | null
 }
 
-type ProfileRow = {
-  id: string
-  email: string | null
-  full_name: string | null
+type ProfileRow = { id: string; email: string | null; full_name: string | null }
+type SettingsRow = { organization_id: string; currency: string | null; timezone: string | null }
+
+/** Lee por tandas de ids, sin cortar en 1000 filas. */
+async function fetchByOrganization<T>(
+  ids: string[],
+  query: (ids: string[], from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+) {
+  if (!ids.length) return []
+  const chunks = await Promise.all(chunkValues(ids).map((chunk) => fetchAllRows<T>((from, to) => query(chunk, from, to))))
+  return chunks.flat()
+}
+
+const EMPTY_STATS: OrganizationDirectoryStats = {
+  members_total: 0, members_active: 0, members_invited: 0, members_suspended: 0,
+  staff_total: 0, staff_active: 0, staff_invited: 0, staff_suspended: 0, customers_total: 0,
+  team_size: 0, last_access_at: null, last_sale_at: null, products_total: null,
 }
 
 export default async function SuperAdminOrganizationsPage() {
+  // El layout ya lo verifica, pero un layout no se vuelve a ejecutar en cada
+  // navegación del cliente y esta página lee con la service role.
+  const superAdmin = await requireSuperAdmin()
+  if (!superAdmin) redirect('/dashboard')
+
   const admin = createAdminSupabase()
 
   const organizations = await fetchAllRows<OrganizationRow>((from, to) =>
     admin
       .from('organizations')
-      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at, business_vertical, operating_model, enabled_modules')
+      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at, business_vertical, operating_model, enabled_modules, storefront_public, erased_at')
       .order('created_at', { ascending: false })
       .range(from, to)
   )
   const organizationIds = organizations.map((organization) => organization.id)
-  const ownerIds = organizations.map((organization) => organization.owner_id).filter(Boolean) as string[]
+  const ownerIds = [...new Set(organizations.map((organization) => organization.owner_id).filter(Boolean) as string[])]
 
-  const organizationIdChunks = chunkValues(organizationIds)
-  const [members, subscriptions, profiles, lastSignIns, activityByOrganization, planNames] = await Promise.all([
-    organizationIds.length
-      ? Promise.all(organizationIdChunks.map((ids) =>
-          fetchAllRows<MemberRow>((from, to) =>
-            admin
-              .from('organization_members')
-              .select('organization_id, user_id, role, status')
-              .in('organization_id', ids)
-              .range(from, to)
-          )
-        )).then((chunks) => chunks.flat())
-      : Promise.resolve([]),
-    organizationIds.length
-      ? Promise.all(organizationIdChunks.map((ids) =>
-          fetchAllRows<SubscriptionRow>((from, to) =>
-            admin
-              .from('subscriptions')
-              .select('organization_id, plan, status, payment_status, provider, trial_ends_at, current_period_ends_at, cancel_at_period_end')
-              .in('organization_id', ids)
-              .range(from, to)
-          )
-        )).then((chunks) => chunks.flat())
-      : Promise.resolve([]),
-    ownerIds.length
-      ? Promise.all(chunkValues(ownerIds).map(async (ids) => {
-          const { data, error } = await admin.from('profiles').select('id, email, full_name').in('id', ids)
-          if (error) throw new Error(error.message)
-          return (data ?? []) as ProfileRow[]
-        })).then((chunks) => chunks.flat())
-      : Promise.resolve([]),
-    loadLastSignIns(admin).catch(() => null),
-    loadActivity(admin, organizationIds),
+  const [subscriptions, profiles, settings, directoryStats, planNames] = await Promise.all([
+    fetchByOrganization<SubscriptionRow>(organizationIds, (ids, from, to) =>
+      admin
+        .from('subscriptions')
+        .select('organization_id, plan, status, payment_status, provider, trial_ends_at, current_period_ends_at, cancel_at_period_end')
+        .in('organization_id', ids)
+        .range(from, to)
+    ),
+    Promise.all(chunkValues(ownerIds).map(async (ids) => {
+      const { data, error } = await admin.from('profiles').select('id, email, full_name').in('id', ids)
+      if (error) throw new Error(error.message)
+      return (data ?? []) as ProfileRow[]
+    })).then((chunks) => chunks.flat()),
+    // Moneda y zona horaria, para que el modal no muestre los valores por defecto.
+    fetchByOrganization<SettingsRow>(organizationIds, (ids, from, to) =>
+      admin.from('organization_settings').select('organization_id, currency, timezone').in('organization_id', ids).range(from, to)
+    ).catch(() => [] as SettingsRow[]),
+    loadDirectoryStats(admin, organizations),
     loadPlanNames(admin).catch(() => ({})),
   ])
 
-  const membersByOrganization = new Map<string, MemberRow[]>()
-  members.forEach((member) => {
-    const current = membersByOrganization.get(member.organization_id) ?? []
-    current.push(member)
-    membersByOrganization.set(member.organization_id, current)
-  })
-
   const subscriptionsByOrganization = new Map(subscriptions.map((subscription) => [subscription.organization_id, subscription]))
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]))
+  const settingsByOrganization = new Map(settings.map((row) => [row.organization_id, row]))
 
   const dashboardOrganizations: SuperAdminOrganization[] = organizations.map((organization) => {
-    const orgMembers = membersByOrganization.get(organization.id) ?? []
     const subscription = subscriptionsByOrganization.get(organization.id)
     const ownerProfile = organization.owner_id ? profilesById.get(organization.owner_id) : null
-    const memberSummary = summarizeOrganizationMembers(orgMembers)
-    const activity = activityByOrganization.get(organization.id)
-
-    // El acceso mas reciente del equipo (y del dueño): los clientes de la
-    // tienda web no dicen si la empresa usa el sistema.
-    const teamUserIds = new Set([
-      ...(organization.owner_id ? [organization.owner_id] : []),
-      ...orgMembers.filter((member) => member.role !== 'customer').map((member) => member.user_id).filter(Boolean) as string[],
-    ])
-    const teamAccesses = lastSignIns ? [...teamUserIds].map((userId) => lastSignIns.get(userId) ?? null) : []
-    const lastAccessAt = teamAccesses.filter(Boolean).sort().at(-1) ?? null
+    const orgSettings = settingsByOrganization.get(organization.id)
+    const stats = directoryStats.stats.get(organization.id) ?? EMPTY_STATS
 
     return {
       id: organization.id,
@@ -175,22 +123,29 @@ export default async function SuperAdminOrganizationsPage() {
       trial_ends_at: subscription?.trial_ends_at || null,
       current_period_ends_at: subscription?.current_period_ends_at || null,
       cancel_at_period_end: Boolean(subscription?.cancel_at_period_end),
-      members_total: orgMembers.length,
-      members_active: orgMembers.filter((member) => member.status === 'active').length,
-      members_invited: orgMembers.filter((member) => member.status === 'invited').length,
-      members_suspended: orgMembers.filter((member) => member.status === 'suspended').length,
-      staff_total: memberSummary.staffTotal,
-      staff_active: memberSummary.staffActive,
-      staff_invited: memberSummary.staffInvited,
-      staff_suspended: memberSummary.staffSuspended,
-      customers_total: memberSummary.customersTotal,
+      members_total: stats.members_total,
+      members_active: stats.members_active,
+      members_invited: stats.members_invited,
+      members_suspended: stats.members_suspended,
+      staff_total: stats.staff_total,
+      staff_active: stats.staff_active,
+      staff_invited: stats.staff_invited,
+      staff_suspended: stats.staff_suspended,
+      customers_total: stats.customers_total,
       business_vertical: organization.business_vertical || 'general',
       operating_model: organization.operating_model || 'retail',
-      enabled_modules: organization.enabled_modules || [],
-      last_access_known: Boolean(lastSignIns) && teamUserIds.size > 0,
-      last_access_at: lastAccessAt,
-      last_sale_at: activity?.lastSaleAt ?? null,
-      products_total: activity ? activity.products : null,
+      // `null` = las funciones del plan. Antes se convertía en `[]` y la
+      // fila decía «Sin funciones habilitadas».
+      enabled_modules: organization.enabled_modules,
+      last_access_known: directoryStats.accessKnown && stats.team_size > 0,
+      last_access_at: stats.last_access_at,
+      last_sale_at: stats.last_sale_at,
+      activity_known: directoryStats.accessKnown,
+      products_total: stats.products_total,
+      currency: orgSettings?.currency ?? null,
+      timezone: orgSettings?.timezone ?? null,
+      storefront_public: organization.storefront_public,
+      erased_at: organization.erased_at,
     }
   })
 

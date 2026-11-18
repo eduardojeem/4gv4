@@ -27,8 +27,9 @@ export function describeLastAccess(value: string | null | undefined, now = Date.
   if (days === 0) return { label: 'Hoy', stale }
   if (days === 1) return { label: 'Ayer', stale }
   if (days < 30) return { label: `Hace ${days} días`, stale }
-  const months = Math.floor(days / 30)
-  if (months < 12) return { label: `Hace ${months} ${months === 1 ? 'mes' : 'meses'}`, stale }
+  // Entre los días 360 y 364 daba «Hace 12 meses»: hasta el año se cuenta en meses.
+  const months = Math.min(11, Math.floor(days / 30))
+  if (days < 365) return { label: `Hace ${months} ${months === 1 ? 'mes' : 'meses'}`, stale }
   const years = Math.floor(days / 365)
   return { label: `Hace ${years} ${years === 1 ? 'año' : 'años'}`, stale }
 }

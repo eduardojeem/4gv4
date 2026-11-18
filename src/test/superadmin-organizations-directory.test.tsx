@@ -58,7 +58,7 @@ describe('directorio de organizaciones', () => {
 
 describe('filtros claros del directorio', () => {
  it('encuentra empresas aunque la búsqueda omita acentos', () => {
-  render(<OrganizationsDashboard organizations={[org({name:'Tecnología Sur'}),org({id:'otra',name:'Moda Norte',slug:'moda-norte'})]} referenceTime={AHORA}/>);
+  render(<OrganizationsDashboard organizations={[org({name:'Tecnología Sur'}),org({id:'otra',name:'Moda Norte',slug:'moda-norte',business_vertical:'clothing'})]} referenceTime={AHORA}/>);
   fireEvent.change(screen.getByPlaceholderText('Buscar empresa, slug, owner...'), {target:{value:'tecnologia'}});
   expect(screen.getAllByRole('link',{name:'Tecnología Sur'}).length).toBeGreaterThan(0);
   expect(screen.queryByRole('link',{name:'Moda Norte'})).not.toBeInTheDocument();
@@ -69,8 +69,27 @@ describe('filtros claros del directorio', () => {
   expect(screen.queryByRole('link',{name:'HCA Celular'})).not.toBeInTheDocument();
   fireEvent.change(screen.getByPlaceholderText('Buscar empresa, slug, owner...'),{target:{value:'no existe'}});
   expect(screen.getAllByText('No se encontraron organizaciones con estos filtros').length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole('button',{name:'Limpiar filtros'}));
+  fireEvent.click(screen.getByRole('button',{name:'Mostrar todas'}));
   expect(screen.getAllByRole('link',{name:'HCA Celular'}).length).toBeGreaterThan(0);
+ });
+ it('oculta las dadas de baja salvo en su propio filtro', () => {
+  render(<OrganizationsDashboard organizations={[org({}),org({id:'baja',name:'Empresa dada de baja',slug:'baja-1',erased_at:'2026-09-01T00:00:00Z',subscription_status:null})]} referenceTime={AHORA}/>);
+  expect(screen.queryByRole('link',{name:'Empresa dada de baja'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:/Dadas de baja/}));
+  expect(screen.getAllByRole('link',{name:'Empresa dada de baja'}).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button',{name:'Más acciones de Empresa dada de baja'})).not.toBeInTheDocument();
+ });
+ it('por defecto pone primero a la que tiene problema de cobro', () => {
+  render(<OrganizationsDashboard organizations={[org({}),org({id:'mora',name:'Moda Norte',slug:'moda-norte',subscription_status:'past_due',created_at:'2024-01-01T00:00:00Z'})]} referenceTime={AHORA}/>);
+  const rows=within(screen.getByRole('table',{name:/Directorio de organizaciones/})).getAllByRole('row');
+  expect(within(rows[1]).getByRole('link',{name:'Moda Norte'})).toBeInTheDocument();
+ });
+ it('permite elegir filas y exportar o copiar solo esas', () => {
+  render(<OrganizationsDashboard organizations={[org({}),org({id:'otra',name:'Moda Norte',slug:'moda-norte'})]} referenceTime={AHORA}/>);
+  fireEvent.click(screen.getByRole('checkbox',{name:'Seleccionar Moda Norte'}));
+  expect(screen.getByRole('region',{name:'Acciones sobre las seleccionadas'})).toHaveTextContent('1 seleccionada');
+  fireEvent.click(screen.getByRole('checkbox',{name:'Seleccionar las organizaciones de esta página'}));
+  expect(screen.getByRole('region',{name:'Acciones sobre las seleccionadas'})).toHaveTextContent('2 seleccionadas');
  });
 });
 
