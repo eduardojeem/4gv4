@@ -24,6 +24,7 @@ import type { WebsiteSettings } from '@/types/website-settings'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { isSectionRecommended, type WebsiteFocus, type WebsiteSectionId } from '@/lib/website/setup-checklist'
 import { isSectionAvailable, type SectionAvailability } from '@/lib/website/section-availability'
+import { getSectionVisualTheme, SECTION_GROUP_THEMES } from '@/lib/website/section-visual-themes'
 
 interface NavigationItem {
   id: string
@@ -286,6 +287,7 @@ export function WebsiteNavigation({
       item.id === 'services' && !servicesModuleEnabled
         ? 'Módulo inactivo en tu plan'
         : item.description
+    const theme = getSectionVisualTheme(item.id)
 
     return (
       <button
@@ -295,21 +297,24 @@ export function WebsiteNavigation({
         aria-current={isSelected ? 'page' : undefined}
         onClick={() => onChange(item.id)}
         className={cn(
-          'group relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring select-none',
+          'group relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring select-none',
           isSelected
-            ? 'bg-primary/10 text-primary shadow-2xs border border-primary/25'
+            ? cn(theme.activeBg, theme.activeBorder, 'shadow-2xs border')
             : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground border border-transparent'
         )}
       >
         {isSelected && (
-          <span className="absolute -left-1 top-2.5 bottom-2.5 w-1 rounded-r-full bg-primary" aria-hidden="true" />
+          <span
+            className={cn('absolute -left-1 top-2.5 bottom-2.5 w-1 rounded-r-full shadow-xs', theme.activeIndicator)}
+            aria-hidden="true"
+          />
         )}
         <div
           className={cn(
-            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200',
             isSelected
-              ? 'bg-primary text-primary-foreground shadow-2xs'
-              : 'bg-muted/80 text-muted-foreground group-hover:bg-muted group-hover:text-foreground'
+              ? cn(theme.iconBg, theme.iconColor, theme.borderTone, 'shadow-2xs ring-2 ring-background scale-105')
+              : cn(theme.iconBg, theme.iconColor, theme.borderTone, 'group-hover:scale-105 group-hover:shadow-xs')
           )}
           aria-hidden="true"
         >
@@ -317,14 +322,19 @@ export function WebsiteNavigation({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1">
-            <span className={cn('truncate text-xs leading-tight', isSelected ? 'font-semibold text-primary' : 'text-foreground')}>
+            <span
+              className={cn(
+                'truncate text-xs leading-tight transition-colors',
+                isSelected ? cn('font-bold', theme.activeText) : 'text-foreground font-medium group-hover:text-foreground'
+              )}
+            >
               {item.label}
             </span>
             {badge && (
               <span
                 aria-hidden="true"
                 className={cn(
-                  'ml-1 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] leading-none border',
+                  'ml-1 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none border',
                   badge.tone === 'emerald' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
                   badge.tone === 'amber' && 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
                   badge.tone === 'blue' && 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400',
@@ -340,7 +350,7 @@ export function WebsiteNavigation({
           </p>
         </div>
         {isSelected && (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-primary opacity-80" aria-hidden="true" />
+          <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 opacity-90', theme.iconColor)} aria-hidden="true" />
         )}
       </button>
     )
@@ -394,6 +404,7 @@ export function WebsiteNavigation({
           {chipItems.map((item) => {
             const Icon = item.icon
             const isSelected = value === item.id
+            const theme = getSectionVisualTheme(item.id)
             return (
               <button
                 key={item.id}
@@ -402,11 +413,11 @@ export function WebsiteNavigation({
                 className={cn(
                   'flex items-center gap-1.5 shrink-0 rounded-full px-3 py-1.5 text-xs transition-all border',
                   isSelected
-                    ? 'border-primary bg-primary text-primary-foreground shadow-xs font-semibold'
+                    ? cn(theme.activeBg, theme.activeBorder, theme.activeText, 'shadow-xs font-semibold')
                     : 'border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className={cn('h-3.5 w-3.5', isSelected ? theme.iconColor : 'text-muted-foreground')} />
                 <span>{item.short}</span>
               </button>
             )
@@ -421,14 +432,29 @@ export function WebsiteNavigation({
         </div>
 
         <div className="space-y-3 overflow-y-auto pr-1.5 pt-3 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
-          {groups.map((group, groupIdx) => (
-            <div key={group.title} className={cn(groupIdx > 0 && 'border-t border-border/40 pt-3')}>
-              <p className="mb-1.5 px-2 text-[11px] uppercase tracking-wider text-muted-foreground/80">
-                {group.title}
-              </p>
-              <div className="space-y-0.5">{group.items.map(renderItem)}</div>
-            </div>
-          ))}
+          {groups.map((group, groupIdx) => {
+            const groupTheme =
+              group.title === 'Datos y venta'
+                ? SECTION_GROUP_THEMES.sales
+                : group.title === 'Diseño de la tienda'
+                ? SECTION_GROUP_THEMES.design
+                : group.title === 'Servicios y turnos'
+                ? SECTION_GROUP_THEMES.services
+                : SECTION_GROUP_THEMES.overview
+
+            return (
+              <div key={group.title} className={cn(groupIdx > 0 && 'border-t border-border/40 pt-3')}>
+                <div className="mb-2 flex items-center justify-between px-2">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', groupTheme.dot)} />
+                    <span>{group.title}</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 font-medium">{group.items.length}</span>
+                </div>
+                <div className="space-y-0.5">{group.items.map(renderItem)}</div>
+              </div>
+            )
+          })}
 
           {extra.length > 0 && (
             <div className="border-t border-border/40 pt-3">

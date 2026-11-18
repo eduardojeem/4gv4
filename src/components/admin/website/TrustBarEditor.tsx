@@ -175,6 +175,7 @@ export function TrustBarEditor({
         title="Dónde se muestran"
         description="Una franja con pocas ventajas concretas, cerca del inicio de tu tienda."
         icon={ShieldCheck}
+        tone="sky"
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3.5">

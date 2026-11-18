@@ -203,8 +203,8 @@ export default function WebsiteAdminPage() {
       {/* Encabezado: estado, ver tienda y lo demás en un menú */}
       <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
-            <Globe className="h-5 w-5 text-muted-foreground" />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent text-primary shadow-xs">
+            <Globe className="h-5 w-5" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import type { WebsiteSectionAnchor, WebsiteSectionId, WebsiteSetupChecklist, WebsiteSetupStep } from '@/lib/website/setup-checklist'
 import type { SectionAvailability, WebsiteEditableSection } from '@/lib/website/section-availability'
 import { STOREFRONT_STYLE_LABELS, STOREFRONT_TEMPLATES_METADATA, type StorefrontStyle } from '@/lib/website/storefront-style'
+import { getSectionVisualTheme } from '@/lib/website/section-visual-themes'
 
 type Navigate = (section: Exclude<WebsiteSectionId, 'overview'>, anchor?: WebsiteSectionAnchor) => void
 
@@ -75,9 +76,25 @@ function AccountSections({ account, availability }: { account: AccountModules; a
         </ul>
       </div>
 
-      <p className="mt-4 text-xs text-muted-foreground">
-        {available.length} secciones disponibles: {available.map(([id]) => SECTION_LABELS[id]).join(', ')}.
-      </p>
+      <div className="mt-4">
+        <p className="text-xs text-muted-foreground font-medium">
+          {available.length} secciones disponibles en tu tienda:
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Secciones disponibles">
+          {available.map(([id]) => {
+            const theme = getSectionVisualTheme(id)
+            return (
+              <span
+                key={id}
+                className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border shadow-2xs', theme.badgeTone)}
+              >
+                <span className={cn('h-1.5 w-1.5 rounded-full', theme.activeIndicator)} />
+                <span>{SECTION_LABELS[id]}</span>
+              </span>
+            )
+          })}
+        </div>
+      </div>
 
       {locked.length > 0 && (
         <div className="mt-3 rounded-xl bg-muted/40 p-3">
@@ -102,19 +119,34 @@ function AccountSections({ account, availability }: { account: AccountModules; a
 }
 
 function StepRow({ step, index, onNavigate }: { step: WebsiteSetupStep; index?: number; onNavigate: Navigate }) {
+  const theme = getSectionVisualTheme(step.section)
+
   return (
     <li className="flex items-start gap-3 py-3">
       {step.done ? (
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Listo" />
       ) : index !== undefined ? (
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] text-muted-foreground" aria-label="Pendiente">
+        <span
+          className={cn(
+            'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold shadow-xs',
+            theme.iconBg,
+            theme.iconColor,
+            theme.borderTone
+          )}
+          aria-label="Pendiente"
+        >
           {index + 1}
         </span>
       ) : (
-        <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground/60" aria-label="Pendiente" />
+        <Circle className={cn('mt-0.5 h-5 w-5 shrink-0', theme.iconColor)} aria-label="Pendiente" />
       )}
       <div className="min-w-0 flex-1">
-        <p className={cn('text-sm', step.done ? 'text-muted-foreground' : 'font-semibold text-foreground')}>{step.title}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={cn('text-sm', step.done ? 'text-muted-foreground' : 'font-semibold text-foreground')}>{step.title}</p>
+          <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold border leading-none', theme.badgeTone)}>
+            {SECTION_LABELS[step.section]}
+          </span>
+        </div>
         <p className="mt-0.5 text-xs text-muted-foreground">{step.done ? step.why : step.missing ?? step.why}</p>
       </div>
       <Button

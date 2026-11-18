@@ -1076,6 +1076,7 @@ export function PromotionalCarouselEditor({
 
       <SectionCard
         icon={GalleryHorizontalEnd}
+        tone="fuchsia"
         title={title}
         description={description}
       >

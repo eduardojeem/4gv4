@@ -690,7 +690,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
             </div>
           </section>
 
-          <SectionCard icon={Type} title="Textos" description="Una frase corta, un título claro y una línea que diga qué ofrecés.">
+          <SectionCard icon={Type} tone="purple" title="Textos" description="Una frase corta, un título claro y una línea que diga qué ofrecés.">
             <div className="space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -756,6 +756,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           {fields.buttons ? (
             <SectionCard
               icon={MousePointerClick}
+              tone="violet"
               title="Botones"
               description={isServicesStyle ? 'Reservar es lo principal; el otro botón abre una conversación por WhatsApp.' : 'Qué puede hacer el cliente: ver tus productos o escribirte.'}
             >
@@ -833,7 +834,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           )}
 
           {isServicesStyle && (
-            <SectionCard icon={Building2} title="Se completa solo" description="Estas partes de la portada salen de los datos de tu negocio y de tu agenda.">
+            <SectionCard icon={Building2} tone="blue" title="Se completa solo" description="Estas partes de la portada salen de los datos de tu negocio y de tu agenda.">
               <ul className="divide-y text-sm">
                 <li className="flex items-center justify-between gap-3 py-2.5">
                   <span className="flex min-w-0 items-center gap-2">
@@ -870,7 +871,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           )}
 
           {fields.stats && (
-            <SectionCard icon={BarChart3} title="Números de confianza" description="Cifras reales y/o canales oficiales verificados en tu portada.">
+            <SectionCard icon={BarChart3} tone="emerald" title="Números de confianza" description="Cifras reales y/o canales oficiales verificados en tu portada.">
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3">
                   <Label htmlFor="hero-stats-enabled" className="cursor-pointer text-sm">Mostrar elementos de confianza</Label>

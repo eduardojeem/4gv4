@@ -160,6 +160,7 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
 
       <SectionCard
         icon={ShoppingBag}
+        tone="rose"
         title="Visibilidad y contenido"
         description="Controla como aparece la seccion de ofertas en la portada y en su pagina publica"
       >

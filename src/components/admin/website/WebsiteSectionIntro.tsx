@@ -1,8 +1,41 @@
 'use client'
 
-import { HelpCircle } from 'lucide-react'
+import {
+  Award,
+  Briefcase,
+  Building2,
+  CalendarCheck2,
+  CreditCard,
+  Footprints,
+  GalleryHorizontalEnd,
+  HelpCircle,
+  Images,
+  MapPin,
+  Megaphone,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+  type LucideIcon,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { getSectionVisualTheme, SECTION_GROUP_THEMES } from '@/lib/website/section-visual-themes'
+import { cn } from '@/lib/utils'
+
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  company: Building2,
+  checkout: CreditCard,
+  hero: Sparkles,
+  carousel: GalleryHorizontalEnd,
+  trust_bar: ShieldCheck,
+  offers: Tag,
+  brands: Award,
+  announcement: Megaphone,
+  services: Briefcase,
+  booking: CalendarCheck2,
+  gallery: Images,
+  process: Footprints,
+}
 
 export const WEBSITE_SECTION_HELP = {
   company: {
@@ -81,17 +114,91 @@ export const WEBSITE_SECTION_HELP = {
 
 export function WebsiteSectionIntro({ section }: { section: keyof typeof WEBSITE_SECTION_HELP }) {
   const help = WEBSITE_SECTION_HELP[section]
-  return <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-muted/20 p-4">
-    <div className="min-w-0 flex-1"><h2 className="text-base font-semibold">{help.title}</h2><p className="mt-1 text-sm text-muted-foreground">{help.description}</p></div>
-    <Dialog>
-      <DialogTrigger asChild><Button type="button" size="sm" variant="outline"><HelpCircle className="mr-2 h-4 w-4" />Cómo funciona</Button></DialogTrigger>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>{help.title}</DialogTitle><DialogDescription>{help.description}</DialogDescription></DialogHeader>
-        <h3 className="font-medium">Paso a paso</h3>
-        <ol className="list-decimal space-y-2 pl-5 text-sm">{help.steps.map(step => <li key={step}>{step}</li>)}</ol>
-        <div className="rounded-lg bg-muted p-4"><h3 className="mb-2 font-medium">Ejemplos</h3><ul className="list-disc space-y-2 pl-4 text-sm">{help.examples.map(example => <li key={example}>{example}</li>)}</ul></div>
-        <p className="text-sm text-muted-foreground">{help.note}</p>
-      </DialogContent>
-    </Dialog>
-  </div>
+  const theme = getSectionVisualTheme(section)
+  const group = SECTION_GROUP_THEMES[theme.group] ?? SECTION_GROUP_THEMES.overview
+  const Icon = SECTION_ICONS[section] ?? Sparkles
+
+  return (
+    <div className={cn(
+      'mb-5 rounded-2xl border bg-gradient-to-r p-4 sm:p-5 shadow-2xs transition-all duration-300 backdrop-blur-xs',
+      theme.gradientBg
+    )}>
+      {/* Barra superior de categoría y ubicación en la tienda */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3 mb-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border', group.pill)}>
+            <span className={cn('h-1.5 w-1.5 rounded-full', group.dot)} />
+            <span>{group.label}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+            <MapPin className="h-3 w-3 text-muted-foreground/70" />
+            <span>{theme.location}</span>
+          </span>
+        </div>
+
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5 rounded-full bg-background/80 hover:bg-background border-border/70"
+            >
+              <HelpCircle className="h-3.5 w-3.5 text-primary" />
+              <span>Cómo funciona</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <div className="flex items-center gap-2.5 mb-1">
+                <span className={cn('flex h-8 w-8 items-center justify-center rounded-xl border', theme.iconBg, theme.iconColor, theme.borderTone)}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div>
+                  <DialogTitle>{help.title}</DialogTitle>
+                  <span className={cn('text-[11px] font-semibold', group.pill)}>{group.label}</span>
+                </div>
+              </div>
+              <DialogDescription>{help.description}</DialogDescription>
+            </DialogHeader>
+            <h3 className="font-semibold text-sm">Paso a paso</h3>
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-foreground/90">
+              {help.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4">
+              <h3 className="mb-2 font-semibold text-xs uppercase tracking-wider text-muted-foreground">Ejemplos por rubro</h3>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs sm:text-sm text-foreground/80">
+                {help.examples.map((example) => (
+                  <li key={example}>{example}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">{help.note}</p>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Contenido principal con ícono colorido destacado y textos */}
+      <div className="flex items-start gap-3.5">
+        <div className={cn(
+          'flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl border shadow-xs transition-transform duration-300 hover:scale-105',
+          theme.iconBg,
+          theme.iconColor,
+          theme.borderTone
+        )}>
+          <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-snug">
+            {help.title}
+          </h2>
+          <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
+            {help.description}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
 }

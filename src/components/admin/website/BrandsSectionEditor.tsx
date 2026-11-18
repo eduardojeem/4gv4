@@ -359,6 +359,7 @@ export function BrandsSectionEditor() {
         title="Marcas de tu negocio"
         description="Seleccioná marcas reales de tu oferta y revisá cómo se verán antes de guardar."
         icon={Tag}
+        tone="amber"
       >
         <div className="space-y-6">
           <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
@@ -440,6 +441,7 @@ export function BrandsSectionEditor() {
         title="Dónde mostrar las marcas"
         description="Elegí en qué páginas públicas de la tienda querés mostrar la cinta continua de marcas."
         icon={Globe}
+        tone="amber"
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
           {/* Inicio / Portada */}
@@ -509,6 +511,7 @@ export function BrandsSectionEditor() {
         title="Marcas de tu Tienda y Catálogo"
         description="Marcas registradas en tu sección de Marcas (/dashboard/brands) y asociadas a tus productos. Podés sumarlas a la marquesina o sincronizarlas todas con 1 clic."
         icon={Building2}
+        tone="amber"
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-muted/20 border border-border/70">
@@ -646,6 +649,7 @@ export function BrandsSectionEditor() {
         title="Agregar otra marca o explorar sugerencias"
         description="Agregá una marca propia. Las sugerencias disponibles dependen del rubro y no se agregan automáticamente."
         icon={Sparkles}
+        tone="amber"
       >
         {guidance.categories.length === 0 && <p className="text-xs text-muted-foreground">Para este rubro, elegí marcas de tu catálogo o ingresá una propia. No se agregan ejemplos genéricos.</p>}
         <div className="flex flex-wrap gap-2.5">

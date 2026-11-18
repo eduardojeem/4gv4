@@ -376,6 +376,7 @@ export function CompanyInfoForm() {
       <SectionCard
         id="website-visibility"
         icon={Globe}
+        tone="emerald"
         title="Enlace y publicación de tu tienda"
         description="Estado de publicación en vivo, dirección web pública y visibilidad en el Marketplace"
       >
@@ -426,7 +427,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Identidad */}
-      <SectionCard id="website-identity" icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
+      <SectionCard id="website-identity" icon={Building2} tone="blue" title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
           <div className="space-y-2 md:col-span-1">
             <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
@@ -536,7 +537,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Personalización visual y plantilla */}
-      <SectionCard id="website-appearance" icon={Sparkles} title="Personalización visual y plantilla" description="Plantilla de diseño, color de marca y encabezado de tu tienda.">
+      <SectionCard id="website-appearance" icon={Sparkles} tone="purple" title="Personalización visual y plantilla" description="Plantilla de diseño, color de marca y encabezado de tu tienda.">
         <StorefrontAppearanceEditor
           value={formData}
           onChange={handleAppearanceChange}
@@ -548,7 +549,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Contacto */}
-      <SectionCard id="website-contact" icon={Phone} title="Información de contacto" description="Datos mostrados en el portal público">
+      <SectionCard id="website-contact" icon={Phone} tone="teal" title="Información de contacto" description="Datos mostrados en el portal público">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-medium">
@@ -738,7 +739,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Redes sociales */}
-      <SectionCard collapsible icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
+      <SectionCard collapsible icon={MessageCircle} tone="fuchsia" title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
         <div className="grid gap-8 md:grid-cols-3">
           {[
             { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
@@ -764,7 +765,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Horarios */}
-      <SectionCard collapsible icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
+      <SectionCard collapsible icon={Clock} tone="amber" title="Horarios de atención" description="Horarios mostrados a los clientes">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="weekdays" className="text-sm font-medium">Lunes - Viernes</Label>
@@ -782,7 +783,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Legal */}
-      <SectionCard collapsible icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
+      <SectionCard collapsible icon={Building2} tone="indigo" title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ruc" className="text-sm font-medium">
