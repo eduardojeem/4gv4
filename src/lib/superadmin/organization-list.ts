@@ -81,18 +81,40 @@ export function normalizeSubscriptionStatus(status: string | null | undefined) {
 }
 
 const BLOCKING_STATUSES = new Set(['past_due', 'unpaid', 'suspended'])
-const FAILED_PAYMENTS = new Set(['failed', 'unpaid'])
+type BillingFields = Pick<SuperAdminOrganization, 'plan' | 'subscription_status' | 'payment_status' | 'trial_ends_at' | 'current_period_ends_at'>
 
 /**
- * Hay un problema de cobro si el estado lo dice o si, con la suscripción
- * vigente, el último pago falló: antes se miraba solo el estado.
+ * La prueba terminó sin pago: `expire_trials()` la pasa a `past_due` con
+ * `payment_status = 'unpaid'`. No es un cobro rechazado, es un cliente que
+ * todavía no pagó nunca.
  */
-export function hasBillingProblem(org: Pick<SuperAdminOrganization, 'subscription_status' | 'payment_status'>) {
-  const status = normalizeSubscriptionStatus(org.subscription_status)
-  if (status && BLOCKING_STATUSES.has(status)) return true
-  const payment = org.payment_status?.toLowerCase() ?? ''
-  return (status === 'active' || status === 'trialing') && FAILED_PAYMENTS.has(payment)
+export function isExpiredTrial(org: BillingFields, now: number) {
+  if (normalizeSubscriptionStatus(org.subscription_status) !== 'past_due') return false
+  const trialEnd = timeOf(org.trial_ends_at)
+  if (trialEnd === null || trialEnd > now) return false
+  const periodEnd = timeOf(org.current_period_ends_at)
+  // Si tuvo un período pago después de la prueba, el vencido es ese período.
+  return periodEnd === null || periodEnd <= trialEnd
 }
+
+/**
+ * Problema de cobro: un período pago que venció, quedó impago o se suspendió,
+ * o un pago rechazado con la suscripción vigente.
+ *
+ * No cuentan: el plan gratis (no se cobra), una prueba que terminó sin pagar
+ * (se marca aparte) ni un `payment_status = 'unpaid'` que quedó de antes:
+ * reactivar desde el superadmin no lo limpia, y marcaba como morosas a
+ * empresas activas.
+ */
+export function hasBillingProblem(org: BillingFields, now = Date.now()) {
+  if (org.plan?.toUpperCase() === 'FREE') return false
+  const status = normalizeSubscriptionStatus(org.subscription_status)
+  if (status && BLOCKING_STATUSES.has(status)) return !isExpiredTrial(org, now)
+  return (status === 'active' || status === 'trialing') && org.payment_status?.toLowerCase() === 'failed'
+}
+
+/** Días sin vender a partir de los cuales una empresa sin accesos se considera sin uso. */
+const RECENT_SALE_DAYS = 30
 
 /** La fecha que importa según el estado: fin de prueba o fin del período. */
 export function dueDateOf(org: Pick<SuperAdminOrganization, 'subscription_status' | 'trial_ends_at' | 'current_period_ends_at'>) {
@@ -111,14 +133,19 @@ export function daysUntilDue(org: SuperAdminOrganization, now: number) {
   return Math.ceil((time - now) / DAY)
 }
 
-export type AttentionReason = 'billing' | 'due' | 'inactive' | 'no_subscription'
+export type AttentionReason = 'billing' | 'trial_expired' | 'due' | 'inactive' | 'no_subscription'
 
 export type OrganizationAttention = {
   erased: boolean
   billingProblem: boolean
+  /** La prueba terminó y no pagó. */
+  trialExpired: boolean
   /** Vence (o venció) dentro de `DUE_SOON_DAYS`. */
   dueSoon: boolean
-  /** Más de un mes sin que nadie del equipo entre, o nunca entró. Solo con el dato. */
+  /**
+   * Más de un mes sin que nadie del equipo entre (o nunca entró) y sin ventas
+   * en ese tiempo. Solo con el dato.
+   */
   inactive: boolean
   noSubscription: boolean
   /** 0 = lo más urgente; 4 = sin alertas. */
@@ -128,18 +155,24 @@ export type OrganizationAttention = {
 
 export function getOrganizationAttention(org: SuperAdminOrganization, now: number): OrganizationAttention {
   const erased = Boolean(org.erased_at)
-  const billingProblem = !erased && hasBillingProblem(org)
+  const billingProblem = !erased && hasBillingProblem(org, now)
+  const trialExpired = !erased && org.plan?.toUpperCase() !== 'FREE' && isExpiredTrial(org, now)
   const days = daysUntilDue(org, now)
   const dueSoon = !erased && days !== null && days <= DUE_SOON_DAYS && !org.cancel_at_period_end
-  const inactive = !erased && Boolean(org.last_access_known) && describeLastAccess(org.last_access_at, now).stale
+  // Vender es usar el sistema: una caja que factura todos los días con la
+  // sesión abierta no está abandonada aunque nadie haya vuelto a iniciar sesión.
+  const lastSale = timeOf(org.last_sale_at)
+  const sellsRecently = lastSale !== null && now - lastSale <= RECENT_SALE_DAYS * DAY
+  const inactive = !erased && Boolean(org.last_access_known) && describeLastAccess(org.last_access_at, now).stale && !sellsRecently
   const noSubscription = !erased && !org.subscription_status
   const reasons: AttentionReason[] = []
   if (billingProblem) reasons.push('billing')
+  if (trialExpired) reasons.push('trial_expired')
   if (dueSoon) reasons.push('due')
   if (inactive) reasons.push('inactive')
   if (noSubscription) reasons.push('no_subscription')
-  const rank = billingProblem ? 0 : dueSoon ? 1 : inactive ? 2 : noSubscription ? 3 : 4
-  return { erased, billingProblem, dueSoon, inactive, noSubscription, rank, reasons }
+  const rank = billingProblem ? 0 : trialExpired || dueSoon ? 1 : inactive ? 2 : noSubscription ? 3 : 4
+  return { erased, billingProblem, trialExpired, dueSoon, inactive, noSubscription, rank, reasons }
 }
 
 export function needsAttention(org: SuperAdminOrganization, now: number) {
@@ -231,7 +264,7 @@ export const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
   { key: 'all', label: 'Todas' },
   { key: 'attention', label: 'Requiere atención' },
   { key: 'due_soon', label: `Vence en ${DUE_SOON_DAYS} días` },
-  { key: 'inactive', label: 'Sin acceso hace 30 días' },
+  { key: 'inactive', label: 'Sin uso hace 30 días' },
   { key: 'no_sub', label: 'Sin suscripción' },
   { key: 'no_store', label: 'Tienda sin publicar' },
   { key: 'erased', label: 'Dadas de baja' },
@@ -364,7 +397,8 @@ export function buildOrganizationsCsv(rows: SuperAdminOrganization[], now: numbe
 
 export const ATTENTION_LABELS: Record<AttentionReason, string> = {
   billing: 'Problema de cobro',
+  trial_expired: 'Prueba vencida sin pago',
   due: 'Vence pronto',
-  inactive: 'Sin acceso',
+  inactive: 'Sin uso hace 30 días',
   no_subscription: 'Sin suscripción',
 }

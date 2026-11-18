@@ -46,25 +46,57 @@ describe('modal de edición desde el listado', () => {
 })
 
 describe('qué requiere atención', () => {
-  it('un pago fallido con la suscripción activa es problema de cobro', () => {
-    expect(hasBillingProblem({ subscription_status: 'active', payment_status: 'failed' })).toBe(true)
-    expect(hasBillingProblem({ subscription_status: 'active', payment_status: 'pending' })).toBe(false)
-    expect(hasBillingProblem({ subscription_status: 'past_due', payment_status: 'paid' })).toBe(true)
+  const cobro = (over: Partial<SuperAdminOrganization>) => ({
+    plan: 'PRO', subscription_status: 'active', payment_status: 'paid', trial_ends_at: null, current_period_ends_at: en(10), ...over,
+  })
+
+  it('un pago rechazado o un período vencido es problema de cobro', () => {
+    expect(hasBillingProblem(cobro({ payment_status: 'failed' }), AHORA)).toBe(true)
+    expect(hasBillingProblem(cobro({ payment_status: 'pending' }), AHORA)).toBe(false)
+    expect(hasBillingProblem(cobro({ subscription_status: 'past_due', current_period_ends_at: en(-3) }), AHORA)).toBe(true)
+  })
+
+  /** Reactivar desde el superadmin no limpia `payment_status`: marcaba morosas a empresas activas. */
+  it('un «impago» que quedó de antes no marca a una empresa activa', () => {
+    expect(hasBillingProblem(cobro({ payment_status: 'unpaid' }), AHORA)).toBe(false)
+    expect(hasBillingProblem(cobro({ subscription_status: 'trialing', payment_status: 'unpaid', trial_ends_at: en(5) }), AHORA)).toBe(false)
+  })
+
+  it('el plan gratis no tiene problema de cobro', () => {
+    expect(hasBillingProblem(cobro({ plan: 'FREE', subscription_status: 'past_due', payment_status: 'unpaid' }), AHORA)).toBe(false)
+  })
+
+  /** `expire_trials()` deja la prueba vencida en `past_due` + `unpaid`: no es un cobro rechazado. */
+  it('una prueba vencida sin pago se marca aparte, no como problema de cobro', () => {
+    const vencida = org({ subscription_status: 'past_due', payment_status: 'unpaid', trial_ends_at: en(-4), current_period_ends_at: null })
+    const attention = getOrganizationAttention(vencida, AHORA)
+    expect(attention.billingProblem).toBe(false)
+    expect(attention.trialExpired).toBe(true)
+    expect(attention.rank).toBe(1)
+    // Si después de la prueba pagó un período y ese venció, sí es cobro.
+    const morosa = org({ subscription_status: 'past_due', payment_status: 'unpaid', trial_ends_at: en(-60), current_period_ends_at: en(-2) })
+    expect(getOrganizationAttention(morosa, AHORA).billingProblem).toBe(true)
   })
 
   it('ordena cobro, vencimiento, inactividad y sin suscripción', () => {
     const rows = [
       org({ id: 'ok', name: 'Al día' }),
       org({ id: 'nosub', name: 'Sin sub', subscription_status: null, current_period_ends_at: null }),
-      org({ id: 'idle', name: 'Inactiva', last_access_at: en(-60) }),
+      org({ id: 'idle', name: 'Inactiva', last_access_at: en(-60), last_sale_at: null }),
       org({ id: 'due', name: 'Vence', current_period_ends_at: en(3) }),
-      org({ id: 'bill', name: 'Cobro', subscription_status: 'past_due' }),
+      org({ id: 'bill', name: 'Cobro', subscription_status: 'past_due', current_period_ends_at: en(-2) }),
     ]
     expect(sortOrganizations(rows, 'attention', 'asc', AHORA).map((o) => o.id)).toEqual(['bill', 'due', 'idle', 'nosub', 'ok'])
   })
 
   it('sin el dato de acceso no la marca como inactiva', () => {
     expect(getOrganizationAttention(org({ last_access_known: false, last_access_at: null }), AHORA).inactive).toBe(false)
+  })
+
+  /** Una caja con la sesión abierta vende todos los días sin volver a iniciar sesión. */
+  it('si vendió en el último mes no está sin uso, aunque nadie haya iniciado sesión', () => {
+    expect(getOrganizationAttention(org({ last_access_at: en(-90), last_sale_at: en(-2) }), AHORA).inactive).toBe(false)
+    expect(getOrganizationAttention(org({ last_access_at: en(-90), last_sale_at: en(-45) }), AHORA).inactive).toBe(true)
   })
 
   /** Las dadas de baja figuraban como empresas normales. */
