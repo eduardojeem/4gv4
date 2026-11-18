@@ -2074,6 +2074,8 @@ export function OrganizationDetailView({ data }: Props) {
             planName={planName}
             storefrontPublic={storefrontPublic}
             marketplacePublic={org.marketplace_public === true}
+            organizationName={org.name}
+            businessVertical={org.business_vertical}
           />
         </TabsContent>
 
