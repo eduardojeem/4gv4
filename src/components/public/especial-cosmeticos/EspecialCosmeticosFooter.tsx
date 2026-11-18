@@ -4,17 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Clock,
-  Heart,
   Mail,
   MapPin,
   Phone,
-  Sparkles,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
-import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { socialProfileUrl } from '@/lib/public/social-links'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -31,7 +28,6 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
   const { settings } = useWebsiteSettings()
   const effectiveSettings = settings ?? initialSettings
   const company = useStorefrontCompanyInfo(effectiveSettings?.company_info)
-  const { categories } = usePublicCategories()
 
   const slug = getTenantSlugFromPathname(pathname)
   const prefix = slug ? `/${slug}` : ''
@@ -102,7 +98,7 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
               </div>
             </Link>
             <p className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
-              Cosmética dermatológica y skincare de alta gama. Fórmulas botánicas seleccionadas para realzar tu belleza natural con resultados visibles y seguros.
+              Consultá los productos publicados en el catálogo y los canales de atención de esta tienda.
             </p>
             {/* Redes sociales */}
             <div className="flex items-center gap-2 pt-2">

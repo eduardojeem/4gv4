@@ -175,9 +175,9 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
   const heroBadge = settings.hero_content?.badge || city
   const heroTitle = settings.hero_content?.title || storeName
   const heroSubtitle = settings.hero_content?.subtitle || (slogan ? `${slogan}. ${description}` : description)
-  const heroCtaText = settings.hero_content?.ctaText || 'Ver productos'
-  const heroCtaHref = settings.hero_content?.ctaHref || `${prefix}/productos`
-  const heroImageSrc = settings.hero_content?.imageUrl || heroPhoto?.image
+  const heroCtaText = settings.hero_content?.ctaPrimaryText || 'Ver productos'
+  const heroCtaHref = `${prefix}/productos`
+  const heroImageSrc = heroPhoto?.image
 
   const offersVisible = offers.length > 0 && settings.offers_section?.enabled !== false
   const offersTitle = settings.offers_section?.title || 'Productos en Oferta'
@@ -273,9 +273,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                         className="object-cover transition-transform duration-700 hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
-                      {(!settings.hero_content?.imageUrl || settings.hero_content.imageUrl === heroPhoto.image) && (
-                        <PhotoProductTag photo={heroPhoto} href={productHref(heroPhoto.id)} />
-                      )}
+                      <PhotoProductTag photo={heroPhoto} href={productHref(heroPhoto.id)} />
                     </>
                   ) : heroImageSrc ? (
                     <AppImage

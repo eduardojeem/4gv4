@@ -28,7 +28,7 @@ export function formatDay(date: string) {
  * `alwaysShow`: el rubro trabaja con vencimientos. Si no, el panel solo
  * aparece cuando el producto ya tiene lotes cargados.
  */
-export function ProductBatchesPanel({ productId, alwaysShow }: { productId: string; alwaysShow: boolean }) {
+export function ProductBatchesPanel({ productId, alwaysShow, variants = [] }: { productId: string; alwaysShow: boolean; variants?: Array<{ id: string; name: string }> }) {
   const [batches, setBatches] = useState<EstimatedBatch[] | null>(null)
   const [available, setAvailable] = useState(true)
   const [open, setOpen] = useState(false)
@@ -36,16 +36,21 @@ export function ProductBatchesPanel({ productId, alwaysShow }: { productId: stri
   const [lot, setLot] = useState('')
   const [expires, setExpires] = useState('')
   const [quantity, setQuantity] = useState('')
+  const [variantId, setVariantId] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/products/${productId}/batches`, { cache: 'no-store' })
-    const body = await response.json().catch(() => ({}))
-    setAvailable(body.available !== false)
-    setBatches(Array.isArray(body.batches) ? body.batches : [])
+    try {
+      const response = await fetch(`/api/products/${productId}/batches`, { cache: 'no-store' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok || typeof body.available !== 'boolean' || !Array.isArray(body.batches)) throw new Error(body.error || 'No se pudieron consultar los lotes.')
+      setError(null); setAvailable(body.available); setBatches(body.batches)
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudieron consultar los lotes.') }
   }, [productId])
   useEffect(() => { void load() }, [load])
 
-  if (batches === null) return null
+  if (error) return <div role="alert" className="rounded-xl border p-4 text-sm"><p>{error}</p><Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void load()}>Reintentar lotes</Button></div>
+  if (batches === null) return <p role="status" className="text-xs text-muted-foreground">Cargando lotes…</p>
   if (!alwaysShow && batches.length === 0) return null
 
   const add = async () => {
@@ -54,7 +59,7 @@ export function ProductBatchesPanel({ productId, alwaysShow }: { productId: stri
       const response = await fetch(`/api/products/${productId}/batches`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lot_code: lot.trim() || null, expires_on: expires, quantity: Number(quantity) }),
+        body: JSON.stringify({ lot_code: lot.trim() || null, expires_on: expires, quantity: Number(quantity), variant_id: variantId || null }),
       })
       const body = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -65,9 +70,10 @@ export function ProductBatchesPanel({ productId, alwaysShow }: { productId: stri
       setLot('')
       setExpires('')
       setQuantity('')
+      setVariantId('')
       setOpen(false)
       await load()
-    } finally {
+    } catch { toast.error('No se pudo guardar el lote. Revisá la conexión.') } finally {
       setSaving(false)
     }
   }
@@ -102,11 +108,12 @@ export function ProductBatchesPanel({ productId, alwaysShow }: { productId: stri
 
       {open && (
         <div className="grid gap-2 rounded-xl border border-dashed p-3 sm:grid-cols-[1fr_150px_110px_auto] sm:items-end">
+          {variants.length > 0 && <div className="space-y-1 sm:col-span-4"><Label htmlFor="batch-variant" className="text-xs">Presentación o variante</Label><select id="batch-variant" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={variantId} onChange={e => setVariantId(e.target.value)}><option value="">Seleccioná una variante</option>{variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></div>}
           <div className="space-y-1"><Label htmlFor="batch-lot" className="text-xs">Lote (opcional)</Label><Input id="batch-lot" value={lot} onChange={(event) => setLot(event.target.value)} placeholder="L2410" /></div>
           <div className="space-y-1"><Label htmlFor="batch-expires" className="text-xs">Vence</Label><Input id="batch-expires" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></div>
           <div className="space-y-1"><Label htmlFor="batch-qty" className="text-xs">Unidades</Label><Input id="batch-qty" type="number" min={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></div>
           <div className="flex gap-1">
-            <Button type="button" size="sm" onClick={() => void add()} disabled={saving || !expires || !(Number(quantity) > 0)}>{saving && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</Button>
+            <Button type="button" size="sm" onClick={() => void add()} disabled={saving || !expires || !Number.isInteger(Number(quantity)) || !(Number(quantity) > 0) || (variants.length > 0 && !variantId)}>{saving && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
           </div>
           <p className="text-[11px] text-muted-foreground sm:col-span-4">Registrar el lote no suma stock: el stock se carga en la compra o con un ajuste.</p>

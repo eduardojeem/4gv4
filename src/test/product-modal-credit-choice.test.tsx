@@ -14,6 +14,9 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 let websiteSettings: WebsiteSettings | null = null
+vi.mock('@/contexts/auth-context', () => ({ useOptionalAuth: () => ({ user: { id: 'test-user', organization: { id: 'test-org' } }, hasPermission: () => true }), useAuth: () => ({ user: { id: 'test-user' }, hasPermission: () => true }) }))
+vi.mock('@/contexts/ActiveOrganizationContext', () => ({ useOptionalActiveOrganization: () => ({ organization: { id: 'test-org' }, isLoading: false }) }))
+vi.mock('@/components/dashboard/products/ProductCatalogDetails', () => ({ ProductCatalogDetailsForm: () => null }))
 
 vi.mock('@/hooks/useWebsiteSettings', () => ({
   useAdminWebsiteSettings: () => ({

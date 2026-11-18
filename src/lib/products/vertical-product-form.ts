@@ -117,7 +117,10 @@ const BASE: ProfileOverrides = {
 }
 
 const PROFILES: Record<BusinessVertical, Partial<ProfileOverrides>> = {
-  beauty_services: { namePlaceholder: 'Ej: Manicura', descriptionPlaceholder: 'Qué incluye el servicio y para quién es.', skuPrefix: 'SRV' },
+  beauty_services: {
+    namePlaceholder: 'Ej: Manicura', descriptionPlaceholder: 'Qué incluye el servicio y para quién es.', skuPrefix: 'SRV',
+    warranty: { ...BASE.warranty, title: 'Cobertura del servicio', monthOptions: [0, 1], templates: [], placeholder: 'Condiciones de atención o corrección del servicio, si corresponde.' },
+  },
   general: {},
   other: {},
   electronics: {
@@ -264,6 +267,10 @@ const GENERIC_POST_SALE: PostSaleDefaults = {
  * corte de pelo no se cambia por otro.
  */
 const POST_SALE_BY_VERTICAL: Partial<Record<BusinessVertical, PostSaleDefaults>> = {
+  beauty_services: {
+    warranty_months: 0, warranty_info: '', return_window_days: 0, exchange_window_days: 0,
+    return_policy: '', exchange_policy: '',
+  },
   clothing: {
     warranty_months: 0,
     warranty_info: '',

@@ -72,6 +72,7 @@ export default function POSDashboard() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      URL.revokeObjectURL(url)
 
       toast.success(`Exportadas ${full.allSales.length} ventas del período`)
     } catch (e) {
@@ -82,9 +83,12 @@ export default function POSDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
-    setRefreshing(false)
-    toast.success('Datos actualizados')
+    try {
+      await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
+      toast.success('Datos actualizados')
+    } catch {
+      toast.error('No se pudieron actualizar todos los datos. Revisá el aviso y reintentá.')
+    } finally { setRefreshing(false) }
   }
 
   if (authLoading) {
@@ -138,7 +142,7 @@ export default function POSDashboard() {
             Error al cargar datos
           </p>
           <p className="mt-1 text-xs text-red-700 dark:text-red-400">{error.message}</p>
-          <Button onClick={() => refetch()} className="mt-4 gap-2" size="sm">
+          <Button onClick={() => void refetch().catch(() => undefined)} className="mt-4 gap-2" size="sm">
             <RefreshCw className="h-3.5 w-3.5" />
             Reintentar
           </Button>
@@ -216,11 +220,11 @@ export default function POSDashboard() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <RecentTransactionsList sales={stats.recentSales} />
+            <RecentTransactionsList onSaleChanged={handleRefresh} sales={stats.recentSales} />
             <TopProductsCard products={stats.topProducts} />
           </div>
 
-          <DetailedSalesTable stats={stats} {...detailProps} />
+          <DetailedSalesTable onSaleChanged={handleRefresh} stats={stats} {...detailProps} />
         </>
       )}
     </div>

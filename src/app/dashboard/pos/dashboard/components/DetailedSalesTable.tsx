@@ -14,9 +14,10 @@ import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface DetailedSalesTableProps extends PosDetailProps {
     stats: PosStats
+    onSaleChanged?: () => void | Promise<void>
 }
 
-export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps }: DetailedSalesTableProps) {
+export function DetailedSalesTable({ stats, detailsLoaded = true, onSaleChanged, ...detailProps }: DetailedSalesTableProps) {
     const allSales = stats.allSales || []
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
 
@@ -119,7 +120,7 @@ export function DetailedSalesTable({ stats, detailsLoaded = true, ...detailProps
                 </CardContent>
             </Card>
 
-            <SaleDetailsModal 
+            <SaleDetailsModal onSaleChanged={onSaleChanged}
                 saleId={selectedSaleId}
                 isOpen={!!selectedSaleId}
                 onClose={() => setSelectedSaleId(null)}

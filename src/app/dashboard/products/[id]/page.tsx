@@ -65,6 +65,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { cn } from '@/lib/utils'
 import { VariantDetailList, type VariantBranchStock } from '@/components/dashboard/products/variants/VariantDetailList'
 import { PRODUCT_CLIENT_COLUMNS, VARIANT_CLIENT_COLUMNS, asCostRpcClient, attachProductCost } from '@/lib/products/cost-columns'
+import { ProductBusinessDetails } from '@/components/dashboard/products/ProductBusinessDetails'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1245,6 +1246,7 @@ export default function ProductDetailPage() {
 
               {/* ── Tab 1: Resumen ──────────────────────────────────────── */}
               <TabsContent value="overview" className="space-y-4">
+                <ProductBusinessDetails key={`${scope}:${product.id}`} product={product} onVisibilitySaved={(id, patch) => setProduct(current => current?.id === id ? { ...current, ...patch } : current)} />
                 <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 shadow-sm backdrop-blur-md">
                   <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
                     <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">

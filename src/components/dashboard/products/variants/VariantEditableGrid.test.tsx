@@ -8,11 +8,20 @@ const setup = (overrides: Partial<VariantEditableGridProps> = {}): VariantEditab
 })
 
 describe('VariantEditableGrid', () => {
+  it('permite completar precio y cantidad en móvil sin desplegar opciones', () => {
+    const props = setup({ stockEditable: true, branchName: 'Centro' })
+    render(<VariantMobileCard {...props} row={props.rows[0]} />)
+    fireEvent.change(screen.getByLabelText('Precio de venta · Azul / M · móvil'), { target: { value: '18000' } })
+    fireEvent.change(screen.getByLabelText('Cantidad inicial · Azul / M · móvil'), { target: { value: '6' } })
+    expect(props.onUpdate).toHaveBeenCalledWith(3, { salePrice: 18000 })
+    expect(props.onUpdate).toHaveBeenCalledWith(3, { stockQuantity: 6 })
+    expect(screen.queryByLabelText('Código de barras · Azul / M · móvil')).toBeNull()
+  })
   it('preserves unknown cost and explicit zero without coercing either on render', () => {
     const props = setup()
     const view = render(<VariantEditableGrid {...props} />)
     expect(screen.getByLabelText('Costo · Azul / M · tabla')).toHaveValue(null)
-    expect(screen.getByPlaceholderText('Sin costo')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Sin informar')).toBeInTheDocument()
     expect(props.onUpdate).not.toHaveBeenCalled()
     view.rerender(<VariantEditableGrid {...props} rows={[{ ...props.rows[0], variant: { ...props.rows[0].variant, purchasePrice: 0 } }]} />)
     expect(screen.getByLabelText('Costo · Azul / M · tabla')).toHaveValue(0)
@@ -23,9 +32,9 @@ describe('VariantEditableGrid', () => {
   it('omits cost from unauthorized DOM and makes authorized read access read only', () => {
     const props = setup({ canViewCost: false, canUpdateCost: false })
     const view = render(<VariantEditableGrid {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Más opciones' }))
     expect(screen.queryByText('Costo')).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Sin costo')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Sin informar')).not.toBeInTheDocument()
     view.rerender(<VariantEditableGrid {...props} canViewCost />)
     expect(screen.getByLabelText('Costo · Azul / M · tabla')).toHaveAttribute('readonly')
   })
@@ -41,7 +50,7 @@ describe('VariantEditableGrid', () => {
     expect(props.onUpdate).toHaveBeenCalledWith(3, { sku: 'NEW' })
     fireEvent.click(screen.getByLabelText('Eliminar Azul / M · tabla'))
     expect(props.onRemove).toHaveBeenCalledWith(3)
-    expect(screen.getByLabelText('Stock · Azul / M · tabla')).toBeDisabled()
+    expect(screen.getByLabelText('Cantidad inicial · Azul / M · tabla')).toBeDisabled()
   })
 
   it('keeps mobile cards compact and reveals secondary fields on edit', () => {
@@ -50,10 +59,10 @@ describe('VariantEditableGrid', () => {
     const card = screen.getByRole('article')
     expect(within(card).getByText('Gs. 15.000')).toBeInTheDocument()
     expect(within(card).queryByLabelText('Código de barras · Azul / M · móvil')).not.toBeInTheDocument()
-    fireEvent.click(within(card).getByRole('button', { name: 'Editar' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Más opciones' }))
     expect(within(card).getByLabelText('Código de barras · Azul / M · móvil')).toBeInTheDocument()
-    expect(within(card).getByLabelText('Stock · Azul / M · móvil')).toBeEnabled()
-    expect(within(card).getByRole('button', { name: 'Editar' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(card).getByLabelText('Cantidad inicial · Azul / M · móvil')).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Más opciones' })).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

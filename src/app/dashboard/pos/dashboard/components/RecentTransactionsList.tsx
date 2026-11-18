@@ -10,10 +10,11 @@ import { formatCurrency } from '@/lib/currency'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface RecentTransactionsListProps {
+  onSaleChanged?: () => void | Promise<void>
   sales: PosStats['recentSales']
 }
 
-export function RecentTransactionsList({ sales }: RecentTransactionsListProps) {
+export function RecentTransactionsList({ sales, onSaleChanged }: RecentTransactionsListProps) {
   const [open, setOpen] = useState(false)
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
 
@@ -90,7 +91,7 @@ export function RecentTransactionsList({ sales }: RecentTransactionsListProps) {
           </div>
         )}
       </CardContent>
-      <SaleDetailsModal isOpen={open} onClose={() => setOpen(false)} saleId={selectedSaleId} />
+      <SaleDetailsModal onSaleChanged={onSaleChanged} isOpen={open} onClose={() => setOpen(false)} saleId={selectedSaleId} />
     </Card>
   )
 }

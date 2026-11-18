@@ -21,6 +21,9 @@ export function getProductSaveFeedback(
   const message = getErrorMessage(error)
   const normalized = message.toLowerCase()
   const actionLabel = action === 'create' ? 'crear' : 'actualizar'
+  if (normalized.includes('migración') || normalized.includes('catalog_migration_required')) return {
+    title: 'Falta activar una actualización del catálogo', description: message,
+  }
 
   if (
     normalized.includes('sku already exists') ||

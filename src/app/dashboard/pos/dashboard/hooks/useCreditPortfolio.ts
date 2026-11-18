@@ -1,9 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { endOfDay, startOfDay } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
 import type { CreditReport } from '@/lib/reports/credit-report'
 
 /**
@@ -30,52 +34,46 @@ export interface UseCreditPortfolioReturn {
 }
 
 export function useCreditPortfolio(dateRange: DateRange | undefined, enabled: boolean): UseCreditPortfolioReturn {
-  const [state, setState] = useState<CreditPortfolioState>({ status: 'idle' })
-
+  const { scope, currentScope, organizationId } = useTenantScope()
+  const { organization, isLoading } = useActiveOrganization()
+  const { selectedBranchId } = useBranch()
   const from = dateRange?.from ? startOfDay(dateRange.from).toISOString() : null
   const to = dateRange?.from ? endOfDay(dateRange.to || dateRange.from).toISOString() : null
-  const requestKey = enabled && from && to ? `${from}:${to}` : null
-  const [previousRequestKey, setPreviousRequestKey] = useState(requestKey)
-  if (previousRequestKey !== requestKey) {
-    setPreviousRequestKey(requestKey)
-    setState({ status: requestKey ? 'loading' : 'idle' })
-  }
-
-  const load = useCallback(
-    async (signal?: AbortSignal): Promise<CreditPortfolioState | undefined> => {
-      if (!from || !to) return
-      try {
-        const params = new URLSearchParams({ from, to })
-        const res = await fetch(`/api/reports/credits?${params.toString()}`, { cache: 'no-store', signal })
-        const body = (await res.json().catch(() => null)) as { success?: boolean; data?: CreditReport; error?: string } | null
-        if (signal?.aborted) return
-        if (!res.ok || !body?.success || !body.data) {
-          return { status: 'error', message: body?.error ?? 'No se pudo cargar la cartera de créditos.' }
-        }
-        return { status: 'ready', report: body.data }
-      } catch (err) {
-        if ((err as { name?: string })?.name === 'AbortError') return
-        return { status: 'error', message: 'Error de conexión al cargar la cartera de créditos.' }
-      }
-    },
-    [from, to]
-  )
-
+  const key = enabled && !isLoading && organization?.id && organizationId === organization.id && from && to
+    ? JSON.stringify([scope, organization.id, organization.role, selectedBranchId, from, to]) : null
+  const keyRef = useRef(key)
+  const sequence = useRef(0)
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  useLayoutEffect(() => { keyRef.current = key; sequence.current++ }, [key])
+  const [snapshot, setSnapshot] = useState<{key: string; state: CreditPortfolioState} | null>(null)
+  const load = useCallback(async (signal?: AbortSignal) => {
+    if (!key || !from || !to) return false
+    const request = ++sequence.current
+    const valid = () => alive.current && !signal?.aborted && keyRef.current === key && currentScope.current === scope && sequence.current === request
+    setSnapshot({ key, state: { status: 'loading' } })
+    try {
+      const params = new URLSearchParams({ from, to })
+      const response = await fetch(`/api/reports/credits?${params}`, { cache: 'no-store', signal, headers: branchHeaders(selectedBranchId) })
+      const body = await response.json().catch(() => null) as { success?: boolean; data?: CreditReport; error?: string } | null
+      if (!valid()) return false
+      if (!response.ok || !body?.success || !body.data) throw new Error(body?.error || 'No se pudo cargar la cartera de créditos.')
+      setSnapshot({ key, state: { status: 'ready', report: body.data } })
+      return true
+    } catch (error) {
+      if (!valid()) return false
+      setSnapshot({ key, state: { status: 'error', message: error instanceof Error ? error.message : 'Error de conexión al cargar la cartera de créditos.' } })
+      return false
+    }
+  }, [key, from, to, scope, currentScope, selectedBranchId])
   useEffect(() => {
-    if (!enabled) return
     const controller = new AbortController()
-    void load(controller.signal).then(result => {
-      if (result && !controller.signal.aborted) setState(result)
-    })
+    void load(controller.signal)
     return () => controller.abort()
-  }, [enabled, load])
-
+  }, [load])
   const refetch = useCallback(async () => {
-    if (!enabled || !from || !to) return
-    setState({ status: 'loading' })
-    const result = await load()
-    if (result) setState(result)
-  }, [enabled, from, to, load])
-
-  return { state: requestKey && state.status === 'idle' ? { status: 'loading' } : state, refetch }
+    if (!await load()) throw new Error('No se pudo actualizar la cartera de créditos.')
+  }, [load])
+  const state: CreditPortfolioState = !key ? { status: 'idle' } : snapshot?.key === key ? snapshot.state : { status: 'loading' }
+  return { state, refetch }
 }

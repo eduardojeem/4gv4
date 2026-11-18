@@ -86,3 +86,11 @@ it('rejects an empty daily series for a nonempty requested period instead of fil
  await waitFor(()=>expect(result.current.error?.message).toContain('diario está incompleto'))
  expect(result.current.loading).toBe(false)
 })
+
+it('una recarga fallida no confirma actualización exitosa', async () => {
+ const {result}=renderHook(()=>usePosStats(range))
+ await waitFor(()=>expect(result.current.loading).toBe(false))
+ state.rpc.mockImplementation(()=>Object.assign(Promise.resolve({data:null,error:{message:'fallo de red'}}),{abortSignal(){return this}}))
+ await act(async()=>{await expect(result.current.refetch()).rejects.toThrow('No se pudo actualizar')})
+ expect(result.current.error?.message).toBe('fallo de red')
+})
