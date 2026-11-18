@@ -262,7 +262,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         barcode: body?.barcode ? String(body.barcode).trim() : null,
         purchase_price: getVariantPurchaseCost(getVariantCostValue(rawBody)),
         sale_price: Math.max(0, price),
-        wholesale_price: body?.wholesale_price === undefined
+        wholesale_price: body?.wholesale_price === undefined || body.wholesale_price === null
           ? null
           : Math.max(0, toSafeNumber(body.wholesale_price, 0)),
         min_stock: Math.max(0, toSafeNumber(body?.min_stock, 0)),
@@ -452,7 +452,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         patch.purchase_price = getVariantPurchaseCost(getVariantCostValue(variantData))
       }
       if (variantData.wholesale_price !== undefined) {
-        patch.wholesale_price = Math.max(0, toSafeNumber(variantData.wholesale_price, 0))
+        // null = sin mayorista propio (hereda), no 0.
+        patch.wholesale_price = variantData.wholesale_price === null ? null : Math.max(0, toSafeNumber(variantData.wholesale_price, 0))
       }
       if (variantData.min_stock !== undefined) {
         patch.min_stock = Math.max(0, toSafeNumber(variantData.min_stock, 0))

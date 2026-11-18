@@ -22,6 +22,13 @@ const variant = {
 }
 
 describe('ProductVariantsPayloadSchema', () => {
+  it('rejects a wholesale price that is not below the variant sale price, like the product form', () => {
+    const parsed = ProductVariantsPayloadSchema.safeParse({ hasVariants: true, attributes: [attribute], variants: [{ ...variant, wholesalePrice: 90000 }] })
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) expect(parsed.error.issues[0]).toMatchObject({ path: ['variants', 0, 'wholesalePrice'] })
+    expect(ProductVariantsPayloadSchema.safeParse({ hasVariants: true, attributes: [attribute], variants: [{ ...variant, wholesalePrice: undefined }] }).success).toBe(true)
+  })
+
   it('keeps unknown variant cost distinct from an explicit zero', () => {
     const parsed = ProductVariantsPayloadSchema.safeParse({
       hasVariants: true,

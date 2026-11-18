@@ -321,7 +321,7 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
     ['PRODUCT_NOT_IN_ORGANIZATION', 'Uno de los productos no pertenece a esta organización.', 400],
     ['VARIANT_NOT_IN_POS_SCOPE', 'La variante seleccionada no está activa o no tiene stock configurado en esta sucursal.', 409],
     ['VARIANT_STOCK_INSUFFICIENT', 'No hay stock suficiente de la variante seleccionada.', 409],
-    ['VARIANT_PRICE_REQUIRES_SYNC', 'El precio de la variante no coincide con el precio del producto. Actualizá el catálogo antes de cobrar.', 409],
+    ['VARIANT_PRICE_REQUIRES_SYNC', 'La base de datos todavía no cobra variantes con precio propio: igualá su precio al del producto o aplicá la actualización pendiente.', 409],
     ['POS_VARIANT_MIXED_WITH_PARENT', 'No se puede cobrar el producto general y una de sus variantes en la misma venta.', 400],
     ['POS_TOTAL_MUST_BE_POSITIVE', 'El total de la venta debe ser mayor a 0.', 400],
     ['CREDIT_CUSTOMER_REQUIRED', 'Seleccioná un cliente para registrar una venta a crédito.', 400],
@@ -584,9 +584,25 @@ export const POST = withTenantAuth(
         logger.warn('No se pudieron leer los precios de la venta POS', { error: priceError.message })
         return NextResponse.json({ success: false, error: 'No se pudieron verificar los precios. No se cobró nada; probá de nuevo.' }, { status: 503 })
       }
+      // Cada variante se cobra con su precio (pos_line_unit_price): la oferta y
+      // el descuento general se calculan sobre ese precio, no sobre el del producto.
+      const variantIds = [...new Set(items.map(item => item.variant_id).filter((id): id is string => Boolean(id)))]
+      let variantRows: Array<{ id: string; product_id: string; sale_price: number | null; wholesale_price: number | null }> = []
+      if (variantIds.length > 0) {
+        const { data, error: variantPriceError } = await supabase
+          .from('product_variants')
+          .select('id, product_id, sale_price, wholesale_price')
+          .eq('organization_id', organization.id)
+          .in('id', variantIds)
+        if (variantPriceError) {
+          logger.warn('No se pudieron leer los precios de las variantes de la venta POS', { error: variantPriceError.message })
+          return NextResponse.json({ success: false, error: 'No se pudieron verificar los precios. No se cobró nada; probá de nuevo.' }, { status: 503 })
+        }
+        variantRows = data ?? []
+      }
       const fractionDigits = getCurrencyFractionDigits(config.currency)
-      items = applyCatalogOfferDiscounts(items, priceRows ?? [], { priceMode, fractionDigits })
-      const distributed = distributeOrderDiscount(items, priceRows ?? [], { priceMode, rate: orderDiscountRate, fractionDigits })
+      items = applyCatalogOfferDiscounts(items, priceRows ?? [], { priceMode, fractionDigits, variants: variantRows })
+      const distributed = distributeOrderDiscount(items, priceRows ?? [], { priceMode, rate: orderDiscountRate, fractionDigits, variants: variantRows })
       if (distributed) {
         items = distributed
         saleOrderDiscountRate = 0

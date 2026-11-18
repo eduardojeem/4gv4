@@ -2,9 +2,9 @@ import type { VariantAttributeControl, VariantAttributeSuggestion } from '@/lib/
 
 /**
  * Qué impide vender una variante en el punto de venta. Replica las reglas de
- * `process_pos_sale_atomic_v5`: la variante tiene que estar activa, tener su
- * fila de stock en la sucursal y costar lo mismo que el producto (minorista, y
- * mayorista cuando el producto tiene uno propio).
+ * `process_pos_sale_atomic_v5`: la variante tiene que estar activa y tener su
+ * fila de stock en la sucursal. Desde 20261118120000 cada variante se cobra con
+ * su propio precio, así que un precio distinto al del producto ya no bloquea.
  */
 
 export interface VariantSyncRow {
@@ -28,7 +28,7 @@ export interface VariantSyncProduct {
   wholesale_price: number | null
 }
 
-export type VariantIssue = 'inactive' | 'not_in_branch' | 'price_mismatch' | 'out_of_stock'
+export type VariantIssue = 'inactive' | 'not_in_branch' | 'out_of_stock'
 
 export interface VariantStatus {
   id: string
@@ -49,20 +49,11 @@ export interface VariantProductSummary {
   issues: Record<Exclude<VariantIssue, 'inactive'>, number>
 }
 
-const toNumber = (value: number | null | undefined) => Number(value ?? 0) || 0
-
-export function variantIssues(variant: VariantSyncRow, product: VariantSyncProduct): VariantIssue[] {
+export function variantIssues(variant: VariantSyncRow, _product?: VariantSyncProduct): VariantIssue[] {
   if (variant.is_active === false) return ['inactive']
   const issues: VariantIssue[] = []
   if (variant.branch_stock === null) issues.push('not_in_branch')
   else if (variant.branch_stock <= 0) issues.push('out_of_stock')
-
-  const productWholesale = toNumber(product.wholesale_price)
-  const variantWholesale = toNumber(variant.wholesale_price)
-  const retailMismatch = toNumber(variant.sale_price) !== toNumber(product.sale_price)
-  // Mayorista: el POS compara contra el mayorista del producto solo si lo tiene.
-  const wholesaleMismatch = productWholesale > 0 && variantWholesale > 0 && variantWholesale !== productWholesale
-  if (retailMismatch || wholesaleMismatch) issues.push('price_mismatch')
   return issues
 }
 
@@ -97,13 +88,12 @@ export function summarizeVariantProducts(products: VariantSyncProduct[], variant
         branchStock: statuses.reduce((sum, status) => sum + Math.max(0, status.stock ?? 0), 0),
         issues: {
           not_in_branch: count('not_in_branch'),
-          price_mismatch: count('price_mismatch'),
           out_of_stock: count('out_of_stock'),
         },
       }
     })
     // Primero lo que impide vender.
-    .sort((a, b) => (b.issues.not_in_branch + b.issues.price_mismatch) - (a.issues.not_in_branch + a.issues.price_mismatch)
+    .sort((a, b) => b.issues.not_in_branch - a.issues.not_in_branch
       || a.product.name.localeCompare(b.product.name, 'es'))
 }
 

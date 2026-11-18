@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { Product } from '../types'
 import { CONVERTIBLE_STATUSES, discountToHonorQuote, posUnitPrice, quoteCode, type QuoteStatus } from '@/lib/quotes/quote-math'
 import { appointmentCode } from '@/lib/agenda/agenda-api'
+import { variantUnitPrice } from '@/lib/products/variant-pricing'
 
 type QuoteItem = {
   product_id: string | null
@@ -172,7 +173,10 @@ export function useQuoteToCart({
           }
           addVariant(variant, quantity)
           cartItemId = variant.id
-          current = posUnitPrice({ sale_price: Number(variant.price), wholesale_price: variant.wholesale_price }, mode)
+          const parent = inventoryProducts.find((candidate) => candidate.id === item.product_id)
+          current = parent
+            ? variantUnitPrice(parent, { sale_price: Number(variant.price), wholesale_price: variant.wholesale_price }, mode)
+            : posUnitPrice({ sale_price: Number(variant.price), wholesale_price: variant.wholesale_price }, mode)
         } else {
           const product = inventoryProducts.find((candidate) => candidate.id === item.product_id)
           if (!product || product.is_active === false) {

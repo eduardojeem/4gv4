@@ -12,7 +12,6 @@ import { VariantManager } from '@/components/admin/inventory/VariantManager'
 
 const ISSUE_TEXT: Record<VariantIssue, string> = {
   not_in_branch: 'Sin stock cargado en esta sucursal: el POS no la deja cobrar',
-  price_mismatch: 'Precio distinto al del producto: el POS bloquea la venta',
   out_of_stock: 'Agotada en esta sucursal',
   inactive: 'Inactiva',
 }
@@ -66,7 +65,7 @@ export function VariantsOverview({
       || variants.some((variant) => variant.name.toLowerCase().includes(term) || (variant.sku ?? '').toLowerCase().includes(term)))
   }, [products, search])
 
-  const blocked = products.reduce((sum, item) => sum + item.issues.not_in_branch + item.issues.price_mismatch, 0)
+  const blocked = products.reduce((sum, item) => sum + item.issues.not_in_branch, 0)
   const totalVariants = products.reduce((sum, item) => sum + item.variants.length, 0)
   const branchName = selectedBranch?.name || 'la sucursal principal'
 
@@ -91,7 +90,7 @@ export function VariantsOverview({
           {[
             { icon: CheckCircle2, title: 'Activa', text: 'Solo las variantes activas aparecen en el punto de venta y la tienda.' },
             { icon: Warehouse, title: 'Con stock en la sucursal', text: `Cada variante lleva su stock en cada sucursal. Ahora estás viendo ${branchName}.` },
-            { icon: Tag, title: 'Mismo precio que el producto', text: 'El POS cobra el precio del producto: si una variante tiene otro, bloquea la venta.' },
+            { icon: Tag, title: 'Precio propio', text: 'Cada variante se cobra con su precio de venta. Sin mayorista propio usa el del producto si cuesta lo mismo; si no, su precio menos 10%.' },
           ].map(({ icon: Icon, title, text }, index) => (
             <li key={title} className="flex gap-2.5 rounded-xl bg-muted/40 p-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background text-xs text-muted-foreground">{index + 1}</span>
@@ -142,7 +141,7 @@ export function VariantsOverview({
         ) : (
           <ul className="divide-y">
             {visible.map(({ product, variants, sellable, branchStock, issues }) => {
-              const blockedHere = issues.not_in_branch + issues.price_mismatch
+              const blockedHere = issues.not_in_branch
               return (
                 <li key={product.id} className="flex flex-col gap-3 p-4 lg:flex-row lg:items-start">
                   <div className="flex min-w-0 flex-1 gap-3">
@@ -186,7 +185,6 @@ export function VariantsOverview({
                       {blockedHere > 0 && (
                         <ul className="mt-2 space-y-0.5 text-[11px] text-amber-800 dark:text-amber-200">
                           {issues.not_in_branch > 0 && <li>• {issues.not_in_branch} sin stock cargado en {branchName}: abrilas y guardá el stock de cada una.</li>}
-                          {issues.price_mismatch > 0 && <li>• {issues.price_mismatch} con un precio distinto al del producto: igualalo en la ficha.</li>}
                         </ul>
                       )}
                     </div>

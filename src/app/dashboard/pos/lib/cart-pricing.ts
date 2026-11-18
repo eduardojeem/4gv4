@@ -2,6 +2,7 @@ import { config } from '@/lib/config'
 import { getCurrencyFractionDigits } from '@/lib/currency'
 import { hasActiveCatalogOffer } from '@/lib/products/offer-filter'
 import { resolveOfferPrice } from '@/lib/public/offer-pricing'
+import { variantRetailPrice, variantUnitPrice } from '@/lib/products/variant-pricing'
 
 /** Descuento mayorista cuando el producto no tiene precio mayorista propio (igual que el RPC). */
 export const WHOLESALE_DISCOUNT_RATE = 10
@@ -133,21 +134,29 @@ export function buildReceiptLines<T extends PricedCartLineInput>(
  * cobraba a precio de lista. Se toma el mayor entre lo enviado y la oferta,
  * igual que `priceCartLine`: nunca se suman. En mayorista no hay oferta.
  */
-export function applyCatalogOfferDiscounts<T extends { product_id: string; quantity: number; discount_amount: number }>(
+export function applyCatalogOfferDiscounts<T extends SaleLine>(
   items: T[],
-  products: Array<{ id: string; sale_price?: unknown; offer_price?: unknown; has_offer?: unknown }>,
-  options: { priceMode: 'retail' | 'wholesale'; fractionDigits: number },
+  products: Array<{ id: string; sale_price?: unknown; wholesale_price?: unknown; offer_price?: unknown; has_offer?: unknown }>,
+  options: { priceMode: 'retail' | 'wholesale'; fractionDigits: number; variants?: SaleVariantPrice[] },
 ): T[] {
   if (options.priceMode !== 'retail') return items
   const byId = new Map(products.map(product => [product.id, product]))
+  const variants = new Map((options.variants ?? []).map(variant => [variant.id, variant]))
   return items.map(item => {
     const product = byId.get(item.product_id)
-    const offerPrice = getActiveOfferPrice(product)
-    if (!product || offerPrice === null) return item
-    const offerDiscount = roundTo((Number(product.sale_price) - offerPrice) * item.quantity, options.fractionDigits)
+    if (!product) return item
+    const variant = item.variant_id ? variants.get(item.variant_id) : undefined
+    const listPrice = variant ? variantRetailPrice(product, variant) : Number(product.sale_price)
+    // Una variante con otro precio hereda la oferta en proporción, como en el carrito.
+    const offerPrice = getActiveOfferPrice(product, variant ? listPrice : undefined)
+    if (offerPrice === null) return item
+    const offerDiscount = roundTo((listPrice - offerPrice) * item.quantity, options.fractionDigits)
     return offerDiscount > item.discount_amount ? { ...item, discount_amount: offerDiscount } : item
   })
 }
+
+type SaleLine = { product_id: string; variant_id?: string | null; quantity: number; discount_amount: number }
+export type SaleVariantPrice = { id: string; product_id: string; sale_price?: unknown; wholesale_price?: unknown }
 
 /**
  * Descuento general en moneda, sobre los productos ya netos de sus descuentos.
@@ -169,21 +178,21 @@ export function orderDiscountAmount(productsNet: number, rate: unknown, fraction
  * comisiones y productos más vendidos. Devuelve null si falta el precio de
  * alguna línea: entonces la ruta deja la tasa como venía.
  */
-export function distributeOrderDiscount<T extends { product_id: string; quantity: number; discount_amount: number }>(
+export function distributeOrderDiscount<T extends SaleLine>(
   items: T[],
   products: Array<{ id: string; sale_price?: unknown; wholesale_price?: unknown }>,
-  options: { priceMode: 'retail' | 'wholesale'; rate: number; fractionDigits: number },
+  options: { priceMode: 'retail' | 'wholesale'; rate: number; fractionDigits: number; variants?: SaleVariantPrice[] },
 ): T[] | null {
   if (!(options.rate > 0) || items.length === 0) return items
   const byId = new Map(products.map(product => [product.id, product]))
+  const variants = new Map((options.variants ?? []).map(variant => [variant.id, variant]))
   const lines: Array<{ gross: number; net: number }> = []
   for (const item of items) {
     const product = byId.get(item.product_id)
     if (!product) return null
-    const listPrice = Number(product.sale_price) || 0
-    const unitPrice = options.priceMode === 'wholesale'
-      ? (positive(product.wholesale_price) ?? roundTo(listPrice * (1 - WHOLESALE_DISCOUNT_RATE / 100), 2))
-      : listPrice
+    const variant = item.variant_id ? variants.get(item.variant_id) : undefined
+    if (item.variant_id && !variant) return null
+    const unitPrice = variantUnitPrice(product, variant ?? null, options.priceMode)
     const gross = roundTo(unitPrice * item.quantity, 2)
     lines.push({ gross, net: roundTo(gross - Math.min(gross, item.discount_amount), 2) })
   }

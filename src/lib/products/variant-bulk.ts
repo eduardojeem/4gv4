@@ -1,6 +1,6 @@
 import type { ProductVariantInput } from './variant-contract'
 
-export type VariantBulkAction = { type: 'price' | 'cost' | 'stock'; value: number } | { type: 'clearCost' } | { type: 'active'; value: boolean } | { type: 'sku'; base: string }
+export type VariantBulkAction = { type: 'price' | 'cost' | 'stock' | 'wholesale'; value: number } | { type: 'clearCost' } | { type: 'clearWholesale' } | { type: 'active'; value: boolean } | { type: 'sku'; base: string }
 export const variantSelectionKey = (variant: ProductVariantInput) => variant.id ?? variant.clientKey
 
 export function suggestVariantSku(base: string, variant: ProductVariantInput): string {
@@ -22,6 +22,8 @@ export function applyVariantBulkAction(
       case 'price': return { ...variant, salePrice: action.value }
       case 'cost': return { ...variant, purchasePrice: action.value }
       case 'clearCost': return { ...variant, purchasePrice: null }
+      case 'wholesale': return { ...variant, wholesalePrice: action.value }
+      case 'clearWholesale': return { ...variant, wholesalePrice: undefined }
       case 'stock': return { ...variant, stockQuantity: action.value }
       case 'active': return { ...variant, isActive: action.value }
       case 'sku': return { ...variant, sku: suggestVariantSku(action.base, variant) }
@@ -34,6 +36,9 @@ export function applyVariantBulkAction(
       if (seen.has(sku)) throw new Error('La sugerencia genera un SKU duplicado en el borrador. Ajustá los atributos o editá el SKU manualmente.')
       seen.add(sku)
     }
+  }
+  if (action.type === 'wholesale' && next.some(v => selected.has(variantSelectionKey(v)) && action.value > 0 && action.value >= v.salePrice)) {
+    throw new Error('El mayorista tiene que ser menor que el precio de venta de cada variante seleccionada.')
   }
   if (action.type === 'active' && !next.some(v => v.isActive)) throw new Error('Debe quedar al menos una variante activa.')
   return next

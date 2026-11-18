@@ -37,6 +37,13 @@ it('preserves unknown as null while preserving an explicitly legitimate zero cos
  expect(body.purchase_price).toBeUndefined()
  expect(body.variants).toEqual([{id:'owned',purchasePrice:null},{name:'new',purchasePrice:0}])
 })
+it('only clears a saved variant cost on purpose when the user can read and write cost',async()=>{
+ const q={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),in:vi.fn().mockResolvedValue({data:[{id:'owned',purchase_price:27}],error:null})}
+ const client={from:()=>q} as never
+ const input={variants:[{id:'owned',purchasePrice:null},{id:'owned',name:'omitted'}]}
+ expect((await prepareProductCostInput(client,input,'B','product',{allowClearingVariantCost:true})).variants).toEqual([{id:'owned',purchasePrice:null},{id:'owned',name:'omitted',purchasePrice:27}])
+ expect((await prepareProductCostInput(client,input,'B','product',{allowClearingVariantCost:false})).variants).toEqual([{id:'owned',purchasePrice:27},{id:'owned',name:'omitted',purchasePrice:27}])
+})
 it('fails closed when membership cannot be verified even with caller-provided admin role',async()=>{
  const q={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),maybeSingle:vi.fn().mockResolvedValue({data:null,error:null})}
  expect(await resolveOrganizationProductCostAccess({from:()=>q} as never,{userId:'u',organizationId:'B',organizationRole:'admin'})).toEqual({canReadCost:false,canWriteCost:false})

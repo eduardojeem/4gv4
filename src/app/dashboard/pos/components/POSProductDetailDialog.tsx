@@ -33,6 +33,7 @@ import {
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
+import { variantExplicitWholesale } from '@/lib/products/variant-pricing'
 import { toast } from 'sonner'
 import type { Product } from '@/types/product-unified'
 import type { ProductVariant, ProductWithVariants, VariantAttributeValue } from '@/types/product-variants'
@@ -366,15 +367,13 @@ export function POSProductDetailDialog({
   const basePrice = product?.sale_price || 0
   const activeUnitSalePrice = hasVariants && selectedVariant ? selectedVariant.price : basePrice
 
-  const explicitWholesalePrice = product?.wholesale_price
-  const hasExplicitWholesale =
-    typeof explicitWholesalePrice === 'number' && explicitWholesalePrice > 0
+  // Misma regla que el cobro (variant-pricing / pos_line_unit_price).
+  const explicitWholesalePrice = variantExplicitWholesale(
+    product,
+    hasVariants && selectedVariant ? { sale_price: selectedVariant.price, wholesale_price: selectedVariant.wholesale_price } : null,
+  )
   const computedWholesale = Math.round(activeUnitSalePrice * (1 - wholesaleDiscountRate / 100))
-  const wholesalePrice = hasVariants && selectedVariant && typeof selectedVariant.wholesale_price === 'number'
-    ? selectedVariant.wholesale_price
-    : hasExplicitWholesale
-    ? explicitWholesalePrice
-    : computedWholesale
+  const wholesalePrice = explicitWholesalePrice ?? computedWholesale
 
   const activePrice = isWholesale ? wholesalePrice : activeUnitSalePrice
 

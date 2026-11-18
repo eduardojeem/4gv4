@@ -20,7 +20,7 @@ const variant = (overrides: Partial<VariantSyncRow> = {}): VariantSyncRow => ({
 })
 
 describe('cuándo se puede cobrar una variante, como en el POS', () => {
-  it('activa, con stock en la sucursal y al precio del producto', () => {
+  it('activa y con stock en la sucursal', () => {
     expect(variantIssues(variant(), product)).toEqual([])
   })
 
@@ -28,13 +28,9 @@ describe('cuándo se puede cobrar una variante, como en el POS', () => {
     expect(variantIssues(variant({ branch_stock: null }), product)).toEqual(['not_in_branch'])
   })
 
-  it('con otro precio el POS responde VARIANT_PRICE_REQUIRES_SYNC', () => {
-    expect(variantIssues(variant({ sale_price: 90000 }), product)).toContain('price_mismatch')
-    expect(variantIssues(variant({ wholesale_price: 60000 }), product)).toContain('price_mismatch')
-  })
-
-  it('el mayorista solo cuenta si el producto tiene uno propio', () => {
-    expect(variantIssues(variant({ wholesale_price: 60000 }), { ...product, wholesale_price: 0 })).toEqual([])
+  it('un precio propio ya no impide cobrarla: el POS cobra el de la variante', () => {
+    expect(variantIssues(variant({ sale_price: 90000 }), product)).toEqual([])
+    expect(variantIssues(variant({ wholesale_price: 60000 }), product)).toEqual([])
   })
 
   it('una inactiva no se evalúa más: no se vende', () => {
@@ -51,7 +47,7 @@ describe('resumen por producto', () => {
       variant({ id: 'v3', product_id: 'p2', branch_stock: null }),
     ])
     expect(summary.map((item) => item.product.id)).toEqual(['p2', 'p1'])
-    expect(summary[1]).toMatchObject({ sellable: 1, branchStock: 5, issues: { out_of_stock: 1, not_in_branch: 0, price_mismatch: 0 } })
+    expect(summary[1]).toMatchObject({ sellable: 1, branchStock: 5, issues: { out_of_stock: 1, not_in_branch: 0 } })
     expect(summary[0].issues.not_in_branch).toBe(1)
   })
 

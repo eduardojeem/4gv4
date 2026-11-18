@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Product } from '../types'
 import { toast } from 'sonner'
 import { getActiveOfferPrice, orderDiscountAmount, priceCartLine } from '../lib/cart-pricing'
+import { variantExplicitWholesale } from '@/lib/products/variant-pricing'
 
 interface CartConfig {
   taxRate?: number
@@ -253,7 +254,12 @@ export const useOptimizedCart = (
       stock: Number(cartItem.stock ?? productRef?.stock_quantity ?? 0),
       subtotal: Number(cartItem.price || productRef?.sale_price || 0) * Number(cartItem.quantity || 1),
       image: cartItem.image || productRef?.image || productRef?.image_url || productRef?.images?.[0] || '',
-      wholesalePrice: cartItem.wholesalePrice ?? cartItem.wholesale_price ?? productRef?.wholesale_price ?? undefined,
+      // Misma regla que el cobro: mayorista propio, el del producto si la
+      // variante cuesta lo mismo, o (sin valor acá) su precio -10%.
+      wholesalePrice: variantExplicitWholesale(productRef, {
+        sale_price: Number(cartItem.price || productRef?.sale_price || 0),
+        wholesale_price: cartItem.wholesalePrice ?? cartItem.wholesale_price,
+      }) ?? undefined,
       originalPrice: Number(cartItem.price || productRef?.sale_price || 0),
       offerPrice: getActiveOfferPrice(productRef, Number(cartItem.price || productRef?.sale_price || 0)) ?? undefined,
       category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category,

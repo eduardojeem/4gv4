@@ -160,3 +160,42 @@ describe('descuento general sin céntimos', () => {
     expect(distributeOrderDiscount([{ product_id: 'x', quantity: 1, discount_amount: 0 }], products, { priceMode: 'retail', rate: 5, fractionDigits: 0 })).toBeNull()
   })
 })
+describe('precios por variante en la ruta de cobro', () => {
+  const remera = { id: 'p1', sale_price: 100000, wholesale_price: 90000, offer_price: 80000, has_offer: true }
+  const variants = [
+    { id: 's', product_id: 'p1', sale_price: 100000, wholesale_price: null },
+    { id: 'xl', product_id: 'p1', sale_price: 150000, wholesale_price: null },
+  ]
+
+  it('la oferta de una variante con otro precio se aplica en proporción', () => {
+    const [s, xl] = applyCatalogOfferDiscounts(
+      [{ product_id: 'p1', variant_id: 's', quantity: 1, discount_amount: 0 }, { product_id: 'p1', variant_id: 'xl', quantity: 1, discount_amount: 0 }],
+      [remera], { priceMode: 'retail', fractionDigits: 0, variants },
+    )
+    expect(s.discount_amount).toBe(20000)
+    expect(xl.discount_amount).toBe(30000)
+  })
+
+  it('el descuento general se reparte sobre el precio de cada variante', () => {
+    const lines = distributeOrderDiscount(
+      [{ product_id: 'p1', variant_id: 's', quantity: 1, discount_amount: 0 }, { product_id: 'p1', variant_id: 'xl', quantity: 2, discount_amount: 0 }],
+      [{ id: 'p1', sale_price: 100000, wholesale_price: 90000 }], { priceMode: 'retail', rate: 10, fractionDigits: 0, variants },
+    )
+    expect(lines?.map(line => line.discount_amount)).toEqual([10000, 30000])
+  })
+
+  it('en mayorista la variante con otro precio usa su precio -10%', () => {
+    const lines = distributeOrderDiscount(
+      [{ product_id: 'p1', variant_id: 'xl', quantity: 1, discount_amount: 0 }],
+      [{ id: 'p1', sale_price: 100000, wholesale_price: 90000 }], { priceMode: 'wholesale', rate: 10, fractionDigits: 0, variants },
+    )
+    expect(lines?.[0].discount_amount).toBe(13500)
+  })
+
+  it('sin el precio de la variante no reparte (deja la tasa al servidor)', () => {
+    expect(distributeOrderDiscount(
+      [{ product_id: 'p1', variant_id: 'otra', quantity: 1, discount_amount: 0 }],
+      [{ id: 'p1', sale_price: 100000 }], { priceMode: 'retail', rate: 10, fractionDigits: 0, variants },
+    )).toBeNull()
+  })
+})

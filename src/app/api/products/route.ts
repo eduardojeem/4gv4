@@ -817,7 +817,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: ['inv
     if (!costAccess.canWriteCost && (hasExplicitProductCost(rawBody) || await changesForeignCostCurrency(costClient, rawBody, organization.id, rawBody.id))) {
       return NextResponse.json({success:false,error:'No tenés permiso para modificar costos en esta organización.',code:'PRODUCT_COST_FORBIDDEN'}, {status:403})
     }
-    const body = await prepareProductCostInput(costClient, rawBody, organization.id, rawBody.id)
+    const body = await prepareProductCostInput(costClient, rawBody, organization.id, rawBody.id, { allowClearingVariantCost: costAccess.canReadCost && costAccess.canWriteCost })
 
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
