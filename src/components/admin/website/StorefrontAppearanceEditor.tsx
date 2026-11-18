@@ -56,8 +56,14 @@ export function StorefrontAppearanceEditor({
   commerceMode,
 }: StorefrontAppearanceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewStyleOverride, setPreviewStyleOverride] = useState<StorefrontStylePreference | null>(null)
   const [suggestionDismissed, setSuggestionDismissed] = useState(false)
   const [previewHeroActive, setPreviewHeroActive] = useState(false)
+
+  const handleQuickPreview = (style: StorefrontStylePreference) => {
+    setPreviewStyleOverride(style)
+    setPreviewOpen(true)
+  }
 
   // «Servicios» arma la portada con la agenda: sin el módulo se ofrece el resto.
   const { effectiveModules } = useSubscriptionStatus()
@@ -162,7 +168,16 @@ export function StorefrontAppearanceEditor({
           title="Plantilla"
           hint="Define cómo se ven el inicio y las fotos de tus productos según tu rubro."
           action={
-            <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)} className="h-8 gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPreviewStyleOverride(null)
+                setPreviewOpen(true)
+              }}
+              className="h-8 gap-1.5"
+            >
               <Eye aria-hidden="true" className="h-3.5 w-3.5" />
               Diseñar en mi tienda
             </Button>
@@ -172,6 +187,7 @@ export function StorefrontAppearanceEditor({
             <StorefrontTemplateSelector
               value={stylePreference}
               onChange={(next) => onChange({ storefrontStyle: next })}
+              onPreview={handleQuickPreview}
               businessVertical={businessVertical}
               suggestedStyle={followsSuggestion ? undefined : suggestedPreference}
               servicesAvailable={servicesAvailable}
@@ -364,7 +380,15 @@ export function StorefrontAppearanceEditor({
           businessVertical={businessVertical}
           heroEnabled={previewHeroActive}
         />
-        <Button type="button" variant="secondary" onClick={() => setPreviewOpen(true)} className="mt-3 w-full gap-1.5">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setPreviewStyleOverride(null)
+            setPreviewOpen(true)
+          }}
+          className="mt-3 w-full gap-1.5"
+        >
           <Eye aria-hidden="true" className="h-4 w-4" />
           {storePath ? 'Ver con mis productos' : 'Comparar plantillas'}
         </Button>
@@ -373,10 +397,18 @@ export function StorefrontAppearanceEditor({
       {previewOpen && (
         <StorefrontTemplatePreviewDialog
           open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          initial={currentLook}
+          onOpenChange={(open) => {
+            setPreviewOpen(open)
+            if (!open) setPreviewStyleOverride(null)
+          }}
+          initial={
+            previewStyleOverride
+              ? { ...currentLook, storefrontStyle: previewStyleOverride }
+              : currentLook
+          }
           onApply={(changes) => {
             onChange(changes)
+            setPreviewStyleOverride(null)
             toast.success('Cambios aplicados', { description: 'Guardá los cambios para publicarlos en tu tienda.' })
           }}
           businessVertical={businessVertical}
