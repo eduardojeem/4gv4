@@ -168,6 +168,15 @@ export function usePOSProducts() {
     updateProductInState(product as unknown as Product)
   }, [updateProductInState])
 
+  // Guardar publicación no debe reponer una copia antigua del stock/precio.
+  const syncProductVisibility = useCallback((productId: string, patch: { visibility: 'public' | 'wholesale' | 'hidden'; hide_price: boolean }) => {
+    setProducts(current => {
+      const updated = current.map(product => product.id === productId ? { ...product, visibility: patch.visibility, hide_price: patch.hide_price } : product)
+      setProductsCache(selectedBranchId, updated)
+      return updated
+    })
+  }, [selectedBranchId])
+
   // Función para actualizar stock en tiempo real
   const updateStockInState = useCallback((stockMovement: StockMovement) => {
     if (stockMovement.product_id) {
@@ -614,6 +623,7 @@ export function usePOSProducts() {
     fetchProducts,
     refreshProducts: fetchProducts,
     syncProduct: syncProductInState,
+    syncProductVisibility,
 
     // Funciones de tiempo real
     toggleRealTime,

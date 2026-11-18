@@ -1,5 +1,6 @@
 import { CreditPlanDefinitionSchema, fixedProductPlanErrors } from '@/lib/credits/plan-definition'
 import { z } from 'zod'
+import { CalendarDateSchema, ApiVariantBatchSchema, ProductDetailsSchema, normalizeServiceProduct } from '@/lib/products/catalog-contract'
 import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 import {
   ProductAttributeDefinitionSchema,
@@ -210,8 +211,10 @@ const productBaseSchema = z.object({
   // Lote del stock inicial (alimentos, cosmética): se registra al crear el producto.
   initial_batch: z.object({
     lot_code: z.string().trim().max(60).nullable().optional(),
-    expires_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de vencimiento no es válida'),
+    expires_on: CalendarDateSchema,
   }).nullable().optional(),
+  initial_batches: z.array(ApiVariantBatchSchema).max(500).optional(),
+  product_details: ProductDetailsSchema.optional(),
 
   ...productVariantsFields,
 })
@@ -221,9 +224,16 @@ const validateProductVariants = (
     has_variants?: boolean
     variant_attribute_config?: unknown[]
     variants?: unknown[]
+    initial_batches?: z.infer<typeof ApiVariantBatchSchema>[]
   },
   context: z.RefinementCtx,
 ) => {
+  const seen = new Set<string>()
+  for (const [index, batch] of (product.initial_batches ?? []).entries()) {
+    const variant = (product.variants ?? []).find(row => row && typeof row === 'object' && (row as { sku?: string }).sku === batch.sku) as { stockQuantity?: number; isActive?: boolean } | undefined
+    if (!product.has_variants || !variant || !variant.isActive || !(Number(variant.stockQuantity) > 0) || seen.has(batch.sku)) context.addIssue({ code: 'custom', path: ['initial_batches', index], message: 'Cada lote debe corresponder a una variante activa con stock, sin repetir su SKU.' })
+    seen.add(batch.sku)
+  }
   if (!product.has_variants) return
 
   if (!product.variant_attribute_config?.length) {
@@ -243,7 +253,7 @@ const validateProductVariants = (
   }
 }
 
-export const productSchema = productBaseSchema.superRefine(validateProductVariants).superRefine((data, context) => { for (const issue of fixedProductPlanErrors(data)) context.addIssue({ code: 'custom', path: ['installments_plans', issue.index, 'installmentAmount'], message: issue.message }) })
+export const productSchema = z.preprocess(normalizeServiceProduct, productBaseSchema.superRefine(validateProductVariants).superRefine((data, context) => { for (const issue of fixedProductPlanErrors(data)) context.addIssue({ code: 'custom', path: ['installments_plans', issue.index, 'installmentAmount'], message: issue.message }) }))
 
 /**
  * Actualizar un producto: solo lo que viene en el pedido.

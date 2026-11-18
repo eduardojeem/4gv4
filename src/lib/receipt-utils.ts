@@ -374,7 +374,8 @@ const printWhenReady = (printWindow: Window, fallbackDelay = 1500): void => {
 
 export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   // Intentar capturar el contenido del modal primero
-  const receiptElement = document.getElementById('receipt-content')
+  // Una copia debe usar la venta persistida, nunca otro ticket montado en el POS.
+  const receiptElement = receiptData.isReprint ? null : document.getElementById('receipt-content')
 
   if (receiptElement) {
     // Si existe el elemento del modal, clonar su contenido
@@ -926,7 +927,7 @@ export const generatePrintHTML = (
 
       ${receiptData.isReprint ? `
       <div style="margin: 6px 0; padding: 4px; border: 2px dashed #000; text-align: center; font-weight: bold; letter-spacing: 2px; font-size: 12px;">
-        REIMPRESIÓN
+        COPIA · REIMPRESIÓN
       </div>
       ` : ''}
 

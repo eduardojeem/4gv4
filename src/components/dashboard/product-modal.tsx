@@ -4,6 +4,8 @@ import { useOptionalBranch } from '@/contexts/branch-context'
 import { getVariantCombinationKey } from '@/lib/products/variant-safety'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useOptionalAuth } from '@/contexts/auth-context'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import Link from 'next/link'
 import { clearProductDraft, readProductDraft, scheduleProductDraft, flushProductDraft } from '@/lib/products/product-draft'
 import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
@@ -102,6 +104,9 @@ import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products
 import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress, calculateWholesalePriceFromCost, calculateWholesalePriceFromSale } from './product-modal-behavior'
 import { FASHION_AUDIENCES, getFashionAudienceFromTags, mergeFashionAudienceTag } from '@/lib/products/fashion-filters'
 import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
+import { ProductCatalogDetailsForm } from '@/components/dashboard/products/ProductCatalogDetails'
+import { InitialVariantBatches } from '@/components/dashboard/products/InitialVariantBatches'
+import { cleanProductDetails } from '@/lib/products/catalog-contract'
 import { ProductBatchesPanel } from '@/components/dashboard/products/ProductBatchesPanel'
 import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
@@ -317,6 +322,10 @@ export function ProductModal({
   const productRef = useRef(product)
   productRef.current = product
   const productId = product?.id ?? null
+  const draftAuth = useOptionalAuth()
+  const draftActive = useOptionalActiveOrganization()
+  const draftOrgId = draftActive ? (draftActive.isLoading ? null : draftActive.organization?.id) : draftAuth?.user?.organization?.id
+  const draftScope = draftAuth?.user?.id && draftOrgId ? draftAuth.user.id + ':' + draftOrgId : null
   const branchScope = useOptionalBranch()
   const variantBranchId = branchScope?.selectedBranch?.id === branchScope?.selectedBranchId ? branchScope?.selectedBranchId ?? null : null
   const variantHydrationKey = `${productId}:${variantBranchId ?? 'unresolved'}`
@@ -542,6 +551,18 @@ export function ProductModal({
     attributes: variantConfig[1] ?? [],
     variants: variantConfig[2] ?? [],
   }
+  const changeProductUnit = (value: string, change: (next: string) => void) => {
+    if (value === SERVICE_UNIT && product && product.unit_measure !== SERVICE_UNIT) {
+      toast.error('Para conservar el inventario y el historial, creá el servicio por separado en lugar de convertir este producto.')
+      return
+    }
+    change(value)
+    if (value === SERVICE_UNIT) {
+      setValue('stock_quantity', 0, { shouldDirty: true }); setValue('min_stock', 0); setValue('max_stock', 0)
+      setValue('has_variants', false); setValue('variants', []); setValue('variant_attribute_config', [])
+      setValue('initial_expires_on', ''); setValue('initial_lot_code', ''); setValue('initial_variant_batches', [])
+    }
+  }
 
   // Progreso de obligatorios: se calcula en vivo para avisar antes de guardar,
   // no despues de rebotar en la validacion.
@@ -558,10 +579,10 @@ export function ProductModal({
 
   // Fix #1: Detectar qué tabs contienen errores de validación
   const tabErrorMap = useMemo(() => {
-    const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active']
+    const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active', 'product_details']
     const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer', 'installments_enabled', 'installments_plans']
-    const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock']
-    const variantFields = ['has_variants', 'variant_attribute_config', 'variants']
+    const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock', 'initial_lot_code', 'initial_expires_on']
+    const variantFields = ['has_variants', 'variant_attribute_config', 'variants', 'initial_variant_batches']
     const postSaleFields = ['warranty_months', 'warranty_info', 'return_window_days', 'exchange_window_days', 'return_policy', 'exchange_policy']
     const imagesFields = ['images']
     const errorKeys = Object.keys(errors)
@@ -607,7 +628,7 @@ export function ProductModal({
 
     // Un borrador de esta pestaña gana sobre los datos guardados: es lo que la
     // persona estaba escribiendo y todavia no llego a guardar.
-    const draft = readProductDraft(productId)
+    const draft = readProductDraft(productId, draftScope)
     if (draft) {
       form.reset(draft as never)
       setDraftRestored(true)
@@ -701,7 +722,7 @@ export function ProductModal({
         variants: [],
       })
     }
-  }, [productId, form,initialUnit])
+  }, [productId, form,initialUnit, draftScope])
 
   // Algunos consumidores abren el modal desde listados resumidos que solo
   // incluyen `has_variants`. Recuperamos el detalle completo para mostrar las
@@ -760,12 +781,12 @@ export function ProductModal({
   // recupero nada.
   useEffect(() => {
     if (!isDirty) return
-    scheduleProductDraft(productId, form.getValues() as Record<string, unknown>)
+    scheduleProductDraft(productId, form.getValues() as Record<string, unknown>, draftScope)
     // React Hook Form exposes a subscription API that React Compiler cannot memoize.
     const subscription = form.watch((values, event) => {
-      if (event.name) scheduleProductDraft(productId, values as Record<string, unknown>)
+      if (event.name) scheduleProductDraft(productId, values as Record<string, unknown>, draftScope)
     })
-    const flush = () => flushProductDraft(productId)
+    const flush = () => flushProductDraft(productId, draftScope)
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
     window.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', onVisibility)
@@ -775,7 +796,7 @@ export function ProductModal({
       document.removeEventListener('visibilitychange', onVisibility)
       flush()
     }
-  }, [form, isDirty, productId])
+  }, [form, isDirty, productId, draftScope])
 
   const handleSaveCategory = async (categoryData: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
     const payload = {
@@ -915,6 +936,8 @@ export function ProductModal({
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
     delete rest.fashion_audience
+    delete rest.product_details
+    delete (rest as Record<string, unknown>).initial_variant_batches
     // El lote del stock inicial viaja como un objeto aparte (solo al crear).
     const initialExpiresOn = data.initial_expires_on?.trim() || null
     const initialLotCode = data.initial_lot_code?.trim() || null
@@ -942,6 +965,8 @@ export function ProductModal({
 
     return {
       ...rest,
+      ...(!product && Object.keys(cleanProductDetails(data.product_details, data.has_variants ? data.variant_attribute_config.map(a => a.key) : [])).length ? { product_details: cleanProductDetails(data.product_details, data.has_variants ? data.variant_attribute_config.map(a => a.key) : []) } : {}),
+      ...(!product && data.has_variants ? { initial_batches: data.variants.filter(v => v.isActive && v.stockQuantity > 0).flatMap(v => { const batch = data.initial_variant_batches.find(b => b.variant_key === v.clientKey); const expires = batch ? batch.expires_on : data.initial_expires_on; return expires ? [{ sku: v.sku, expires_on: expires, lot_code: batch?.lot_code ?? data.initial_lot_code ?? null }] : [] }) } : {}),
       category_id: data.category_id || null,
       brand_id: data.brand_id || null,
       supplier_id: data.supplier_id || null,
@@ -953,7 +978,7 @@ export function ProductModal({
       offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
       // Sin moneda extranjera, los precios en otra moneda se limpian.
       price_currency: data.price_currency || null,
-      ...(!product && initialExpiresOn ? { initial_batch: { lot_code: initialLotCode, expires_on: initialExpiresOn } } : {}),
+      ...(!product && !data.has_variants && initialExpiresOn ? { initial_batch: { lot_code: initialLotCode, expires_on: initialExpiresOn } } : {}),
       foreign_sale_price: data.price_currency ? Number(data.foreign_sale_price ?? 0) : null,
       foreign_wholesale_price: data.price_currency && Number(data.foreign_wholesale_price) > 0 ? Number(data.foreign_wholesale_price) : null,
       foreign_purchase_price: data.price_currency && Number(data.foreign_purchase_price) > 0 ? Number(data.foreign_purchase_price) : null,
@@ -970,7 +995,7 @@ export function ProductModal({
       purchase_price: data.purchase_price == null ? null : Number(data.purchase_price),
       sale_price: Number(data.sale_price),
       stock_quantity: Boolean(data.has_variants && Array.isArray(data.variants) && data.variants.length > 0)
-        ? data.variants.reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
+        ? data.variants.filter(v => v.isActive).reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
         : Number(data.stock_quantity),
       min_stock: Number(data.min_stock),
       is_active: data.is_active ?? true,
@@ -1028,7 +1053,7 @@ export function ProductModal({
         {
           description: product
             ? `"${values.name}" · SKU ${values.sku}`
-            : `"${values.name}" · SKU ${values.sku} · Stock inicial ${values.stock_quantity}`,
+            : `"${values.name}" · SKU ${values.sku} · Stock inicial ${cleanedData.stock_quantity}`,
           duration: 4000
         }
       )
@@ -1041,7 +1066,7 @@ export function ProductModal({
       newlyUploadedImages.current.clear()
       // Lo escrito ya esta en la base: el borrador dejaria de ser un respaldo
       // para pasar a ser una version vieja que reaparece.
-      clearProductDraft(productId)
+      clearProductDraft(productId, draftScope)
       setDraftRestored(false)
       form.reset(values)
       onClose()
@@ -1106,7 +1131,7 @@ export function ProductModal({
     await cleanupAllNewImages()
     // Descartar es explicito: si el borrador sobreviviera, volveria al abrir y
     // la persona habria descartado nada.
-    clearProductDraft(productId)
+    clearProductDraft(productId, draftScope)
     setDraftRestored(false)
     form.reset()
     onClose()
@@ -1246,7 +1271,7 @@ export function ProductModal({
 
                     <div className="min-w-0">
                       <DialogTitle className="text-sm sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate">
-                        {product ? 'Editar Producto' : 'Nuevo Producto'}
+                        {product ? (isServiceUnit ? 'Editar servicio' : 'Editar producto') : (isServiceUnit ? 'Nuevo servicio' : 'Nuevo producto')}
                       </DialogTitle>
                       <DialogDescription className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate hidden sm:block">
                         {product
@@ -1364,7 +1389,7 @@ export function ProductModal({
                   <button
                     type="button"
                     onClick={() => {
-                      clearProductDraft(productId)
+                      clearProductDraft(productId, draftScope)
                       setDraftRestored(false)
                       onClose()
                     }}
@@ -1870,7 +1895,7 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Unidad de Medida <FieldRequirement /></FormLabel>
-                              <Select disabled={effectiveModules.includes('services')&&!effectiveModules.includes('inventory')} onValueChange={field.onChange} value={field.value || ""}>
+                              <Select disabled={effectiveModules.includes('services')&&!effectiveModules.includes('inventory')} onValueChange={value => changeProductUnit(value, field.onChange)} value={field.value || ""}>
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue placeholder="Seleccionar unidad" />
@@ -1887,6 +1912,7 @@ export function ProductModal({
                                   Es un servicio: no lleva stock y en el POS se cobra sin descontar inventario.
                                 </p>
                               )}
+                              {!isServiceUnit && <p className="text-[11px] leading-relaxed text-muted-foreground">Elegí la unidad que contás en el inventario. Para un frasco de 50 ml elegí Unidad y cargá 50 ml en Características o Variantes. El stock se registra en cantidades enteras.</p>}
                               <FormMessage />
                             </FormItem>
                           )}
@@ -2100,6 +2126,19 @@ export function ProductModal({
                     </CardContent>
                   </Card>
 
+                  {draftScope && !isServiceUnit && <ProductCatalogDetailsForm
+                    key={`${draftScope}:${productId ?? 'new'}`}
+                    productId={productId ?? undefined}
+                    vertical={formProfile.vertical}
+                    variantKeys={variantValue.hasVariants ? variantValue.attributes.map(attribute => attribute.key) : []}
+                    value={watch('product_details') ?? {}}
+                    disabled={isSubmitting}
+                    onChange={details => {
+                      setValue('product_details', details, { shouldDirty: true, shouldValidate: true })
+                      if (details.expiry_policy === 'not_applicable') { setValue('initial_expires_on', ''); setValue('initial_lot_code', ''); setValue('initial_variant_batches', []) }
+                    }}
+                  />}
+                  {errors.product_details && <p role="alert" className="text-sm text-destructive">Revisá las características: textos de hasta 120 caracteres, indicaciones de hasta 1000 y PAO entre 1 y 120 meses enteros.</p>}
                   {renderStepNavigation('basic')}
                 </TabsContent>
 
@@ -3228,8 +3267,8 @@ export function ProductModal({
                   </Card>
 
                   {product ? (
-                    <ProductBatchesPanel productId={product.id} alwaysShow={formProfile.tracksExpiry} />
-                  ) : formProfile.tracksExpiry && (
+                    <ProductBatchesPanel key={`${draftScope}:${product.id}`} productId={product.id} alwaysShow={formProfile.tracksExpiry} variants={variantValue.variants.flatMap(v => v.id ? [{ id: v.id, name: v.name }] : [])} />
+                  ) : formProfile.tracksExpiry && !watch('has_variants') && watch('product_details')?.expiry_policy !== 'not_applicable' && (
                     <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900 sm:p-6">
                       <div>
                         <p className="text-sm font-semibold sm:text-base">Lote y vencimiento del stock inicial</p>
@@ -3321,9 +3360,19 @@ export function ProductModal({
                       form.setValue('has_variants', next.hasVariants, { shouldDirty: true, shouldValidate: true })
                       form.setValue('variant_attribute_config', next.attributes, { shouldDirty: true, shouldValidate: true })
                       form.setValue('variants', next.variants, { shouldDirty: true, shouldValidate: true })
+                      const eligible = new Set(next.variants.filter(v => v.isActive && v.stockQuantity > 0).map(v => v.clientKey))
+                      form.setValue('initial_variant_batches', (form.getValues('initial_variant_batches') ?? []).filter(row => eligible.has(row.variant_key)), { shouldDirty: true, shouldValidate: true })
                     }}
                   />
                   <ProductVariantReview value={variantValue} />
+                  {!product && formProfile.tracksExpiry && variantValue.hasVariants && watch('product_details')?.expiry_policy !== 'not_applicable' && <InitialVariantBatches
+                    variants={variantValue.variants}
+                    value={watch('initial_variant_batches') ?? []}
+                    fallback={{ lot_code: watch('initial_lot_code'), expires_on: watch('initial_expires_on') }}
+                    disabled={isSubmitting}
+                    onChange={rows => setValue('initial_variant_batches', rows, { shouldDirty: true, shouldValidate: true })}
+                  />}
+                  {errors.initial_variant_batches && <p role="alert" className="text-sm text-destructive">Revisá los lotes: cada fecha debe ser válida y corresponder a una variante activa con stock inicial.</p>}
 
                   {renderStepNavigation('variants')}
                 </TabsContent>
@@ -3388,7 +3437,7 @@ export function ProductModal({
                         <div className="rounded-xl border p-4 bg-rose-50/50 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/40 flex flex-col justify-center">
                           <p className="text-xs font-semibold text-rose-800 dark:text-rose-300">Resumen en ficha pública</p>
                           <p className="text-lg font-bold text-rose-900 dark:text-rose-100 mt-0.5">
-                            {warrantyMonths > 0 ? `🛡️ ${warrantyMonths} meses de garantía oficial` : '⚠️ Sin garantía'}
+                            {warrantyMonths > 0 ? `🛡️ ${warrantyMonths} meses de garantía registrada` : 'Sin plazo de garantía registrado'}
                           </p>
                           <p className="text-[10px] text-rose-700/70 dark:text-rose-300/70 mt-1">
                             Aparece destacado en la página de compra para generar seguridad.

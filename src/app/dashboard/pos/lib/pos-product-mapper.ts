@@ -24,6 +24,16 @@ export type PosProductRow = {
   installments_plans?: unknown
   has_variants?: boolean | null
   variants?: unknown
+  organization_id?: string | null
+  visibility?: Product['visibility']
+  hide_price?: boolean | null
+  variant_attribute_config?: Product['variant_attribute_config']
+  device_brand?: string | null
+  device_models?: string[] | null
+  warranty_months?: number | null
+  warranty_info?: string | null
+  return_policy?: string | null
+  exchange_policy?: string | null
 }
 
 function mapInstallmentPlans(value: unknown): InstallmentPlanOption[] {
@@ -83,5 +93,15 @@ export function mapProductForPOS(row: PosProductRow): Product {
     installments_plans: mapInstallmentPlans(row.installments_plans),
     has_variants: hasVariants,
     variants: rawVariants,
+    organization_id: row.organization_id ?? null,
+    visibility: row.visibility,
+    hide_price: row.hide_price,
+    variant_attribute_config: row.variant_attribute_config,
+    device_brand: row.device_brand,
+    device_models: row.device_models,
+    warranty_months: row.warranty_months ?? null,
+    warranty_info: row.warranty_info ?? null,
+    return_policy: row.return_policy ?? null,
+    exchange_policy: row.exchange_policy ?? null,
   } as Product
 }

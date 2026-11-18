@@ -31,8 +31,8 @@ it('permite reintentar y muestra estados en español', async () => {
 })
 it('imprime solo los contactos reales del comercio', async () => {
  render(<SaleDetailsModal isOpen saleId="a" onClose={() => {}} />)
- fireEvent.click(await screen.findByRole('button', { name: 'Imprimir copia' }))
- expect(ctx.print).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ name: 'Comercio real', phone: '', address: '', email: '' }))
+ fireEvent.click(await screen.findByRole('button', { name: 'Reimprimir copia' }))
+ expect(ctx.print).toHaveBeenCalledWith(expect.objectContaining({ isReprint: true, receiptNumber: 'VTA-a' }), expect.objectContaining({ name: 'Comercio real', phone: '', address: '', email: '' }))
 })
 it('no ofrece acciones de gestión sin permiso', async () => {
  ctx.can=false
@@ -43,6 +43,6 @@ it('no ofrece acciones de gestión sin permiso', async () => {
 it('no imprime ventas anuladas', async () => {
  ctx.get.mockResolvedValue({ ...sale('a'), status: 'cancelled' })
  render(<SaleDetailsModal isOpen saleId="a" onClose={() => {}} />)
- await waitFor(() => expect(screen.getByRole('button', { name: 'Imprimir copia' })).toBeDisabled())
+ await waitFor(() => expect(screen.getByRole('button', { name: 'Reimprimir copia' })).toBeDisabled())
  expect(ctx.print).not.toHaveBeenCalled()
 })

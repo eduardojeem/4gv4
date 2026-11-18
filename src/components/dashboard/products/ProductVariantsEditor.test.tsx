@@ -226,7 +226,7 @@ it('tracks modified and reverted values after persisted variants hydrate asynchr
   render(<Host />)
   fireEvent.click(screen.getByRole('button', { name: 'Cargar variantes' }))
   expect(screen.getAllByText('Sin cambios')).toHaveLength(2)
-  const price = screen.getByLabelText('Precio · Negro · tabla')
+  const price = screen.getByLabelText('Precio de venta · Negro · tabla')
   fireEvent.change(price, { target: { value: '40' } })
   expect(screen.getAllByText('Modificada')).toHaveLength(2)
   fireEvent.change(price, { target: { value: '50' } })

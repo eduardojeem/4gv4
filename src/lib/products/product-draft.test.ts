@@ -21,6 +21,14 @@ describe('borrador del producto', () => {
     saveProductDraft('p-1', { name: 'Teclado', sale_price: 90000 })
     expect(readProductDraft('p-1')).toEqual({ name: 'Teclado', sale_price: 90000 })
   })
+  it('separa usuario y empresa, sin recuperar borradores antiguos sin ámbito', () => {
+    saveProductDraft(null, { name: 'Antiguo' })
+    saveProductDraft(null, { name: 'Comercio A' }, 'u:A')
+    expect(readProductDraft(null, 'u:B')).toBeNull()
+    expect(readProductDraft(null, 'v:A')).toBeNull()
+    expect(readProductDraft(null, 'u:A')).toEqual({ name: 'Comercio A' })
+    expect(readProductDraft(null, null)).toBeNull()
+  })
 
   it('agrupa cambios rápidos y guarda el último borrador', () => {
     vi.useFakeTimers()
@@ -110,13 +118,13 @@ describe('el modal ya no borra lo que se está escribiendo', () => {
     // `product` llega como prop y cualquier recarga de la lista lo reemplaza por
     // uno nuevo con los mismos datos: con el objeto en las dependencias, ese
     // reemplazo disparaba `form.reset()` sobre lo que la persona escribía.
-    expect(modal).toMatch(/\}, \[productId, form,\s*initialUnit\]\)/)
+    expect(modal).toMatch(/\}, \[productId, form,\s*initialUnit, draftScope\]\)/)
     expect(modal).not.toContain('}, [product, form])')
     expect(modal).toContain('const product = productRef.current')
   })
 
   it('el borrador gana sobre lo guardado al abrir', () => {
-    const efecto = modal.slice(modal.indexOf('const draft = readProductDraft(productId)'))
+    const efecto = modal.slice(modal.indexOf('const draft = readProductDraft(productId, draftScope)'))
     expect(efecto.slice(0, 200)).toContain('setDraftRestored(true)')
   })
 
@@ -129,10 +137,10 @@ describe('el modal ya no borra lo que se está escribiendo', () => {
 
   it('lo borra al guardar y al descartar', () => {
     const guardado = modal.slice(modal.indexOf('newlyUploadedImages.current.clear()\n      // Lo escrito'))
-    expect(guardado.slice(0, 300)).toContain('clearProductDraft(productId)')
+    expect(guardado.slice(0, 300)).toContain('clearProductDraft(productId, draftScope)')
 
     const descarte = modal.slice(modal.indexOf('const discardChangesAndClose'))
-    expect(descarte.slice(0, 500)).toContain('clearProductDraft(productId)')
+    expect(descarte.slice(0, 500)).toContain('clearProductDraft(productId, draftScope)')
   })
 
   it('avisa que recuperó, en vez de aparecer lleno sin explicación', () => {

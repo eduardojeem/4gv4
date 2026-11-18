@@ -509,7 +509,8 @@ function POSPageContent() {
     error: productsError,
     processSale: processInventorySale,
     findProductByBarcode,
-    syncProduct
+    syncProduct,
+    syncProductVisibility,
   } = usePOSProducts()
 
   // Optimized Cart Hook
@@ -3123,6 +3124,10 @@ function POSPageContent() {
       {/* Modal de Detalle de Producto */}
       <POSProductDetailDialog
         product={detailProduct}
+        onProductVisibilitySaved={(id, patch) => {
+          setDetailProduct(current => current?.id === id ? { ...current, ...patch } : current)
+          syncProductVisibility(id, patch)
+        }}
         open={isDetailDialogOpen}
         onOpenChange={setIsDetailDialogOpen}
         autoScrollToCredit={detailDialogScrollToCredit}

@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { CalendarDateSchema } from '@/lib/products/catalog-contract'
 import { BATCH_COLUMNS, isMissingBatchesTable, loadEstimatedBatches } from '@/lib/inventory/batches-server'
 
 export const dynamic = 'force-dynamic'
@@ -31,9 +32,9 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 
 const batchSchema = z.object({
   lot_code: z.string().trim().max(60).nullable().optional(),
-  expires_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Poné la fecha de vencimiento'),
+  expires_on: CalendarDateSchema,
   quantity: z.number().int().min(1, 'La cantidad tiene que ser mayor a 0').max(10_000_000),
-  received_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  received_on: CalendarDateSchema.optional(),
   variant_id: z.string().uuid().nullable().optional(),
   notes: z.string().trim().max(500).nullable().optional(),
 })

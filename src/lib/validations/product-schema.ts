@@ -4,10 +4,12 @@ import { validateBarcode } from "./product-validation"
 import {
   ProductAttributeDefinitionSchema,
   ProductVariantInputSchema,
+  ProductVariantsPayloadSchema,
 } from "@/lib/products/variant-contract"
 import { isPersistableImageSource } from '@/lib/image-url-policy'
+import { OptionalCalendarDateSchema, InitialVariantBatchSchema, ProductDetailsSchema, normalizeServiceProduct } from '@/lib/products/catalog-contract'
 
-export const productSchema = z
+export const productSchema = z.preprocess(normalizeServiceProduct, z
   .object({
     id: z.string().optional(),
     name: z
@@ -48,7 +50,9 @@ export const productSchema = z
 
     // Lote y vencimiento del stock inicial (rubros con vencimiento).
     initial_lot_code: z.string().max(60).optional().nullable(),
-    initial_expires_on: z.string().optional().nullable(),
+    initial_expires_on: OptionalCalendarDateSchema,
+    initial_variant_batches: z.array(InitialVariantBatchSchema).default([]),
+    product_details: ProductDetailsSchema.optional(),
 
     // Pricing
     purchase_price: z.preprocess(
@@ -172,6 +176,21 @@ export const productSchema = z
     variants: z.array(ProductVariantInputSchema).default([]),
   })
   .superRefine((data, ctx) => {
+    if (data.has_variants) {
+      const check = ProductVariantsPayloadSchema.safeParse({ hasVariants: true, attributes: data.variant_attribute_config, variants: data.variants })
+      if (!check.success) for (const issue of check.error.issues) {
+        const [first, ...rest] = issue.path
+        ctx.addIssue({ code: 'custom', path: [first === 'attributes' ? 'variant_attribute_config' : first === 'hasVariants' ? 'has_variants' : first, ...rest], message: issue.message })
+      }
+    }
+    if (!data.has_variants && data.initial_lot_code?.trim() && !data.initial_expires_on) ctx.addIssue({ code: 'custom', path: ['initial_expires_on'], message: 'Agregá el vencimiento del lote o borrá su código.' })
+    if (!data.has_variants && data.initial_expires_on && data.stock_quantity <= 0) ctx.addIssue({ code: 'custom', path: ['stock_quantity'], message: 'Para registrar el lote inicial, cargá una cantidad mayor a cero.' })
+    for (const [index, batch] of data.initial_variant_batches.entries()) {
+      if (!data.has_variants) continue
+      const variant = data.variants.find(v => v.clientKey === batch.variant_key)
+      if ((batch.expires_on || batch.lot_code?.trim()) && (!variant || variant.stockQuantity <= 0 || !variant.isActive)) ctx.addIssue({ code: 'custom', path: ['initial_variant_batches', index, 'expires_on'], message: 'El lote necesita una variante activa con stock inicial.' })
+      if (batch.lot_code?.trim() && !batch.expires_on) ctx.addIssue({ code: 'custom', path: ['initial_variant_batches', index, 'expires_on'], message: 'Agregá la fecha de vencimiento del lote.' })
+    }
     for (const issue of fixedProductPlanErrors(data)) ctx.addIssue({ code: 'custom', path: ['installments_plans', issue.index, 'installmentAmount'], message: issue.message })
     if (data.has_variants && data.variant_attribute_config.length === 0) {
       ctx.addIssue({
@@ -278,20 +297,8 @@ export const productSchema = z
       }
     }
 
-    // post-sale consistency
-    if (
-      data.exchange_window_days > 0 &&
-      data.return_window_days > 0 &&
-      data.exchange_window_days > data.return_window_days
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "La ventana de cambio no puede ser mayor a la ventana de devolucion",
-        path: ["exchange_window_days"],
-      })
-    }
-  })
+    // Cambio y devolución son políticas independientes.
+  }))
 
 // Output type (after parsing/coercion) - used for onSubmit handler
 export type ProductFormValues = z.output<typeof productSchema>
