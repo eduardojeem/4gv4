@@ -173,7 +173,11 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
 
       {/* ── 0. CARRUSEL PROMOCIONAL (lo carga el comercio) ── */}
       {hasConfiguredSlides && settings.promotional_carousel && (
-        <EspecialCosmeticosCarousel settings={settings.promotional_carousel} />
+        <EspecialCosmeticosCarousel
+          settings={settings.promotional_carousel}
+          brandColor={company?.brandColor ?? settings.company_info.brandColor}
+          customBrandColor={company?.customBrandColor ?? settings.company_info.customBrandColor}
+        />
       )}
 
       {/* ── 1. PORTADA: solo si no hay carrusel (antes repetía su mismo título) ── */}

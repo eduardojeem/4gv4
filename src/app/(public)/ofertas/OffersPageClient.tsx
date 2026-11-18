@@ -641,7 +641,11 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     <div className="min-h-screen bg-background">
       {/* ── Banners de campaña configurados en Sitio Web ── */}
       {isCosmeticos ? (
-        <EspecialCosmeticosCarousel settings={settings.offers_carousel} />
+        <EspecialCosmeticosCarousel
+          settings={settings.offers_carousel}
+          brandColor={settings.company_info?.brandColor}
+          customBrandColor={settings.company_info?.customBrandColor}
+        />
       ) : (
         <PromotionalCarousel settings={settings.offers_carousel} />
       )}
