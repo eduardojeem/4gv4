@@ -166,4 +166,14 @@ describe('/ofertas — banda del carrusel', () => {
     // Y cae en los defaults, así que el carrusel igual se muestra.
     expect(screen.getByRole('region', { name: 'Carrusel de ofertas destacadas' })).toBeInTheDocument()
   })
+
+  it('aplica el rediseño boutique para especial-cosmeticos con encabezado y tarjetas exclusivas', () => {
+    const settings = getWebsiteSettingsDefaults()
+    settings.company_info.storefrontStyle = 'especial-cosmeticos'
+    renderPage(settings)
+
+    expect(screen.getByText(/Alta Cosmética · Fórmulas en Descuento/i)).toBeInTheDocument()
+    expect(screen.getByText(/Ofertas Destacadas en Cuidado & Belleza/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Recomendado/i).length).toBeGreaterThan(0)
+  })
 })

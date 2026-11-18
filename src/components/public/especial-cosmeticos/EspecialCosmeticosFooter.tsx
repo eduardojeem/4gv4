@@ -31,8 +31,8 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
 
   const slug = getTenantSlugFromPathname(pathname)
   const prefix = slug ? `/${slug}` : ''
-  const storeName = company?.name?.trim() || 'Tu tienda'
-  const slogan = company?.slogan?.trim() || 'Alta Cosmética & Skincare'
+  const storeName = company?.name?.trim() || 'Tienda'
+  const slogan = company?.slogan?.trim() || ''
   const logoUrl = company?.logoUrl?.trim() || ''
   const phone = company?.phone?.trim() || ''
   const email = company?.email?.trim() || ''
@@ -47,11 +47,13 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
   const facebookUrl = company?.facebook ? socialProfileUrl(company.facebook, 'facebook') : ''
   const tiktokUrl = company?.tiktok ? socialProfileUrl(company.tiktok, 'tiktok') : ''
 
-  const hours = company?.hours ?? {
-    weekdays: '',
-    saturday: '',
-    sunday: '',
+  // Solo los horarios que cargó el comercio (antes se inventaban si faltaban).
+  const hours = {
+    weekdays: company?.hours?.weekdays?.trim() || '',
+    saturday: company?.hours?.saturday?.trim() || '',
+    sunday: company?.hours?.sunday?.trim() || '',
   }
+  const hasHours = Boolean(hours.weekdays || hours.saturday || hours.sunday)
 
   return (
     <footer className="border-t border-rose-200/60 bg-[#FFFDFB] text-stone-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-stone-300">
@@ -88,9 +90,11 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
                 <span className="font-serif text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
                   {storeName}
                 </span>
-                <span className="text-[10px] font-medium tracking-[0.18em] uppercase text-rose-600 dark:text-rose-400">
-                  {slogan}
-                </span>
+                {slogan && (
+                  <span className="text-[10px] font-medium tracking-[0.18em] uppercase text-rose-600 dark:text-rose-400">
+                    {slogan}
+                  </span>
+                )}
               </div>
             </Link>
             <p className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
@@ -185,25 +189,30 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
           </div>
 
           {/* 3. Horarios de Atención */}
+          {hasHours && (
           <div className="space-y-3">
             <h3 className="font-serif text-sm font-bold tracking-wide uppercase text-stone-900 dark:text-stone-100">
               Horarios del Local
             </h3>
             <div className="space-y-2 text-xs">
-              <div className="flex items-start gap-2">
-                <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-stone-900 dark:text-stone-200">Lunes a Viernes</p>
-                  <p className="text-stone-500">{hours.weekdays || 'No publicado'}</p>
+              {hours.weekdays && (
+                <div className="flex items-start gap-2">
+                  <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-stone-900 dark:text-stone-200">Lunes a Viernes</p>
+                    <p className="text-stone-500">{hours.weekdays}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-stone-900 dark:text-stone-200">Sábados</p>
-                  <p className="text-stone-500">{hours.saturday || 'No publicado'}</p>
+              )}
+              {hours.saturday && (
+                <div className="flex items-start gap-2">
+                  <Clock className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-stone-900 dark:text-stone-200">Sábados</p>
+                    <p className="text-stone-500">{hours.saturday}</p>
+                  </div>
                 </div>
-              </div>
+              )}
               {hours.sunday && (
                 <div className="flex items-start gap-2">
                   <Clock className="h-3.5 w-3.5 text-stone-400 shrink-0 mt-0.5" />
@@ -215,6 +224,7 @@ export function EspecialCosmeticosFooter({ initialSettings = null }: EspecialCos
               )}
             </div>
           </div>
+          )}
 
           {/* 4. Contacto y Dirección */}
           <div className="space-y-3">

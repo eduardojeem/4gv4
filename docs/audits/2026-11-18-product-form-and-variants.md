@@ -14,11 +14,11 @@
 - La creación con características o lotes por variante usa una transacción nueva que delega en las funciones actuales de producto/stock. Si falla cualquier lote, se revierte la creación completa.
 - Las características de productos existentes se editan con su propio botón y aviso explícito de guardado separado. Las lecturas mantienen ámbito y cancelan respuestas obsoletas.
 
-## Migración pendiente
+## Migración
 
 `supabase/migrations/20261118010000_product_catalog_details_and_initial_batches.sql` crea `product_catalog_details` y `create_product_catalog_atomic`. RLS para lectura; escrituras de tabla y ejecución RPC reservadas a service_role. La API conserva autorización por empresa y permiso de productos, y valida el origen de las ediciones de características.
 
-No se aplicó a producción. Sin activarla, los campos nuevos informan su indisponibilidad y el guardado que los necesite falla de forma explícita; no continúa descartando datos. Las altas básicas conservan el camino existente.
+El usuario informó que ejecutó el SQL antes de autorizar la publicación. No se volvió a aplicar ni se modificó la migración. Esa ejecución no se verificó directamente en producción. Sin activarla, los campos nuevos informan su indisponibilidad y el guardado que los necesite falla de forma explícita; no continúa descartando datos. Las altas básicas conservan el camino existente.
 
 ## Verificación local
 

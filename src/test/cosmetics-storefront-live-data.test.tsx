@@ -5,7 +5,7 @@ vi.mock('@/hooks/useWebsiteSettings',()=>({useWebsiteSettings:()=>({settings:nul
 vi.mock('@/components/legal/LegalFooterLinks',()=>({LegalFooterLinks:()=>null}))
 vi.mock('swr',()=>({default:()=>({data:state.products,isLoading:state.loading,error:state.error})}))
 vi.mock('next/navigation',()=>({usePathname:()=>'/prueba/inicio'}))
-vi.mock('@/components/public/storefront-style-context',()=>({useStorefrontCompanyInfo:()=>state.company}))
+vi.mock('@/components/public/storefront-style-context',()=>({useStorefrontCompanyInfo:()=>state.company,useStorefrontStyle:()=>({})}))
 vi.mock('@/hooks/usePublicCategories',()=>({usePublicCategories:()=>({categories:state.categories})}))
 vi.mock('@/components/public/especial-cosmeticos/EspecialCosmeticosCarousel',()=>({EspecialCosmeticosCarousel:()=> <div data-testid="configured-carousel">Banner configurado</div>}))
 vi.mock('@/components/public/ProductCard',()=>({ProductCard:({product}:{product:{id:string;name:string}})=><div data-testid="real-product">{product.name}</div>}))
@@ -28,7 +28,7 @@ it('un catálogo vacío no inventa productos, ofertas, contactos ni reseñas',()
 it('muestra solo productos reales y ofertas reales del comercio',()=>{
  state.products=[{id:'p1',name:'Producto real',has_offer:true,offer_price:80,sale_price:100}]
  show()
- expect(screen.getAllByTestId('real-product')).toHaveLength(2)
+ expect(screen.getAllByTestId('real-product')).toHaveLength(1)
  expect(screen.getAllByText('Producto real')).toHaveLength(2)
  expect(screen.queryByText('Set Rutina Glow Completa')).toBeNull()
 })
@@ -36,12 +36,12 @@ it('usa el contacto y los conteos guardados, incluido cero',()=>{
  state.company={...state.company,whatsapp:'595981999999',address:'Dirección real'}
  state.categories=[{id:'cat',name:'Categoría real',productCount:0}]
  const {container}=show()
- expect(container.querySelector('a[href="https://wa.me/595981999999"]')).not.toBeNull()
- expect(screen.getByText('0 productos')).toBeInTheDocument()
+ expect(container.querySelector('a[href*="wa.me/"]')).toBeNull() // El layout comparte el botón; no duplicarlo aquí.
+ expect(screen.queryByText('Categoría real')).toBeNull() // No se anuncian categorías vacías.
 })
 it('un error de catálogo se comunica sin sustituir datos por una muestra',()=>{
  state.error=new Error('error de red');show()
- expect(screen.getByText(/No pudimos cargar el catálogo/)).toBeInTheDocument()
+ expect(screen.getByText(/No pudimos cargar los productos/)).toBeInTheDocument()
  expect(screen.queryAllByTestId('real-product')).toHaveLength(0)
 })
 

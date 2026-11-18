@@ -36,14 +36,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AuthModal } from '@/components/public/AuthModal'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
-import { InstagramIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
+import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/contexts/auth-context'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { cityFromAddress } from './cosmetics-home-data'
 import './especial-cosmeticos.css'
 
 interface EspecialCosmeticosHeaderProps {
@@ -139,7 +141,9 @@ const SEARCH_SUGGESTIONS = [
 export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticosHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const company = useStorefrontCompanyInfo(settings?.company_info)
+  const { settings: liveSettings } = useWebsiteSettings()
+  const effectiveSettings = liveSettings ?? settings
+  const company = useStorefrontCompanyInfo(effectiveSettings?.company_info)
   const { user, signOut } = useAuth()
   const hydrated = useHydrated()
 
@@ -183,12 +187,26 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
     }
   }, [isSearchOpen])
 
-  const storeName = company?.name?.trim() || 'Tu tienda'
-  const slogan = company?.slogan?.trim() || 'Alta Cosmética & Cuidado Botánico'
+  // Solo datos que cargó el comercio: nada de nombres, logos o teléfonos de
+  // ejemplo (antes un comercio sin logo mostraba el de Paravos y sin teléfono,
+  // el +595 981 111 111).
+  const storeName = company?.name?.trim() || 'Tienda'
+  const slogan = company?.slogan?.trim() || ''
   const logoUrl = company?.logoUrl?.trim() || ''
   const phone = company?.phone?.trim() || ''
   const whatsapp = company?.whatsapp?.trim() || phone
   const whatsappClean = whatsapp.replace(/\D/g, '')
+  const city = cityFromAddress(company?.address)
+  const weekdayHours = company?.hours?.weekdays?.trim() || ''
+
+  // Opciones de apariencia elegidas en /admin/website:
+  // headerStyle: 'solid' (Claro) | 'accent' (Color de marca) | 'dark' (Oscuro)
+  const headerStyle = company?.headerStyle || 'solid'
+  const isAccent = headerStyle === 'accent'
+  const isDark = headerStyle === 'dark'
+
+  const customBrandColor = company?.customBrandColor
+  const isCustomBrand = Boolean(customBrandColor && /^#[0-9A-Fa-f]{3,8}$/.test(customBrandColor))
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -227,22 +245,38 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
       <header
         className={cn(
           'sticky top-0 z-50 w-full transition-all duration-300',
-          scrolled
+          isAccent
+            ? 'bg-primary text-white border-b border-white/20 shadow-md shadow-black/10 py-1.5'
+            : isDark
+            ? 'bg-stone-950 text-white border-b border-stone-800 shadow-md shadow-black/30 py-1.5'
+            : scrolled
             ? 'bg-[#FFFDFB]/95 dark:bg-zinc-950/95 shadow-md shadow-rose-950/5 backdrop-blur-md border-b border-rose-150/70 dark:border-rose-900/30 py-1.5'
             : 'bg-[#FFFDFB] dark:bg-zinc-950 border-b border-rose-100 dark:border-zinc-800/80 py-2.5'
         )}
+        style={isAccent && isCustomBrand ? { backgroundColor: customBrandColor, borderColor: `${customBrandColor}cc` } : undefined}
       >
         {/* ── 1. Barra superior de anuncios boutique ── */}
         {company?.showTopBar !== false && (
-          <div className="border-b border-rose-100/70 bg-[#FFF5F6] py-1 text-xs text-rose-900 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-200">
+          <div
+            className={cn(
+              'border-b py-1 text-xs transition-colors',
+              isAccent
+                ? 'border-white/15 bg-black/15 text-white/90'
+                : isDark
+                ? 'border-stone-800 bg-stone-900 text-stone-300'
+                : 'border-rose-100/70 bg-[#FFF5F6] text-rose-900 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-200'
+            )}
+          >
             <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
+                <Sparkles
+                  className={cn(
+                    'h-3.5 w-3.5',
+                    isAccent ? 'text-white/90' : isDark ? 'text-amber-400' : 'text-rose-500'
+                  )}
+                />
                 <span className="font-medium tracking-wide">
-                  Consultá productos y opciones con el comercio
-                </span>
-                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-rose-200/60 dark:bg-rose-900/50 px-2 py-0.5 text-[10px] font-semibold text-rose-800 dark:text-rose-200">
-                  ✦ Catálogo online
+                  {[city, weekdayHours].filter(Boolean).join(' · ') || slogan || storeName}
                 </span>
               </div>
               <div className="hidden sm:flex items-center gap-4 text-[11px]">
@@ -251,9 +285,21 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     href={`https://wa.me/${whatsappClean}?text=${encodeURIComponent('¡Hola! Me gustaría asesorarme sobre productos y rutinas para mi tipo de piel.')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 font-medium text-emerald-800 dark:text-emerald-300 hover:text-emerald-600 transition-colors"
+                    className={cn(
+                      'flex items-center gap-1.5 font-medium transition-colors',
+                      isAccent
+                        ? 'text-white hover:text-white/80'
+                        : isDark
+                        ? 'text-emerald-400 hover:text-emerald-300'
+                        : 'text-emerald-800 dark:text-emerald-300 hover:text-emerald-600'
+                    )}
                   >
-                    <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-600" />
+                    <WhatsAppIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white' : 'text-emerald-500'
+                      )}
+                    />
                     <span>WhatsApp: {whatsapp}</span>
                   </a>
                 )}
@@ -262,10 +308,68 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     href={`https://instagram.com/${company.instagram.replace(/^@/, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-rose-600 transition-colors"
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      isAccent
+                        ? 'text-white/90 hover:text-white'
+                        : isDark
+                        ? 'text-stone-300 hover:text-white'
+                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                    )}
                   >
-                    <InstagramIcon className="h-3.5 w-3.5 text-rose-500" />
+                    <InstagramIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      )}
+                    />
                     <span>@{company.instagram.replace(/^@/, '')}</span>
+                  </a>
+                )}
+                {company?.facebook && (
+                  <a
+                    href={`https://facebook.com/${company.facebook.replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      isAccent
+                        ? 'text-white/90 hover:text-white'
+                        : isDark
+                        ? 'text-stone-300 hover:text-white'
+                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                    )}
+                  >
+                    <FacebookIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      )}
+                    />
+                    <span>Facebook</span>
+                  </a>
+                )}
+                {company?.tiktok && (
+                  <a
+                    href={`https://tiktok.com/@${company.tiktok.replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      isAccent
+                        ? 'text-white/90 hover:text-white'
+                        : isDark
+                        ? 'text-stone-300 hover:text-white'
+                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                    )}
+                  >
+                    <TikTokIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      )}
+                    />
+                    <span>TikTok</span>
                   </a>
                 )}
               </div>
@@ -278,7 +382,12 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
           {/* Logo & Marca */}
           <Link href={`${prefix}/inicio`} className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-3 lg:max-w-xs">
             {logoUrl && !logoError ? (
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11 border border-rose-200/80 shadow-xs bg-white">
+              <div
+                className={cn(
+                  'relative h-9 w-9 shrink-0 sm:h-11 sm:w-11 overflow-hidden rounded-full border shadow-xs bg-white',
+                  isAccent ? 'border-white/40' : isDark ? 'border-stone-700' : 'border-rose-200/80'
+                )}
+              >
                 <AppImage
                   src={logoUrl}
                   alt={storeName}
@@ -288,9 +397,18 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 />
               </div>
             ) : (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-11 sm:w-11 bg-gradient-to-tr from-rose-100 via-pink-50 to-amber-100 border border-rose-200/80 shadow-xs group-hover:scale-105 transition-transform duration-300">
+              <div
+                className={cn(
+                  'flex h-9 w-9 shrink-0 sm:h-11 sm:w-11 items-center justify-center rounded-full shadow-xs group-hover:scale-105 transition-transform duration-300',
+                  isAccent
+                    ? 'bg-white/15 text-white border border-white/30'
+                    : isDark
+                    ? 'bg-stone-900 text-rose-400 border border-stone-700'
+                    : 'bg-gradient-to-tr from-rose-100 via-pink-50 to-amber-100 border border-rose-200/80 text-rose-600'
+                )}
+              >
                 <svg
-                  className="h-6 w-6 text-rose-600"
+                  className="h-6 w-6"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -308,12 +426,32 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               </div>
             )}
             <div className="flex min-w-0 flex-col">
-              <span title={storeName} className="truncate font-serif text-base sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50 group-hover:text-rose-600 transition-colors">
+              <span
+                className={cn(
+                  'truncate font-serif text-base sm:text-2xl font-bold tracking-tight transition-colors',
+                  isAccent
+                    ? 'text-white'
+                    : isDark
+                    ? 'text-white group-hover:text-rose-400'
+                    : 'text-stone-900 dark:text-stone-50 group-hover:text-rose-600'
+                )}
+              >
                 {storeName}
               </span>
-              <span className="hidden truncate text-[10px] font-medium tracking-[0.18em] sm:block uppercase text-rose-600/90 dark:text-rose-400">
-                {slogan}
-              </span>
+              {slogan && (
+                <span
+                  className={cn(
+                    'text-[10px] font-medium tracking-[0.18em] uppercase',
+                    isAccent
+                      ? 'text-white/80'
+                      : isDark
+                      ? 'text-rose-400'
+                      : 'text-rose-600/90 dark:text-rose-400'
+                  )}
+                >
+                  {slogan}
+                </span>
+              )}
             </div>
           </Link>
 
@@ -324,7 +462,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               href={`${prefix}/inicio`}
               className={cn(
                 'text-sm font-medium tracking-wide transition-colors relative py-1',
-                isHome
+                isAccent
+                  ? isHome
+                    ? 'text-white font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-white'
+                    : 'text-white/85 hover:text-white'
+                  : isDark
+                  ? isHome
+                    ? 'text-white font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
+                    : 'text-stone-300 hover:text-white'
+                  : isHome
                   ? 'text-rose-600 font-semibold dark:text-rose-400 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
                   : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
               )}
@@ -343,7 +489,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMegaMenuOpen(!megaMenuOpen)}
                 className={cn(
                   'flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors py-1',
-                  isProducts || megaMenuOpen
+                  isAccent
+                    ? isProducts || megaMenuOpen
+                      ? 'text-white font-bold'
+                      : 'text-white/85 hover:text-white'
+                    : isDark
+                    ? isProducts || megaMenuOpen
+                      ? 'text-white font-bold'
+                      : 'text-stone-300 hover:text-white'
+                    : isProducts || megaMenuOpen
                     ? 'text-rose-600 font-semibold dark:text-rose-400'
                     : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
                 )}
@@ -353,7 +507,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 <ChevronDown
                   className={cn(
                     'h-3.5 w-3.5 transition-transform duration-200',
-                    megaMenuOpen ? 'rotate-180 text-rose-600' : 'text-stone-400'
+                    megaMenuOpen ? 'rotate-180' : '',
+                    isAccent
+                      ? 'text-white/80'
+                      : isDark
+                      ? 'text-stone-400'
+                      : megaMenuOpen
+                      ? 'text-rose-600'
+                      : 'text-stone-400'
                   )}
                 />
               </button>
@@ -441,34 +602,17 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                           </div>
                         </div>
 
-                        {/* Tarjeta Promocional Mini dentro del menú */}
-                        <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 dark:from-zinc-900 dark:to-zinc-850 border border-rose-200/80 dark:border-zinc-750">
-                          <div className="flex items-center gap-3">
-                            <div className="relative h-12 w-12 shrink-0 rounded-xl overflow-hidden border border-rose-200">
-                              <AppImage
-                                src="/images/promotional-carousel/hero-cosmetica-spa.webp"
-                                alt="Set Rutina Glow"
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <span className="inline-block px-1.5 py-0.2 text-[9px] font-extrabold uppercase rounded-full bg-rose-600 text-white shadow-2xs">
-                                Catálogo
-                              </span>
-                              <p className="font-serif text-xs font-bold text-stone-900 dark:text-stone-100 truncate mt-0.5">
-                                Productos del comercio
-                              </p>
-                              <Link
-                                href={`${prefix}/ofertas`}
-                                className="text-[11px] font-semibold text-rose-600 hover:underline inline-flex items-center gap-1"
-                              >
-                                <span>Ver productos</span>
-                                <ArrowRight className="h-2.5 w-2.5" />
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
+                        {/* Acceso a las ofertas reales de la tienda */}
+                        <Link
+                          href={`${prefix}/ofertas`}
+                          className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 dark:from-zinc-900 dark:to-zinc-850 border border-rose-200/80 dark:border-zinc-750 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:border-rose-300"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Ver ofertas de la tienda
+                          </span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
                       </div>
                     </div>
 
@@ -476,7 +620,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     <div className="mt-4 pt-3 border-t border-rose-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
                         <Clock className="h-3.5 w-3.5 text-rose-500" />
-                        <span>Consultá las opciones de entrega</span>
+                        <span>{[city, weekdayHours].filter(Boolean).join(' · ') || storeName}</span>
                       </div>
                       <Link
                         href={`${prefix}/productos`}
@@ -494,7 +638,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             {/* Categorías */}
             <Link
               href={`${prefix}/inicio#categorias`}
-              className="text-sm font-medium tracking-wide text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400 transition-colors relative py-1"
+              className={cn(
+                'text-sm font-medium tracking-wide transition-colors relative py-1',
+                isAccent
+                  ? 'text-white/85 hover:text-white'
+                  : isDark
+                  ? 'text-stone-300 hover:text-white'
+                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+              )}
             >
               Categorías
             </Link>
@@ -504,21 +655,33 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               href={`${prefix}/ofertas`}
               className={cn(
                 'inline-flex items-center gap-1.5 text-sm font-medium tracking-wide transition-colors relative py-1',
-                isOffers
+                isAccent
+                  ? isOffers
+                    ? 'text-white font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-white'
+                    : 'text-white/85 hover:text-white'
+                  : isDark
+                  ? isOffers
+                    ? 'text-rose-400 font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
+                    : 'text-stone-300 hover:text-rose-400'
+                  : isOffers
                   ? 'text-rose-600 font-semibold dark:text-rose-400 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
                   : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
               )}
             >
               <span>Ofertas</span>
-              <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs animate-pulse">
-                -25%
-              </span>
             </Link>
 
             {/* Rutina / Cuidados */}
             <Link
               href={`${prefix}/inicio#rutina`}
-              className="text-sm font-medium tracking-wide text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400 transition-colors relative py-1"
+              className={cn(
+                'text-sm font-medium tracking-wide transition-colors relative py-1',
+                isAccent
+                  ? 'text-white/85 hover:text-white'
+                  : isDark
+                  ? 'text-stone-300 hover:text-white'
+                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+              )}
             >
               Rutina
             </Link>
@@ -526,7 +689,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             {/* Nosotros */}
             <Link
               href={`${prefix}/inicio#nosotros`}
-              className="text-sm font-medium tracking-wide text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400 transition-colors relative py-1"
+              className={cn(
+                'text-sm font-medium tracking-wide transition-colors relative py-1',
+                isAccent
+                  ? 'text-white/85 hover:text-white'
+                  : isDark
+                  ? 'text-stone-300 hover:text-white'
+                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+              )}
             >
               Nosotros
             </Link>
@@ -534,7 +704,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             {/* Ubicación */}
             <Link
               href={`${prefix}/inicio#ubicacion`}
-              className="text-sm font-medium tracking-wide text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400 transition-colors relative py-1"
+              className={cn(
+                'text-sm font-medium tracking-wide transition-colors relative py-1',
+                isAccent
+                  ? 'text-white/85 hover:text-white'
+                  : isDark
+                  ? 'text-stone-300 hover:text-white'
+                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+              )}
             >
               Ubicación
             </Link>
@@ -578,7 +755,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 <button
                   type="button"
                   onClick={() => setIsSearchOpen(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-rose-50 hover:text-rose-600 dark:text-stone-300 dark:hover:bg-zinc-800 transition-colors"
+                  className={cn(
+                    'flex h-9 w-9 items-center justify-center rounded-full transition-colors',
+                    isAccent
+                      ? 'text-white hover:bg-white/15'
+                      : isDark
+                      ? 'text-stone-300 hover:bg-stone-800 hover:text-white'
+                      : 'text-stone-600 hover:bg-rose-50 hover:text-rose-600 dark:text-stone-300 dark:hover:bg-zinc-800'
+                  )}
                   aria-label="Buscar cosméticos"
                 >
                   <Search className="h-4 w-4" />
@@ -587,10 +771,26 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             </div>
 
             {/* Selector de tema */}
-            <ThemeToggle />
+            <ThemeToggle
+              className={
+                isAccent
+                  ? 'text-white hover:bg-white/15 hover:text-white'
+                  : isDark
+                  ? 'text-stone-300 hover:bg-stone-800 hover:text-white'
+                  : undefined
+              }
+            />
 
             {/* Botón Carrito con contador en vivo */}
-            <PublicCartButton />
+            <PublicCartButton
+              className={
+                isAccent
+                  ? 'border-white/30 bg-white/15 text-white hover:bg-white/25 hover:text-white'
+                  : isDark
+                  ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800 hover:text-white'
+                  : undefined
+              }
+            />
 
             {/* Perfil de Usuario / Inicio de sesión */}
             {hydrated && user ? (
@@ -598,11 +798,27 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-rose-300"
+                    className={cn(
+                      'flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+                      isAccent
+                        ? 'border-white/30 bg-white/15 text-white hover:bg-white/25'
+                        : isDark
+                        ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
+                        : 'border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-rose-300'
+                    )}
                     aria-label="Menú de usuario"
                   >
                     <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <AvatarFallback
+                        className={cn(
+                          'text-xs font-semibold',
+                          isAccent
+                            ? 'bg-white/25 text-white'
+                            : isDark
+                            ? 'bg-stone-800 text-rose-400'
+                            : 'bg-rose-100 text-rose-700'
+                        )}
+                      >
                         {user.email?.charAt(0).toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
@@ -642,7 +858,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <button
                 type="button"
                 onClick={() => setAuthModalOpen(true)}
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/70 px-3.5 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-100 hover:border-rose-300 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 transition-colors shadow-2xs"
+                className={cn(
+                  'hidden sm:inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors shadow-2xs',
+                  isAccent
+                    ? 'border-white/30 bg-white/15 text-white hover:bg-white/25'
+                    : isDark
+                    ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
+                    : 'border border-rose-200 bg-rose-50/70 text-rose-800 hover:bg-rose-100 hover:border-rose-300 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
+                )}
               >
                 <LogIn className="h-3.5 w-3.5" />
                 <span>Ingresar</span>
@@ -653,7 +876,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-stone-700 hover:bg-rose-50 dark:text-stone-300 dark:hover:bg-zinc-800 lg:hidden"
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-full lg:hidden transition-colors',
+                isAccent
+                  ? 'text-white hover:bg-white/15'
+                  : isDark
+                  ? 'text-stone-200 hover:bg-stone-800'
+                  : 'text-stone-700 hover:bg-rose-50 dark:text-stone-300 dark:hover:bg-zinc-800'
+              )}
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={mobileMenuOpen}
               aria-controls="cosmetics-mobile-menu"
@@ -665,7 +895,17 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
         {/* ── 3. Menú Móvil Desplegable (Drawer Completo) ── */}
         {mobileMenuOpen && (
-          <div id="cosmetics-mobile-menu" className="lg:hidden border-t border-rose-100 bg-[#FFFDFB] px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950 shadow-2xl animate-in slide-in-from-top-2 duration-200">
+          <div id="cosmetics-mobile-menu"
+            className={cn(
+              'lg:hidden border-t px-5 py-4 shadow-2xl animate-in slide-in-from-top-2 duration-200',
+              isAccent
+                ? 'border-white/20 bg-primary text-white'
+                : isDark
+                ? 'border-stone-800 bg-stone-950 text-stone-100'
+                : 'border-rose-100 bg-[#FFFDFB] dark:border-zinc-800 dark:bg-zinc-950'
+            )}
+            style={isAccent && isCustomBrand ? { backgroundColor: customBrandColor } : undefined}
+          >
             {/* Buscador visible integrado en móvil */}
             <form onSubmit={handleSearchSubmit} className="relative mb-4">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
@@ -674,24 +914,51 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 placeholder="Buscar cosméticos, sérums, cremas..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-full border border-rose-200 bg-white py-2 pl-10 pr-20 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-rose-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-stone-200"
+                className={cn(
+                  'w-full rounded-full border py-2 pl-10 pr-20 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2',
+                  isAccent
+                    ? 'border-white/30 bg-white/15 text-white placeholder:text-white/60 focus:ring-white/40'
+                    : isDark
+                    ? 'border-stone-800 bg-stone-900 text-stone-100 focus:ring-stone-600'
+                    : 'border-rose-200 bg-white text-stone-800 focus:ring-rose-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-stone-200'
+                )}
               />
               <button
                 type="submit"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full bg-rose-500 px-3 py-1 text-[11px] font-bold text-white shadow-2xs"
+                className={cn(
+                  'absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[11px] font-bold shadow-2xs',
+                  isAccent
+                    ? 'bg-white text-primary'
+                    : isDark
+                    ? 'bg-stone-800 text-white'
+                    : 'bg-rose-500 text-white'
+                )}
+                style={isAccent && isCustomBrand ? { color: customBrandColor } : undefined}
               >
                 Buscar
               </button>
             </form>
 
             {/* Tags de búsqueda rápida */}
-            <div className="flex flex-wrap gap-1.5 mb-4 pb-3 border-b border-rose-100 dark:border-zinc-800">
+            <div
+              className={cn(
+                'flex flex-wrap gap-1.5 mb-4 pb-3 border-b',
+                isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-rose-100 dark:border-zinc-800'
+              )}
+            >
               {SEARCH_SUGGESTIONS.slice(0, 4).map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => handleQuickSearch(tag)}
-                  className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-medium text-rose-800 dark:bg-rose-950/40 dark:text-rose-200 border border-rose-150 dark:border-rose-900"
+                  className={cn(
+                    'rounded-full px-2.5 py-1 text-[10px] font-medium border transition-colors',
+                    isAccent
+                      ? 'bg-white/15 text-white border-white/25 hover:bg-white/25'
+                      : isDark
+                      ? 'bg-stone-900 text-stone-300 border-stone-800 hover:bg-stone-800'
+                      : 'bg-rose-50 text-rose-800 border-rose-150 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900'
+                  )}
                 >
                   {tag}
                 </button>
@@ -699,11 +966,19 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             </div>
 
             {/* Enlaces de Navegación Móvil */}
-            <nav className="flex flex-col gap-1 text-sm font-medium text-stone-800 dark:text-stone-200">
+            <nav
+              className={cn(
+                'flex flex-col gap-1 text-sm font-medium',
+                isAccent ? 'text-white' : isDark ? 'text-stone-200' : 'text-stone-800 dark:text-stone-200'
+              )}
+            >
               <Link
                 href={`${prefix}/inicio`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 Inicio
               </Link>
@@ -713,25 +988,50 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 <button
                   type="button"
                   onClick={() => setMobileProductsOpen(!mobileProductsOpen)}
-                  className="flex w-full items-center justify-between px-3 py-2 text-stone-800 dark:text-stone-200 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-2 transition-colors',
+                    isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  )}
                 >
-                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                  <span
+                    className={cn(
+                      'font-semibold',
+                      isAccent ? 'text-white' : isDark ? 'text-rose-400' : 'text-rose-600 dark:text-rose-400'
+                    )}
+                  >
                     Productos & Fórmulas
                   </span>
                   <ChevronDown
                     className={cn(
-                      'h-4 w-4 transition-transform duration-200 text-rose-500',
-                      mobileProductsOpen && 'rotate-180'
+                      'h-4 w-4 transition-transform duration-200',
+                      mobileProductsOpen && 'rotate-180',
+                      isAccent ? 'text-white/80' : isDark ? 'text-rose-400' : 'text-rose-500'
                     )}
                   />
                 </button>
 
                 {mobileProductsOpen && (
-                  <div className="pl-4 pr-2 py-2 space-y-1 bg-rose-50/40 dark:bg-zinc-900/50 rounded-xl mb-1">
+                  <div
+                    className={cn(
+                      'pl-4 pr-2 py-2 space-y-1 rounded-xl mb-1',
+                      isAccent
+                        ? 'bg-black/20 text-white'
+                        : isDark
+                        ? 'bg-stone-900/90 text-stone-200'
+                        : 'bg-rose-50/40 dark:bg-zinc-900/50'
+                    )}
+                  >
                     <Link
                       href={`${prefix}/productos`}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between p-2 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-100/50"
+                      className={cn(
+                        'flex items-center justify-between p-2 rounded-lg text-xs font-bold transition-colors',
+                        isAccent
+                          ? 'text-white hover:bg-white/15'
+                          : isDark
+                          ? 'text-rose-400 hover:bg-stone-800'
+                          : 'text-rose-600 hover:bg-rose-100/50'
+                      )}
                     >
                       <span>Ver Todo el Catálogo →</span>
                     </Link>
@@ -742,9 +1042,16 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                           key={cat.key}
                           href={`${prefix}/productos?q=${encodeURIComponent(cat.query)}`}
                           onClick={() => setMobileMenuOpen(false)}
-                          className="flex items-center gap-2 p-1.5 rounded-lg text-xs hover:bg-rose-100/50"
+                          className={cn(
+                            'flex items-center gap-2 p-1.5 rounded-lg text-xs transition-colors',
+                            isAccent
+                              ? 'text-white/95 hover:bg-white/15'
+                              : isDark
+                              ? 'text-stone-300 hover:bg-stone-800'
+                              : 'text-stone-700 hover:bg-rose-100/50 dark:text-stone-300'
+                          )}
                         >
-                          <IconComp className="h-3.5 w-3.5 text-rose-500" />
+                          <IconComp className={cn('h-3.5 w-3.5', isAccent ? 'text-white' : isDark ? 'text-rose-400' : 'text-rose-500')} />
                           <span>{cat.name}</span>
                         </Link>
                       )
@@ -756,7 +1063,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <Link
                 href={`${prefix}/inicio#categorias`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 Categorías
               </Link>
@@ -764,18 +1074,21 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <Link
                 href={`${prefix}/ofertas`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'flex items-center justify-between rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 <span>Ofertas Especiales</span>
-                <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-extrabold text-white">
-                  -25%
-                </span>
               </Link>
 
               <Link
                 href={`${prefix}/inicio#rutina`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 Rutina de Cuidado Diario
               </Link>
@@ -783,7 +1096,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <Link
                 href={`${prefix}/inicio#nosotros`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 Nosotros & Showroom
               </Link>
@@ -791,12 +1107,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <Link
                 href={`${prefix}/inicio#ubicacion`}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl px-3 py-2 hover:bg-rose-50 dark:hover:bg-zinc-900"
+                className={cn(
+                  'rounded-xl px-3 py-2 transition-colors',
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                )}
               >
                 Ubicación & Google Maps
               </Link>
 
-              <div className="my-2 border-t border-rose-100 dark:border-zinc-800" />
+              <div className={cn('my-2 border-t', isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-rose-100 dark:border-zinc-800')} />
 
               {/* Botón Asesoría WhatsApp Móvil */}
               {whatsappClean && (
@@ -804,9 +1123,16 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   href={`https://wa.me/${whatsappClean}?text=${encodeURIComponent('¡Hola! Me gustaría asesorarme sobre productos y rutinas para mi piel.')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 shadow-2xs mb-2"
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-full border py-2.5 text-xs font-bold shadow-2xs mb-2 transition-colors',
+                    isAccent
+                      ? 'border-white/30 bg-white/15 text-white hover:bg-white/25'
+                      : isDark
+                      ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300'
+                      : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                  )}
                 >
-                  <WhatsAppIcon className="h-4 w-4 text-emerald-600" />
+                  <WhatsAppIcon className="h-4 w-4 text-emerald-500" />
                   <span>Asesoramiento por WhatsApp</span>
                 </a>
               )}
@@ -819,7 +1145,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     setMobileMenuOpen(false)
                     setAuthModalOpen(true)
                   }}
-                  className="flex items-center justify-center gap-2 rounded-full bg-rose-500 py-2.5 text-sm font-semibold text-white shadow-sm"
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold shadow-sm transition-colors',
+                    isAccent
+                      ? 'bg-white text-primary hover:bg-white/90'
+                      : isDark
+                      ? 'bg-stone-800 text-white hover:bg-stone-700'
+                      : 'bg-rose-500 text-white hover:bg-rose-600'
+                  )}
+                  style={isAccent && isCustomBrand ? { color: customBrandColor } : undefined}
                 >
                   <LogIn className="h-4 w-4" />
                   <span>Iniciar Sesión / Registrarse</span>
