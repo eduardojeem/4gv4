@@ -16,12 +16,15 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  Briefcase,
   Building2,
   CalendarCheck2,
   Check,
+  CheckCircle2,
   ChevronDown,
   Clock,
   Eye,
+  Flame,
   Images,
   LayoutTemplate,
   Loader2,
@@ -33,6 +36,7 @@ import {
   Scissors,
   Search,
   Share2,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Type,
@@ -58,6 +62,7 @@ import {
 } from '@/lib/website/storefront-style'
 import { heroFieldsForStyle } from '@/lib/website/vertical-guidance'
 import { getPremiumHeroForVertical } from '@/lib/website/premium-hero'
+import { getCompanyHeroOptions, type CompanyHeroOption } from '@/lib/website/company-hero-options'
 
 // Los textos por rubro viven en la librería: también los usa el servidor al preparar la página.
 export { HERO_PRESETS, type HeroPreset } from '@/lib/website/hero-presets'
@@ -159,6 +164,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
   const company = settings?.company_info
   const fromBusiness = heroFromBusiness(company)
   const hasWhatsApp = Boolean((company?.whatsapp || company?.phone || '').replace(/\D/g, ''))
+  const companyOptions = getCompanyHeroOptions(company, capabilities, verticalDef)
 
   const socialNetworks = [
     { id: 'instagram', label: 'Instagram', value: company?.instagram, Icon: InstagramIcon, placeholder: '@tu_tienda', color: 'text-pink-600 bg-pink-500/10 border-pink-500/20' },
@@ -287,6 +293,32 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
     setHeroContentDraft((c) => ({ ...(c ?? heroContent), ...fromBusiness }))
     setErrors({})
     toast.success('Usamos el nombre, el eslogan y la descripción de tu negocio', { description: 'Revisalos antes de guardar.' })
+  }
+
+  const applyCompanyHeroOption = (option: CompanyHeroOption) => {
+    setHeroContentDraft((c) => ({
+      ...(c ?? heroContent),
+      enabled: true,
+      badge: option.hero.badge,
+      title: option.hero.title,
+      subtitle: option.hero.subtitle,
+      ctaPrimaryText: option.hero.ctaPrimaryText,
+      ctaSecondaryText: option.hero.ctaSecondaryText,
+      trustBadges: [...option.hero.trustBadges],
+    }))
+    if (fields.stats) {
+      setHeroStatsDraft((s) => ({
+        ...(s ?? heroStats),
+        enabled: true,
+        repairs: option.stats.repairs,
+        satisfaction: option.stats.satisfaction,
+        avgTime: option.stats.avgTime,
+      }))
+    }
+    setErrors({})
+    toast.success(`Opción «${option.label}» aplicada para tu empresa`, {
+      description: 'Revisá la vista previa y guardá para publicar.',
+    })
   }
 
   const discard = () => {
@@ -496,13 +528,20 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           <div id="hero-preview" className={cn('mt-3 xl:mt-0 xl:block', !previewOpen && 'hidden')}>
             <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
               <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2">
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <Eye className="h-3.5 w-3.5 text-primary" />
-                  Así se ve
-                </span>
-                <span className={cn('flex items-center gap-1.5 text-xs font-semibold', visible ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <Eye className="h-3.5 w-3.5 text-primary" />
+                    Vista previa en vivo
+                  </span>
+                  {company?.name && (
+                    <span className="hidden sm:inline-block truncate max-w-[140px] rounded-md bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground border">
+                      {company.name}
+                    </span>
+                  )}
+                </div>
+                <span className={cn('flex items-center gap-1.5 text-xs font-semibold shrink-0', visible ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
                   <span className={cn('h-2 w-2 rounded-full', visible ? 'bg-emerald-500' : 'bg-muted-foreground')} />
-                  {visible ? 'Visible' : 'Oculta'}
+                  {visible ? 'Portada activa' : 'Portada oculta'}
                 </span>
               </div>
 
@@ -649,6 +688,105 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
 
         {/* ── Edición ── */}
         <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
+          {/* ── Opciones de portada para tu empresa ── */}
+          <SectionCard
+            icon={Briefcase}
+            tone="indigo"
+            title="Opciones de portada para tu empresa"
+            description={`Elegí el enfoque comercial que querés priorizar. Cada opción adapta los títulos, frases y llamadas a la acción para ${company?.name || 'tu negocio'}.`}
+            badge={`${companyOptions.length} enfoques listos`}
+          >
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-indigo-500/5 border border-indigo-500/20 p-2.5 text-xs text-foreground">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Building2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                  {company?.name ? (
+                    <>Adaptado con los datos de: <strong className="text-foreground">{company.name}</strong></>
+                  ) : (
+                    <>Podés cargar el nombre de tu empresa en <strong className="text-foreground">Información del Negocio</strong> para personalizar aún más.</>
+                  )}
+                </span>
+                {onNavigate && !company?.name && (
+                  <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px] text-indigo-600 hover:text-indigo-700" onClick={() => onNavigate('company')}>
+                    Cargar nombre
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {companyOptions.map((opt) => {
+                  const isActive = heroContent.title === opt.hero.title
+                  return (
+                    <div
+                      key={opt.id}
+                      className={cn(
+                        'group flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all',
+                        isActive
+                          ? 'border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500 shadow-sm'
+                          : 'border-border/80 bg-card hover:border-indigo-500/40 hover:bg-muted/30'
+                      )}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg leading-none select-none" aria-hidden="true">{opt.icon}</span>
+                            <span className="font-bold text-xs text-foreground">{opt.label}</span>
+                          </div>
+                          <span className={cn(
+                            'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                            isActive
+                              ? 'bg-indigo-500 text-white dark:bg-indigo-600'
+                              : 'bg-muted text-muted-foreground'
+                          )}>
+                            {isActive ? 'Activa' : opt.badgeLabel}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">
+                          {opt.description}
+                        </p>
+
+                        <div className="rounded-lg border bg-background/60 p-2 text-[11px] space-y-1">
+                          <p className="font-semibold text-foreground truncate">{opt.hero.title}</p>
+                          <p className="text-muted-foreground truncate text-[10px]">{opt.hero.subtitle}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <MousePointerClick className="h-3 w-3 text-primary" />
+                          <span className="truncate max-w-[120px]">{opt.hero.ctaPrimaryText}</span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isActive ? 'default' : 'outline'}
+                          onClick={() => applyCompanyHeroOption(opt)}
+                          className={cn(
+                            'h-7 px-2.5 text-xs font-semibold gap-1 shrink-0',
+                            isActive && 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          )}
+                        >
+                          {isActive ? (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Aplicada
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                              Aplicar opción
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </SectionCard>
+
           <section aria-labelledby="hero-presets" className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
             <h3 id="hero-presets" className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
               <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -690,7 +828,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
             </div>
           </section>
 
-          <SectionCard icon={Type} tone="purple" title="Textos" description="Una frase corta, un título claro y una línea que diga qué ofrecés.">
+          <SectionCard icon={Type} tone="purple" title="Textos" badge="Principal" description="Una frase corta, un título claro y una línea que diga qué ofrecés.">
             <div className="space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -758,6 +896,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
               icon={MousePointerClick}
               tone="violet"
               title="Botones"
+              badge="Acciones"
               description={isServicesStyle ? 'Reservar es lo principal; el otro botón abre una conversación por WhatsApp.' : 'Qué puede hacer el cliente: ver tus productos o escribirte.'}
             >
               <div className="space-y-4">
@@ -834,7 +973,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           )}
 
           {isServicesStyle && (
-            <SectionCard icon={Building2} tone="blue" title="Se completa solo" description="Estas partes de la portada salen de los datos de tu negocio y de tu agenda.">
+            <SectionCard icon={Building2} tone="blue" title="Se completa solo" badge="Sincronizado" description="Estas partes de la portada salen de los datos de tu negocio y de tu agenda.">
               <ul className="divide-y text-sm">
                 <li className="flex items-center justify-between gap-3 py-2.5">
                   <span className="flex min-w-0 items-center gap-2">
@@ -871,7 +1010,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
           )}
 
           {fields.stats && (
-            <SectionCard icon={BarChart3} tone="emerald" title="Números de confianza" description="Cifras reales y/o canales oficiales verificados en tu portada.">
+            <SectionCard icon={BarChart3} tone="emerald" title="Números de confianza" badge="Credibilidad" description="Cifras reales y/o canales oficiales verificados en tu portada.">
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3">
                   <Label htmlFor="hero-stats-enabled" className="cursor-pointer text-sm">Mostrar elementos de confianza</Label>

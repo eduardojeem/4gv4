@@ -145,4 +145,19 @@ describe('Portada principal', () => {
     expect(screen.getByRole('button', { name: 'Servicio Técnico & Reparaciones' })).toBeInTheDocument()
     expect(screen.getByLabelText(/Texto del enlace inferior/)).toBeInTheDocument()
   })
+
+  it('permite aplicar una opción estratégica de portada para la empresa con 1 clic', () => {
+    render(<HeroEditor />)
+    expect(screen.getByText('Opciones de portada para tu empresa')).toBeInTheDocument()
+    expect(screen.getByText('Venta & Catálogo')).toBeInTheDocument()
+    expect(screen.getByText('Ofertas & Novedades')).toBeInTheDocument()
+    expect(screen.getByText('Confianza & Respaldo')).toBeInTheDocument()
+    expect(screen.getByText('Asesoría por WhatsApp')).toBeInTheDocument()
+
+    const applyButtons = screen.getAllByRole('button', { name: /Aplicar opción/ })
+    expect(applyButtons.length).toBeGreaterThanOrEqual(1)
+    fireEvent.click(applyButtons[0])
+
+    expect(screen.getByLabelText('Título principal')).toHaveValue('Todo lo que buscás en Tu Empresa')
+  })
 })
