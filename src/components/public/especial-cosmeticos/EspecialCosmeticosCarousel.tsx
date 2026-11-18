@@ -14,6 +14,7 @@ import {
 import { AppImage } from '@/components/ui/app-image'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { prefixPublicTenantPath } from '@/lib/public/tenant-path-shared'
+import { cn } from '@/lib/utils'
 import type { PromotionalCarouselSettings } from '@/types/website-settings'
 
 interface EspecialCosmeticosCarouselProps {
@@ -61,11 +62,53 @@ export function EspecialCosmeticosCarousel({ settings }: EspecialCosmeticosCarou
     return null
   }
 
+  const layoutMode = settings?.layoutMode || 'contained'
+  const isFullBleed = layoutMode === 'full'
+  const isCompact = layoutMode === 'compact'
+
   const currentSlide = slides[currentIndex]
   const isExternal = /^https?:\/\//i.test(currentSlide.ctaHref || '')
   const ctaHref = isExternal
     ? currentSlide.ctaHref || '#'
     : prefixPublicTenantPath(prefix, currentSlide.ctaHref || '/productos')
+
+  const hideText = Boolean(currentSlide.hideText)
+  const contentAlign = currentSlide.contentAlign || 'left'
+  const titleSize = currentSlide.titleSize || 'normal'
+  const fontFamily = currentSlide.fontFamily || 'serif'
+  const overlayIntensity = currentSlide.overlayIntensity || 'medium'
+
+  const alignContainerClass =
+    contentAlign === 'center'
+      ? 'justify-center items-end sm:items-center text-center'
+      : contentAlign === 'right'
+      ? 'justify-end items-end sm:items-center text-left sm:text-right'
+      : 'justify-start items-end sm:items-center text-left'
+
+  const titleSizeClass =
+    titleSize === 'compact'
+      ? 'text-xl sm:text-2xl lg:text-3xl'
+      : titleSize === 'large'
+      ? 'text-3xl sm:text-4xl lg:text-5xl'
+      : 'text-2xl sm:text-3xl lg:text-4xl'
+
+  const fontFamilyClass =
+    fontFamily === 'sans'
+      ? 'font-sans'
+      : fontFamily === 'mono'
+      ? 'font-mono'
+      : fontFamily === 'display'
+      ? 'font-sans font-black tracking-tight'
+      : 'font-serif'
+
+  const overlayIntensityClass =
+    overlayIntensity === 'none'
+      ? 'opacity-0'
+      : overlayIntensity === 'subtle'
+      ? 'opacity-35'
+      : overlayIntensity === 'strong'
+      ? 'opacity-90'
+      : 'opacity-70'
 
   // Manejo de gestos táctiles
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -84,15 +127,35 @@ export function EspecialCosmeticosCarousel({ settings }: EspecialCosmeticosCarou
   return (
     <section
       aria-label="Campañas y Novedades de Cosmética"
-      className="relative w-full overflow-hidden bg-gradient-to-b from-[#FFF5F6]/60 via-[#FFF9F9] to-transparent py-4 sm:py-8"
+      className={cn(
+        'relative w-full overflow-hidden bg-gradient-to-b from-[#FFF5F6]/60 via-[#FFF9F9] to-transparent',
+        isFullBleed ? 'py-0' : isCompact ? 'py-3 sm:py-5' : 'py-4 sm:py-8'
+      )}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div
+        className={cn(
+          isFullBleed
+            ? 'w-full px-0 max-w-none'
+            : isCompact
+            ? 'container mx-auto px-3 sm:px-6 max-w-5xl'
+            : 'container mx-auto px-4 sm:px-6 lg:px-8'
+        )}
+      >
         {/* Marco boutique con bordes redondeados y sombra suave */}
-        <div className="relative aspect-[4/3] sm:aspect-[16/8] lg:aspect-[21/9] min-h-[380px] sm:min-h-[460px] lg:min-h-[500px] w-full overflow-hidden rounded-3xl sm:rounded-[2.5rem] border border-rose-200/80 dark:border-rose-900/40 shadow-xl shadow-rose-950/5">
+        <div
+          className={cn(
+            'relative w-full overflow-hidden transition-all duration-300',
+            isFullBleed
+              ? 'aspect-[4/3] sm:aspect-[21/9] lg:aspect-[24/9] min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] rounded-none border-y border-rose-200/80 dark:border-rose-900/40 shadow-none'
+              : isCompact
+              ? 'aspect-[4/3] sm:aspect-[16/7] lg:aspect-[21/8] min-h-[320px] sm:min-h-[380px] lg:min-h-[420px] rounded-2xl border border-rose-200/80 dark:border-rose-900/40 shadow-md shadow-rose-950/5'
+              : 'aspect-[4/3] sm:aspect-[16/8] lg:aspect-[21/9] min-h-[380px] sm:min-h-[460px] lg:min-h-[500px] rounded-3xl sm:rounded-[2.5rem] border border-rose-200/80 dark:border-rose-900/40 shadow-xl shadow-rose-950/5'
+          )}
+        >
           {/* Slides de imagen en cross-fade */}
           {slides.map((slide, idx) => {
             const isActive = idx === currentIndex
@@ -112,48 +175,80 @@ export function EspecialCosmeticosCarousel({ settings }: EspecialCosmeticosCarou
                   className="object-cover object-center scale-100 transition-transform duration-1000 ease-out"
                 />
                 {/* Degradé de oscurecimiento suave para legibilidad */}
-                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/70 via-stone-950/30 to-transparent sm:bg-gradient-to-r sm:from-stone-950/75 sm:via-stone-950/35 sm:to-transparent" />
+                <div
+                  className={cn(
+                    'absolute inset-0 transition-opacity duration-300 bg-gradient-to-t from-stone-950/70 via-stone-950/30 to-transparent sm:bg-gradient-to-r sm:from-stone-950/75 sm:via-stone-950/35 sm:to-transparent',
+                    overlayIntensityClass
+                  )}
+                />
               </div>
             )
           })}
 
+          {/* Enlace de toda la diapositiva cuando se ocultan textos gráficos */}
+          {hideText && currentSlide.ctaHref && (
+            <Link
+              href={ctaHref}
+              className="absolute inset-0 z-20 block cursor-pointer"
+              aria-label={currentSlide.title || 'Ver promoción'}
+            />
+          )}
+
           {/* Tarjeta editorial flotante con contenido */}
-          <div className="absolute inset-0 z-20 flex items-end sm:items-center p-5 sm:p-10 lg:p-14">
-            <div className="w-full max-w-xl rounded-2xl sm:rounded-3xl bg-white/90 dark:bg-zinc-900/90 p-5 sm:p-8 backdrop-blur-md border border-white/60 dark:border-zinc-700/60 shadow-2xl space-y-3 sm:space-y-4">
-              {/* Badge del slide */}
-              {currentSlide.badge && (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 px-3 py-1 text-[11px] font-bold tracking-wide uppercase text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                  <Sparkles className="h-3 w-3 text-rose-500" />
-                  <span>{currentSlide.badge}</span>
-                </div>
-              )}
+          {!hideText && (
+            <div className={cn('absolute inset-0 z-20 flex p-5 sm:p-10 lg:p-14', alignContainerClass)}>
+              <div className="w-full max-w-xl rounded-2xl sm:rounded-3xl bg-white/90 dark:bg-zinc-900/90 p-5 sm:p-8 backdrop-blur-md border border-white/60 dark:border-zinc-700/60 shadow-2xl space-y-3 sm:space-y-4">
+                {/* Badge del slide */}
+                {currentSlide.badge && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/60 px-3 py-1 text-[11px] font-bold tracking-wide uppercase text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    <Sparkles className="h-3 w-3 text-rose-500" />
+                    <span>{currentSlide.badge}</span>
+                  </div>
+                )}
 
-              {/* Título editorial */}
-              <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-[1.15]">
-                {currentSlide.title}
-              </h2>
+                {/* Título editorial */}
+                <h2
+                  className={cn(
+                    'font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-[1.15]',
+                    titleSizeClass,
+                    fontFamilyClass
+                  )}
+                  style={currentSlide.titleColor ? { color: currentSlide.titleColor } : undefined}
+                >
+                  {currentSlide.title}
+                </h2>
 
-              {/* Mensaje descriptivo */}
-              {currentSlide.message && (
-                <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed line-clamp-2 sm:line-clamp-3">
-                  {currentSlide.message}
-                </p>
-              )}
+                {/* Mensaje descriptivo */}
+                {currentSlide.message && (
+                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed line-clamp-2 sm:line-clamp-3">
+                    {currentSlide.message}
+                  </p>
+                )}
 
-              {/* Botón de acción */}
-              {currentSlide.ctaText && (
-                <div className="pt-2 flex items-center gap-4">
-                  <Link
-                    href={ctaHref}
-                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 px-6 py-2.5 sm:px-7 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-md shadow-rose-950/20 hover:from-rose-600 hover:to-pink-700 hover:shadow-lg transition-all"
+                {/* Botón de acción */}
+                {currentSlide.ctaText && (
+                  <div
+                    className={cn(
+                      'pt-2 flex items-center gap-4',
+                      contentAlign === 'center'
+                        ? 'justify-center'
+                        : contentAlign === 'right'
+                        ? 'justify-end'
+                        : 'justify-start'
+                    )}
                   >
-                    <span>{currentSlide.ctaText}</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              )}
+                    <Link
+                      href={ctaHref}
+                      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 px-6 py-2.5 sm:px-7 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-md shadow-rose-950/20 hover:from-rose-600 hover:to-pink-700 hover:shadow-lg transition-all"
+                    >
+                      <span>{currentSlide.ctaText}</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Flechas de navegación boutique (escritorio y tablet) */}
           {slideCount > 1 && (
