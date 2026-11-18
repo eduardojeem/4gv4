@@ -8,7 +8,7 @@ import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { cn } from '@/lib/utils'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 
-export function PublicCartButton() {
+export function PublicCartButton({ className }: { className?: string } = {}) {
   const { count } = usePublicCart()
   const { open }  = useCartDrawer()
   const { settings, isLoading } = useWebsiteSettings()
@@ -45,7 +45,8 @@ export function PublicCartButton() {
       size="sm"
       className={cn(
         'relative gap-2 rounded-lg transition-transform duration-150',
-        bump && 'scale-110'
+        bump && 'scale-110',
+        className
       )}
       onClick={open}
       aria-label={`Abrir carrito${count > 0 ? ` — ${count} unidad${count !== 1 ? 'es' : ''}` : ''}`}
