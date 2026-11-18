@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AuthModal } from '@/components/public/AuthModal'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
-import { InstagramIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
+import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/public/SocialIcons'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/contexts/auth-context'
@@ -324,6 +324,52 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       )}
                     />
                     <span>@{company.instagram.replace(/^@/, '')}</span>
+                  </a>
+                )}
+                {company?.facebook && (
+                  <a
+                    href={`https://facebook.com/${company.facebook.replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      isAccent
+                        ? 'text-white/90 hover:text-white'
+                        : isDark
+                        ? 'text-stone-300 hover:text-white'
+                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                    )}
+                  >
+                    <FacebookIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      )}
+                    />
+                    <span>Facebook</span>
+                  </a>
+                )}
+                {company?.tiktok && (
+                  <a
+                    href={`https://tiktok.com/@${company.tiktok.replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      isAccent
+                        ? 'text-white/90 hover:text-white'
+                        : isDark
+                        ? 'text-stone-300 hover:text-white'
+                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                    )}
+                  >
+                    <TikTokIcon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      )}
+                    />
+                    <span>TikTok</span>
                   </a>
                 )}
               </div>

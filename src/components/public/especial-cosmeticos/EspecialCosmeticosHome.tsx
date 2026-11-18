@@ -35,8 +35,13 @@ import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { getCompanyMapsEmbedSrc, getDirectionsHref } from '@/lib/website/company-maps-url'
+import { BranchLocations, type BranchLocationData } from '@/components/public/inicio/BranchLocations'
+import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
+import { ServiceGallery } from '@/components/public/inicio/ServicesHome'
+import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
+import { getPublicProcessFlows } from '@/lib/website/process-steps'
+import { getBrandTheme } from '@/lib/constants/brand-theme'
 import type { WebsiteSettings } from '@/types/website-settings'
-import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 import { categoryCards, cityFromAddress, offerCards, productPhoto, type CosmeticsProductPhoto } from './cosmetics-home-data'
 import './especial-cosmeticos.css'
@@ -100,7 +105,7 @@ function PhotoProductTag({ photo, href }: { photo: CosmeticsProductPhoto; href: 
  * la URL), se mostraba un catálogo de ejemplo con otra marca, y había cifras,
  * cupones y combos escritos a mano. Lo que el comercio no cargó no aparece.
  */
-export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosmeticosHomeProps) {
+export function EspecialCosmeticosHome({ settings, branches, capabilities }: EspecialCosmeticosHomeProps) {
   const pathname = usePathname()
   const company = useStorefrontCompanyInfo(settings.company_info)
   const { categories: liveCategories } = usePublicCategories()
@@ -148,10 +153,36 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
   const directionsHref = address || company?.mapsUrl ? getDirectionsHref(company?.mapsUrl, address) : null
   const hasLocation = Boolean(address || company?.mapsUrl)
 
+  const brand = getBrandTheme(company?.brandColor)
+  const phoneClean = (company?.whatsapp || company?.phone || '').replace(/\D/g, '')
+
+  const processSteps = useMemo(
+    () => (Array.isArray(settings.process_steps) ? settings.process_steps : []),
+    [settings.process_steps]
+  )
+  const processFlows = useMemo(
+    () => getPublicProcessFlows(settings.process_flows, processSteps),
+    [settings.process_flows, processSteps]
+  )
+  const hasProcessSteps = company?.processSectionEnabled !== false && processFlows.length > 0
+
   const heroPhoto = productPhoto(products)
   const editorialPhoto = productPhoto(products, 1)
   const storyPhoto = productPhoto(products, 2)
   const productHref = (id: string) => `${prefix}/productos/${encodeURIComponent(id)}`
+
+  const heroVisible = settings.hero_content?.enabled !== false
+  const heroBadge = settings.hero_content?.badge || city
+  const heroTitle = settings.hero_content?.title || storeName
+  const heroSubtitle = settings.hero_content?.subtitle || (slogan ? `${slogan}. ${description}` : description)
+  const heroCtaText = settings.hero_content?.ctaText || 'Ver productos'
+  const heroCtaHref = settings.hero_content?.ctaHref || `${prefix}/productos`
+  const heroImageSrc = settings.hero_content?.imageUrl || heroPhoto?.image
+
+  const offersVisible = offers.length > 0 && settings.offers_section?.enabled !== false
+  const offersTitle = settings.offers_section?.title || 'Productos en Oferta'
+  const offersEyebrow = settings.offers_section?.eyebrow || 'Ofertas de la tienda'
+  const offersSubtitle = settings.offers_section?.subtitle
 
   const trustItems = settings.trust_bar?.enabled === false
     ? []
@@ -180,22 +211,22 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
         />
       )}
 
-      {/* ── 1. PORTADA: solo si no hay carrusel (antes repetía su mismo título) ── */}
-      {!hasConfiguredSlides && (
+      {/* ── 1. PORTADA: solo si no hay carrusel activo y la portada está habilitada ── */}
+      {!hasConfiguredSlides && heroVisible && (
         <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF5F6] via-[#FFFDFB] to-[#FFFDFB] dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 py-12 sm:py-20 lg:py-28">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
               <div className="space-y-6 text-center lg:text-left">
-                {city && (
+                {heroBadge && (
                   <div className="inline-flex items-center gap-2 rounded-full bg-rose-100/90 px-3.5 py-1 text-xs font-semibold tracking-wide text-rose-800 dark:bg-rose-950/60 dark:text-rose-200 border border-rose-200 dark:border-rose-800 shadow-2xs">
-                    <MapPin className="h-3.5 w-3.5 text-rose-500" />
-                    <span>{city}</span>
+                    <Sparkles className="h-3.5 w-3.5 text-rose-500" />
+                    <span>{heroBadge}</span>
                   </div>
                 )}
 
                 <h2 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-[1.12]">
-                  {storeName}
-                  {slogan && (
+                  {heroTitle}
+                  {slogan && !settings.hero_content?.title && (
                     <>
                       <br />
                       <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent italic text-2xl sm:text-4xl lg:text-5xl">
@@ -205,21 +236,21 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
                   )}
                 </h2>
 
-                {description && (
+                {heroSubtitle && (
                   <p className="max-w-xl text-base sm:text-lg leading-relaxed text-stone-600 dark:text-stone-300 mx-auto lg:mx-0">
-                    {description}
+                    {heroSubtitle}
                   </p>
                 )}
 
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
                   <Link
-                    href={`${prefix}/productos`}
+                    href={heroCtaHref}
                     className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-7 py-3.5 text-sm font-semibold text-white shadow-md shadow-rose-500/25 hover:bg-rose-600 hover:shadow-lg hover:shadow-rose-500/35 transition-all transform hover:-translate-y-0.5"
                   >
-                    <span>Ver productos</span>
+                    <span>{heroCtaText}</span>
                     <ArrowRight className="h-4 w-4" />
                   </Link>
-                  {offers.length > 0 && (
+                  {offersVisible && (
                     <Link
                       href={`${prefix}/ofertas`}
                       className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white/80 px-6 py-3.5 text-sm font-semibold text-stone-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200 dark:hover:bg-zinc-800 transition-colors shadow-2xs"
@@ -235,15 +266,25 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
                   {heroPhoto ? (
                     <>
                       <AppImage
-                        src={heroPhoto.image}
+                        src={heroImageSrc || heroPhoto.image}
                         alt={heroPhoto.name}
                         fill
                         priority
                         className="object-cover transition-transform duration-700 hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
-                      <PhotoProductTag photo={heroPhoto} href={productHref(heroPhoto.id)} />
+                      {(!settings.hero_content?.imageUrl || settings.hero_content.imageUrl === heroPhoto.image) && (
+                        <PhotoProductTag photo={heroPhoto} href={productHref(heroPhoto.id)} />
+                      )}
                     </>
+                  ) : heroImageSrc ? (
+                    <AppImage
+                      src={heroImageSrc}
+                      alt={heroTitle}
+                      fill
+                      priority
+                      className="object-cover transition-transform duration-700 hover:scale-105"
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center">
                       <Sparkles className="h-16 w-16 text-rose-300" />
@@ -327,6 +368,9 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
         </section>
       )}
 
+      {/* ── 3.5 MARCAS CON LAS QUE TRABAJAMOS ── */}
+      <StoreBrandTicker settings={settings.brands_section} />
+
       {/* ── 4. TU CUIDADO DIARIO: texto de la plantilla + cifras reales de la tienda ── */}
       <section id="rutina" className="scroll-mt-20 py-16 bg-gradient-to-r from-rose-50 via-[#FFF5F6] to-pink-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-y border-rose-150/80 dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -386,7 +430,7 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
       </section>
 
       {/* ── 5. OFERTAS REALES (productos con precio de oferta) ── */}
-      {offers.length > 0 && (
+      {offersVisible && (
         <section id="ofertas" className="scroll-mt-20 relative py-20 sm:py-28 overflow-hidden bg-gradient-to-b from-[#FFF0F3] via-[#FFF7F9] to-[#FFFDFB] dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950 border-y border-rose-200/80 dark:border-zinc-800">
           <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-rose-300/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-pink-300/20 blur-3xl" />
@@ -395,13 +439,18 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 lg:mb-16 gap-6">
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1 text-xs font-bold tracking-wider text-white shadow-md shadow-rose-950/15 uppercase">
-                  <span>Ofertas de la tienda</span>
+                  <span>{offersEyebrow}</span>
                   <span className="h-1 w-1 rounded-full bg-white" />
                   <span>Hasta {maxDiscount}% OFF</span>
                 </div>
                 <h3 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-[1.15]">
-                  Productos en Oferta
+                  {offersTitle}
                 </h3>
+                {offersSubtitle && (
+                  <p className="text-sm sm:text-base text-stone-600 dark:text-stone-300 max-w-xl">
+                    {offersSubtitle}
+                  </p>
+                )}
               </div>
 
               <Link
@@ -581,6 +630,26 @@ export function EspecialCosmeticosHome({ settings, capabilities }: EspecialCosme
           </div>
         </div>
       </section>
+
+      {/* ── 7.5 GALERÍA DE FOTOS & SHOWROOM ── */}
+      <ServiceGallery settings={settings.gallery_section} />
+
+      {/* ── 7.6 CÓMO COMPRAR / PROCESO DE ATENCIÓN ── */}
+      {hasProcessSteps && (
+        <ProcessSteps
+          brand={brand}
+          flows={processFlows}
+          tenantPrefix={prefix}
+          phoneClean={phoneClean}
+          variant="store"
+          showCatalog={hasCatalog}
+        />
+      )}
+
+      {/* ── 7.7 SUCURSALES (si hay más de 1) ── */}
+      {branches && branches.length > 1 && (
+        <BranchLocations branches={branches} brand={brand} />
+      )}
 
       {/* ── 8. UBICACIÓN: solo con la dirección real ── */}
       {hasLocation && (

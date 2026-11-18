@@ -452,7 +452,7 @@ export function NextSlotBadge({
 export function ServiceGallery({ settings }: { settings: GallerySectionSettings | undefined }) {
   const style = useStorefrontStyle()
   const [openIndex, setOpenIndex] = useState<number | null>(null)
-  const images = settings?.enabled ? settings.images : []
+  const images = settings?.enabled && Array.isArray(settings.images) ? settings.images : []
   if (images.length === 0) return null
   const open = openIndex !== null ? images[openIndex] : null
 

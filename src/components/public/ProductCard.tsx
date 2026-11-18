@@ -177,18 +177,18 @@ export function ProductCard(props: ProductCardProps) {
 
   // ── Tenant prefix ────────────────────────────────────────────────────────
   const tenantSlug = getTenantSlugFromPathname(pathname)
-  const favoriteSlug = tenantSlug || websiteSettings?.company_info.slug
+  const favoriteSlug = tenantSlug || websiteSettings?.company_info?.slug
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const productHref = `${tenantPrefix}/productos/${product.id}`
-  const commerceMode = websiteSettings?.checkout.commerceMode ??
+  const commerceMode = websiteSettings?.checkout?.commerceMode ??
     (isLoadingWebsiteSettings ? 'catalog' : 'cart')
   const contactPhone =
-    websiteSettings?.company_info.whatsapp?.trim() ||
-    websiteSettings?.company_info.phone?.trim() ||
+    websiteSettings?.company_info?.whatsapp?.trim() ||
+    websiteSettings?.company_info?.phone?.trim() ||
     ''
 
-  const storeName = websiteSettings?.company_info.name || null
+  const storeName = websiteSettings?.company_info?.name || null
   const fullProductUrl = siteUrl(productHref)
 
   const inquiryHref=productWhatsappInquiryHref({company:websiteSettings?.company_info,product:{name:product.name,url:fullProductUrl}})
@@ -292,7 +292,7 @@ export function ProductCard(props: ProductCardProps) {
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
       >
-        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
+        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info?.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
         {/* ── Image area ── */}
         <button
           type="button"
@@ -772,7 +772,7 @@ export function ProductCard(props: ProductCardProps) {
                     <p className="mt-0.5 text-[11px] text-muted-foreground">SKU: {selectedVariant?.sku || product.sku}</p>
                   )}
                 </div>
-                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
+                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info?.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
