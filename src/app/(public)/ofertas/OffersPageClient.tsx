@@ -32,6 +32,7 @@ import {
   type OfferSlide,
 } from '@/components/public/offers/OffersCarouselDeck'
 import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { EspecialCosmeticosCarousel } from '@/components/public/especial-cosmeticos/EspecialCosmeticosCarousel'
 import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePublicCart } from '@/hooks/use-public-cart'
@@ -514,8 +515,10 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   const { tenantPrefix } = usePublicTenantPrefix()
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
-  const portrait = usesPortraitMedia(useStorefrontStyle())
+  const storefrontStyle = useStorefrontStyle()
+  const portrait = usesPortraitMedia(storefrontStyle)
   const settings = liveSettings ?? initialSettings
+  const isCosmeticos = storefrontStyle === 'especial-cosmeticos' || settings.company_info.storefrontStyle === 'especial-cosmeticos'
   const offersSettings = settings.offers_section
   const commerceMode = settings.checkout.commerceMode ?? 'cart'
   const contactPhone =
@@ -637,7 +640,11 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   return (
     <div className="min-h-screen bg-background">
       {/* ── Banners de campaña configurados en Sitio Web ── */}
-      <PromotionalCarousel settings={settings.offers_carousel} />
+      {isCosmeticos ? (
+        <EspecialCosmeticosCarousel settings={settings.offers_carousel} />
+      ) : (
+        <PromotionalCarousel settings={settings.offers_carousel} />
+      )}
 
       {/* ── Encabezado ── */}
       <section className="border-b border-border/70">
@@ -685,16 +692,41 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
 
       {/* ── Destacados ── */}
       {carouselSettings.enabled && carouselSlides.length > 0 && (
-        <section className={cn('border-b border-border/70 bg-muted/30 py-8 sm:py-10', carouselAccent.section)}>
+        <section
+          className={cn(
+            isCosmeticos
+              ? 'border-b border-rose-200/80 bg-gradient-to-b from-[#FFF0F3] via-[#FFF8F9] to-background py-10 sm:py-14 dark:border-rose-950/60 dark:from-zinc-900/60 dark:via-zinc-950 dark:to-zinc-950'
+              : cn('border-b border-border/70 bg-muted/30 py-8 sm:py-10', carouselAccent.section)
+          )}
+        >
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="mb-5">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                {carouselSettings.title || 'Destacados de la semana'}
-              </h2>
-              {carouselSettings.subtitle && (
-                <p className="mt-1 text-sm text-muted-foreground">{carouselSettings.subtitle}</p>
-              )}
-            </div>
+            {isCosmeticos ? (
+              <div className="mb-6 flex flex-col items-center text-center">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200/80 bg-rose-50/80 px-3.5 py-1 text-xs font-semibold tracking-wider uppercase text-rose-700 shadow-2xs backdrop-blur-sm dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                  <Sparkles className="h-3 w-3 text-rose-500 animate-pulse" />
+                  Alta Cosmética · Fórmulas en Descuento
+                </span>
+                <h2 className="mt-2 font-serif text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl dark:text-stone-100">
+                  {(!carouselSettings.title || carouselSettings.title === 'Destacados de la semana')
+                    ? 'Ofertas Destacadas en Cuidado & Belleza'
+                    : carouselSettings.title}
+                </h2>
+                <p className="mt-1.5 max-w-xl text-sm text-stone-600 dark:text-stone-400">
+                  {(!carouselSettings.subtitle || carouselSettings.subtitle === 'Las mejores rebajas activas, en rotación automática.')
+                    ? 'Descubrí tratamientos dermocosméticos y sets exclusivos con precios rebajados por tiempo limitado.'
+                    : carouselSettings.subtitle}
+                </p>
+              </div>
+            ) : (
+              <div className="mb-5">
+                <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                  {carouselSettings.title || 'Destacados de la semana'}
+                </h2>
+                {carouselSettings.subtitle && (
+                  <p className="mt-1 text-sm text-muted-foreground">{carouselSettings.subtitle}</p>
+                )}
+              </div>
+            )}
 
             <OffersCarouselDeck
               offers={carouselSlides}
@@ -704,6 +736,7 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
               autoplay={carouselSettings.autoplay}
               intervalSeconds={carouselSettings.intervalSeconds}
               ariaLabel="Carrusel de ofertas destacadas"
+              isCosmeticos={isCosmeticos}
             />
           </div>
         </section>

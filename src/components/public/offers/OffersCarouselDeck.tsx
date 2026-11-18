@@ -146,6 +146,7 @@ interface OffersCarouselDeckProps {
   autoplay?: boolean
   intervalSeconds?: number
   ariaLabel?: string
+  isCosmeticos?: boolean
 }
 
 export function OffersCarouselDeck({
@@ -156,6 +157,7 @@ export function OffersCarouselDeck({
   autoplay = true,
   intervalSeconds = 5,
   ariaLabel = 'Carrusel de ofertas destacadas',
+  isCosmeticos = false,
 }: OffersCarouselDeckProps) {
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
   const [isCarouselPaused, setIsCarouselPaused] = useState(false)
@@ -346,8 +348,12 @@ export function OffersCarouselDeck({
               className={cn(
                 'h-2 rounded-full transition-all duration-300',
                 idx === activeOfferIndex
-                  ? `w-7 ${accent.activeDot}`
-                  : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                  ? isCosmeticos
+                    ? 'w-7 bg-rose-500 shadow-xs shadow-rose-500/30'
+                    : `w-7 ${accent.activeDot}`
+                  : isCosmeticos
+                    ? 'w-2 bg-rose-200/70 hover:bg-rose-300 dark:bg-rose-950 dark:hover:bg-rose-800'
+                    : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
               )}
               aria-label={`Ir a oferta ${idx + 1}`}
             />
@@ -357,7 +363,12 @@ export function OffersCarouselDeck({
             <button
               type="button"
               onClick={() => setIsUserPaused((p) => !p)}
-              className="ml-2 flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                'ml-2 flex h-6 w-6 items-center justify-center rounded-full border transition-colors',
+                isCosmeticos
+                  ? 'border-rose-200/80 bg-white/90 text-rose-700 hover:bg-rose-50 dark:border-rose-900/50 dark:bg-zinc-900 dark:text-rose-300'
+                  : 'border-border/80 bg-background text-muted-foreground hover:text-foreground'
+              )}
               aria-label={isUserPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
             >
               {isUserPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
@@ -372,7 +383,12 @@ export function OffersCarouselDeck({
               type="button"
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              className={cn(
+                'h-8 w-8 rounded-full border shadow-2xs transition-colors',
+                isCosmeticos
+                  ? 'border-rose-200/80 bg-white/95 text-stone-700 hover:border-rose-300 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-zinc-900 dark:text-stone-200'
+                  : 'rounded-xl border-border/80 bg-card hover:bg-muted'
+              )}
               onClick={() => goToOffer(activeOfferIndex - 1)}
               aria-label="Oferta anterior"
             >
@@ -382,7 +398,12 @@ export function OffersCarouselDeck({
               type="button"
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              className={cn(
+                'h-8 w-8 rounded-full border shadow-2xs transition-colors',
+                isCosmeticos
+                  ? 'border-rose-200/80 bg-white/95 text-stone-700 hover:border-rose-300 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-zinc-900 dark:text-stone-200'
+                  : 'rounded-xl border-border/80 bg-card hover:bg-muted'
+              )}
               onClick={() => goToOffer(activeOfferIndex + 1)}
               aria-label="Siguiente oferta"
             >
@@ -420,17 +441,29 @@ export function OffersCarouselDeck({
             aria-labelledby={`offer-title-${offer.id}`}
             className={cn(
               cn(
-                'group relative flex flex-col justify-between snap-start overflow-hidden rounded-2xl border border-border/80 bg-card p-3 shadow-xs transition-all duration-300 motion-reduce:transition-none',
+                'group relative flex flex-col justify-between snap-start overflow-hidden p-3 shadow-xs transition-all duration-300 motion-reduce:transition-none',
+                isCosmeticos
+                  ? 'rounded-[1.75rem] border border-rose-200/80 bg-white/95 dark:border-rose-900/50 dark:bg-zinc-900/95 shadow-2xs'
+                  : 'rounded-2xl border border-border/80 bg-card shadow-xs',
                 getOfferCardWidthClass(),
               ),
               offer.inStock
-                ? 'hover:-translate-y-1 hover:shadow-xl hover:border-primary/50'
+                ? isCosmeticos
+                  ? 'hover:-translate-y-1.5 hover:shadow-xl hover:border-rose-300 dark:hover:border-rose-700'
+                  : 'hover:-translate-y-1 hover:shadow-xl hover:border-primary/50'
                 : 'opacity-55 grayscale-[25%] hover:opacity-65'
             )}
           >
             <div>
               {/* Imagen del Producto con Badges */}
-                  <div className="relative aspect-4/3 w-full overflow-hidden rounded-xl bg-muted/40 p-2 mb-2">
+              <div
+                className={cn(
+                  'relative aspect-4/3 w-full overflow-hidden p-2 mb-2',
+                  isCosmeticos
+                    ? 'rounded-2xl bg-gradient-to-b from-rose-50/70 via-pink-50/30 to-rose-50/50 dark:from-zinc-800/70 dark:to-zinc-800/30'
+                    : 'rounded-xl bg-muted/40'
+                )}
+              >
                 <Link
                   href={resolveHref(offer.ctaHref)}
                   onClick={(event) => openDetail(event, offer)}
@@ -457,10 +490,14 @@ export function OffersCarouselDeck({
 
                 {/* Badge de Descuento */}
                 <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-                  <span className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm',
-                    accent.button
-                  )}>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm',
+                      isCosmeticos
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-rose-500/25'
+                        : accent.button
+                    )}
+                  >
                     <Flame className="h-3.5 w-3.5 fill-current animate-pulse" />
                     <span>{offer.tag}</span>
                   </span>
@@ -468,9 +505,16 @@ export function OffersCarouselDeck({
 
                 {/* Badge Destacado */}
                 <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                    <Star className="h-3 w-3 fill-white" />
-                    <span>Top Semana</span>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-xs',
+                      isCosmeticos
+                        ? 'bg-stone-900/85 text-rose-100 backdrop-blur-xs'
+                        : 'bg-amber-500 text-white'
+                    )}
+                  >
+                    <Star className={cn('h-3 w-3', isCosmeticos ? 'fill-amber-300 text-amber-300' : 'fill-white')} />
+                    <span>{isCosmeticos ? 'Recomendado' : 'Top Semana'}</span>
                   </span>
                 </div>
 
@@ -485,11 +529,31 @@ export function OffersCarouselDeck({
 
               {/* Marca & Título */}
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <p
+                  className={cn(
+                    'text-[10px] font-bold uppercase tracking-wider',
+                    isCosmeticos ? 'text-rose-600/90 dark:text-rose-400 font-semibold' : 'text-muted-foreground'
+                  )}
+                >
                   {offer.brand || fallbackBrand}
                 </p>
-                <Link href={resolveHref(offer.ctaHref)} className="group-hover:text-primary transition-colors">
-                  <h3 id={`offer-title-${offer.id}`} className="line-clamp-2 text-sm font-bold leading-snug text-foreground" title={offer.title}>
+                <Link
+                  href={resolveHref(offer.ctaHref)}
+                  className={cn(
+                    'transition-colors',
+                    isCosmeticos ? 'group-hover:text-rose-600' : 'group-hover:text-primary'
+                  )}
+                >
+                  <h3
+                    id={`offer-title-${offer.id}`}
+                    className={cn(
+                      'line-clamp-2 text-sm leading-snug',
+                      isCosmeticos
+                        ? 'font-serif font-bold text-stone-900 dark:text-stone-100'
+                        : 'font-bold text-foreground'
+                    )}
+                    title={offer.title}
+                  >
                     {offer.title}
                   </h3>
                 </Link>
@@ -497,14 +561,24 @@ export function OffersCarouselDeck({
             </div>
 
             {/* Precios & Botón de Acción */}
-            <div className="mt-3 pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+            <div
+              className={cn(
+                'mt-3 pt-2 flex items-center justify-between gap-2 border-t',
+                isCosmeticos ? 'border-rose-100 dark:border-zinc-800' : 'border-border/60'
+              )}
+            >
               <div className="min-w-0">
                 {offer.originalPriceLabel && (
                   <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none truncate">
                     {offer.originalPriceLabel}
                   </p>
                 )}
-                <p className={cn('text-base sm:text-lg font-black tracking-tight tabular-nums mt-0.5 truncate', accent.price)}>
+                <p
+                  className={cn(
+                    'text-base sm:text-lg font-black tracking-tight tabular-nums mt-0.5 truncate',
+                    isCosmeticos ? 'font-serif text-rose-600 dark:text-rose-400' : accent.price
+                  )}
+                >
                   {offer.priceLabel}
                 </p>
               </div>
@@ -515,7 +589,12 @@ export function OffersCarouselDeck({
                   asChild
                   size="sm"
                   variant="outline"
-                  className="rounded-xl font-bold text-xs px-2.5 sm:px-3 h-8 sm:h-9 border-border/80 hover:bg-muted"
+                  className={cn(
+                    'font-bold text-xs px-2.5 sm:px-3 h-8 sm:h-9',
+                    isCosmeticos
+                      ? 'rounded-full border-rose-200/90 bg-white/80 hover:bg-rose-50 text-stone-700 hover:text-rose-700 dark:border-rose-900/60 dark:bg-zinc-800 dark:text-stone-200'
+                      : 'rounded-xl border-border/80 hover:bg-muted'
+                  )}
                 >
                   <Link
                     href={resolveHref(offer.ctaHref)}
@@ -535,10 +614,13 @@ export function OffersCarouselDeck({
                     aria-label={`Agregar ${offer.title} al carrito`}
                     title={`Agregar ${offer.title} al carrito`}
                     className={cn(
-                      'flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                      'flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                      isCosmeticos ? 'rounded-full' : 'rounded-xl',
                       addedItemIds[offer.id]
                         ? 'bg-emerald-600 text-white shadow-emerald-600/20'
-                        : accent.button
+                        : isCosmeticos
+                          ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-rose-500/25'
+                          : accent.button
                     )}
                   >
                     {addedItemIds[offer.id] ? (
