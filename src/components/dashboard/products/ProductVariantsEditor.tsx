@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useOptionalBranch } from '@/contexts/branch-context'
 import type { BusinessVertical } from '@/lib/organization/business-profile'
 import { generateVariantCombinations, mergeGeneratedVariants, type VariantPriceDefaults } from '@/lib/products/variant-combinations'
+import { applyLinkedBasePrices, createPriceLinks, registerPriceLinks, unlinkEditedPrices } from '@/lib/products/variant-price-links'
 import type { ProductAttributeDefinition, ProductVariantInput, ProductVariantsPayload } from '@/lib/products/variant-contract'
 import { analyzeVariantRemovalImpact, type VariantRemovalImpact } from '@/lib/products/variant-safety'
 import { countVariantCombinations, validateVariantAttributes, VARIANT_COMBINATION_WARNING_THRESHOLD, VARIANT_COMBINATION_HARD_CAP } from '@/lib/products/variant-workflow'
@@ -103,6 +104,22 @@ export function ProductVariantsEditor({ value, onChange, basePrices, baseSku = '
   const [filter, setFilter] = useState('all')
   const reviewRef = useRef<HTMLDivElement>(null)
   const [originals, setOriginals] = useState(() => new Map(value.variants.flatMap(v => v.id ? [[v.id, JSON.stringify(v)] as const] : [])))
+  // Variantes que siguen los precios del producto (variant-price-links). Se
+  // registran recién cuando el editor está habilitado: mientras el producto
+  // carga no se copia nada.
+  const priceLinks = useRef(createPriceLinks())
+  const latest = useRef({ value, onChange, canUpdateCost, basePrices })
+  useEffect(() => {
+    latest.current = { value, onChange, canUpdateCost, basePrices }
+    if (!disabled) registerPriceLinks(priceLinks.current, value.variants, basePrices)
+  })
+  useEffect(() => {
+    if (disabled) return
+    const { value: current, onChange: emit, canUpdateCost: mayUpdateCost, basePrices: base } = latest.current
+    if (!current.hasVariants || current.variants.length === 0) return
+    const next = applyLinkedBasePrices(current.variants, priceLinks.current, base, { canUpdateCost: mayUpdateCost })
+    if (next !== current.variants) emit({ ...current, variants: next })
+  }, [basePrices.salePrice, basePrices.wholesalePrice, basePrices.purchasePrice, disabled])
   useEffect(() => {
     if (!value.hasVariants) return
     let cancelled = false
@@ -119,6 +136,17 @@ export function ProductVariantsEditor({ value, onChange, basePrices, baseSku = '
       return nextOriginals
     })
     setSelected(old => new Set([...old].filter(key => next.variants.some(v => variantSelectionKey(v) === key))))
+    // Un precio cambiado a mano en una variante deja de seguir al del producto.
+    const before = new Map(value.variants.map(v => [variantSelectionKey(v), v]))
+    next.variants.forEach(v => {
+      const old = before.get(variantSelectionKey(v))
+      if (!old) return
+      const edited: Partial<ProductVariantInput> = {}
+      if (old.salePrice !== v.salePrice) edited.salePrice = v.salePrice
+      if (old.wholesalePrice !== v.wholesalePrice) edited.wholesalePrice = v.wholesalePrice
+      if (old.purchasePrice !== v.purchasePrice) edited.purchasePrice = v.purchasePrice
+      unlinkEditedPrices(priceLinks.current, variantSelectionKey(v), edited)
+    })
     setError(''); onChange(next)
   }
   const attributesChange = (attributes: ProductAttributeDefinition[]) => {
@@ -161,7 +189,7 @@ export function ProductVariantsEditor({ value, onChange, basePrices, baseSku = '
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Ajustá las combinaciones <span className="text-muted-foreground">({value.variants.length})</span></h4><p className="text-xs text-muted-foreground">{branch ? `Sucursal: ${branch.name}` : 'Seleccioná una sucursal para asignar stock.'}</p></div>
         {value.variants.length > 1 && <div className="flex flex-col gap-2 sm:flex-row"><Input aria-label="Buscar variantes" placeholder="Buscar SKU o atributos" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Filtrar variantes" value={filter} onChange={e => setFilter(e.target.value)} className="rounded-lg border bg-background p-2 text-sm"><option value="all">Todas</option><option value="active">Activas</option><option value="inactive">Inactivas</option><option value="stock">Con stock</option><option value="empty">Sin stock</option></select></div>}
         <VariantBulkToolbar variants={value.variants} selected={selected} onApply={variants => request({ ...value, variants }, 'bulk')} onClear={() => setSelected(new Set())} canUpdateCost={canViewCost && canUpdateCost} branch={branch} baseSku={baseSku} disabled={disabled} />
-        <VariantEditableGrid rows={rows} selectedKeys={selected} onToggle={key => setSelected(old => { const next = new Set(old); if (next.has(key)) next.delete(key); else next.add(key); return next })} onToggleAll={() => setSelected(old => { const next = new Set(old); const all = rows.every(r => next.has(variantSelectionKey(r.variant))); rows.forEach(r => { const key = variantSelectionKey(r.variant); if (all) next.delete(key); else next.add(key) }); return next })} onUpdate={update} onRemove={index => request({ ...value, variants: value.variants.filter((_, i) => index !== i) }, 'remove-variant')} canViewCost={canViewCost} canUpdateCost={canUpdateCost} disabled={disabled} stockEditable={Boolean(branch)} branchName={branch?.name} />
+        <VariantEditableGrid rows={rows} selectedKeys={selected} onToggle={key => setSelected(old => { const next = new Set(old); if (next.has(key)) next.delete(key); else next.add(key); return next })} onToggleAll={() => setSelected(old => { const next = new Set(old); const all = rows.every(r => next.has(variantSelectionKey(r.variant))); rows.forEach(r => { const key = variantSelectionKey(r.variant); if (all) next.delete(key); else next.add(key) }); return next })} onUpdate={update} onRemove={index => request({ ...value, variants: value.variants.filter((_, i) => index !== i) }, 'remove-variant')} canViewCost={canViewCost} canUpdateCost={canUpdateCost} disabled={disabled} stockEditable={Boolean(branch)} branchName={branch?.name} basePrices={basePrices} />
         {!rows.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No hay variantes con estos filtros.</p>}
       </div> : <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Agregá atributos y generá las combinaciones para comenzar.</div>}
     </>}

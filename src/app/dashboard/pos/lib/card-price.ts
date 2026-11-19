@@ -1,5 +1,6 @@
 import type { Product } from '@/types/product-unified'
 import { getActiveOfferPrice, WHOLESALE_DISCOUNT_RATE } from './cart-pricing'
+import { variantExplicitWholesale, variantRetailPrice } from '@/lib/products/variant-pricing'
 
 export type ProductCardPrice = {
   /** Lo que se cobra al agregarlo (o el más bajo de sus variantes). */
@@ -56,9 +57,12 @@ export function resolveProductCardPrice(
   const pricedVariants = variants
     .filter((variant) => variant.is_active !== false && variant.isActive !== false)
     .map((variant) => {
-      const sale = positive(variant.sale_price ?? variant.salePrice) ?? listPrice
-      const wholesale = positive(variant.wholesale_price ?? variant.wholesalePrice) ?? positive(product.wholesale_price)
-      return priceOf(sale, wholesale, sale)
+      const source = {
+        sale_price: variant.sale_price ?? variant.salePrice,
+        wholesale_price: variant.wholesale_price ?? variant.wholesalePrice,
+      }
+      const sale = variantRetailPrice(product, source) || listPrice
+      return priceOf(sale, variantExplicitWholesale(product, source), sale)
     })
     .filter((candidate) => candidate.price > 0)
 

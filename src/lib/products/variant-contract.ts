@@ -82,6 +82,15 @@ export const ProductVariantsPayloadSchema = z.object({
     }
     skus.add(sku)
 
+    // Igual que en el producto: un mayorista que no baja del precio de venta no es mayorista.
+    if (variant.wholesalePrice !== undefined && variant.wholesalePrice > 0 && variant.wholesalePrice >= variant.salePrice) {
+      context.addIssue({
+        code: 'custom',
+        path: ['variants', index, 'wholesalePrice'],
+        message: 'El precio mayorista tiene que ser menor que el precio de venta de la variante',
+      })
+    }
+
     const barcode = variant.barcode?.trim()
     if (barcode) {
       if (barcodes.has(barcode)) {

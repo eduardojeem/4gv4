@@ -63,7 +63,12 @@ export async function prepareProductCostInput(
   input: Record<string, unknown>,
   organizationId: string,
   productId?: string,
+  options: { allowClearingVariantCost?: boolean } = {},
 ): Promise<Record<string, unknown>> {
+  // Un costo de variante en null se toma como «no enviado» y se conserva el
+  // guardado. Solo quien puede ver y editar costos lo borra a propósito
+  // («Limpiar costo»): sin ver el costo, el editor manda null por no conocerlo.
+  const rawVariants = Array.isArray(input.variants) ? input.variants : []
   const result = normalizeUnknownProductCosts(input, !productId)
   if (!Array.isArray(result.variants)) return result
   const ids = result.variants.filter(row => row && typeof row === 'object' && row.id).map(row => row.id as string)
@@ -76,13 +81,14 @@ export async function prepareProductCostInput(
     for (const row of data ?? []) costs.set(row.id, row.purchase_price)
     if (ids.some(id => !costs.has(id))) throw new ProductCostInputError('La variante no pertenece al producto de esta organización.')
   }
-  result.variants = result.variants.map(row => {
+  result.variants = result.variants.map((row, index) => {
     if (!row || typeof row !== 'object') return row
     const variant = normalizeUnknownProductCosts(row, false)
     if (variant.purchasePrice === undefined) {
-      const hasExplicitUnknown = Object.prototype.hasOwnProperty.call(row, 'purchasePrice') && row.purchasePrice === null
-        || Object.prototype.hasOwnProperty.call(row, 'purchase_price') && row.purchase_price === null
-      variant.purchasePrice = hasExplicitUnknown ? null : variant.id ? costs.get(String(variant.id)) ?? null : null
+      const raw = rawVariants[index]
+      const clears = Boolean(options.allowClearingVariantCost) && Boolean(raw) && typeof raw === 'object'
+        && ((raw as Record<string, unknown>).purchasePrice === null || (raw as Record<string, unknown>).purchase_price === null)
+      variant.purchasePrice = clears ? null : variant.id ? costs.get(String(variant.id)) ?? null : null
     }
     delete variant.purchase_price
     return variant

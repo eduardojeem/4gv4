@@ -26,3 +26,8 @@ it('suggests SKUs and rejects normalized draft duplicates against unselected var
   expect(applyVariantBulkAction(variants, selected, { type: 'sku', base: 'IPH15' }, { canUpdateCost: false })[0].sku).toBe('IPH15-NEG')
   expect(() => applyVariantBulkAction([v('Negro'), { ...v('Otro'), sku: ' iph15-neg ' }], selected, { type: 'sku', base: 'IPH15' }, { canUpdateCost: false })).toThrow('duplicado')
 })
+it('sets or clears the wholesale price and rejects one that is not below the sale price', () => {
+  expect(applyVariantBulkAction(variants, selected, { type: 'wholesale', value: 8 }, { canUpdateCost: false })[0].wholesalePrice).toBe(8)
+  expect(applyVariantBulkAction([{ ...v('Negro'), wholesalePrice: 8 }], selected, { type: 'clearWholesale' }, { canUpdateCost: false })[0].wholesalePrice).toBeUndefined()
+  expect(() => applyVariantBulkAction(variants, selected, { type: 'wholesale', value: 10 }, { canUpdateCost: false })).toThrow('menor')
+})

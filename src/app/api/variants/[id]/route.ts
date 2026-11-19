@@ -288,7 +288,8 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       patch.purchase_price = getVariantPurchaseCost(getVariantCostValue(rawBody))
     }
     if (body.wholesale_price !== undefined) {
-      patch.wholesale_price = Math.max(0, toSafeNumber(body.wholesale_price, 0))
+      // null = sin mayorista propio (hereda), no 0.
+      patch.wholesale_price = body.wholesale_price === null ? null : Math.max(0, toSafeNumber(body.wholesale_price, 0))
     }
     if (body.min_stock !== undefined) {
       patch.min_stock = Math.max(0, toSafeNumber(body.min_stock, 0))
