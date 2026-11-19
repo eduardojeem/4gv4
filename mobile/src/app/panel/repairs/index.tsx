@@ -3,9 +3,10 @@ import { PanelAccessState } from '@/components/panel-access-state';
 import { useListRequestScope } from '@/lib/use-list-request-scope';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { whatsappUrl } from '@/lib/agenda-model';
 import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import { usePanel } from '@/lib/panel';
@@ -45,6 +46,9 @@ export default function RepairsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [scanning, setScanning] = useState(false);
+  // Indicadores del taller: se calculan con la lista "En curso" sin búsqueda y se
+  // mantienen al filtrar, para que no cambien según el filtro elegido.
+  const [summary, setSummary] = useState<RepairSummary | null>(null);
 
   // Busca medio segundo después de dejar de escribir.
   const requestScope = useListRequestScope(JSON.stringify([panelData?.organization.id, panelData?.organization.role, panelData?.user.email,search,filter,attempt]));
@@ -67,6 +71,7 @@ export default function RepairsScreen() {
         setPage(1);
         setTotalPages(result.pagination.totalPages);
         setTotal(result.pagination.total);
+        if (filter === 'active' && !search) setSummary(summarizeRepairs(result.repairs, result.pagination.totalPages > 1));
         setError(null);
       })
       .catch((err) => {
@@ -108,7 +113,9 @@ export default function RepairsScreen() {
         if (!isCurrent()) return;
         setError(null);
         rememberRepairs(result.repairs);
-        setRepairs((list) => [...list, ...result.repairs.filter((repair) => !list.some((item) => item.id === repair.id))]);
+        const merged = [...repairs, ...result.repairs.filter((repair) => !repairs.some((item) => item.id === repair.id))];
+        setRepairs(merged);
+        if (filter === 'active' && !search) setSummary(summarizeRepairs(merged, page + 1 < result.pagination.totalPages));
         setPage(page + 1);
         setTotalPages(result.pagination.totalPages);
       })
@@ -116,30 +123,14 @@ export default function RepairsScreen() {
       .finally(() => { if (isCurrent()) setLoadingMore(false); });
   };
 
-  // Resumen / KPIs rápidos de la carga actual del taller
-  const kpis = useMemo(() => {
-    let revisar = 0;
-    let enTaller = 0;
-    let listos = 0;
-    let demorados = 0;
-    let saldoTotal = 0;
-
-    for (const r of repairs) {
-      if (r.status === 'recibido') revisar++;
-      if (r.status === 'diagnostico' || r.status === 'reparacion' || r.status === 'pausado') enTaller++;
-      if (r.status === 'listo') listos++;
-      const days = daysSince(r.created_at);
-      if (r.status !== 'entregado' && r.status !== 'cancelado' && days >= 7) demorados++;
-      const { balance } = money(r);
-      if (balance > 0 && r.status !== 'cancelado') saldoTotal += balance;
-    }
-
-    return { revisar, enTaller, listos, demorados, saldoTotal };
-  }, [repairs]);
+  // Tocar un indicador filtra por ese estado; tocarlo otra vez vuelve a "En curso".
+  const toggleFilter = (next: RepairFilter) => changeFilter(filter === next ? 'active' : next);
 
   if (panelLoading || !findItem('repairs')) return <PanelAccessState />;
 
-  const orgName = panelData?.organization.name ?? 'MiTienda';
+  const orgName = panelData?.organization.name ?? 'Mi TiendaPy';
+  // Si la lista "En curso" tiene más páginas, los números son "al menos".
+  const count = (value: number) => (summary?.partial ? `${value}+` : String(value));
 
   return (
     <View style={styles.flex}>
@@ -148,7 +139,7 @@ export default function RepairsScreen() {
         <View style={styles.titleRow}>
           <View style={styles.flex}>
             <Text style={[styles.title, { color: colors.text }]}>Reparaciones</Text>
-            <Text style={[styles.muted, { color: colors.muted, textAlign: 'left' }]}>
+            <Text style={[styles.muted, { color: colors.muted }]}>
               {loading ? 'Cargando órdenes…' : `${total} ${total === 1 ? 'orden en taller' : 'órdenes en taller'}`}
             </Text>
           </View>
@@ -193,90 +184,53 @@ export default function RepairsScreen() {
         </View>
       </View>
 
-      {/* Franja de métricas rápidas del taller (KPIs) */}
-      {repairs.length > 0 && (
+      {/* Indicadores del taller: los de estado filtran; los otros solo informan */}
+      {summary && summary.open > 0 && (
         <View style={styles.kpiContainer}>
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.kpiList}
             data={[
-              {
-                id: 'revisar',
-                label: 'Por revisar',
-                value: String(kpis.revisar),
-                icon: 'mail-unread-outline' as const,
-                color: palette.primary,
-                active: filter === 'recibido',
-                onPress: () => changeFilter('recibido'),
-              },
-              {
-                id: 'taller',
-                label: 'En taller',
-                value: String(kpis.enTaller),
-                icon: 'construct-outline' as const,
-                color: '#3B82F6',
-                active: filter === 'reparacion',
-                onPress: () => changeFilter('reparacion'),
-              },
-              {
-                id: 'listos',
-                label: 'Listos para retiro',
-                value: String(kpis.listos),
-                icon: 'checkmark-circle-outline' as const,
-                color: '#16A34A',
-                active: filter === 'listo',
-                onPress: () => changeFilter('listo'),
-              },
-              ...(kpis.demorados > 0
-                ? [
-                    {
-                      id: 'demorados',
-                      label: 'Demorados (+7d)',
-                      value: String(kpis.demorados),
-                      icon: 'alert-circle-outline' as const,
-                      color: palette.danger,
-                      active: false,
-                      onPress: () => changeFilter('active'),
-                    },
-                  ]
+              { id: 'recibido', label: 'Por revisar', value: count(summary.received), icon: 'mail-unread-outline' as const, color: palette.primary, filterKey: 'recibido' as RepairFilter },
+              { id: 'reparacion', label: 'En reparación', value: count(summary.inRepair), icon: 'construct-outline' as const, color: '#3B82F6', filterKey: 'reparacion' as RepairFilter },
+              { id: 'listo', label: 'Listos para retirar', value: count(summary.ready), icon: 'checkmark-circle-outline' as const, color: '#16A34A', filterKey: 'listo' as RepairFilter },
+              ...(summary.late > 0
+                ? [{ id: 'late', label: 'Hace 7 días o más', value: count(summary.late), icon: 'alert-circle-outline' as const, color: palette.danger, filterKey: null }]
                 : []),
-              ...(kpis.saldoTotal > 0
-                ? [
-                    {
-                      id: 'porCobrar',
-                      label: 'Por cobrar',
-                      value: formatGs(kpis.saldoTotal),
-                      icon: 'wallet-outline' as const,
-                      color: '#059669',
-                      active: false,
-                      onPress: () => changeFilter('active'),
-                    },
-                  ]
+              ...(summary.balance > 0
+                ? [{ id: 'balance', label: summary.partial ? 'Por cobrar (parcial)' : 'Por cobrar', value: formatGs(summary.balance), icon: 'wallet-outline' as const, color: '#059669', filterKey: null }]
                 : []),
             ]}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={item.onPress}
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.kpiCard,
-                  {
-                    backgroundColor: item.active ? `${item.color}15` : colors.card,
-                    borderColor: item.active ? item.color : colors.border,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}>
-                <View style={[styles.kpiIconBox, { backgroundColor: `${item.color}18` }]}>
-                  <Ionicons name={item.icon} size={14} color={item.color} />
-                </View>
-                <View>
-                  <Text style={[styles.kpiValue, { color: colors.text }]}>{item.value}</Text>
-                  <Text style={[styles.kpiLabel, { color: colors.muted }]}>{item.label}</Text>
-                </View>
-              </Pressable>
-            )}
+            renderItem={({ item }) => {
+              const active = item.filterKey !== null && filter === item.filterKey;
+              const body = (
+                <>
+                  <View style={[styles.kpiIconBox, { backgroundColor: `${item.color}18` }]}>
+                    <Ionicons name={item.icon} size={14} color={item.color} />
+                  </View>
+                  <View>
+                    <Text style={[styles.kpiValue, { color: colors.text }]}>{item.value}</Text>
+                    <Text style={[styles.kpiLabel, { color: colors.muted }]}>{item.label}</Text>
+                  </View>
+                </>
+              );
+              const cardStyle = { backgroundColor: active ? `${item.color}15` : colors.card, borderColor: active ? item.color : colors.border };
+              const label = `${item.label}: ${item.value}`;
+              return item.filterKey === null ? (
+                <View accessible accessibilityLabel={label} style={[styles.kpiCard, cardStyle]}>{body}</View>
+              ) : (
+                <Pressable
+                  onPress={() => toggleFilter(item.filterKey as RepairFilter)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
+                  style={({ pressed }) => [styles.kpiCard, cardStyle, { opacity: pressed ? 0.85 : 1 }]}>
+                  {body}
+                </Pressable>
+              );
+            }}
           />
         </View>
       )}
@@ -385,6 +339,8 @@ function RepairCard({ repair, colors, orgName }: { repair: Repair; colors: Retur
   const outcome = repairOutcome(repair);
   const stepIndex = TIMELINE.indexOf(repair.status === 'pausado' ? 'reparacion' : repair.status);
   const phone = repair.customer?.phone?.trim();
+  // Con 595 adelante y sin el 0 inicial: wa.me no acepta números locales.
+  const whatsapp = phone ? whatsappUrl(phone, repairWhatsAppMessage(repair, orgName)) : null;
 
   return (
     <Pressable
@@ -483,74 +439,94 @@ function RepairCard({ repair, colors, orgName }: { repair: Repair; colors: Retur
               {customerName(repair)}
             </Text>
             <Text style={[styles.metaTimeText, { color: waiting ? palette.danger : colors.muted }]}>
-              · {shortDate(repair.created_at)}{waiting ? ` (⚠️ ${days}d)` : ` (${days}d)`}
+              · {shortDate(repair.created_at)}{waiting ? ` · hace ${days} días` : ''}
             </Text>
           </View>
 
-          {/* Botones de acción directa si tiene teléfono */}
+          {/* Llamar o escribir por WhatsApp, si el cliente tiene teléfono */}
           {phone ? (
             <View style={styles.quickActionsRow}>
               <Pressable
-                onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`)}
+                onPress={() => openLink(`tel:${phone.replace(/[^\d+]/g, '')}`)}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel={`Llamar a ${customerName(repair)}`}
                 style={[styles.quickIconBtn, { borderColor: colors.border, backgroundColor: colors.background }]}>
                 <Ionicons name="call-outline" size={13} color={colors.text} />
               </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  const cleanPhone = phone.replace(/[^\d+]/g, '').replace('+', '');
-                  const msg = encodeURIComponent(
-                    repair.status === 'listo'
-                      ? `Hola ${customerName(repair)}, ¡tu equipo ${deviceName(repair)} (${ticketOf(repair)}) ya está listo para retirar en ${orgName}! ${balance > 0 ? `Saldo a abonar: ${formatGs(balance)}.` : 'Totalmente pagado.'}`
-                      : `Hola ${customerName(repair)}, te contactamos de ${orgName} sobre tu equipo ${deviceName(repair)} (${ticketOf(repair)}).`
-                  );
-                  Linking.openURL(`https://wa.me/${cleanPhone}?text=${msg}`);
-                }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`WhatsApp a ${customerName(repair)}`}
-                style={[styles.quickIconBtn, { borderColor: '#16A34A44', backgroundColor: '#16A34A14' }]}>
-                <Ionicons name="logo-whatsapp" size={13} color="#16A34A" />
-              </Pressable>
+              {whatsapp ? (
+                <Pressable
+                  onPress={() => openLink(whatsapp)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`WhatsApp a ${customerName(repair)}`}
+                  style={[styles.quickIconBtn, { borderColor: '#16A34A44', backgroundColor: '#16A34A14' }]}>
+                  <Ionicons name="logo-whatsapp" size={13} color="#16A34A" />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
         </View>
 
-        {/* Fila inferior: Técnico, Aviso de retiro y Saldo */}
+        {/* Técnico, saldo y, si está listo, el aviso de retiro */}
         <View style={styles.rowBetween}>
-          <Text style={[styles.metaText, { color: colors.muted }]}>
+          <Text numberOfLines={1} style={[styles.metaText, styles.flex, { color: colors.muted }]}>
             {repair.technician?.full_name ? `Téc.: ${repair.technician.full_name}` : 'Sin técnico asignado'}
           </Text>
-
-          {repair.status === 'listo' && phone ? (
-            <Pressable
-              onPress={() => {
-                const cleanPhone = phone.replace(/[^\d+]/g, '').replace('+', '');
-                const msg = encodeURIComponent(
-                  `Hola ${customerName(repair)}, ¡tu equipo ${deviceName(repair)} (${ticketOf(repair)}) ya está listo para retirar en ${orgName}! ${balance > 0 ? `Saldo a abonar: ${formatGs(balance)}.` : 'Ya se encuentra totalmente abonado.'}`
-                );
-                Linking.openURL(`https://wa.me/${cleanPhone}?text=${msg}`);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Avisar retiro por WhatsApp"
-              style={styles.readyWspPill}>
-              <Ionicons name="logo-whatsapp" size={11} color="#fff" />
-              <Text style={styles.readyWspPillText}>Avisar retiro</Text>
-            </Pressable>
-          ) : quoted ? (
+          {quoted ? (
             <Text style={[styles.amount, { color: balance > 0 ? colors.text : palette.success }]}>
               {balance > 0 ? `Saldo ${formatGs(balance)}` : `Pagado ${formatGs(total)}`}
             </Text>
           ) : (
             <Text style={[styles.metaText, { color: colors.muted }]}>A presupuestar</Text>
           )}
+          {repair.status === 'listo' && whatsapp ? (
+            <Pressable
+              onPress={() => openLink(whatsapp)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Avisar a ${customerName(repair)} por WhatsApp que puede retirar`}
+              style={styles.readyWspPill}>
+              <Ionicons name="logo-whatsapp" size={11} color="#fff" />
+              <Text style={styles.readyWspPillText}>Avisar retiro</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Pressable>
   );
+}
+
+/** Mensaje de WhatsApp para el cliente: aviso de retiro si está listo, o un contacto general. */
+function repairWhatsAppMessage(repair: Repair, orgName: string) {
+  const { balance, quoted } = money(repair);
+  const name = customerName(repair);
+  const device = `${deviceName(repair)} (${ticketOf(repair)})`;
+  if (repair.status !== 'listo') return `Hola ${name}, te escribimos de ${orgName} por tu equipo ${device}.`;
+  const payment = !quoted ? '' : balance > 0 ? ` Saldo a pagar: ${formatGs(balance)}.` : ' Ya está todo pagado.';
+  return `Hola ${name}, tu equipo ${device} ya está listo para retirar en ${orgName}.${payment}`;
+}
+
+/** Abre el teléfono o WhatsApp; si no hay app para eso, avisa en lugar de fallar en silencio. */
+function openLink(url: string) {
+  Linking.openURL(url).catch(() => Alert.alert('No se pudo abrir', 'Revisá que el teléfono tenga una app para llamar o WhatsApp.'));
+}
+
+type RepairSummary = { open: number; received: number; inRepair: number; ready: number; late: number; balance: number; partial: boolean };
+
+/** Indicadores del taller con las órdenes en curso cargadas (partial: hay más páginas). */
+function summarizeRepairs(list: Repair[], partial: boolean): RepairSummary {
+  const summary: RepairSummary = { open: 0, received: 0, inRepair: 0, ready: 0, late: 0, balance: 0, partial };
+  for (const repair of list) {
+    if (repair.status === 'entregado' || repair.status === 'cancelado') continue;
+    summary.open += 1;
+    if (repair.status === 'recibido') summary.received += 1;
+    if (repair.status === 'reparacion') summary.inRepair += 1;
+    if (repair.status === 'listo') summary.ready += 1;
+    if (daysSince(repair.created_at) >= 7) summary.late += 1;
+    summary.balance += money(repair).balance;
+  }
+  return summary;
 }
 
 const styles = StyleSheet.create({
