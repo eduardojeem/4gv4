@@ -18,7 +18,9 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 describe('tienda pública sin taller', () => {
   it('el layout resuelve el módulo en el servidor y se lo pasa al footer', () => {
     const layout = leer('src/app/[organizationSlug]/layout.tsx')
-    expect(layout).toContain("const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
+    // Además del módulo, el rubro tiene que tener taller.
+    expect(layout).toContain('const repairsModuleEnabled = verticalOffersRepairs(storefrontOrganization.business_vertical)')
+    expect(layout).toContain("&& await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
     expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />')
   })
 

@@ -27,7 +27,7 @@ import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { cn } from '@/lib/utils'
 import type { PublicProduct } from '@/types/public'
 import type { WebsiteSettings } from '@/types/website-settings'
-import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { canPublishRepairs, type StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 
 /**
  * Inicio de la plantilla Informática & Electrónica.
@@ -477,6 +477,9 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
   const storeName = company?.name?.trim() || 'Nuestra tienda'
   const phoneClean = (company?.phone || '').replace(/\D/g, '')
   const brandTheme = getBrandTheme(company?.brandColor)
+  // Igual que la portada común: el módulo de reparaciones no alcanza, también
+  // cuenta la opción pública de Sitio Web (repairTrackingEnabled).
+  const repairsVisible = canPublishRepairs(capabilities, company?.repairTrackingEnabled, settings.services)
 
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -908,14 +911,14 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
         </>
       )}
 
-      {capabilities.hasRepairs && company && <TechRepairsBanner phoneClean={phoneClean} companyInfo={company} />}
+      {repairsVisible && company && <TechRepairsBanner phoneClean={phoneClean} companyInfo={company} />}
 
       {/* Beneficios: solo los que el dueño configuró en el sitio web. */}
       {trustBar && <StoreTrustBar settings={trustBar} className="py-4 sm:py-5" />}
 
       {branches.length > 0 && <BranchLocations branches={branches} brand={brandTheme} />}
 
-      <OrganizationReviews hasRepairs={capabilities.hasRepairs} />
+      <OrganizationReviews hasRepairs={repairsVisible} />
     </div>
   )
 }
