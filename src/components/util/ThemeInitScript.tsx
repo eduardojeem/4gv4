@@ -1,6 +1,8 @@
 'use client'
 
 import { useServerInsertedHTML } from 'next/navigation'
+import { SYSTEM_COLOR_SCHEME_VALUES } from '@/lib/theme/color-schemes'
+import { PANEL_STYLES } from '@/lib/theme/panel-appearance'
 
 // Script anti-flash de tema: fija la clase dark/light en <html> antes de que
 // React hidrate, para no mostrar un parpadeo del tema equivocado.
@@ -39,6 +41,11 @@ const THEME_INIT_SCRIPT = `
     var dark = theme === 'dark' || (theme === 'system' && systemPrefersDark);
 
     document.documentElement.classList.add(dark ? 'dark' : 'light');
+    var scheme = localStorage.getItem('colorScheme');
+    var schemes = ${JSON.stringify([...SYSTEM_COLOR_SCHEME_VALUES, 'default', 'custom'])};
+    document.documentElement.setAttribute('data-color-scheme', schemes.indexOf(scheme) >= 0 ? scheme : 'blue');
+    var panelStyle = localStorage.getItem('panelStyle');
+    document.documentElement.setAttribute('data-panel-style', ${JSON.stringify(PANEL_STYLES)}.indexOf(panelStyle) >= 0 ? panelStyle : 'neutral');
   } catch (e) {
     document.documentElement.classList.add('light');
   }
