@@ -36,7 +36,7 @@ export function getCompanyHeroOptions(
 ): CompanyHeroOption[] {
   const companyName = company?.name?.trim() || 'Tu Empresa'
   const slogan = company?.slogan?.trim()
-  const isServices = capabilities.primaryAction.kind === 'services' || capabilities.businessVertical === 'barbershop' || capabilities.businessVertical === 'services'
+  const isServices = capabilities.primaryAction.kind === 'services' || capabilities.businessVertical === 'barbershop' || capabilities.businessVertical === 'beauty_services'
 
   const options: CompanyHeroOption[] = [
     {
