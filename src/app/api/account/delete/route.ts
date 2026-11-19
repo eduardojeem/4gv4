@@ -9,11 +9,14 @@ import {
 } from '@/lib/account/account-deletion'
 
 const deleteSchema = z.object({
-  password: z.string().min(1, 'Ingresá tu contraseña.').max(200),
+  password: z.string().min(1, 'Ingresá tu contraseña.').max(200).optional(),
+  code: z.string().trim().regex(/^\d{6}$/, 'El código tiene 6 números.').optional(),
   confirm: z.string().trim(),
   reason: z.string().trim().max(500).optional(),
   source: z.enum(['app', 'web']).default('web'),
-}).strict()
+}).strict().refine((body) => Boolean(body.password) !== Boolean(body.code), {
+  message: 'Confirmá con tu contraseña o con el código que te mandamos.',
+})
 
 async function authenticatedUser() {
   const auth = await resolveRequestAuthUser()
@@ -21,7 +24,7 @@ async function authenticatedUser() {
   return auth.user
 }
 
-/** Qué pasa si se elimina la cuenta (negocios que se cierran, pedido pendiente). */
+/** Qué pasa si se elimina la cuenta (negocios que se cierran, pedido pendiente, cómo se confirma). */
 export async function GET() {
   const user = await authenticatedUser()
   if (!user) return NextResponse.json({ error: 'Iniciá sesión para eliminar tu cuenta.' }, { status: 401 })
@@ -45,7 +48,9 @@ export async function POST(request: NextRequest) {
     const result = await requestAccountDeletion({
       userId: user.id,
       email: user.email ?? null,
-      password: parsed.data.password,
+      confirmation: parsed.data.code
+        ? { method: 'code', code: parsed.data.code }
+        : { method: 'password', password: parsed.data.password as string },
       source: parsed.data.source,
       reason: parsed.data.reason,
     })

@@ -27,10 +27,18 @@ describe('protecciones al eliminar la cuenta en la app', () => {
 
   it('con huella o Face ID configurados, también se confirma con eso antes de enviar', () => {
     const biometric = screen.indexOf('authenticateWithBiometrics(')
-    const request = screen.indexOf("method: 'POST'")
+    // El pedido de eliminación (no el de mandar el código, que no cambia nada).
+    const request = screen.indexOf("apiFetch<{ scheduledFor: string; emailSent?: boolean }>('/api/account/delete'")
+    expect(request).toBeGreaterThan(-1)
     expect(biometric).toBeGreaterThan(-1)
     expect(biometric).toBeLessThan(request)
     expect(screen).toContain('Tu cuenta sigue activa.')
+  })
+
+  it('quien entra con Google confirma con un código por correo, sin contraseña', () => {
+    expect(screen).toContain("if (data.hasPassword === false) setMethod('code')")
+    expect(screen).toContain("apiFetch('/api/account/delete/code', { method: 'POST' })")
+    expect(screen).toContain("{ code: code.trim(), confirm, source: 'app' }")
   })
 
   it('no se puede pegar la palabra de confirmación', () => {
