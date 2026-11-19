@@ -19,6 +19,7 @@ import { formatGs } from '@/lib/marketplace';
 import { palette, usePalette } from '@/lib/palette';
 import {
   customerName,
+  defineRepairDeliveryPrice,
   deliverRepair,
   deliveryOutcomeFor,
   deviceName,
@@ -31,6 +32,7 @@ import {
   type Repair,
   type UnrepairedDelivery,
 } from '@/lib/repairs';
+import { repairHasDefinedPrice } from '../../../src/lib/repairs/price-required';
 
 type Colors = ReturnType<typeof usePalette>;
 
@@ -61,7 +63,15 @@ export function DeliverySheet({
   const colors = usePalette();
   const insets = useSafeAreaInsets();
   const outcome = deliveryOutcomeFor(repair);
-  const { total, paid, balance } = money(repair);
+  const stored = money(repair);
+  const paid = stored.paid;
+  // Sin precio, el servidor no deja entregarlo reparado (Finanzas lo contaría en
+  // ₲ 0): se pide acá cuánto se cobró o «Sin cargo», como en la web.
+  const needsPrice = outcome === 'repaired' && !repairHasDefinedPrice(repair);
+  const [priceText, setPriceText] = useState('');
+  const [noCharge, setNoCharge] = useState(false);
+  const total = needsPrice ? (noCharge ? 0 : digits(priceText)) : stored.total;
+  const balance = Math.max(0, total - paid);
 
   const [key, setKey] = useState(newIdempotencyKey);
   const [collect, setCollect] = useState(true);
@@ -93,7 +103,20 @@ export function DeliverySheet({
     setRefund('store_credit');
     setDispositions(defaultDispositions());
     setNote('');
+    setPriceText('');
+    setNoCharge(false);
     setError(null);
+  };
+
+  const changePrice = (value: string) => {
+    setPriceText(pretty(value));
+    const due = Math.max(0, digits(value) - paid);
+    setAmount(due > 0 ? due.toLocaleString('es-PY') : '');
+  };
+
+  const toggleNoCharge = () => {
+    setNoCharge((value) => !value);
+    setAmount('');
   };
 
   const close = () => {
@@ -114,6 +137,8 @@ export function DeliverySheet({
   const problem = (() => {
     if (!outcome) return 'Primero hacé la verificación técnica.';
     if (outcome === 'repaired') {
+      if (needsPrice && !noCharge && digits(priceText) <= 0) return 'Escribí cuánto cobraste o marcá «Sin cargo».';
+      if (needsPrice && !noCharge && digits(priceText) < paid) return `El precio no puede ser menor a lo que ya pagó (${formatGs(paid)}).`;
       if (balance > 0 && collect && payAmount <= 0) return 'Escribí cuánto cobrás.';
       if (balance > 0 && collect && needsReference && !reference.trim()) return 'Anotá la referencia del comprobante.';
       if (remaining > 0 && !confirmOutstanding) return `Confirmá que se entrega con ${formatGs(remaining)} pendiente.`;
@@ -140,6 +165,8 @@ export function DeliverySheet({
     try {
       let updated: Repair;
       if (outcome === 'repaired') {
+        // Primero el precio (con las mismas validaciones que editarlo) y después la entrega.
+        if (needsPrice) await defineRepairDeliveryPrice(repair.id, noCharge ? 0 : digits(priceText), noCharge);
         updated = await deliverRepair(
           repair.id,
           {
@@ -227,6 +254,36 @@ export function DeliverySheet({
 
             {outcome === 'repaired' && (
               <>
+                {needsPrice && (
+                  <View style={styles.block}>
+                    <Text style={[styles.small, { color: colors.muted }]}>
+                      Esta orden no tiene precio. Indicá cuánto cobraste o, si fue por garantía o cortesía, marcá «Sin cargo».
+                    </Text>
+                    <Field label="¿Cuánto cobraste?" colors={colors}>
+                      <Text style={[styles.prefix, { color: colors.muted }]}>Gs.</Text>
+                      <TextInput
+                        value={noCharge ? '' : priceText}
+                        onChangeText={changePrice}
+                        editable={!noCharge && !saving}
+                        keyboardType="number-pad"
+                        placeholder={noCharge ? 'Sin cargo' : '0'}
+                        placeholderTextColor={colors.muted}
+                        accessibilityLabel="Precio de la reparación"
+                        style={[styles.input, { color: colors.text }]}
+                      />
+                    </Field>
+                    <Pressable
+                      onPress={toggleNoCharge}
+                      disabled={saving}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: noCharge }}
+                      style={[styles.confirm, { borderColor: noCharge ? palette.primary : colors.border }]}>
+                      <Ionicons name={noCharge ? 'checkbox' : 'square-outline'} size={22} color={noCharge ? palette.primary : colors.muted} />
+                      <Text style={[styles.confirmText, { color: colors.text }]}>Sin cargo (garantía o cortesía)</Text>
+                    </Pressable>
+                  </View>
+                )}
+
                 <View style={[styles.totals, { borderColor: colors.border }]}>
                   <Total label="Total" value={formatGs(total)} colors={colors} />
                   <Total label="Pagado" value={formatGs(paid)} colors={colors} />
