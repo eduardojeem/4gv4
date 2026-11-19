@@ -1,0 +1,57 @@
+/* Personal panel surfaces only. Storefront containers retain their own tokens.
+   Portal content inherits the same treatment while a panel shell is mounted. */
+:where(html[data-panel-style]:not([data-panel-style="neutral"])) :is(
+  [data-panel-shell],
+  body:has([data-panel-shell]) [data-slot="dialog-content"],
+  body:has([data-panel-shell]) [data-slot="alert-dialog-content"],
+  body:has([data-panel-shell]) [data-slot="sheet-content"],
+  body:has([data-panel-shell]) [data-slot="dropdown-menu-content"],
+  body:has([data-panel-shell]) [data-slot="select-content"],
+  body:has([data-panel-shell]) [data-slot="popover-content"],
+  body:has([data-panel-shell]) [data-slot="tooltip-content"]
+) {
+  --panel-base: oklch(0.985 0.003 240);
+  --panel-ink: oklch(0.24 0.012 240);
+  --panel-mix: 8%;
+  --background: color-mix(in oklch, var(--primary) var(--panel-mix), var(--panel-base));
+  --card: color-mix(in oklch, var(--primary) 3%, var(--panel-base));
+  --popover: var(--card);
+  --border: color-mix(in oklch, var(--primary) 18%, var(--panel-base));
+  --input: var(--border);
+  --muted: color-mix(in oklch, var(--primary) 7%, var(--panel-base));
+  --accent: color-mix(in oklch, var(--primary) 16%, var(--panel-base));
+  --accent-foreground: var(--panel-ink);
+  --sidebar: var(--card);
+  --sidebar-accent: var(--accent);
+  --sidebar-border: var(--border);
+  --ring: var(--primary);
+}
+
+:where(html.dark[data-panel-style]:not([data-panel-style="neutral"])) :is(
+  [data-panel-shell], body:has([data-panel-shell]) :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="popover-content"], [data-slot="tooltip-content"])
+) {
+  --panel-base: oklch(0.18 0.008 250);
+  --panel-ink: oklch(0.96 0.005 250);
+  --card: color-mix(in oklch, var(--primary) 5%, var(--panel-base));
+  --border: color-mix(in oklch, var(--primary) 24%, var(--panel-base));
+}
+
+:where(html[data-panel-style="contrast"]) :is([data-panel-shell], body:has([data-panel-shell]) :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="popover-content"], [data-slot="tooltip-content"])) {
+  --panel-mix: 0%;
+  --border: color-mix(in oklch, var(--primary) 38%, var(--panel-base));
+  --card: var(--panel-base);
+}
+
+:where(html[data-panel-style]:not([data-panel-style="neutral"])) [data-panel-shell] :is([data-slot="card-header"], [data-slot="table-header"]) {
+  background-color: color-mix(in oklch, var(--primary) 9%, var(--card));
+}
+
+:where(html[data-panel-style="tinted"]) [data-panel-shell] [data-slot="card"] {
+  border-inline-start-color: color-mix(in oklch, var(--primary) 48%, var(--card));
+}
+
+:where(html[data-panel-style]:not([data-panel-style="neutral"])) [data-panel-shell] [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: var(--accent);
+  color: var(--primary-text);
+  box-shadow: inset 0 -2px var(--primary);
+}

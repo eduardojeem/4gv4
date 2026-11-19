@@ -3,6 +3,7 @@
 @import "../styles/accessibility.css";
 @import "../styles/design-tokens.css";
 @import "../styles/design-system.css";
+@import "../styles/panel-appearance.css";
 
 /* Oculta scrollbar manteniendo el scroll funcional */
 .scrollbar-hide {

@@ -3,8 +3,10 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
+  isSystemColorScheme,
   type ThemeColorScheme,
 } from '@/lib/theme/color-schemes'
+import { normalizePanelStyle, readAppearancePreference, type PanelStyle } from '@/lib/theme/panel-appearance'
 
 /** Lo que dura la transicion de color al cambiar de modo, igual que en el CSS. */
 export const THEME_TRANSITION_MS = 260
@@ -42,6 +44,9 @@ interface ThemeContextType {
   setTheme: (theme: Theme) => void
   setColorScheme: (scheme: ColorScheme) => void
   isDark: boolean
+  panelStyle: PanelStyle
+  setPanelStyle: (style: PanelStyle) => void
+  resetAppearance: () => void
   customPalette?: CustomPalette
   setCustomPalette?: (palette: CustomPalette) => void
 }
@@ -73,10 +78,10 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return defaultTheme
 
-    const savedTheme = localStorage.getItem('theme') as Theme | null
-    if (savedTheme) return savedTheme
+    const savedTheme = readAppearancePreference('theme')
+    if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') return savedTheme
 
-    const legacyAdminDarkMode = localStorage.getItem('admin-dark-mode')
+    const legacyAdminDarkMode = readAppearancePreference('admin-dark-mode')
     if (legacyAdminDarkMode !== null) {
       return legacyAdminDarkMode === 'true' ? 'dark' : 'light'
     }
@@ -85,8 +90,10 @@ export function ThemeProvider({
   })
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     if (typeof window === 'undefined') return defaultColorScheme
-    return (localStorage.getItem('colorScheme') as ColorScheme | null) ?? defaultColorScheme
+    const saved = readAppearancePreference('colorScheme')
+    return saved === 'custom' || saved === 'default' || (saved && isSystemColorScheme(saved)) ? saved as ColorScheme : defaultColorScheme
   })
+  const [panelStyle, setPanelStyle] = useState<PanelStyle>(() => normalizePanelStyle(readAppearancePreference('panelStyle')))
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -94,11 +101,12 @@ export function ThemeProvider({
   const [customPalette, setCustomPaletteState] = useState<CustomPalette | undefined>(() => {
     if (typeof window === 'undefined') return undefined
 
-    const savedCustomPalette = localStorage.getItem('customPalette')
+    const savedCustomPalette = readAppearancePreference('customPalette')
     if (!savedCustomPalette) return undefined
 
     try {
-      return JSON.parse(savedCustomPalette)
+      const parsed = JSON.parse(savedCustomPalette)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined
     } catch {
       return undefined
     }
@@ -125,6 +133,7 @@ export function ThemeProvider({
     
     // Apply color scheme
     root.setAttribute('data-color-scheme', colorScheme)
+    root.setAttribute('data-panel-style', panelStyle)
     
     // Apply custom palette overrides when using custom scheme
     const keys: (keyof CustomPalette)[] = [
@@ -154,9 +163,10 @@ export function ThemeProvider({
     if (colorScheme === 'custom' && customPalette) {
       keys.forEach((k) => {
         const v = customPalette[k]
-        if (v) root.style.setProperty(`--${toKebab(k)}`, v)
+        if (typeof v === 'string' && v) root.style.setProperty(`--${toKebab(k)}`, v)
+        else root.style.removeProperty(`--${toKebab(k)}`)
       })
-      localStorage.setItem('customPalette', JSON.stringify(customPalette))
+      try { localStorage.setItem('customPalette', JSON.stringify(customPalette)) } catch {}
     } else {
       // Clear inline overrides to let scheme CSS take effect
       keys.forEach((k) => {
@@ -168,23 +178,43 @@ export function ThemeProvider({
     try {
       localStorage.setItem('theme', theme)
       localStorage.setItem('colorScheme', colorScheme)
+      localStorage.setItem('panelStyle', panelStyle)
       localStorage.removeItem('admin-dark-mode')
     } catch {}
-  }, [theme, colorScheme, customPalette, isDark])
+  }, [theme, colorScheme, customPalette, isDark, panelStyle])
 
   const setCustomPalette = useCallback((palette: CustomPalette) => {
     setCustomPaletteState(palette)
-    // if currently custom, immediately apply
+    // El efecto aplica la paleta únicamente al seleccionar el esquema custom.
     if (typeof window !== 'undefined') {
-      const root = window.document.documentElement
-      Object.entries(palette).forEach(([k, v]) => {
-        if (v) root.style.setProperty(`--${toKebab(k)}`, v as string)
-      })
       try {
         localStorage.setItem('customPalette', JSON.stringify(palette))
       } catch {}
     }
   }, [])
+  const resetAppearance = useCallback(() => {
+    setTheme(defaultTheme)
+    setColorScheme(defaultColorScheme)
+    setPanelStyle('neutral')
+    setCustomPaletteState(undefined)
+    try { localStorage.removeItem('customPalette') } catch {}
+  }, [defaultTheme, defaultColorScheme])
+
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === 'theme') setTheme(event.newValue === 'dark' || event.newValue === 'system' ? event.newValue : defaultTheme)
+      if (event.key === 'colorScheme') setColorScheme(event.newValue === 'custom' || event.newValue === 'default' || (event.newValue && isSystemColorScheme(event.newValue)) ? event.newValue as ColorScheme : defaultColorScheme)
+      if (event.key === 'panelStyle') setPanelStyle(normalizePanelStyle(event.newValue))
+      if (event.key === 'customPalette') {
+        try {
+          const parsed = event.newValue ? JSON.parse(event.newValue) : undefined
+          setCustomPaletteState(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined)
+        } catch { setCustomPaletteState(undefined) }
+      }
+    }
+    window.addEventListener('storage', sync)
+    return () => window.removeEventListener('storage', sync)
+  }, [defaultTheme, defaultColorScheme])
 
   /**
    * La transición de color acompaña el cambio de modo y se retira enseguida.
@@ -226,10 +256,13 @@ export function ThemeProvider({
       setTheme,
       setColorScheme,
       isDark,
+      panelStyle,
+      setPanelStyle,
+      resetAppearance,
       customPalette,
       setCustomPalette
     }),
-    [theme, colorScheme, isDark, customPalette, setCustomPalette]
+    [theme, colorScheme, isDark, customPalette, setCustomPalette, panelStyle, resetAppearance]
   )
 
   return (
