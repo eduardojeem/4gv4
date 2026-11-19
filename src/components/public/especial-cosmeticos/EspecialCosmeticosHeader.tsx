@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
+  ArrowLeft,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Store,
   Sun,
   User,
   X,
@@ -268,16 +270,31 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             )}
           >
             <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
-              <div className="flex items-center gap-2">
-                <Sparkles
+              <div className="flex items-center gap-2.5">
+                <Link
+                  href="/marketplace"
+                  aria-label="Volver al marketplace"
                   className={cn(
-                    'h-3.5 w-3.5',
-                    isAccent ? 'text-white/90' : isDark ? 'text-amber-400' : 'text-rose-500'
+                    'inline-flex items-center gap-1 font-semibold transition-colors hover:underline text-[11px]',
+                    isAccent ? 'text-white' : isDark ? 'text-stone-200' : 'text-stone-700 dark:text-stone-300'
                   )}
-                />
-                <span className="font-medium tracking-wide">
-                  {[city, weekdayHours].filter(Boolean).join(' · ') || slogan || storeName}
-                </span>
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                  <Store className="h-3 w-3" />
+                  <span>Marketplace</span>
+                </Link>
+                <span className="opacity-40 text-[10px]">·</span>
+                <div className="flex items-center gap-1.5">
+                  <Sparkles
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      isAccent ? 'text-white/90' : isDark ? 'text-amber-400' : 'text-rose-500'
+                    )}
+                  />
+                  <span className="font-medium tracking-wide">
+                    {[city, weekdayHours].filter(Boolean).join(' · ') || slogan || storeName}
+                  </span>
+                </div>
               </div>
               <div className="hidden sm:flex items-center gap-4 text-[11px]">
                 {whatsappClean && (
@@ -792,6 +809,23 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               }
             />
 
+            {/* Botón Volver al Marketplace */}
+            <Link
+              href="/marketplace"
+              aria-label="Volver al Marketplace"
+              className={cn(
+                'hidden sm:inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all shadow-2xs',
+                isAccent
+                  ? 'border-white/30 bg-white/10 text-white hover:bg-white/20'
+                  : isDark
+                  ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
+                  : 'border-rose-200/80 bg-white text-stone-700 hover:bg-rose-50/80 hover:text-rose-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200'
+              )}
+            >
+              <Store className="h-3.5 w-3.5 text-rose-500" />
+              <span>Volver al Marketplace</span>
+            </Link>
+
             {/* Perfil de Usuario / Inicio de sesión */}
             {hydrated && user ? (
               <DropdownMenu>
@@ -1117,6 +1151,26 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
 
               <div className={cn('my-2 border-t', isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-rose-100 dark:border-zinc-800')} />
 
+              {/* Opción Volver al Marketplace */}
+              <Link
+                href="/marketplace"
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors mb-2',
+                  isAccent
+                    ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
+                    : isDark
+                    ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
+                    : 'border-rose-200/80 bg-rose-50/80 text-rose-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Store className="h-4 w-4 text-rose-500" />
+                  <span>Volver al Marketplace</span>
+                </div>
+                <ChevronRight className="h-4 w-4 opacity-70" />
+              </Link>
+
               {/* Botón Asesoría WhatsApp Móvil */}
               {whatsappClean && (
                 <a
@@ -1162,6 +1216,28 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             </nav>
           </div>
         )}
+
+        {/* En el celular, la vuelta al marketplace va en una franja propia */}
+        <div
+          className={cn(
+            'border-t lg:hidden',
+            isAccent
+              ? 'border-white/15 bg-black/20 text-white'
+              : isDark
+              ? 'border-stone-800 bg-stone-900 text-stone-200'
+              : 'border-rose-150/70 bg-rose-50/80 dark:bg-zinc-900 dark:border-zinc-800 text-stone-800 dark:text-stone-200'
+          )}
+        >
+          <Link
+            href="/marketplace"
+            aria-label="Volver al Marketplace"
+            className="container mx-auto flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-xs font-bold transition-colors hover:bg-black/5"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <Store className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-hidden="true" />
+            <span>Volver al Marketplace</span>
+          </Link>
+        </div>
       </header>
 
       {/* Modal de autenticación */}
