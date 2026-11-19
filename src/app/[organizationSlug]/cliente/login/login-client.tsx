@@ -35,6 +35,7 @@ import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleS
 import { isValidEmail } from '@/lib/auth/password-validation'
 import { describeAuthError } from '@/lib/auth/auth-error-messages'
 import { ALL_STORE_CUSTOMER_FEATURES, customerAccessCopy, type CustomerAccessItemKey, type StoreCustomerFeatures } from '@/lib/public/customer-access-copy'
+import { requestPasswordResetEmail } from '@/lib/auth/request-password-reset'
 
 const ITEM_ICONS: Record<CustomerAccessItemKey, typeof Wrench> = {
   repairs: Wrench,
@@ -285,7 +286,7 @@ export default function TenantCustomerLoginClient({ features = ALL_STORE_CUSTOME
 
     try {
       setResetLoading(true)
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      const { error: resetError } = await requestPasswordResetEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
         captchaToken,
       })
