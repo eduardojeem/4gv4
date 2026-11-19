@@ -32,97 +32,13 @@ interface EspecialCosmeticosCarouselProps {
   customBrandColor?: string
 }
 
-const BRAND_CAROUSEL_THEMES: Record<string, {
-  btn: string
-  badge: string
-  border: string
-  activeDot: string
-  glow: string
-}> = {
-  rose: {
-    btn: 'bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 hover:from-rose-600 hover:to-pink-700 shadow-rose-950/20',
-    badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
-    border: 'border-rose-200/80 dark:border-rose-900/40',
-    activeDot: 'bg-rose-400',
-    glow: 'from-[#FFF5F6]/60 via-[#FFF9F9] to-transparent',
-  },
-  purple: {
-    btn: 'bg-gradient-to-r from-purple-600 via-fuchsia-600 to-purple-700 hover:from-purple-700 hover:to-fuchsia-700 shadow-purple-950/20',
-    badge: 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-    border: 'border-purple-200/80 dark:border-purple-900/40',
-    activeDot: 'bg-purple-500',
-    glow: 'from-[#FAF5FF]/60 via-[#FDF9FF] to-transparent',
-  },
-  amber: {
-    btn: 'bg-gradient-to-r from-amber-500 via-orange-600 to-amber-600 hover:from-amber-600 hover:to-orange-700 shadow-amber-950/20',
-    badge: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-    border: 'border-amber-200/80 dark:border-amber-900/40',
-    activeDot: 'bg-amber-500',
-    glow: 'from-[#FFFBEB]/60 via-[#FEFDF9] to-transparent',
-  },
-  emerald: {
-    btn: 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-950/20',
-    badge: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
-    border: 'border-emerald-200/80 dark:border-emerald-900/40',
-    activeDot: 'bg-emerald-500',
-    glow: 'from-[#ECFDF5]/60 via-[#F7FEFB] to-transparent',
-  },
-  teal: {
-    btn: 'bg-gradient-to-r from-teal-600 via-cyan-600 to-teal-700 hover:from-teal-700 hover:to-cyan-700 shadow-teal-950/20',
-    badge: 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800',
-    border: 'border-teal-200/80 dark:border-teal-900/40',
-    activeDot: 'bg-teal-500',
-    glow: 'from-[#F0FDFA]/60 via-[#F8FFFE] to-transparent',
-  },
-  red: {
-    btn: 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-700 shadow-red-950/20',
-    badge: 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
-    border: 'border-red-200/80 dark:border-red-900/40',
-    activeDot: 'bg-red-500',
-    glow: 'from-[#FEF2F2]/60 via-[#FFF9F9] to-transparent',
-  },
-  blue: {
-    btn: 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 shadow-blue-950/20',
-    badge: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-    border: 'border-blue-200/80 dark:border-blue-900/40',
-    activeDot: 'bg-blue-500',
-    glow: 'from-[#EFF6FF]/60 via-[#F8FAFC] to-transparent',
-  },
-  indigo: {
-    btn: 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 shadow-indigo-950/20',
-    badge: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
-    border: 'border-indigo-200/80 dark:border-indigo-900/40',
-    activeDot: 'bg-indigo-500',
-    glow: 'from-[#EEF2FF]/60 via-[#F8FAFF] to-transparent',
-  },
-  orange: {
-    btn: 'bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 hover:from-orange-600 hover:to-amber-700 shadow-orange-950/20',
-    badge: 'bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800',
-    border: 'border-orange-200/80 dark:border-orange-900/40',
-    activeDot: 'bg-orange-500',
-    glow: 'from-[#FFF7ED]/60 via-[#FFFBF5] to-transparent',
-  },
-  cyan: {
-    btn: 'bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-700 hover:from-cyan-700 hover:to-blue-700 shadow-cyan-950/20',
-    badge: 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
-    border: 'border-cyan-200/80 dark:border-cyan-900/40',
-    activeDot: 'bg-cyan-500',
-    glow: 'from-[#ECFEFF]/60 via-[#F7FEFF] to-transparent',
-  },
-  sky: {
-    btn: 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-600 hover:from-sky-600 hover:to-blue-600 shadow-sky-950/20',
-    badge: 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
-    border: 'border-sky-200/80 dark:border-sky-900/40',
-    activeDot: 'bg-sky-500',
-    glow: 'from-[#F0F9FF]/60 via-[#F8FCFF] to-transparent',
-  },
-  green: {
-    btn: 'bg-gradient-to-r from-green-600 via-emerald-600 to-teal-700 hover:from-green-700 hover:to-emerald-700 shadow-green-950/20',
-    badge: 'bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
-    border: 'border-green-200/80 dark:border-green-900/40',
-    activeDot: 'bg-green-500',
-    glow: 'from-[#F0FDF4]/60 via-[#F8FEFA] to-transparent',
-  },
+// The storefront owns --primary; all carousel formats derive the same palette.
+const CAROUSEL_THEME = {
+  btn: 'bg-gradient-to-r from-[var(--cosmetics-500)] to-[var(--cosmetics-600)] hover:from-[var(--cosmetics-600)] hover:to-[var(--cosmetics-700)]',
+  badge: 'bg-[var(--cosmetics-soft)] text-[var(--cosmetics-ink)] border-[var(--cosmetics-200)]',
+  border: 'border-[var(--cosmetics-200)]/80 dark:border-[var(--cosmetics-900)]/40',
+  activeDot: 'bg-[var(--cosmetics-400)]',
+  glow: 'from-[var(--cosmetics-tint)] via-[var(--cosmetics-page)] to-transparent',
 }
 
 export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandColor }: EspecialCosmeticosCarouselProps) {
@@ -233,23 +149,25 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
   }
 
   // Resolución de colores de marca elegidos por la organización en /admin/website
-  const effectiveBrand = brandColor && brandColor !== 'custom' ? brandColor : 'rose'
-  const brandTheme = BRAND_CAROUSEL_THEMES[effectiveBrand] ?? BRAND_CAROUSEL_THEMES.rose
-  const isCustomBrand = Boolean(customBrandColor && /^#[0-9A-Fa-f]{3,8}$/.test(customBrandColor))
+  const brandTheme = CAROUSEL_THEME
+  const isCustomBrand = Boolean(brandColor === 'custom' && customBrandColor && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(customBrandColor))
 
   return (
     <section
+      data-color-scheme={brandColor === 'custom' ? 'blue' : brandColor}
+      data-custom-brand={isCustomBrand ? '' : undefined}
       aria-label="Campañas y Novedades de Cosmética"
       className={cn(
-        'relative w-full overflow-hidden',
+        'cosmetics-brand-surface relative w-full overflow-hidden',
         isCustomBrand ? '' : `bg-gradient-to-b ${brandTheme.glow}`,
         isFullBleed ? 'py-0' : isCompact ? 'py-3 sm:py-5' : 'py-4 sm:py-8'
       )}
       style={
         isCustomBrand
           ? {
-              background: `linear-gradient(to bottom, ${customBrandColor}14 0%, ${customBrandColor}05 60%, transparent 100%)`,
-            }
+              '--brand-primary': customBrandColor,
+              background: 'linear-gradient(to bottom, var(--cosmetics-tint), var(--cosmetics-page), transparent)',
+            } as React.CSSProperties
           : undefined
       }
       onMouseEnter={() => setHoverPaused(true)}
@@ -281,7 +199,7 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
               ? cn('aspect-[4/3] sm:aspect-[16/7] lg:aspect-[21/8] min-h-[320px] sm:min-h-[380px] lg:min-h-[420px] rounded-2xl border shadow-md', isCustomBrand ? '' : brandTheme.border)
               : cn('aspect-[4/3] sm:aspect-[16/8] lg:aspect-[21/9] min-h-[380px] sm:min-h-[460px] lg:min-h-[500px] rounded-3xl sm:rounded-[2.5rem] border shadow-xl', isCustomBrand ? '' : brandTheme.border)
           )}
-          style={isCustomBrand ? { borderColor: `${customBrandColor}40` } : undefined}
+          style={isCustomBrand ? { borderColor: 'var(--cosmetics-200)' } : undefined}
         >
           {/* Slides de imagen en cross-fade */}
           {slides.map((slide, idx) => {
@@ -335,16 +253,16 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
                     style={
                       isCustomBrand
                         ? {
-                            color: customBrandColor,
-                            borderColor: `${customBrandColor}45`,
-                            backgroundColor: `${customBrandColor}15`,
+                            color: 'var(--cosmetics-ink)',
+                            borderColor: 'var(--cosmetics-200)',
+                            backgroundColor: 'var(--cosmetics-soft)',
                           }
                         : undefined
                     }
                   >
                     <Sparkles
                       className="h-3 w-3"
-                      style={isCustomBrand ? { color: customBrandColor } : undefined}
+                      style={isCustomBrand ? { color: 'var(--cosmetics-ink)' } : undefined}
                     />
                     <span>{currentSlide.badge}</span>
                   </div>
@@ -389,7 +307,7 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
                       )}
                       style={
                         isCustomBrand
-                          ? { backgroundColor: customBrandColor, borderColor: customBrandColor }
+                          ? { backgroundColor: 'var(--cosmetics-600)', borderColor: 'var(--cosmetics-600)' }
                           : undefined
                       }
                     >
@@ -455,7 +373,7 @@ export function EspecialCosmeticosCarousel({ settings, brandColor, customBrandCo
                             : `w-6 ${brandTheme.activeDot}`
                           : 'w-1.5 bg-white/40 hover:bg-white/70'
                       )}
-                      style={isActive && isCustomBrand ? { backgroundColor: customBrandColor } : undefined}
+                      style={isActive && isCustomBrand ? { backgroundColor: 'var(--cosmetics-600)' } : undefined}
                       aria-label={`Ir al slide ${idx + 1}`}
                     />
                   )

@@ -1,55 +1,56 @@
-/* ==========================================================================
-   Especial Cosméticos Premium - Boutique Luxury Aesthetics
-   ========================================================================== */
-
+/* Store-owned palette: inherited from the storefront, never from panel preferences. */
+.cosmetics-brand-surface {
+  --cosmetics-50: color-mix(in srgb, var(--primary) 5%, white);
+  --cosmetics-100: color-mix(in srgb, var(--primary) 10%, white);
+  --cosmetics-150: color-mix(in srgb, var(--primary) 16%, white);
+  --cosmetics-200: color-mix(in srgb, var(--primary) 24%, white);
+  --cosmetics-300: color-mix(in srgb, var(--primary) 40%, white);
+  --cosmetics-400: color-mix(in srgb, var(--primary) 60%, white);
+  /* Cap lightness so white action labels remain readable even with pale brands. */
+  --cosmetics-500: oklch(from var(--primary) min(l, 0.50) c h);
+  --cosmetics-600: oklch(from var(--primary) min(l, 0.46) c h);
+  --cosmetics-700: color-mix(in srgb, var(--primary) 65%, #111827);
+  --cosmetics-800: color-mix(in srgb, var(--primary) 45%, #111827);
+  --cosmetics-900: color-mix(in srgb, var(--primary) 25%, #111827);
+  --cosmetics-950: color-mix(in srgb, var(--primary) 12%, #111827);
+  --cosmetics-ink: color-mix(in srgb, var(--primary) 48%, #111827);
+  --cosmetics-page: color-mix(in srgb, var(--primary) 2%, white);
+  --cosmetics-soft: color-mix(in srgb, var(--primary) 6%, white);
+  --cosmetics-tint: color-mix(in srgb, var(--primary) 13%, white);
+}
+.dark .cosmetics-brand-surface {
+  --cosmetics-ink: color-mix(in srgb, var(--primary) 35%, white);
+  --cosmetics-page: color-mix(in srgb, var(--primary) 3%, #09090b);
+  --cosmetics-soft: color-mix(in srgb, var(--primary) 8%, #18181b);
+  --cosmetics-tint: color-mix(in srgb, var(--primary) 17%, #18181b);
+}
 .cosmeticos-hero-glow {
-  background: radial-gradient(circle at 60% 40%, rgba(251, 207, 232, 0.45) 0%, rgba(255, 241, 242, 0.2) 50%, transparent 80%);
+  background: radial-gradient(circle at 60% 40%, var(--cosmetics-200), var(--cosmetics-soft) 50%, transparent 80%);
 }
-
 .cosmeticos-card-shadow {
-  box-shadow: 0 10px 30px -10px rgba(244, 114, 182, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--primary) 12%, transparent), 0 4px 12px -2px #0000000a;
 }
-
 .cosmeticos-card-shadow:hover {
-  box-shadow: 0 20px 40px -12px rgba(244, 114, 182, 0.22), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 20px 40px -12px color-mix(in srgb, var(--primary) 22%, transparent), 0 8px 16px -4px #0000000f;
 }
-
-.cosmeticos-gold-border {
-  border-color: rgba(229, 213, 192, 0.8);
-}
-
-.cosmeticos-badge-gradient {
-  background: linear-gradient(135deg, #f43f5e 0%, #fb7185 100%);
-}
-
+.cosmeticos-gold-border { border-color: var(--cosmetics-200); }
+.cosmeticos-badge-gradient { background: linear-gradient(135deg, var(--cosmetics-600), var(--cosmetics-500)); }
 .cosmeticos-tag-pill {
-  background: rgba(254, 242, 242, 0.85);
-  border: 1px solid rgba(254, 205, 211, 0.6);
-  color: #9f1239;
+  background: var(--cosmetics-soft);
+  border: 1px solid var(--cosmetics-200);
+  color: var(--cosmetics-ink);
 }
-
-.dark .cosmeticos-tag-pill {
-  background: rgba(136, 19, 55, 0.25);
-  border: 1px solid rgba(225, 29, 72, 0.35);
-  color: #fecdd3;
-}
-
-/* Glassmorphism panel for mega menu */
 .cosmeticos-glass-panel {
-  background: rgba(255, 253, 251, 0.98);
+  background: var(--cosmetics-page);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(254, 205, 211, 0.7);
-  box-shadow: 0 20px 45px -10px rgba(225, 29, 72, 0.12), 0 8px 18px -4px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--cosmetics-200);
+  box-shadow: 0 20px 45px -10px color-mix(in srgb, var(--primary) 12%, transparent), 0 8px 18px -4px #0000000a;
 }
-
-.dark .cosmeticos-glass-panel {
-  background: rgba(18, 18, 22, 0.98);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(136, 19, 55, 0.4);
-  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.6);
-}
+/* Alternate sections remain recognizable in both modes. */
+.cosmetics-brand-surface :is(#rutina, #nosotros) { background: var(--cosmetics-soft); }
+.cosmetics-brand-surface #ofertas { background: linear-gradient(160deg, var(--cosmetics-tint), var(--cosmetics-page)); }
+.cosmetics-brand-surface #productos { background: var(--cosmetics-page); }
 
 /* Smooth dropdown entry */
 @keyframes cosmeticosDropdownIn {
@@ -67,3 +68,5 @@
   animation: cosmeticosDropdownIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+
+.cosmetics-brand-surface [data-cosmetics-hero] { background: linear-gradient(150deg, var(--cosmetics-tint), var(--cosmetics-page)); }

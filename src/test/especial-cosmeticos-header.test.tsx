@@ -35,7 +35,7 @@ vi.mock('@/components/ui/theme-toggle', () => ({
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, className, style }: any) => (
+  default: ({ children, href, className, style }: React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>) => (
     <a href={href} className={className} style={style}>
       {children}
     </a>
@@ -45,7 +45,7 @@ vi.mock('next/link', () => ({
 /* eslint-disable @next/next/no-img-element */
 vi.mock('next/image', () => ({
   __esModule: true,
-  default: (props: any) => <img alt={props.alt || ''} src={props.src} />,
+  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img alt={props.alt || ''} src={props.src} />,
 }))
 
 function createSettings(headerStyle?: 'solid' | 'accent' | 'dark', customBrandColor?: string): WebsiteSettings {
@@ -70,8 +70,8 @@ describe('EspecialCosmeticosHeader — headerStyle («Claro», «Color de marca�
     const settings = createSettings('solid')
     const { container } = render(<EspecialCosmeticosHeader settings={settings} />)
     const header = container.querySelector('header')
-    expect(header?.className).toContain('bg-[#FFFDFB]')
-    expect(header?.className).not.toContain('bg-primary')
+    expect(header?.className).toContain('bg-[var(--cosmetics-page)]')
+    expect(header?.className).not.toContain('bg-[var(--cosmetics-600)]')
     expect(header?.className).not.toContain('bg-stone-950')
   })
 
@@ -81,23 +81,23 @@ describe('EspecialCosmeticosHeader — headerStyle («Claro», «Color de marca�
     const header = container.querySelector('header')
     expect(header?.className).toContain('bg-stone-950')
     expect(header?.className).toContain('text-white')
-    expect(header?.className).not.toContain('bg-[#FFFDFB]')
+    expect(header?.className).not.toContain('bg-[var(--cosmetics-page)]')
   })
 
-  it('aplica diseño Color de marca (accent) con bg-primary y texto blanco cuando se elige «Color de marca»', () => {
+  it('aplica diseño Color de marca (accent) con bg-[var(--cosmetics-600)] y texto blanco cuando se elige «Color de marca»', () => {
     const settings = createSettings('accent')
     const { container } = render(<EspecialCosmeticosHeader settings={settings} />)
     const header = container.querySelector('header')
-    expect(header?.className).toContain('bg-primary')
+    expect(header?.className).toContain('bg-[var(--cosmetics-600)]')
     expect(header?.className).toContain('text-white')
-    expect(header?.className).not.toContain('bg-[#FFFDFB]')
+    expect(header?.className).not.toContain('bg-[var(--cosmetics-page)]')
   })
 
-  it('aplica color personalizado hexadecimal inline (ej: Bordó #8B1E3F) cuando headerStyle es accent y customBrandColor está definido', () => {
+  it('aplica tono accesible derivado del color personalizado (ej: Bordó #8B1E3F) cuando headerStyle es accent y customBrandColor está definido', () => {
     const settings = createSettings('accent', '#8B1E3F')
     const { container } = render(<EspecialCosmeticosHeader settings={settings} />)
     const header = container.querySelector('header')
-    expect(header?.style.backgroundColor).toBe('rgb(139, 30, 63)')
+    expect(header?.style.backgroundColor).toBe('var(--cosmetics-600)')
   })
 
   it('incluye opción de volver al marketplace en el encabezado', () => {

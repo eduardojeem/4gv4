@@ -70,7 +70,7 @@ const TRUST_ICONS: Record<string, LucideIcon> = {
   clock: Clock,
 }
 const TRUST_TONES = [
-  'bg-rose-500/10 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300',
+  'bg-[var(--cosmetics-500)]/10 text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)]/50 dark:text-[var(--cosmetics-300)]',
   'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300',
   'bg-amber-500/10 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300',
   'bg-purple-500/10 text-purple-600 dark:bg-purple-950/50 dark:text-purple-300',
@@ -83,17 +83,17 @@ function PhotoProductTag({ photo, href }: { photo: CosmeticsProductPhoto; href: 
   return (
     <Link
       href={href}
-      className="group/tag absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-150/70 bg-white/95 p-3.5 shadow-lg backdrop-blur-md transition-colors hover:border-rose-300 dark:border-zinc-700 dark:bg-zinc-900/95 sm:bottom-6 sm:left-6 sm:right-6 sm:p-4"
+      className="group/tag absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 rounded-2xl border border-[var(--cosmetics-150)]/70 bg-white/95 p-3.5 shadow-lg backdrop-blur-md transition-colors hover:border-[var(--cosmetics-300)] dark:border-zinc-700 dark:bg-zinc-900/95 sm:bottom-6 sm:left-6 sm:right-6 sm:p-4"
     >
       <div className="min-w-0">
-        <p className="font-serif text-sm font-bold text-stone-900 line-clamp-1 group-hover/tag:text-rose-600 dark:text-stone-100">
+        <p className="font-serif text-sm font-bold text-stone-900 line-clamp-1 group-hover/tag:text-[var(--cosmetics-ink)] dark:text-stone-100">
           {photo.name}
         </p>
         {photo.price !== null && (
-          <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{formatGs(photo.price)}</p>
+          <p className="text-xs font-semibold text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)]">{formatGs(photo.price)}</p>
         )}
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-500 px-3 py-1.5 text-[11px] font-bold text-white">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--cosmetics-500)] px-3 py-1.5 text-[11px] font-bold text-white">
         Ver <ArrowRight className="h-3 w-3" />
       </span>
     </Link>
@@ -201,7 +201,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
   ].filter(Boolean) as { value: string; label: string }[]
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FFFDFB] text-stone-800 dark:bg-zinc-950 dark:text-stone-100">
+    <div className="cosmetics-brand-surface flex flex-col min-h-screen bg-[var(--cosmetics-page)] text-stone-800 dark:bg-zinc-950 dark:text-stone-100">
       <h1 className="sr-only">{storeName}{slogan ? ` - ${slogan}` : ''}</h1>
 
       {/* Acceso para volver al Marketplace */}
@@ -209,10 +209,10 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
         <Link
           href="/marketplace"
           aria-label="Volver al Marketplace"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors group"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600 dark:text-stone-400 hover:text-[var(--cosmetics-ink)] dark:hover:text-[var(--cosmetics-400)] transition-colors group"
         >
           <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" />
-          <Store className="h-3.5 w-3.5 text-rose-500" />
+          <Store className="h-3.5 w-3.5 text-[var(--cosmetics-ink)]" />
           <span>Volver al Marketplace</span>
         </Link>
       </div>
@@ -228,13 +228,13 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 1. PORTADA: solo si no hay carrusel activo y la portada está habilitada ── */}
       {!hasConfiguredSlides && heroVisible && (
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF5F6] via-[#FFFDFB] to-[#FFFDFB] dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 py-12 sm:py-20 lg:py-28">
+        <section data-cosmetics-hero className="relative overflow-hidden bg-gradient-to-b from-[var(--cosmetics-tint)] via-[var(--cosmetics-page)] to-[var(--cosmetics-page)] dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 py-12 sm:py-20 lg:py-28">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
               <div className="space-y-6 text-center lg:text-left">
                 {heroBadge && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-rose-100/90 px-3.5 py-1 text-xs font-semibold tracking-wide text-rose-800 dark:bg-rose-950/60 dark:text-rose-200 border border-rose-200 dark:border-rose-800 shadow-2xs">
-                    <Sparkles className="h-3.5 w-3.5 text-rose-500" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-[var(--cosmetics-100)]/90 px-3.5 py-1 text-xs font-semibold tracking-wide text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)]/60 dark:text-[var(--cosmetics-200)] border border-[var(--cosmetics-200)] dark:border-[var(--cosmetics-800)] shadow-2xs">
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--cosmetics-ink)]" />
                     <span>{heroBadge}</span>
                   </div>
                 )}
@@ -244,7 +244,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                   {slogan && !settings.hero_content?.title && (
                     <>
                       <br />
-                      <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent italic text-2xl sm:text-4xl lg:text-5xl">
+                      <span className="bg-gradient-to-r from-[var(--cosmetics-600)] via-[var(--cosmetics-600)] to-[var(--cosmetics-400)] bg-clip-text text-transparent italic text-2xl sm:text-4xl lg:text-5xl">
                         {slogan}
                       </span>
                     </>
@@ -260,7 +260,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
                   <Link
                     href={heroCtaHref}
-                    className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-7 py-3.5 text-sm font-semibold text-white shadow-md shadow-rose-500/25 hover:bg-rose-600 hover:shadow-lg hover:shadow-rose-500/35 transition-all transform hover:-translate-y-0.5"
+                    className="inline-flex items-center gap-2 rounded-full bg-[var(--cosmetics-500)] px-7 py-3.5 text-sm font-semibold text-white shadow-md shadow-[var(--cosmetics-500)]/25 hover:bg-[var(--cosmetics-600)] hover:shadow-lg hover:shadow-[var(--cosmetics-500)]/35 transition-all transform hover:-translate-y-0.5"
                   >
                     <span>{heroCtaText}</span>
                     <ArrowRight className="h-4 w-4" />
@@ -268,7 +268,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                   {offersVisible && (
                     <Link
                       href={`${prefix}/ofertas`}
-                      className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white/80 px-6 py-3.5 text-sm font-semibold text-stone-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200 dark:hover:bg-zinc-800 transition-colors shadow-2xs"
+                      className="inline-flex items-center gap-2 rounded-full border border-[var(--cosmetics-200)] bg-white/80 px-6 py-3.5 text-sm font-semibold text-stone-700 hover:bg-[var(--cosmetics-50)] hover:border-[var(--cosmetics-300)] hover:text-[var(--cosmetics-ink)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200 dark:hover:bg-zinc-800 transition-colors shadow-2xs"
                     >
                       <span>Ver ofertas</span>
                     </Link>
@@ -277,7 +277,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
               </div>
 
               <div className="relative mx-auto w-full max-w-lg lg:max-w-none">
-                <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-rose-200/80 bg-gradient-to-br from-rose-100 via-pink-50 to-amber-50 shadow-2xl shadow-rose-950/10 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 dark:border-zinc-800">
+                <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-[var(--cosmetics-200)]/80 bg-gradient-to-br from-[var(--cosmetics-100)] via-[var(--cosmetics-50)] to-[var(--cosmetics-soft)] shadow-2xl shadow-[var(--cosmetics-950)]/10 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 dark:border-zinc-800">
                   {heroPhoto ? (
                     <>
                       <AppImage
@@ -300,7 +300,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center">
-                      <Sparkles className="h-16 w-16 text-rose-300" />
+                      <Sparkles className="h-16 w-16 text-[var(--cosmetics-300)]" />
                     </div>
                   )}
                 </div>
@@ -312,7 +312,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 2. BENEFICIOS: los que configuró el comercio, ninguno inventado ── */}
       {trustItems.length > 0 && (
-        <section className="border-y border-rose-100 bg-[#FFFDFB] py-8 dark:border-zinc-800 dark:bg-zinc-900/60">
+        <section className="border-y border-[var(--cosmetics-100)] bg-[var(--cosmetics-page)] py-8 dark:border-zinc-800 dark:bg-zinc-900/60">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {trustItems.slice(0, 4).map((item, idx) => {
@@ -320,7 +320,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                 return (
                   <div
                     key={('id' in item && item.id) || idx}
-                    className="flex items-center gap-4 p-3 rounded-2xl bg-[#FFF9F9] dark:bg-zinc-850/50 border border-rose-100/60 dark:border-zinc-800"
+                    className="flex items-center gap-4 p-3 rounded-2xl bg-[var(--cosmetics-soft)] dark:bg-zinc-850/50 border border-[var(--cosmetics-100)]/60 dark:border-zinc-800"
                   >
                     <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${TRUST_TONES[idx % TRUST_TONES.length]}`}>
                       <Icon className="h-6 w-6" />
@@ -341,10 +341,10 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 3. CATEGORÍAS REALES (con su cantidad de productos) ── */}
       {categories.length > 0 && (
-        <section id="categorias" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950">
+        <section id="categorias" className="scroll-mt-20 py-16 sm:py-20 bg-[var(--cosmetics-page)] dark:bg-zinc-950">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
+              <span className="inline-block rounded-full bg-[var(--cosmetics-500)]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)]">
                 Líneas de Cuidado
               </span>
               <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-2">
@@ -362,12 +362,12 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                   <Link
                     key={cat.id}
                     href={cat.href}
-                    className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-[#FFF9F9] dark:bg-zinc-900 border border-rose-150/70 dark:border-zinc-800 text-center transition-all duration-300 hover:-translate-y-1 hover:border-rose-300 hover:shadow-lg hover:shadow-rose-500/10"
+                    className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-[var(--cosmetics-soft)] dark:bg-zinc-900 border border-[var(--cosmetics-150)]/70 dark:border-zinc-800 text-center transition-all duration-300 hover:-translate-y-1 hover:border-[var(--cosmetics-300)] hover:shadow-lg hover:shadow-[var(--cosmetics-500)]/10"
                   >
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-zinc-800 text-rose-500 shadow-sm border border-rose-100 dark:border-zinc-700 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition-all duration-300 mb-3">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-zinc-800 text-[var(--cosmetics-ink)] shadow-sm border border-[var(--cosmetics-100)] dark:border-zinc-700 group-hover:scale-110 group-hover:bg-[var(--cosmetics-500)] group-hover:text-white transition-all duration-300 mb-3">
                       <IconComp className="h-7 w-7" />
                     </div>
-                    <h4 className="font-serif text-sm font-bold text-stone-800 dark:text-stone-200 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                    <h4 className="font-serif text-sm font-bold text-stone-800 dark:text-stone-200 group-hover:text-[var(--cosmetics-ink)] dark:group-hover:text-[var(--cosmetics-400)] transition-colors">
                       {cat.name}
                     </h4>
                     <span className="text-[11px] font-medium text-stone-400 mt-1">
@@ -385,12 +385,12 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
       <StoreBrandTicker settings={settings.brands_section} />
 
       {/* ── 4. TU CUIDADO DIARIO: texto de la plantilla + cifras reales de la tienda ── */}
-      <section id="rutina" className="scroll-mt-20 py-16 bg-gradient-to-r from-rose-50 via-[#FFF5F6] to-pink-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-y border-rose-150/80 dark:border-zinc-800">
+      <section id="rutina" className="scroll-mt-20 py-16 bg-gradient-to-r from-[var(--cosmetics-50)] via-[var(--cosmetics-tint)] to-[var(--cosmetics-50)] dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-y border-[var(--cosmetics-150)]/80 dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className={`grid items-center gap-10 ${editorialPhoto ? 'lg:grid-cols-2' : ''}`}>
             <div className="space-y-5 text-center lg:text-left">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-200/80 px-3 py-1 text-xs font-bold text-rose-800 dark:bg-rose-950 dark:text-rose-200">
-                <Sparkles className="h-3 w-3 text-rose-600" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--cosmetics-200)]/80 px-3 py-1 text-xs font-bold text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)] dark:text-[var(--cosmetics-200)]">
+                <Sparkles className="h-3 w-3 text-[var(--cosmetics-ink)]" />
                 <span>Tu Cuidado Diario ✦</span>
               </span>
               <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
@@ -404,9 +404,9 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                 <div className="flex items-center justify-center lg:justify-start gap-8 py-2">
                   {stats.map((stat, idx) => (
                     <React.Fragment key={stat.label}>
-                      {idx > 0 && <div className="h-10 w-px bg-rose-200 dark:bg-zinc-800" />}
+                      {idx > 0 && <div className="h-10 w-px bg-[var(--cosmetics-200)] dark:bg-zinc-800" />}
                       <div>
-                        <p className="font-serif text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400">{stat.value}</p>
+                        <p className="font-serif text-2xl sm:text-3xl font-bold text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)]">{stat.value}</p>
                         <p className="text-xs text-stone-500 dark:text-stone-400">{stat.label}</p>
                       </div>
                     </React.Fragment>
@@ -417,7 +417,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
               <div>
                 <Link
                   href={`${prefix}/productos`}
-                  className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-7 py-3 text-sm font-semibold text-white shadow-md hover:bg-rose-600 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--cosmetics-500)] px-7 py-3 text-sm font-semibold text-white shadow-md hover:bg-[var(--cosmetics-600)] transition-colors"
                 >
                   <span>Explorar Colección →</span>
                 </Link>
@@ -426,7 +426,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
             {editorialPhoto && (
               <figure className="space-y-3">
-                <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-xl dark:border-zinc-800">
+                <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden rounded-3xl border border-[var(--cosmetics-200)] bg-white shadow-xl dark:border-zinc-800">
                   <AppImage src={editorialPhoto.image} alt={editorialPhoto.name} fill className="object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
                   <PhotoProductTag photo={editorialPhoto} href={productHref(editorialPhoto.id)} />
@@ -444,14 +444,14 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 5. OFERTAS REALES (productos con precio de oferta) ── */}
       {offersVisible && (
-        <section id="ofertas" className="scroll-mt-20 relative py-20 sm:py-28 overflow-hidden bg-gradient-to-b from-[#FFF0F3] via-[#FFF7F9] to-[#FFFDFB] dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950 border-y border-rose-200/80 dark:border-zinc-800">
-          <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-rose-300/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-pink-300/20 blur-3xl" />
+        <section id="ofertas" className="scroll-mt-20 relative py-20 sm:py-28 overflow-hidden bg-gradient-to-b from-[var(--cosmetics-tint)] via-[var(--cosmetics-soft)] to-[var(--cosmetics-page)] dark:from-zinc-900/90 dark:via-zinc-950 dark:to-zinc-950 border-y border-[var(--cosmetics-200)]/80 dark:border-zinc-800">
+          <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-[var(--cosmetics-300)]/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-[var(--cosmetics-300)]/20 blur-3xl" />
 
           <div className="container relative z-10 mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 lg:mb-16 gap-6">
               <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1 text-xs font-bold tracking-wider text-white shadow-md shadow-rose-950/15 uppercase">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[var(--cosmetics-600)] px-3.5 py-1 text-xs font-bold tracking-wider text-white shadow-md shadow-[var(--cosmetics-950)]/15 uppercase">
                   <span>{offersEyebrow}</span>
                   <span className="h-1 w-1 rounded-full bg-white" />
                   <span>Hasta {maxDiscount}% OFF</span>
@@ -468,7 +468,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
               <Link
                 href={`${prefix}/ofertas`}
-                className="inline-flex items-center gap-2 self-start md:self-auto rounded-2xl bg-white/90 dark:bg-zinc-900/90 hover:bg-rose-50 dark:hover:bg-zinc-800 px-5 py-3 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200/90 dark:border-zinc-800 shadow-sm transition-all"
+                className="inline-flex items-center gap-2 self-start md:self-auto rounded-2xl bg-white/90 dark:bg-zinc-900/90 hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-800 px-5 py-3 text-xs font-bold text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] border border-[var(--cosmetics-200)]/90 dark:border-zinc-800 shadow-sm transition-all"
               >
                 <span>Ver todas las ofertas</span>
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -479,10 +479,10 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
               {offers.map((offer) => (
                 <div
                   key={offer.id}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border border-rose-200/90 bg-white/95 dark:bg-zinc-900/90 dark:border-zinc-800/90 p-6 shadow-md hover:shadow-2xl hover:border-rose-300 dark:hover:border-rose-900/50 transition-all duration-500 hover:-translate-y-1.5 backdrop-blur-xs"
+                  className="group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border border-[var(--cosmetics-200)]/90 bg-white/95 dark:bg-zinc-900/90 dark:border-zinc-800/90 p-6 shadow-md hover:shadow-2xl hover:border-[var(--cosmetics-300)] dark:hover:border-[var(--cosmetics-900)]/50 transition-all duration-500 hover:-translate-y-1.5 backdrop-blur-xs"
                 >
                   <div>
-                    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-rose-50/50 dark:bg-zinc-800/50">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-[var(--cosmetics-50)]/50 dark:bg-zinc-800/50">
                       {offer.image ? (
                         <AppImage
                           src={offer.image}
@@ -492,10 +492,10 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center">
-                          <ShoppingBag className="h-10 w-10 text-rose-300" />
+                          <ShoppingBag className="h-10 w-10 text-[var(--cosmetics-300)]" />
                         </div>
                       )}
-                      <div className="absolute top-3 right-3 rounded-full bg-rose-600 px-3.5 py-1 text-xs font-black text-white shadow-lg shadow-rose-950/20">
+                      <div className="absolute top-3 right-3 rounded-full bg-[var(--cosmetics-600)] px-3.5 py-1 text-xs font-black text-white shadow-lg shadow-[var(--cosmetics-950)]/20">
                         -{offer.discountPercent}% OFF
                       </div>
                       <div className="absolute top-3 left-3 max-w-[60%] truncate rounded-full bg-stone-950/80 backdrop-blur-xs px-3 py-1 text-[10px] font-bold text-white uppercase tracking-wider">
@@ -504,28 +504,28 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                     </div>
 
                     <div className="pt-5">
-                      <h4 className="font-serif text-lg font-bold text-stone-900 dark:text-stone-100 line-clamp-2 group-hover:text-rose-600 transition-colors">
+                      <h4 className="font-serif text-lg font-bold text-stone-900 dark:text-stone-100 line-clamp-2 group-hover:text-[var(--cosmetics-ink)] transition-colors">
                         {offer.name}
                       </h4>
                     </div>
                   </div>
 
-                  <div className="pt-5 border-t border-rose-100 dark:border-zinc-800 mt-6 flex items-center justify-between gap-4">
+                  <div className="pt-5 border-t border-[var(--cosmetics-100)] dark:border-zinc-800 mt-6 flex items-center justify-between gap-4">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-stone-400 line-through">{formatGs(offer.originalPrice)}</span>
-                        <span className="rounded-md bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                        <span className="rounded-md bg-[var(--cosmetics-50)] dark:bg-[var(--cosmetics-950)]/60 px-1.5 py-0.5 text-[10px] font-bold text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)]">
                           Ahorrás {formatGs(offer.savings)}
                         </span>
                       </div>
-                      <span className="font-serif text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 block mt-0.5">
+                      <span className="font-serif text-xl sm:text-2xl font-black text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] block mt-0.5">
                         {formatGs(offer.salePrice)}
                       </span>
                     </div>
 
                     <Link
                       href={`${prefix}/productos/${encodeURIComponent(offer.id)}`}
-                      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-600 px-5 py-3 text-xs font-bold text-white shadow-md shadow-rose-950/15 hover:from-rose-600 hover:to-pink-700 hover:shadow-lg transition-all"
+                      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[var(--cosmetics-500)] to-[var(--cosmetics-600)] px-5 py-3 text-xs font-bold text-white shadow-md shadow-[var(--cosmetics-950)]/15 hover:from-[var(--cosmetics-600)] hover:to-[var(--cosmetics-700)] hover:shadow-lg transition-all"
                     >
                       <span>Ver</span>
                       <ShoppingBag className="h-4 w-4" />
@@ -540,10 +540,10 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 6. NOVEDADES: los productos reales de la tienda ── */}
       {hasCatalog && (
-        <section id="productos" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950 border-t border-rose-100 dark:border-zinc-800">
+        <section id="productos" className="scroll-mt-20 py-16 sm:py-20 bg-[var(--cosmetics-page)] dark:bg-zinc-950 border-t border-[var(--cosmetics-100)] dark:border-zinc-800">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
+              <span className="inline-block rounded-full bg-[var(--cosmetics-500)]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)]">
                 Lo Nuevo
               </span>
               <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-2">
@@ -563,16 +563,16 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
             ) : productsLoading ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6" aria-busy="true" aria-label="Cargando productos">
                 {Array.from({ length: 4 }).map((_, idx) => (
-                  <div key={idx} className="aspect-[3/4] animate-pulse rounded-3xl bg-rose-50 dark:bg-zinc-900" />
+                  <div key={idx} className="aspect-[3/4] animate-pulse rounded-3xl bg-[var(--cosmetics-50)] dark:bg-zinc-900" />
                 ))}
               </div>
             ) : (
-              <div className="mx-auto max-w-md rounded-3xl border border-rose-100 bg-[#FFF9F9] p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
-                <ShoppingBag className="mx-auto h-8 w-8 text-rose-400" />
+              <div className="mx-auto max-w-md rounded-3xl border border-[var(--cosmetics-100)] bg-[var(--cosmetics-soft)] p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
+                <ShoppingBag className="mx-auto h-8 w-8 text-[var(--cosmetics-400)]" />
                 <p className="mt-3 text-sm text-stone-600 dark:text-stone-300">
                   {productsError ? 'No pudimos cargar los productos en este momento.' : 'Todavía no hay productos publicados.'}
                 </p>
-                <Link href={`${prefix}/productos`} className="mt-4 inline-flex text-xs font-semibold text-rose-600 hover:underline">
+                <Link href={`${prefix}/productos`} className="mt-4 inline-flex text-xs font-semibold text-[var(--cosmetics-ink)] hover:underline">
                   Ir al catálogo
                 </Link>
               </div>
@@ -582,7 +582,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
               <div className="mt-10 text-center">
                 <Link
                   href={`${prefix}/productos`}
-                  className="inline-flex items-center gap-2 rounded-full border border-rose-200 px-6 py-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--cosmetics-200)] px-6 py-3 text-sm font-semibold text-[var(--cosmetics-ink)] hover:bg-[var(--cosmetics-50)] dark:border-zinc-800 dark:hover:bg-zinc-900"
                 >
                   Ver todo el catálogo <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -593,11 +593,11 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
       )}
 
       {/* ── 7. NOSOTROS: descripción, horarios e Instagram que cargó el comercio ── */}
-      <section id="nosotros" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFF9F9] dark:bg-zinc-900/60 border-t border-rose-100 dark:border-zinc-800">
+      <section id="nosotros" className="scroll-mt-20 py-16 sm:py-20 bg-[var(--cosmetics-soft)] dark:bg-zinc-900/60 border-t border-[var(--cosmetics-100)] dark:border-zinc-800">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className={`grid items-center gap-12 ${storyPhoto ? 'lg:grid-cols-2' : ''}`}>
             {storyPhoto && (
-              <div className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-xl dark:border-zinc-800">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-[var(--cosmetics-200)] bg-white shadow-xl dark:border-zinc-800">
                 <AppImage src={storyPhoto.image} alt={storyPhoto.name} fill className="object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent" />
                 <PhotoProductTag photo={storyPhoto} href={productHref(storyPhoto.id)} />
@@ -605,7 +605,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
             )}
 
             <div className={`space-y-5 ${storyPhoto ? '' : 'mx-auto max-w-2xl text-center'}`}>
-              <span className="inline-block rounded-full bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300">
+              <span className="inline-block rounded-full bg-[var(--cosmetics-500)]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)]">
                 Nosotros
               </span>
               <h3 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
@@ -618,8 +618,8 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
               {(hours?.weekdays?.trim() || instagram) && (
                 <div className={`grid gap-4 pt-2 ${hours?.weekdays?.trim() && instagram ? 'grid-cols-2' : 'grid-cols-1 max-w-xs'} ${storyPhoto ? '' : 'mx-auto'}`}>
                   {hours?.weekdays?.trim() && (
-                    <div className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-rose-150/60 dark:border-zinc-700 text-left">
-                      <Clock className="h-5 w-5 text-rose-500 mb-2" />
+                    <div className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-[var(--cosmetics-150)]/60 dark:border-zinc-700 text-left">
+                      <Clock className="h-5 w-5 text-[var(--cosmetics-ink)] mb-2" />
                       <h5 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">Horarios</h5>
                       <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">{hours.weekdays}</p>
                       {hours.saturday?.trim() && <p className="text-xs text-stone-500 dark:text-stone-400">{hours.saturday}</p>}
@@ -630,9 +630,9 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                       href={`https://instagram.com/${instagram}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-rose-150/60 dark:border-zinc-700 text-left hover:border-rose-300"
+                      className="p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-[var(--cosmetics-150)]/60 dark:border-zinc-700 text-left hover:border-[var(--cosmetics-300)]"
                     >
-                      <Instagram className="h-5 w-5 text-rose-500 mb-2" />
+                      <Instagram className="h-5 w-5 text-[var(--cosmetics-ink)] mb-2" />
                       <h5 className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100">Instagram</h5>
                       <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">@{instagram}</p>
                     </a>
@@ -666,9 +666,9 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
 
       {/* ── 8. UBICACIÓN: solo con la dirección real ── */}
       {hasLocation && (
-        <section id="ubicacion" className="scroll-mt-20 py-16 sm:py-20 bg-[#FFFDFB] dark:bg-zinc-950 border-t border-rose-100 dark:border-zinc-800">
+        <section id="ubicacion" className="scroll-mt-20 py-16 sm:py-20 bg-[var(--cosmetics-page)] dark:bg-zinc-950 border-t border-[var(--cosmetics-100)] dark:border-zinc-800">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="overflow-hidden rounded-3xl border border-rose-200/80 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+            <div className="overflow-hidden rounded-3xl border border-[var(--cosmetics-200)]/80 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
               <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
                 {mapsEmbed ? (
                   <iframe
@@ -680,16 +680,16 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                     className="h-80 w-full border-0 lg:h-full min-h-[340px]"
                   />
                 ) : (
-                  <div className="flex h-80 lg:h-full min-h-[340px] items-center justify-center bg-rose-50/50 dark:bg-zinc-800/40 p-6 text-center">
+                  <div className="flex h-80 lg:h-full min-h-[340px] items-center justify-center bg-[var(--cosmetics-50)]/50 dark:bg-zinc-800/40 p-6 text-center">
                     <div className="space-y-2">
-                      <MapPin className="h-8 w-8 text-rose-500 mx-auto" />
+                      <MapPin className="h-8 w-8 text-[var(--cosmetics-ink)] mx-auto" />
                       <p className="text-xs text-stone-500">{address}</p>
                     </div>
                   </div>
                 )}
 
-                <div className="flex flex-col justify-center gap-5 p-8 lg:p-10 bg-[#FFFDFB] dark:bg-zinc-900">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-300">
+                <div className="flex flex-col justify-center gap-5 p-8 lg:p-10 bg-[var(--cosmetics-page)] dark:bg-zinc-900">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--cosmetics-100)] text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)] dark:text-[var(--cosmetics-300)]">
                     <MapPin className="h-6 w-6" />
                   </span>
                   <div>
@@ -714,7 +714,7 @@ export function EspecialCosmeticosHome({ settings, branches, capabilities }: Esp
                       href={directionsHref}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-full bg-rose-500 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 transition-colors"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-full bg-[var(--cosmetics-500)] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[var(--cosmetics-600)] transition-colors"
                     >
                       <Navigation className="h-4 w-4" />
                       <span>Cómo llegar en Google Maps</span>
