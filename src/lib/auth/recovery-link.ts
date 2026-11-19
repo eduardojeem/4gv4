@@ -114,10 +114,19 @@ type RecoveryAuthClient = Pick<
  * El cliente del navegador (`@supabase/ssr`) ya intenta canjear `?code=` al
  * iniciarse (`detectSessionInUrl`); `initialize()` devuelve el resultado de
  * ese intento, así que no se vuelve a canjear (el código es de un solo uso).
+ *
+ * Una sesión que el navegador ya tenía (la persona estaba logueada) NO cuenta
+ * como sesión de recuperación cuando el enlace trae datos: primero se usa el
+ * enlace y, si falla, se dice por qué. Antes se aceptaba esa sesión vieja y
+ * Supabase rechazaba el cambio con `reauthentication_needed`.
+ *
+ * `readHref` lee la URL después de `initialize()`: el SDK borra `?code=` sólo
+ * cuando lo canjeó, así que si sigue ahí, el canje no ocurrió.
  */
 export async function establishRecoverySession(
   auth: RecoveryAuthClient,
-  href: string
+  href: string,
+  readHref: () => string = () => href
 ): Promise<RecoveryResult> {
   const params = readRecoveryParams(href)
 
@@ -134,13 +143,13 @@ export async function establishRecoverySession(
     initError = error as ErrorLike
   }
 
-  // 1) PKCE: si el SDK intentó canjear y falló, ese es el motivo real.
-  if (params.code && initError) {
-    return { ok: false, reason: classifyRecoveryError(initError) }
+  // 1) PKCE: si el SDK intentó canjear y falló, ese es el motivo real. Si el
+  // código sigue en la URL sin error, en este navegador no hay `code_verifier`
+  // y el SDK ni lo intentó (canjearlo a mano daría el mismo error).
+  if (params.code) {
+    if (initError) return { ok: false, reason: classifyRecoveryError(initError) }
+    if (readRecoveryParams(readHref()).code) return { ok: false, reason: 'other-browser' }
   }
-
-  const { data: { session } } = await auth.getSession()
-  if (session) return { ok: true, email: session.user?.email ?? null }
 
   // 2) token_hash: funciona en cualquier navegador.
   if (params.tokenHash) {
@@ -160,10 +169,12 @@ export async function establishRecoverySession(
     return { ok: true, email: data.session.user?.email ?? null }
   }
 
-  // 1) PKCE sin sesión y sin error: el SDK ni lo intentó porque en este
-  // navegador no hay `code_verifier`. Canjearlo a mano daría el mismo error.
-  if (params.code) return { ok: false, reason: 'other-browser' }
+  // PKCE ya canjeado por el SDK, o se entró sin enlace con la sesión abierta
+  // (en ese caso Supabase puede pedir un código: ver `reauth`).
+  const { data: { session } } = await auth.getSession()
+  if (session) return { ok: true, email: session.user?.email ?? null }
 
+  if (params.code) return { ok: false, reason: 'other-browser' }
   return { ok: false, reason: 'missing' }
 }
 
@@ -197,7 +208,7 @@ export const RECOVERY_FAILURE_COPY: Record<RecoveryFailure, RecoveryFailureCopy>
   },
 }
 
-export type PasswordUpdateErrorKind = 'session' | 'same-password' | 'weak' | 'mfa' | 'rate-limit' | 'network' | 'unknown'
+export type PasswordUpdateErrorKind = 'session' | 'reauth' | 'bad-nonce' | 'same-password' | 'weak' | 'mfa' | 'rate-limit' | 'network' | 'unknown'
 
 export interface PasswordUpdateError {
   kind: PasswordUpdateErrorKind
@@ -219,6 +230,14 @@ export function describePasswordUpdateError(error: ErrorLike): PasswordUpdateErr
       kind: 'session',
       message: 'Tu enlace de recuperación venció mientras completabas el formulario. Pedí uno nuevo para terminar.',
     }
+  }
+  // «Cambio de contraseña seguro»: la sesión no es reciente y hace falta el
+  // código de 6 dígitos que manda `reauthenticate()`.
+  if (code === 'reauthentication_needed' || /requires reauthentication/i.test(message)) {
+    return { kind: 'reauth', message: 'Por seguridad, confirmá el código que te enviamos por correo.' }
+  }
+  if (code === 'reauthentication_not_valid' || /invalid nonce|nonce has expired/i.test(message)) {
+    return { kind: 'bad-nonce', message: 'El código no es correcto o venció. Revisalo o pedí uno nuevo.' }
   }
   if (code === 'same_password' || /different from the old password/i.test(message)) {
     return { kind: 'same-password', message: 'La nueva contraseña tiene que ser distinta de la que tenías.' }

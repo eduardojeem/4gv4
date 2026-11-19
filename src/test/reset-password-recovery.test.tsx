@@ -39,8 +39,12 @@ function authMock(overrides: Partial<Record<keyof AuthMock, unknown>> = {}): Aut
   } as AuthMock
 }
 
-const establish = (auth: AuthMock, href: string) =>
-  establishRecoverySession(auth as unknown as Parameters<typeof establishRecoverySession>[0], href)
+const establish = (auth: AuthMock, href: string, hrefAfterInit?: string) =>
+  establishRecoverySession(
+    auth as unknown as Parameters<typeof establishRecoverySession>[0],
+    href,
+    () => hrefAfterInit ?? href
+  )
 
 describe('readRecoveryParams', () => {
   it('lee query y hash', () => {
@@ -59,9 +63,23 @@ describe('readRecoveryParams', () => {
 
 describe('establishRecoverySession', () => {
   it('PKCE en el mismo navegador: usa la sesión que ya canjeó el SDK', async () => {
+    // El SDK canjeó el código y lo sacó de la URL.
     const auth = authMock({ getSession: vi.fn().mockResolvedValue({ data: { session } }) })
-    await expect(establish(auth, `${BASE}?code=abc&next=%2Fdashboard`)).resolves.toEqual({ ok: true, email: 'ana@tienda.com' })
+    await expect(establish(auth, `${BASE}?code=abc&next=%2Fdashboard`, `${BASE}?next=%2Fdashboard`)).resolves.toEqual({ ok: true, email: 'ana@tienda.com' })
     expect(auth.verifyOtp).not.toHaveBeenCalled()
+  })
+
+  it('no acepta una sesión vieja del navegador cuando el código no se canjeó', async () => {
+    // Era el error de producción: la página usaba la sesión de antes y
+    // Supabase rechazaba el cambio con `reauthentication_needed`.
+    const auth = authMock({ getSession: vi.fn().mockResolvedValue({ data: { session } }) })
+    await expect(establish(auth, `${BASE}?code=abc&next=%2Fdashboard`)).resolves.toEqual({ ok: false, reason: 'other-browser' })
+  })
+
+  it('con sesión vieja y token_hash, verifica el enlace en vez de usar la sesión', async () => {
+    const auth = authMock({ getSession: vi.fn().mockResolvedValue({ data: { session: { ...session, user: { email: 'otra@tienda.com' } } } }) })
+    await expect(establish(auth, `${BASE}?token_hash=th123&type=recovery`)).resolves.toEqual({ ok: true, email: 'ana@tienda.com' })
+    expect(auth.verifyOtp).toHaveBeenCalled()
   })
 
   it('PKCE abierto en otro navegador: lo dice en vez de «expirado»', async () => {
@@ -131,6 +149,8 @@ describe('stripRecoveryParams', () => {
 describe('describePasswordUpdateError', () => {
   it('cada error de updateUser dice qué hacer', () => {
     expect(describePasswordUpdateError({ name: 'AuthSessionMissingError', message: 'Auth session missing!' }).kind).toBe('session')
+    expect(describePasswordUpdateError({ code: 'reauthentication_needed', message: 'Password update requires reauthentication' }).kind).toBe('reauth')
+    expect(describePasswordUpdateError({ code: 'reauthentication_not_valid', message: 'Invalid nonce' }).kind).toBe('bad-nonce')
     expect(describePasswordUpdateError({ code: 'same_password', message: 'New password should be different from the old password.' }).kind).toBe('same-password')
     expect(describePasswordUpdateError({ code: 'weak_password', message: 'Password is known to be weak and easy to guess' }).kind).toBe('weak')
     expect(describePasswordUpdateError({ code: 'insufficient_aal', message: 'AAL2 session is required' }).kind).toBe('mfa')
@@ -208,13 +228,13 @@ describe('ResetPasswordContent', () => {
 
   it('con sesión válida: valida en vivo, guarda y cierra las otras sesiones', async () => {
     auth.getSession = vi.fn().mockResolvedValue({ data: { session } })
-    visit('/auth/reset-password?code=abc&next=%2Fdashboard')
+    visit('/auth/reset-password?token_hash=th123&type=recovery&next=%2Fdashboard')
     const user = userEvent.setup()
     render(<ResetPasswordContent />)
 
     const nueva = await screen.findByLabelText('Nueva contraseña')
     expect(screen.getByText('ana@tienda.com')).toBeInTheDocument()
-    // El código de un solo uso sale de la barra de direcciones.
+    // El token de un solo uso sale de la barra de direcciones.
     expect(window.location.search).toBe('?next=%2Fdashboard')
 
     const guardar = screen.getByRole('button', { name: /guardar contraseña/i })
@@ -267,5 +287,33 @@ describe('ResetPasswordContent', () => {
     await user.click(screen.getByRole('button', { name: /guardar contraseña/i }))
 
     expect(await screen.findByText('El enlace venció o ya se usó')).toBeInTheDocument()
+  })
+
+  it('Supabase pide reautenticación: manda el código y cambia la contraseña con él', async () => {
+    auth.getSession = vi.fn().mockResolvedValue({ data: { session } })
+    auth.updateUser = vi.fn()
+      .mockResolvedValueOnce({ data: {}, error: { code: 'reauthentication_needed', message: 'Password update requires reauthentication' } })
+      .mockResolvedValueOnce({ data: {}, error: null })
+    const reauthenticate = vi.fn().mockResolvedValue({ data: {}, error: null })
+    Object.assign(auth, { reauthenticate })
+    visit('/auth/reset-password?next=%2Fdashboard')
+    const user = userEvent.setup()
+    render(<ResetPasswordContent />)
+
+    await user.type(await screen.findByLabelText('Nueva contraseña'), 'Segura123')
+    await user.type(screen.getByLabelText('Repetí la contraseña'), 'Segura123')
+    await user.click(screen.getByRole('button', { name: /guardar contraseña/i }))
+
+    const codigo = await screen.findByLabelText('Código de verificación')
+    expect(reauthenticate).toHaveBeenCalledTimes(1)
+    const guardar = screen.getByRole('button', { name: /guardar contraseña/i })
+    expect(guardar).toBeDisabled()
+
+    await user.type(codigo, '12a3456')
+    expect(codigo).toHaveValue('123456')
+    await user.click(guardar)
+
+    await waitFor(() => expect(auth.updateUser).toHaveBeenLastCalledWith({ password: 'Segura123', nonce: '123456' }))
+    expect(await screen.findByText('¡Listo, contraseña cambiada!')).toBeInTheDocument()
   })
 })
