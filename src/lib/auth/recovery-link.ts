@@ -245,20 +245,35 @@ export function describePasswordUpdateError(error: ErrorLike): PasswordUpdateErr
   if (code === 'insufficient_aal' || /aal2/i.test(message)) {
     return { kind: 'mfa', message: 'Antes de cambiarla tenés que confirmar el código de verificación en dos pasos.' }
   }
-  if (code === 'weak_password' || /known to be weak|easy to guess|compromised|breached|pwned/i.test(message)) {
+  // `weak_password` trae `reasons`: 'pwned' (aparece en filtraciones, HIBP
+  // está activo en el proyecto), 'length' o 'characters'.
+  const reasons = Array.isArray((error as { reasons?: unknown })?.reasons)
+    ? ((error as { reasons: unknown[] }).reasons.map(String))
+    : []
+  if (reasons.includes('pwned') || /known to be weak|easy to guess|compromised|breached|pwned|leaked/i.test(message)) {
     return {
       kind: 'weak',
-      message: 'Esa contraseña aparece en filtraciones o es fácil de adivinar. Elegí una más larga y única, que no uses en otras cuentas.',
+      message: 'Esa contraseña aparece en filtraciones de datos conocidas. Elegí otra que no uses en ninguna otra cuenta.',
     }
   }
-  if (/password should be|password is too short|weak.?password|at least \d+ characters/i.test(message)) {
+  if (code === 'weak_password' || reasons.length > 0 || /password should be|password is too short|weak.?password|at least \d+ characters|should contain/i.test(message)) {
     return { kind: 'weak', message: 'La contraseña no cumple los requisitos de seguridad. Revisá la lista de abajo.' }
   }
-  if (code === 'over_request_rate_limit' || /rate limit|too many requests|for security purposes/i.test(message)) {
+  if (['over_request_rate_limit', 'over_email_send_rate_limit'].includes(code) || /rate limit|too many requests|for security purposes/i.test(message)) {
     return { kind: 'rate-limit', message: 'Hiciste varios intentos seguidos. Esperá un minuto y volvé a probar.' }
   }
-  if (/failed to fetch|network|timeout/i.test(message)) {
+  if (code === 'user_banned' || code === 'user_not_found') {
+    return { kind: 'unknown', message: 'Esta cuenta no puede cambiar la contraseña ahora. Escribinos a soporte.' }
+  }
+  if (/failed to fetch|network|timeout|load failed/i.test(message)) {
     return { kind: 'network', message: 'No se pudo conectar con el servidor. Comprobá tu conexión a internet.' }
   }
-  return { kind: 'unknown', message: 'No pudimos cambiar tu contraseña. Intentá de nuevo.' }
+  // Algo que no reconocemos: el código va en el mensaje para que soporte lo
+  // pueda buscar en los logs de Auth.
+  return {
+    kind: 'unknown',
+    message: code
+      ? `No pudimos cambiar tu contraseña (código ${code}). Intentá de nuevo o escribinos a soporte.`
+      : 'No pudimos cambiar tu contraseña. Intentá de nuevo o escribinos a soporte.',
+  }
 }

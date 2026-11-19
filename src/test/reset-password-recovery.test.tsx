@@ -158,6 +158,18 @@ describe('describePasswordUpdateError', () => {
     expect(describePasswordUpdateError({ message: 'Failed to fetch' }).kind).toBe('network')
   })
 
+  it('weak_password usa sus reasons', () => {
+    const pwned = describePasswordUpdateError({ code: 'weak_password', message: 'Password is known to be weak and easy to guess, please choose a different one.', reasons: ['pwned'] } as never)
+    expect(pwned.kind).toBe('weak')
+    expect(pwned.message).toMatch(/filtraciones/)
+    const length = describePasswordUpdateError({ code: 'weak_password', message: 'Password should be at least 8 characters.', reasons: ['length'] } as never)
+    expect(length.message).toMatch(/requisitos/)
+  })
+
+  it('un error desconocido muestra su código para soporte', () => {
+    expect(describePasswordUpdateError({ code: 'unexpected_failure', message: 'boom' }).message).toContain('unexpected_failure')
+  })
+
   it('nunca muestra el texto original en inglés', () => {
     for (const message of ['Auth session missing!', 'New password should be different from the old password.', 'boom']) {
       expect(describePasswordUpdateError({ message }).message).not.toContain(message)
@@ -242,7 +254,10 @@ describe('ResetPasswordContent', () => {
     expect(guardar).toBeDisabled()
 
     await user.clear(nueva)
-    await user.type(nueva, 'Segura123')
+    // Pegar funciona igual que escribir.
+    await user.click(nueva)
+    await user.paste('Segura123')
+    expect(nueva).toHaveValue('Segura123')
     const repetir = screen.getByLabelText('Repetí la contraseña')
     await user.type(repetir, 'Segura12')
     await user.tab()
@@ -272,7 +287,12 @@ describe('ResetPasswordContent', () => {
     await user.type(screen.getByLabelText('Repetí la contraseña'), 'Segura123')
     await user.click(screen.getByRole('button', { name: /guardar contraseña/i }))
 
-    expect(await screen.findByText('La nueva contraseña tiene que ser distinta de la que tenías.')).toBeInTheDocument()
+    const alerta = await screen.findByText('La nueva contraseña tiene que ser distinta de la que tenías.')
+    expect(alerta).toBeInTheDocument()
+    // El error queda asociado a los campos para lectores de pantalla.
+    const errorId = alerta.closest('[role="alert"]')?.id
+    expect(errorId).toBeTruthy()
+    expect(screen.getByLabelText('Nueva contraseña').getAttribute('aria-describedby')).toContain(errorId)
   })
 
   it('la sesión vence mientras completa el formulario: pasa a pedir enlace nuevo', async () => {

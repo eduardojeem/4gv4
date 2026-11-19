@@ -93,6 +93,7 @@ export default function ResetPasswordContent() {
   const checksId = useId()
   const confirmHintId = useId()
   const codeId = useId()
+  const errorId = useId()
 
   useEffect(() => {
     let cancelled = false
@@ -362,7 +363,7 @@ export default function ResetPasswordContent() {
                         }}
                         onKeyUp={handleCapsLock}
                         onKeyDown={handleCapsLock}
-                        aria-describedby={checksId}
+                        aria-describedby={error ? `${checksId} ${errorId}` : checksId}
                         aria-invalid={password.length > 0 && !allChecksMet}
                         disabled={loading}
                         className="h-11 rounded-xl border-slate-200 bg-white pr-11 dark:border-slate-700 dark:bg-slate-950"
@@ -423,6 +424,9 @@ export default function ResetPasswordContent() {
                           </li>
                         ))}
                       </ul>
+                      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Tampoco puede ser una contraseña que aparezca en filtraciones de datos conocidas.
+                      </p>
                       {tooLong && (
                         <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
                           Máximo {PASSWORD_MAX_BYTES} caracteres.
@@ -448,7 +452,7 @@ export default function ResetPasswordContent() {
                         }}
                         onBlur={() => setConfirmTouched(true)}
                         onKeyUp={handleCapsLock}
-                        aria-describedby={confirmHintId}
+                        aria-describedby={error ? `${confirmHintId} ${errorId}` : confirmHintId}
                         aria-invalid={showMismatch}
                         disabled={loading}
                         className={cn(
@@ -514,6 +518,7 @@ export default function ResetPasswordContent() {
 
                   {error && (
                     <div
+                      id={errorId}
                       role="alert"
                       className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium leading-relaxed text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
                     >
