@@ -2,79 +2,110 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  CheckCircle2,
+  Copy,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Mail,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Building2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import Link from 'next/link'
-import { describeAuthError } from '@/lib/auth/auth-error-messages'
-import { sanitizeRedirectPath, validatePassword } from '@/lib/auth/password-validation'
+import {
+  getPasswordChecks,
+  passwordByteLength,
+  PASSWORD_MAX_BYTES,
+  sanitizeRedirectPath,
+  validatePassword,
+} from '@/lib/auth/password-validation'
+import {
+  describePasswordUpdateError,
+  establishRecoverySession,
+  RECOVERY_FAILURE_COPY,
+  stripRecoveryParams,
+  type RecoveryFailure,
+} from '@/lib/auth/recovery-link'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
 
+type ViewState =
+  | { step: 'checking' }
+  | { step: 'error'; reason: RecoveryFailure }
+  | { step: 'form' }
+  | { step: 'success' }
+
+const SUCCESS_REDIRECT_MS = 2500
+
+function passwordStrength(password: string, allChecksMet: boolean): { level: 0 | 1 | 2 | 3; label: string } {
+  if (!password) return { level: 0, label: '' }
+  if (!allChecksMet) return { level: 1, label: 'Todavía no cumple los requisitos' }
+  if (password.length >= 12) return { level: 3, label: 'Muy segura' }
+  return { level: 2, label: 'Segura · con 12 caracteres o más es todavía mejor' }
+}
+
 export default function ResetPasswordContent() {
+  const [view, setView] = useState<ViewState>({ step: 'checking' })
+  const [email, setEmail] = useState<string | null>(null)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [capsLock, setCapsLock] = useState(false)
+  const [confirmTouched, setConfirmTouched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
-  const [validatingToken, setValidatingToken] = useState(true)
+  const linkHrefRef = useRef<string>('')
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = sanitizeRedirectPath(searchParams.get('next'))
   const loginHref = `/login?redirect=${encodeURIComponent(next)}`
-  const supabase = createClient()
+  const newLinkHref = `/login?recuperar=1&redirect=${encodeURIComponent(next)}`
+  // Un solo cliente por montaje: si cambiara, el efecto volvería a validar el
+  // enlace y pisaría el estado del formulario.
+  const [supabase] = useState(() => createClient())
   const { branding } = usePlatformBranding()
+  const reduceMotion = useReducedMotion()
+
+  const passwordId = useId()
+  const confirmId = useId()
+  const checksId = useId()
+  const confirmHintId = useId()
 
   useEffect(() => {
-    const establishSessionFromHash = async (): Promise<boolean> => {
-      if (typeof window === 'undefined') return false
-      const hash = window.location.hash?.startsWith('#')
-        ? window.location.hash.slice(1)
-        : ''
-      if (!hash) return false
+    let cancelled = false
 
-      const params = new URLSearchParams(hash)
-      const access_token = params.get('access_token')
-      const refresh_token = params.get('refresh_token')
-      if (!access_token || !refresh_token) return false
-
-      const { error } = await supabase.auth.setSession({ access_token, refresh_token })
-      if (error) {
-        console.error('setSession from hash failed:', error.message)
-        return false
-      }
-
-      window.history.replaceState(null, '', window.location.pathname + window.location.search)
-      return true
-    }
-
-    const validateSession = async () => {
+    const run = async () => {
+      linkHrefRef.current = window.location.href
       try {
-        let { data: { session } } = await supabase.auth.getSession()
+        const result = await establishRecoverySession(supabase.auth, window.location.href)
+        if (cancelled) return
 
-        if (!session) {
-          const ok = await establishSessionFromHash()
-          if (ok) {
-            ({ data: { session } } = await supabase.auth.getSession())
-          }
-        }
-
-        if (!session) {
-          toast.error('El enlace de recuperación es inválido o ha expirado')
-          setTimeout(() => router.push(loginHref), 2000)
+        if ('reason' in result) {
+          console.warn('[reset-password] enlace de recuperación no válido', { reason: result.reason })
+          setView({ step: 'error', reason: result.reason })
           return
         }
+
+        // El enlace ya se usó: que no quede en la barra ni en el historial.
+        window.history.replaceState(window.history.state, '', stripRecoveryParams(window.location.href))
+        setEmail(result.email)
 
         // Con 2FA activa, Supabase sólo deja cambiar la contraseña después del código.
         if ((await loadMfaState(supabase).catch(() => null))?.pending) {
@@ -82,346 +113,403 @@ export default function ResetPasswordContent() {
           return
         }
 
-        setValidatingToken(false)
+        setView({ step: 'form' })
       } catch (err) {
-        console.error('Error validating session:', err)
-        toast.error('Error al validar el enlace')
-        setTimeout(() => router.push('/login'), 2000)
+        console.error('[reset-password] error validando el enlace', err)
+        if (!cancelled) setView({ step: 'error', reason: 'unknown' })
       }
     }
 
-    validateSession()
-  }, [router, supabase, next, loginHref])
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [router, supabase, next])
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const checks = useMemo(() => getPasswordChecks(password), [password])
+  const tooLong = passwordByteLength(password) > PASSWORD_MAX_BYTES
+  const allChecksMet = checks.every((c) => c.ok) && !tooLong
+  const strength = passwordStrength(password, allChecksMet)
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
+  const showMismatch = confirmTouched && confirmPassword.length > 0 && !passwordsMatch
+  const canSubmit = allChecksMet && passwordsMatch && !loading
+
+  const handleCapsLock = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    setCapsLock(event.getModifierState?.('CapsLock') ?? false)
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
+    setConfirmTouched(true)
 
+    const problem = validatePassword(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden')
-      setLoading(false)
+      setError('Las contraseñas no coinciden.')
       return
     }
 
-    const passwordError = validatePassword(password)
-    if (passwordError) {
-      setError(passwordError)
-      setLoading(false)
-      return
-    }
-
+    setLoading(true)
     try {
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) {
-        setError(describeAuthError(error.message, 'password'))
-      } else {
-        setSuccess(true)
-        toast.success('Contraseña actualizada exitosamente')
-        setTimeout(() => router.push(next), 2000)
+      const { error: updateError } = await supabase.auth.updateUser({ password })
+      if (updateError) {
+        const described = describePasswordUpdateError(updateError)
+        console.warn('[reset-password] updateUser falló', { kind: described.kind, code: updateError.code })
+        if (described.kind === 'session') {
+          setView({ step: 'error', reason: 'expired' })
+          return
+        }
+        if (described.kind === 'mfa') {
+          router.replace(buildMfaPath(`/auth/reset-password?next=${encodeURIComponent(next)}`))
+          return
+        }
+        setError(described.message)
+        return
       }
-    } catch (_err) {
-      setError('Ocurrió un error inesperado. Intenta de nuevo.')
+
+      // Si alguien más tenía la cuenta abierta, que pierda el acceso.
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined)
+
+      setView({ step: 'success' })
+      toast.success('Contraseña actualizada')
+      setTimeout(() => router.push(next), SUCCESS_REDIRECT_MS)
+    } catch (err) {
+      setError(describePasswordUpdateError(err as Error).message)
     } finally {
       setLoading(false)
     }
   }
 
-  const reqs = [
-    { label: '8+ caracteres', met: password.length >= 8 },
-    { label: 'Mayúscula', met: /[A-Z]/.test(password) },
-    { label: 'Minúscula', met: /[a-z]/.test(password) },
-    { label: 'Número', met: /[0-9]/.test(password) }
-  ]
-  const strength = reqs.filter(r => r.met).length
-
-  if (validatingToken) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <motion.div
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="relative">
-            <div className="absolute inset-0 blur-xl bg-blue-500/30 rounded-full" />
-            <Loader2 className="h-10 w-10 animate-spin text-blue-500 relative z-10" />
-          </div>
-          <p className="text-sm font-medium text-slate-400 tracking-wide">Autenticando sesión...</p>
-        </motion.div>
-      </div>
-    )
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(linkHrefRef.current)
+      toast.success('Enlace copiado. Pegalo en el navegador donde lo pediste.')
+    } catch {
+      toast.error('No se pudo copiar. Mantené presionado el enlace del correo y elegí «Copiar».')
+    }
   }
 
+  const motionProps = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 12 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -8 },
+        transition: { duration: 0.3, ease: [0.23, 1, 0.32, 1] as const },
+      }
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#030712] relative overflow-hidden selection:bg-blue-500/30 font-sans">
-      {/* Dynamic Ambient Background */}
-      <div className="absolute inset-0 w-full h-full pointer-events-none">
-        <motion.div
-          animate={{ x: [0, 40, 0], y: [0, -40, 0], scale: [1, 1.1, 1] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] mix-blend-screen"
-        />
-        <motion.div
-          animate={{ x: [0, -30, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-violet-600/15 rounded-full blur-[120px] mix-blend-screen"
-        />
-        <motion.div
-          animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-600/15 rounded-full blur-[120px] mix-blend-screen"
-        />
-        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-[0.03]" />
-      </div>
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-slate-50 px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-blue-50 to-transparent dark:from-blue-500/[0.06]"
+      />
 
-      <AnimatePresence mode="wait">
-        {!success ? (
-          <motion.div
-            key="form"
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            className="w-full max-w-md relative z-10 px-4"
-          >
-            {/* Main Card */}
-            <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] overflow-hidden relative group">
-              {/* Card top highlight */}
-              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent opacity-50" />
+      <div className="relative z-10 w-full max-w-[420px]">
+        <div className="mb-6 flex justify-center">
+          {branding.logoUrl ? (
+            <AppImage
+              src={branding.logoUrl}
+              alt={branding.platformName}
+              className="h-10 w-auto max-w-[180px] object-contain"
+            />
+          ) : (
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
+                <Building2 className="h-4 w-4" />
+              </span>
+              {branding.platformName}
+            </div>
+          )}
+        </div>
 
-              <div className="p-8 sm:p-10 space-y-8">
-                {/* Header */}
-                <div className="space-y-4 text-center">
-                  <motion.div
-                    initial={{ scale: 0, rotate: -15 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: "spring", damping: 12, delay: 0.2 }}
-                    className="flex items-center justify-center mx-auto"
-                  >
-                    {branding.logoUrl ? (
-                      <div className="flex h-16 items-center">
-                        <AppImage src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
-                      </div>
-                    ) : (
-                      <div className="w-16 h-16 bg-gradient-to-tr from-blue-600/20 to-violet-600/20 rounded-2xl flex items-center justify-center border border-white/10 shadow-[0_0_40px_rgba(37,99,235,0.15)] relative">
-                        <div className="absolute inset-0 rounded-2xl border border-white/5 bg-gradient-to-tr from-white/5 to-transparent" />
-                        <Building2 className="h-7 w-7 text-blue-300 relative z-10" />
-                      </div>
-                    )}
-                  </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="space-y-1.5"
-                  >
-                    <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-                      Nueva contraseña
-                    </h2>
-                    <p className="text-sm text-slate-400">
-                      Asegura tu cuenta de {branding.platformName}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <AnimatePresence mode="wait">
+            {view.step === 'checking' && (
+              <motion.div
+                key="checking"
+                {...motionProps}
+                className="flex flex-col items-center gap-3 px-8 py-14 text-center"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 className="h-7 w-7 animate-spin text-blue-600 dark:text-blue-400" />
+                <p className="text-sm font-medium">Validando tu enlace…</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Esto tarda sólo un momento.</p>
+              </motion.div>
+            )}
+
+            {view.step === 'error' && (
+              <motion.div key="error" {...motionProps} className="space-y-6 p-6 sm:p-8" role="alert">
+                <div className="space-y-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <h1 className="text-xl font-bold tracking-tight">{RECOVERY_FAILURE_COPY[view.reason].title}</h1>
+                  <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    {RECOVERY_FAILURE_COPY[view.reason].description}
+                  </p>
+                  {RECOVERY_FAILURE_COPY[view.reason].hint && (
+                    <p className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                      {RECOVERY_FAILURE_COPY[view.reason].hint}
                     </p>
-                  </motion.div>
+                  )}
                 </div>
 
-                <form onSubmit={handleResetPassword} className="space-y-6">
-                  {/* Password Input */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="space-y-2.5"
-                  >
-                    <Label className="text-xs font-medium text-slate-300 ml-1">Tu nueva contraseña</Label>
-                    <div className="relative group/input">
+                <div className="space-y-2.5">
+                  <Button asChild className="h-11 w-full rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-700">
+                    <Link href={newLinkHref}>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Pedir un enlace nuevo
+                    </Link>
+                  </Button>
+                  {view.reason === 'other-browser' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={copyLink}
+                      className="h-11 w-full rounded-xl border-slate-200 dark:border-slate-700"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copiar este enlace
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {view.step === 'form' && (
+              <motion.div key="form" {...motionProps} className="space-y-6 p-6 sm:p-8">
+                <div className="space-y-2">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
+                    <KeyRound className="h-5 w-5" />
+                  </div>
+                  <h1 className="text-xl font-bold tracking-tight">Creá tu nueva contraseña</h1>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {email ? (
+                      <>
+                        Para la cuenta <span className="font-medium text-slate-900 dark:text-white">{email}</span>
+                      </>
+                    ) : (
+                      <>Elegí una contraseña que no uses en otros sitios.</>
+                    )}
+                  </p>
+                </div>
+
+                <form onSubmit={handleSubmit} noValidate className="space-y-5">
+                  {/* Para que el gestor de contraseñas guarde la clave en la cuenta correcta. */}
+                  {email && (
+                    <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor={passwordId} className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Nueva contraseña
+                    </Label>
+                    <div className="relative">
                       <Input
+                        id={passwordId}
+                        name="new-password"
                         type={showPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        autoFocus
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="h-12 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:bg-white/5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all duration-300 rounded-xl pr-11 shadow-inner shadow-black/20"
+                        onChange={(e) => {
+                          setPassword(e.target.value)
+                          if (error) setError('')
+                        }}
+                        onKeyUp={handleCapsLock}
+                        onKeyDown={handleCapsLock}
+                        aria-describedby={checksId}
+                        aria-invalid={password.length > 0 && !allChecksMet}
                         disabled={loading}
+                        className="h-11 rounded-xl border-slate-200 bg-white pr-11 dark:border-slate-700 dark:bg-slate-950"
                       />
                       <button
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
+                        aria-pressed={showPassword}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:hover:text-slate-200"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
 
-                    {/* Animated Strength Meter */}
-                    <div className="pt-3">
-                      <div className="flex gap-1.5 h-1 w-full bg-black/40 rounded-full overflow-hidden p-0.5">
-                        {[1, 2, 3, 4].map((level) => (
+                    {capsLock && (
+                      <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Bloq Mayús está activado.</p>
+                    )}
+
+                    <div className="space-y-2 pt-1" id={checksId}>
+                      <div className="flex gap-1" aria-hidden>
+                        {[1, 2, 3].map((segment) => (
                           <div
-                            key={level}
+                            key={segment}
                             className={cn(
-                              "h-full flex-1 rounded-full transition-all duration-500",
-                              password.length === 0 ? "bg-transparent" :
-                              level <= strength ?
-                                (strength <= 2 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" :
-                                strength === 3 ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" :
-                                "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]")
-                              : "bg-transparent"
+                              'h-1 flex-1 rounded-full bg-slate-200 transition-colors dark:bg-slate-800',
+                              segment <= strength.level &&
+                                (strength.level === 1
+                                  ? 'bg-red-500 dark:bg-red-500'
+                                  : strength.level === 2
+                                    ? 'bg-emerald-500 dark:bg-emerald-500'
+                                    : 'bg-emerald-600 dark:bg-emerald-400')
                             )}
                           />
                         ))}
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-y-2 gap-x-4">
-                        {reqs.map((req, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className={cn(
-                              "w-1 h-1 rounded-full transition-colors duration-300",
-                              req.met ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-slate-700"
-                            )} />
-                            <span className={cn(
-                              "text-[11px] transition-colors duration-300",
-                              req.met ? "text-slate-200 font-medium" : "text-slate-500"
-                            )}>{req.label}</span>
-                          </div>
+                      {strength.label && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">
+                          {strength.label}
+                        </p>
+                      )}
+                      <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        {checks.map((check) => (
+                          <li
+                            key={check.label}
+                            className={cn(
+                              'flex items-center gap-1.5 text-[11px] transition-colors',
+                              check.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+                            )}
+                          >
+                            {check.ok ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <span className="mx-1 h-1.5 w-1.5 rounded-full bg-current opacity-50" />
+                            )}
+                            <span>{check.label}</span>
+                            <span className="sr-only">{check.ok ? '(cumplido)' : '(pendiente)'}</span>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
+                      {tooLong && (
+                        <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                          Máximo {PASSWORD_MAX_BYTES} caracteres.
+                        </p>
+                      )}
                     </div>
-                  </motion.div>
+                  </div>
 
-                  {/* Confirm Password Input */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.5 }}
-                    className="space-y-2.5"
-                  >
-                    <Label className="text-xs font-medium text-slate-300 ml-1">Repite la contraseña</Label>
-                    <div className="relative group/input">
+                  <div className="space-y-2">
+                    <Label htmlFor={confirmId} className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Repetí la contraseña
+                    </Label>
+                    <div className="relative">
                       <Input
-                        type={showConfirmPassword ? 'text' : 'password'}
+                        id={confirmId}
+                        name="confirm-password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="h-12 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:bg-white/5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all duration-300 rounded-xl pr-11 shadow-inner shadow-black/20"
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value)
+                          if (error) setError('')
+                        }}
+                        onBlur={() => setConfirmTouched(true)}
+                        onKeyUp={handleCapsLock}
+                        aria-describedby={confirmHintId}
+                        aria-invalid={showMismatch}
                         disabled={loading}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </motion.div>
-
-                  <AnimatePresence>
-                    {error && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0, y: -10 }}
-                        animate={{ opacity: 1, height: 'auto', y: 0 }}
-                        exit={{ opacity: 0, height: 0, y: -10 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 mt-2">
-                          <Shield className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                          <p className="text-xs text-red-200/90 leading-relaxed font-medium">{error}</p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6 }}
-                    className="pt-4"
-                  >
-                    <Button
-                      type="submit"
-                      disabled={loading || strength < 3 || password !== confirmPassword}
-                      className="w-full h-12 bg-white text-black hover:bg-slate-200 transition-all duration-300 rounded-xl font-semibold text-sm relative overflow-hidden group shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:shadow-[0_0_40px_rgba(255,255,255,0.25)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
-                    >
-                      <span className="relative z-10 flex items-center justify-center gap-2">
-                        {loading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            Guardar contraseña
-                            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                          </>
+                        className={cn(
+                          'h-11 rounded-xl border-slate-200 bg-white pr-10 dark:border-slate-700 dark:bg-slate-950',
+                          showMismatch && 'border-red-400 focus-visible:ring-red-400/30 dark:border-red-500/60',
+                          passwordsMatch && 'border-emerald-400 dark:border-emerald-500/60'
                         )}
-                      </span>
-                    </Button>
-                  </motion.div>
+                      />
+                      {confirmPassword.length > 0 && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                          {passwordsMatch ? (
+                            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          ) : showMismatch ? (
+                            <X className="h-4 w-4 text-red-500" />
+                          ) : null}
+                        </span>
+                      )}
+                    </div>
+                    <p id={confirmHintId} className="min-h-[16px] text-[11px]" aria-live="polite">
+                      {showMismatch && (
+                        <span className="font-medium text-red-600 dark:text-red-400">Las contraseñas no coinciden.</span>
+                      )}
+                      {passwordsMatch && <span className="text-emerald-700 dark:text-emerald-400">Las contraseñas coinciden.</span>}
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium leading-relaxed text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="h-11 w-full rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Guardando…
+                      </>
+                    ) : (
+                      <>
+                        Guardar contraseña
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
                 </form>
-              </div>
-
-              {/* Card Footer */}
-              <div className="px-8 py-5 border-t border-white/[0.05] bg-black/20 text-center backdrop-blur-md">
-                <Link
-                  href={loginHref}
-                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1.5 group"
-                >
-                  <ArrowRight className="h-3 w-3 rotate-180 group-hover:-translate-x-1 transition-transform opacity-70" />
-                  Volver al inicio de sesión
-                </Link>
-              </div>
-            </div>
-
-            {/* Bottom badges */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="mt-8 flex justify-center gap-8 text-[11px] text-slate-500 font-medium"
-            >
-              <div className="flex items-center gap-2">
-                <Shield className="h-3.5 w-3.5 text-blue-400/50" />
-                <span>Cifrado Extremo</span>
-              </div>
-            </motion.div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="success"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-sm relative z-10 px-4"
-          >
-            <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] p-10 text-center relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent opacity-50" />
-              <div className="absolute inset-0 bg-emerald-500/5 blur-3xl rounded-full pointer-events-none" />
-
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", damping: 15, delay: 0.1 }}
-                className="w-20 h-20 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 relative z-10"
-              >
-                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
               </motion.div>
+            )}
 
+            {view.step === 'success' && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="relative z-10"
+                key="success"
+                {...motionProps}
+                className="space-y-5 p-8 text-center"
+                role="status"
+                aria-live="polite"
               >
-                <h2 className="text-2xl font-semibold text-white mb-3 tracking-tight">¡Contraseña lista!</h2>
-                <p className="text-sm text-slate-400 leading-relaxed mb-8">
-                  Tu contraseña ha sido actualizada con éxito. Preparando tu entorno de trabajo...
-                </p>
-                <div className="flex justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-emerald-400/50" />
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
+                  <CheckCircle2 className="h-7 w-7" />
                 </div>
+                <div className="space-y-1.5">
+                  <h1 className="text-xl font-bold tracking-tight">¡Listo, contraseña cambiada!</h1>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    Ya podés usarla para entrar. Por seguridad cerramos la sesión en tus otros dispositivos.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => router.push(next)}
+                  className="h-11 w-full rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-700"
+                >
+                  Continuar
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {view.step !== 'success' && (
+            <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-4 text-center dark:border-slate-800 dark:bg-slate-900/60">
+              <Link
+                href={loginHref}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Volver al inicio de sesión
+              </Link>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

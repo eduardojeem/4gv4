@@ -7,9 +7,20 @@ export interface PasswordCheck {
   label: string
 }
 
+/**
+ * Supabase (bcrypt) rechaza contraseñas de más de 72 bytes. Se valida antes
+ * para no mostrar un error genérico después de enviar el formulario.
+ */
+export const PASSWORD_MAX_BYTES = 72
+
+export function passwordByteLength(value: string): number {
+  return new TextEncoder().encode(value).length
+}
+
 /** Returns an error message if the password is invalid, or null if valid. */
 export function validatePassword(pwd: string): string | null {
   if (pwd.length < 8) return 'La contraseña debe tener al menos 8 caracteres'
+  if (passwordByteLength(pwd) > PASSWORD_MAX_BYTES) return `La contraseña no puede superar los ${PASSWORD_MAX_BYTES} caracteres`
   if (!/[A-Z]/.test(pwd)) return 'La contraseña debe contener al menos una mayúscula'
   if (!/[a-z]/.test(pwd)) return 'La contraseña debe contener al menos una minúscula'
   if (!/[0-9]/.test(pwd)) return 'La contraseña debe contener al menos un número'
