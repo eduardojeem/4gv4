@@ -106,8 +106,8 @@ export default async function OrganizationPublicLayout({
               servicesEnabled={servicesModuleEnabled}
             />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
-            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StorefrontMobileNav initialSettings={settings} offersEnabled={settings?.offers_section?.enabled !== false} />
+            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />
+            <StorefrontMobileNav initialSettings={settings} offersEnabled={settings?.offers_section?.enabled !== false} catalogEnabled={catalogEnabled} />
             <WhatsAppFloatButton />
             <SiteAnalyticsTracker />
           </div>

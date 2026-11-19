@@ -17,12 +17,14 @@ import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { publishedPaymentLabels } from '@/lib/website/mega-tech-publication'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 
 export function PublicFooter({
   initialSettings = null,
   repairsModuleEnabled = true,
   servicesModuleEnabled = true,
+  catalogEnabled = true,
 }: {
   initialSettings?: WebsiteSettings | null
   /**
@@ -32,10 +34,12 @@ export function PublicFooter({
    */
   repairsModuleEnabled?: boolean
   servicesModuleEnabled?: boolean
+  catalogEnabled?: boolean
 }) {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
   const effectiveSettings = settings ?? initialSettings
+  const paymentLabels = publishedPaymentLabels(effectiveSettings?.checkout, settings?.paymentControls)
   const company = effectiveSettings?.company_info
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
@@ -68,7 +72,7 @@ export function PublicFooter({
     ? `${companyName}. Reservá tu turno online y conocé nuestros servicios.`
     : isBeauty
       ? ''
-      : `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`)
+      : `${companyName}. Conocé los productos y canales de atención del negocio.`)
 
   if (style === 'wholesale-pro') return <WholesaleFooter company={company} prefix={tenantPrefix} />
   if (style === 'catalog-basic') return <CatalogBasicFooter company={company} prefix={tenantPrefix} />
@@ -123,7 +127,7 @@ export function PublicFooter({
                   {galleryVisible && <li><Link href={`${tenantPrefix}/inicio#galeria`} className="text-muted-foreground hover:text-foreground transition-colors">Galería de trabajos</Link></li>}
                   <li><Link href={`${tenantPrefix}/inicio#resenas`} className="text-muted-foreground hover:text-foreground transition-colors">Opiniones</Link></li>
                 </>
-              ) : (
+              ) : catalogEnabled ? (
                 <li>
                   <Link
                     href={`${tenantPrefix}/productos`}
@@ -132,7 +136,7 @@ export function PublicFooter({
                     Productos
                   </Link>
                 </li>
-              )}
+              ) : null}
 
               {servicesEnabled && !isServices && (
                 <li>
@@ -245,19 +249,8 @@ export function PublicFooter({
         {/* Medios de pago y tecnología de tienda */}
         {!isBeauty && <div className="mt-10 pt-6 border-t border-border/40 flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-foreground text-[11px]">Pagos seguros:</span>
-            <span className="inline-flex items-center rounded-md border border-border/60 bg-card px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-2xs">
-              Tarjetas & Cuotas
-            </span>
-            <span className="inline-flex items-center rounded-md border border-border/60 bg-card px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-2xs">
-              Transferencia SIPAP
-            </span>
-            <span className="inline-flex items-center rounded-md border border-border/60 bg-card px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-2xs">
-              Pagos QR
-            </span>
-            <span className="inline-flex items-center rounded-md border border-border/60 bg-card px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-2xs">
-              Efectivo al recibir
-            </span>
+            {paymentLabels.length > 0 && <span className="font-semibold text-foreground text-[11px]">Medios de pago informados:</span>}
+            {paymentLabels.map(label => <span key={label} className="inline-flex items-center rounded-md border border-border/60 bg-card px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-2xs">{label}</span>)}
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

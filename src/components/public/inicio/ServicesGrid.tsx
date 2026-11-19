@@ -20,6 +20,8 @@ interface ServicesGridProps {
   variant?: 'default' | 'barbero'
   bookingEnabled?: boolean
   onBookService?: (serviceId: string) => void
+  descriptionFallback?: string
+  fallbackContactHref?: string
 }
 
 // Subtle gradient per color for card header
@@ -44,6 +46,8 @@ export function ServicesGrid({
   services,
   variant = 'default',
   bookingEnabled = false,
+  descriptionFallback,
+  fallbackContactHref,
   onBookService,
 }: ServicesGridProps) {
   const { settings } = useWebsiteSettings()
@@ -380,7 +384,7 @@ export function ServicesGrid({
             {settings?.services_section?.title || 'Nuestros Servicios y Soluciones'}
           </h2>
           <p className="mt-3 text-muted-foreground text-sm sm:text-base leading-relaxed">
-            {settings?.services_section?.subtitle ||
+            {settings?.services_section?.subtitle || descriptionFallback ||
               'Calidad garantizada, atención personalizada y presupuesto sin compromiso.'}
           </p>
 
@@ -440,6 +444,9 @@ export function ServicesGrid({
             if (hasCustomCta) {
               ctaHref = rawCtaHref
               isExternalCta = /^https?:\/\//i.test(ctaHref)
+            } else if (!orgPhone && fallbackContactHref) {
+              ctaHref = fallbackContactHref
+              isExternalCta = false
             } else {
               const phoneToUse = orgPhone || getBusinessWhatsApp()
               const message = `¡Hola! Me gustaría consultar sobre el servicio de: *${service.title}*`
@@ -556,7 +563,7 @@ export function ServicesGrid({
                       target={isExternalCta ? '_blank' : undefined}
                       rel={isExternalCta ? 'noopener noreferrer' : undefined}
                     >
-                      {hasCustomCta ? (
+                      {hasCustomCta || (!orgPhone && fallbackContactHref) ? (
                         <>
                           <span>Consultar</span>
                           <ExternalLink className="h-4 w-4" />

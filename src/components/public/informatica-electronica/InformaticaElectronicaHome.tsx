@@ -17,7 +17,12 @@ import { ProductCard } from '@/components/public/ProductCard'
 import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 import { StoreTrustBar } from '@/components/public/inicio/StoreTrustBar'
 import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
-import { TechRepairsBanner } from '@/components/public/inicio/TechRepairsBanner'
+import { TechRepairsSection } from './TechRepairsSection'
+import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
+import { ServiceGallery, usePublicAgenda } from '@/components/public/inicio/ServicesHome'
+import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
+import { getPublicProcessFlows } from '@/lib/website/process-steps'
+import { resolveTechPublication, hasTechOffer, techOffersKey } from '@/lib/website/mega-tech-publication'
 import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
 import { BranchLocations, type BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from '@/components/public/inicio/newest-products'
@@ -47,15 +52,7 @@ interface Props {
   capabilities: StorefrontCapabilities
 }
 
-function hasRealOffer(product: PublicProduct) {
-  return (
-    !hidesPublicPrice(product) &&
-    product.has_offer !== false &&
-    product.offer_price != null &&
-    product.offer_price > 0 &&
-    product.offer_price < product.sale_price
-  )
-}
+const hasRealOffer = hasTechOffer
 
 function productBrand(product: PublicProduct) {
   return (product.brand || product.device_brand || '').trim()
@@ -147,7 +144,8 @@ function displayPrice(product: PublicProduct) {
  */
 function ProductPhoto({ product, sizes, className }: { product: PublicProduct; sizes: string; className?: string }) {
   const [failed, setFailed] = useState(false)
-  const src = product.image ? resolveProductImageUrl(product.image) : null
+  const image = product.image || product.images?.[0]
+  const src = image ? resolveProductImageUrl(image) : null
   if (!src || failed) {
     return (
       <span className="flex h-full w-full items-center justify-center text-muted-foreground/40">
@@ -460,9 +458,12 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
   const pathname = usePathname()
   const slug = getTenantSlugFromPathname(pathname)
   const prefix = slug ? '/' + slug : ''
+  const published = resolveTechPublication(settings, capabilities)
+  const { agenda, bookingHref } = usePublicAgenda(published.booking, settings.company_info?.slug)
 
   const { categories } = usePublicCategories()
   const hydrated = useHydrated()
+  const bookingVisible = hydrated && published.booking && Boolean(agenda && bookingHref)
   const { data: cachedProducts, isLoading: loadingProducts, error } = useSWR(
     capabilities.hasCatalog ? newestProductsKey(slug) : null,
     fetchPublicProducts,
@@ -470,12 +471,13 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
   )
   // Igual que las categorías: los productos pueden venir de la caché de SWR en el
   // navegador; antes de hidratar se dibuja lo mismo que en el servidor (cargando).
-  const products = useMemo(() => (hydrated ? cachedProducts ?? [] : []), [hydrated, cachedProducts])
+  const products = useMemo(() => (hydrated && published.catalog ? cachedProducts ?? [] : []), [hydrated, cachedProducts, published.catalog])
   const isLoading = !hydrated || loadingProducts
+  const { data: cachedOffers } = useSWR(published.offers ? techOffersKey(slug) : null, fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS)
 
   const company = settings.company_info
   const storeName = company?.name?.trim() || 'Nuestra tienda'
-  const phoneClean = (company?.phone || '').replace(/\D/g, '')
+  const phoneClean = (company?.whatsapp || company?.phone || '').replace(/\D/g, '')
   const brandTheme = getBrandTheme(company?.brandColor)
 
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
@@ -497,8 +499,11 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
     return roots.some((category) => typeof category.productCount === 'number') ? withProducts : roots
   }, [categories, hydrated])
 
-  const offers = useMemo(() => products.filter(hasRealOffer).slice(0, PRODUCTS_PER_SECTION), [products])
+  const offers = useMemo(() => published.offers && hydrated ? (cachedOffers ?? []).filter(hasRealOffer).slice(0, PRODUCTS_PER_SECTION) : [], [cachedOffers, published.offers, hydrated])
   const newest = useMemo(() => products.slice(0, PRODUCTS_PER_SECTION), [products])
+  const heroProduct = products.find(product => Boolean(product.image || product.images?.[0]))
+  const services = (settings.services ?? []).filter(service => service.active !== false)
+  const processFlows = getPublicProcessFlows(settings.process_flows, published.repairs ? settings.process_steps : []).filter(flow => flow.id === 'repairs' ? published.repairs : flow.id === 'purchase' ? published.catalog : true)
 
   // Marcas: solo las cargadas en los productos (sin adivinar por el nombre).
   const brands = useMemo(() => {
@@ -560,7 +565,7 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
       .slice(0, 2)
   }, [showcaseCategories, products, storeCategories])
 
-  const heroCategories = storeCategories.slice(0, offers.length > 0 ? 2 : 3)
+  const heroCategories = storeCategories.length > 1 && published.catalog ? storeCategories.slice(0, offers.length > 0 ? 2 : 3) : []
   const catalogUnavailable = capabilities.hasCatalog && !isLoading && (Boolean(error) || products.length === 0)
 
   return (
@@ -576,37 +581,38 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
             <div
               className={cn(
-                'relative flex min-h-[260px] flex-col justify-between overflow-hidden rounded-3xl border-2 p-6 shadow-xl transition-all sm:p-10',
+                'relative grid min-h-[260px] gap-6 overflow-hidden rounded-3xl border p-6 shadow-sm sm:p-8',
                 'border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-card text-foreground shadow-primary/5',
                 'dark:border-primary/40 dark:from-slate-950 dark:via-slate-900 dark:to-primary/30 dark:text-white dark:shadow-xl',
-                heroCategories.length > 0 || offers.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'
+                heroCategories.length > 0 || offers.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3',
+                heroProduct ? 'md:grid-cols-[1.15fr_0.85fr] md:items-center' : ''
               )}
             >
               <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full bg-primary/20 blur-3xl dark:bg-primary/30" />
-              <div className="relative z-10 max-w-xl space-y-3.5">
+              <div className="relative z-10 min-w-0 space-y-3.5">
                 <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1 text-xs font-black uppercase tracking-wide text-primary dark:border-primary/50 dark:bg-primary/25 dark:text-white">
                   <Sparkles className="h-3.5 w-3.5 text-amber-500 dark:text-amber-300" aria-hidden="true" />
-                  {storeName}
+                  {settings.hero_content?.badge?.trim() || storeName}
                 </span>
-                <h1 className="text-2xl font-black leading-tight tracking-tight text-foreground dark:text-white sm:text-4xl">
-                  {settings.hero_content?.title?.trim() || `Tecnología e informática en ${storeName}`}
+                <h1 className="font-sans text-2xl font-bold leading-tight tracking-tight text-foreground dark:text-white sm:text-4xl">
+                  {settings.hero_content?.title?.trim() || `Conocé ${storeName}`}
                 </h1>
                 <p className="text-sm font-medium leading-relaxed text-muted-foreground dark:text-slate-200">
                   {settings.hero_content?.subtitle?.trim() ||
                     company?.slogan?.trim() ||
-                    'Encontrá notebooks, celulares, componentes y accesorios en nuestro catálogo.'}
+                    (published.catalog ? 'Explorá los productos disponibles y consultá con nuestro equipo.' : 'Conocé nuestra atención y comunicate con el negocio.')}
                 </p>
-              </div>
               <div className="relative z-10 flex flex-wrap items-center gap-3 pt-5">
                 {capabilities.hasCatalog && (
                   <Link
                     href={`${prefix}/productos`}
                     className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:scale-105 active:scale-95 hover:bg-primary/90"
                   >
-                    Ver catálogo
+                    {settings.hero_content?.ctaPrimaryText?.trim() || 'Ver catálogo'}
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </Link>
                 )}
+                {!published.catalog && published.services && <Link href={`${prefix}/servicios`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">Ver servicios<ArrowRight className="size-4" /></Link>}
                 {offers.length > 0 && (
                   <Link
                     href={`${prefix}/ofertas`}
@@ -624,10 +630,15 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
                     className="inline-flex items-center gap-2 rounded-2xl bg-[#25D366] px-5 py-3 text-xs font-black text-white shadow-md transition-transform hover:scale-105 active:scale-95 hover:bg-[#20ba5a]"
                   >
                     <WhatsAppIcon className="h-4 w-4 shrink-0" />
-                    Consultar por WhatsApp
+                    {settings.hero_content?.ctaSecondaryText?.trim() || 'Consultar por WhatsApp'}
                   </a>
                 )}
               </div>
+              </div>
+              {heroProduct && published.catalog && <Link href={`${prefix}/productos/${encodeURIComponent(heroProduct.id)}`} aria-label={`Ver ${heroProduct.name}`} className="relative z-10 mx-auto grid w-full max-w-xs gap-3 rounded-2xl border bg-background/80 p-4 text-foreground shadow-sm transition-colors hover:border-primary/50">
+                <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-white"><ProductPhoto product={heroProduct} sizes="(max-width: 768px) 280px, 320px" className="p-3" /></div>
+                <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">En nuestro catálogo</p><p className="mt-1 text-sm font-semibold leading-snug">{heroProduct.name}</p></div><ArrowRight className="size-4 shrink-0 text-primary" /></div>
+              </Link>}
             </div>
 
             {(heroCategories.length > 0 || offers.length > 0) && (
@@ -684,7 +695,7 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
       )}
 
       {/* ── 2. Categorías de la tienda ── */}
-      {storeCategories.length > 0 && (
+      {published.catalog && storeCategories.length > 1 && (
         <section aria-labelledby="tech-categories" className="border-b border-border/70 py-6 sm:py-8">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading
@@ -743,11 +754,12 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
                         <Flame className="h-7 w-7 fill-current text-amber-200" aria-hidden="true" />
                       </span>
                       <div>
+                        {settings.offers_section?.eyebrow?.trim() && <p className="mb-1 text-xs font-semibold text-primary">{settings.offers_section.eyebrow}</p>}
                         <h2 id="tech-offers" className="text-xl font-black tracking-tight text-foreground sm:text-2xl">
-                          Productos con descuento
+                          {settings.offers_section?.title?.trim() || 'Productos con descuento'}
                         </h2>
                         <p className="text-xs font-medium text-muted-foreground sm:text-sm">
-                          Precios rebajados sobre el precio de lista.
+                          {settings.offers_section?.subtitle?.trim() || 'Precios rebajados sobre el precio de lista.'}
                         </p>
                       </div>
                     </div>
@@ -908,14 +920,31 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
         </>
       )}
 
-      {capabilities.hasRepairs && company && <TechRepairsBanner phoneClean={phoneClean} companyInfo={company} />}
+      {published.services && (services.length > 0 ? (
+        <ServicesGrid services={services} bookingEnabled={bookingVisible} fallbackContactHref={`${prefix}/servicios`} descriptionFallback="Conocé nuestros servicios y consultá condiciones y disponibilidad." />
+      ) : (
+        <section id="servicios" aria-labelledby="tech-services-title" className="border-b py-8 sm:py-12">
+          <div className="mx-auto max-w-7xl space-y-5 px-4 sm:px-6 lg:px-8">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">{settings.services_section?.badge || 'Atención y servicios'}</p>
+              <h2 id="tech-services-title" className="mt-2 text-2xl font-bold">{settings.services_section?.title || 'Nuestros servicios'}</h2>
+              {settings.services_section?.subtitle && <p className="mt-2 text-sm text-muted-foreground">{settings.services_section.subtitle}</p>}
+            </div>
+            <Link href={`${prefix}/servicios`} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary">Conocer los servicios<ArrowRight className="size-4" /></Link>
+          </div>
+        </section>
+      ))}
+      {bookingVisible && bookingHref && <section id="reservas" aria-labelledby="tech-booking-title" className="border-b py-8 sm:py-12"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div className="flex flex-col gap-5 rounded-3xl border bg-muted/20 p-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 id="tech-booking-title" className="text-xl font-bold">{settings.booking_section?.title || 'Reservá tu atención'}</h2><p className="mt-2 text-sm text-muted-foreground">{settings.booking_section?.subtitle || 'Elegí un servicio y consultá los horarios disponibles.'}</p></div><Link href={bookingHref} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">Reservar turno<ArrowRight className="size-4" /></Link></div></div></section>}
+      {published.repairs && <TechRepairsSection prefix={prefix} phone={phoneClean} name={storeName} trackingLabel={settings.hero_content?.trackRepairText} />}
+      {(published.catalog || published.services || published.repairs) && <ServiceGallery settings={settings.gallery_section} />}
+      {company?.processSectionEnabled !== false && processFlows.length > 0 && (published.catalog || published.services || published.repairs) && <ProcessSteps brand={brandTheme} flows={processFlows} tenantPrefix={prefix} phoneClean={phoneClean} showCatalog={published.catalog} variant="business" bookingHref={bookingVisible ? bookingHref ?? undefined : undefined} />}
 
       {/* Beneficios: solo los que el dueño configuró en el sitio web. */}
       {trustBar && <StoreTrustBar settings={trustBar} className="py-4 sm:py-5" />}
 
       {branches.length > 0 && <BranchLocations branches={branches} brand={brandTheme} />}
 
-      <OrganizationReviews hasRepairs={capabilities.hasRepairs} />
+      <OrganizationReviews hasRepairs={published.repairs} />
     </div>
   )
 }

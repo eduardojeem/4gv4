@@ -55,10 +55,12 @@ export function PublicHeader({
   initialSettings = null,
   repairsModuleEnabled = true,
   servicesModuleEnabled = true,
+  catalogEnabled = true,
 }: {
   initialSettings?: WebsiteSettings | null
   repairsModuleEnabled?: boolean
   servicesModuleEnabled?: boolean
+  catalogEnabled?: boolean
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
@@ -262,7 +264,7 @@ export function PublicHeader({
 
   if (storefrontStyle === 'wholesale-pro') return <WholesaleHeader settings={effectiveSettings ?? null} />
   if (storefrontStyle === 'catalog-basic') return <CatalogBasicHeader settings={effectiveSettings ?? null} />
-  if (storefrontStyle === 'informatica-electronica') return <InformaticaElectronicaHeader settings={effectiveSettings ?? null} />
+  if (storefrontStyle === 'informatica-electronica') return <InformaticaElectronicaHeader settings={effectiveSettings ?? null} catalogEnabled={catalogEnabled} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} />
   if (storefrontStyle === 'barber') return <BarberHeader settings={effectiveSettings ?? null} />
   if (storefrontStyle === 'especial-para-barbero') {
     return (

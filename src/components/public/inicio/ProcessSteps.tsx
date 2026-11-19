@@ -31,7 +31,7 @@ interface ProcessStepsProps {
   tenantPrefix?: string
   phoneClean?: string
   /** Un negocio de turnos explica cómo reservar, no cómo comprar. */
-  variant?: 'store' | 'services'
+  variant?: 'store' | 'services' | 'business'
   /** A dónde lleva «Reservar turno» en la variante de servicios. */
   bookingHref?: string
   /** Sin productos publicados no se ofrece «Explorar catálogo». */
@@ -39,6 +39,14 @@ interface ProcessStepsProps {
 }
 
 const COPY = {
+  business: {
+    eyebrow: 'Paso a paso',
+    title: 'Cómo te atendemos',
+    description: 'Conocé los pasos de nuestra atención.',
+    helpTitle: '¿Tenés alguna consulta?',
+    helpText: 'Comunicate con el comercio para confirmar condiciones y disponibilidad.',
+    whatsapp: 'Hola, quisiera consultar por la atención del negocio.',
+  },
   store: {
     eyebrow: 'Paso a Paso Transparente',
     title: '¿Cómo comprar en nuestra tienda?',
@@ -314,7 +322,7 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean, vari
             </div>
 
             <div className="flex flex-wrap items-center gap-3 shrink-0 w-full md:w-auto justify-center">
-              {variant === 'services' && bookingHref ? (
+              {(variant === 'services' || variant === 'business') && bookingHref ? (
                 <Button
                   asChild
                   variant="outline"
@@ -325,7 +333,7 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean, vari
                     <span>Reservar turno</span>
                   </Link>
                 </Button>
-              ) : showCatalog && variant === 'store' ? (
+              ) : showCatalog && variant !== 'services' ? (
                 <Button
                   asChild
                   variant="outline"
