@@ -46,6 +46,7 @@ import {
   HeartPulse,
   Scale,
   Wallet,
+  UserX,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -226,6 +227,7 @@ const navItems: NavItem[] = [
     children: [
       { title: 'Comentarios', href: '/superadmin/comentarios', icon: MessageSquareText },
       { title: 'Comunicaciones', href: '/superadmin/communications', icon: Mail },
+      { title: 'Cuentas a eliminar', href: '/superadmin/eliminaciones', icon: UserX },
       { title: 'Configuración', href: '/superadmin/settings', icon: Settings },
       { title: 'Mantenimiento', href: '/superadmin/maintenance', icon: Wrench },
     ],

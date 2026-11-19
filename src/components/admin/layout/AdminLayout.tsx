@@ -190,7 +190,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   }, [mobileSidebarOpen])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div data-panel-shell className="flex h-screen overflow-hidden bg-background text-foreground">
       <aside
         aria-label="Menu lateral"
         className={cn(
@@ -308,7 +308,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
               <FeedbackButton />
 
               {user?.role === 'super_admin' && (
-                <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20 sm:inline-flex">
+                <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-primary/30 text-primary shadow-sm hover:bg-primary/10 sm:inline-flex">
                   <Link href="/superadmin" className="flex items-center gap-1.5">
                     <Crown className="h-4 w-4 shrink-0" />
                     <span className="hidden font-medium lg:inline">Super Admin</span>
@@ -320,10 +320,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Button
                   asChild
                   size="sm"
-                  className="h-9 gap-1.5 rounded-full border border-cyan-400/60 bg-indigo-600 px-3 text-white shadow-sm ring-1 ring-indigo-500/30 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                  className="h-9 gap-1.5 rounded-full border border-primary/40 bg-primary px-3 text-primary-foreground shadow-sm ring-1 ring-primary/30 hover:bg-primary/90"
                 >
                   <Link href="/dashboard" className="flex items-center gap-1.5" aria-label="Volver al panel de inicio" title="Volver al panel de inicio">
-                    <Store className="h-3.5 w-3.5 shrink-0 text-cyan-200" />
+                    <Store className="h-3.5 w-3.5 shrink-0" />
                     <span className="text-xs font-bold sm:hidden">Ir al Panel</span>
                     <span className="hidden font-bold sm:inline">Volver al panel</span>
                   </Link>

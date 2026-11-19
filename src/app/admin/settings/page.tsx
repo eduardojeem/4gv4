@@ -5,13 +5,12 @@ import Link from 'next/link'
 import {
   AlertCircle, ArrowRight,
   Building2,
-  Check, Clock,
+  Clock,
   Coins,
   Globe,
   Info, Loader2,
   Mail,
   MapPin,
-  Moon,
   Palette,
   Percent,
   Phone,
@@ -21,8 +20,6 @@ import {
   ShieldCheck,
   Sparkles,
   Store,
-  Sun,
-  Laptop,
   Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -42,14 +39,8 @@ import { BusinessProfileCard, type BusinessProfileActions } from '@/components/a
 import { SettingsSetupCard, type SettingsSetupStatus, type SettingsTarget } from '@/components/admin/settings/SettingsSetupCard'
 import { AdminMfaPolicyCard } from '@/components/admin/security/admin-mfa-policy-card'
 import { useAuth } from '@/contexts/auth-context'
-import { useTheme } from '@/contexts/theme-context'
-import {
-  DEFAULT_SYSTEM_COLOR_SCHEME,
-  getSystemColorSchemeOption,
-  isSystemColorScheme,
-  type SystemColorScheme,
-} from '@/lib/theme/color-schemes'
-import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
+import { PanelAppearanceSettings } from '@/components/admin/settings/PanelAppearanceSettings'
+
 import { getAdminSettingsText } from '@/lib/i18n/admin-settings'
 import {
   SUPPORTED_CURRENCIES,
@@ -130,7 +121,6 @@ export default function AdminSettingsPage() {
     scope,
   } = useSharedSettings()
   const { loading: authLoading } = useAuth()
-  const { theme: activeTheme, colorScheme: activeColorScheme, setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
   const [activeTab, setActiveTab] = useState<SettingsTab>('negocio')
 
@@ -263,18 +253,6 @@ export default function AdminSettingsPage() {
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [hasPendingChanges])
-
-  // Apariencia es una preferencia de cada persona: se aplica al instante y
-  // queda en este navegador. Antes se guardaba como dato de la organizacion,
-  // pero el panel nunca lo leia: no le llegaba a nadie mas y la pagina podia
-  // marcar un tema distinto del que se veia.
-  const handleThemeChange = (value: string) => {
-    setTheme(value as 'light' | 'dark' | 'system')
-  }
-
-  const handleColorChange = (value: SystemColorScheme) => {
-    setColorScheme(value)
-  }
 
   // El idioma de los formatos y el país forman el `locale` que guardó el
   // onboarding (es-PY): se actualiza junto con cualquiera de los dos.
@@ -432,9 +410,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  const activeSystemColorScheme = isSystemColorScheme(activeColorScheme) ? activeColorScheme : DEFAULT_SYSTEM_COLOR_SCHEME
-  const selectedColorScheme = getSystemColorSchemeOption(activeSystemColorScheme)
-  const selectedColorSchemeText = t.appearance.colorSchemes[selectedColorScheme.value] ?? selectedColorScheme
   // Una zona que no está en la lista (la guardó el onboarding o la app) se
   // muestra igual: antes el desplegable quedaba en blanco.
   const timeZoneOptions: Array<[string, string]> = Object.entries(t.regional.timeZones)
@@ -927,114 +902,7 @@ export default function AdminSettingsPage() {
 
         {/* TAB 4: APARIENCIA */}
         <TabsContent value="appearance" className="m-0 space-y-6 focus-visible:outline-none">
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="border-b bg-muted/20 pb-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Palette className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg font-semibold tracking-tight">
-                    Apariencia del panel
-                  </CardTitle>
-                  <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Es tu preferencia personal: se aplica al instante y queda en este navegador. Cada persona del equipo elige la suya. Solo cambia el panel: el marketplace y tu tienda online tienen su propio aspecto.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6 p-5 sm:p-6">
-              {/* Selector Visual de Tema */}
-              <div className="space-y-3">
-                <Label className="text-xs font-semibold text-foreground">
-                  Modo de visualización
-                </Label>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    { value: 'light', label: 'Modo claro', desc: 'Fondo blanco y contrastes nítidos', icon: Sun },
-                    { value: 'dark', label: 'Modo oscuro', desc: 'Tonos oscuros que descansan la vista', icon: Moon },
-                    { value: 'system', label: 'Según el dispositivo', desc: 'Sigue el modo de tu equipo', icon: Laptop },
-                  ].map((item) => {
-                    const isSelected = activeTheme === item.value
-                    const Icon = item.icon
-                    return (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => handleThemeChange(item.value)}
-                        aria-pressed={isSelected}
-                        className={cn(
-                          'flex flex-col items-start gap-2.5 rounded-xl border p-4 text-left transition-all',
-                          'hover:border-primary/50 hover:bg-muted/30',
-                          isSelected
-                            ? 'border-primary bg-primary/[0.04] shadow-sm ring-2 ring-primary/20'
-                            : 'border-border/80 bg-card'
-                        )}
-                      >
-                        <div className="flex w-full items-center justify-between">
-                          <div className={cn(
-                            'flex h-8 w-8 items-center justify-center rounded-lg',
-                            isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                          )}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          {isSelected ? <Check className="h-4 w-4 text-primary" /> : null}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Selector de Esquema Cromático */}
-              <div className="space-y-4 rounded-xl border border-border/80 bg-muted/20 p-4 sm:p-5">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <Label className="text-xs font-semibold text-foreground">
-                      Color principal
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Define el color de botones principales, estados activos, enlaces y gráficos.
-                    </p>
-                  </div>
-                  <Badge className="w-fit text-xs font-normal">
-                    {selectedColorSchemeText.label}
-                  </Badge>
-                </div>
-
-                <SystemColorSchemePicker
-                  value={activeSystemColorScheme}
-                  onChange={handleColorChange}
-                  labels={t.appearance.colorSchemes}
-                  footerText={t.appearance.colorSchemeFooter}
-                />
-              </div>
-
-              {/* Sandbox de Previsualización en Vivo */}
-              <div className="rounded-xl border border-border/80 bg-card p-5 shadow-sm space-y-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Vista previa
-                  </h4>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Así se ven los botones y etiquetas del panel con lo que elegiste:
-                </p>
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Button size="sm" className="shadow-sm">Botón principal</Button>
-                  <Button variant="outline" size="sm">Botón secundario</Button>
-                  <Badge className="bg-primary text-primary-foreground">Etiqueta activa</Badge>
-                  <Badge variant="secondary">Estado neutral</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <PanelAppearanceSettings />
         </TabsContent>
       </Tabs>
 

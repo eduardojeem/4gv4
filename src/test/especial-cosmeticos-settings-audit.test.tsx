@@ -219,4 +219,11 @@ describe('EspecialCosmeticosHome — Auditoría de configuraciones de /admin/web
     expect(screen.getByText('Sucursal Centro')).toBeInTheDocument()
     expect(screen.getByText('Sucursal Villa Morra')).toBeInTheDocument()
   })
+
+  it('incluye opción de volver al marketplace en el inicio de la tienda', () => {
+    render(<EspecialCosmeticosHome settings={baseSettings} />)
+    const marketplaceLink = screen.getByRole('link', { name: /Volver al Marketplace/i })
+    expect(marketplaceLink).toBeInTheDocument()
+    expect(marketplaceLink).toHaveAttribute('href', '/marketplace')
+  })
 })

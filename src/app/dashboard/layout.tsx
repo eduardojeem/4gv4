@@ -27,7 +27,7 @@ export default function DashboardLayout({
           <DashboardLayoutProvider>
               <RepairsProvider>
                 <TooltipProvider delayDuration={150}>
-                  <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
+                  <div data-panel-shell className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
                     <Sidebar />
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                       <Header />

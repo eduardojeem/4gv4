@@ -1,6 +1,8 @@
 'use client'
 
 import { useServerInsertedHTML } from 'next/navigation'
+import { SYSTEM_COLOR_SCHEME_VALUES } from '@/lib/theme/color-schemes'
+import { PANEL_STYLES } from '@/lib/theme/panel-appearance'
 import {
   DEFAULT_MARKETPLACE_THEME,
   MARKETPLACE_PATH_PREFIXES,
@@ -72,7 +74,11 @@ export function buildThemeInitScript(marketplaceTheme: MarketplaceTheme = DEFAUL
     var dark = theme === 'dark' || (theme === 'system' && systemPrefersDark);
 
     document.documentElement.classList.add(dark ? 'dark' : 'light');
+    if (scheme && scheme !== 'custom' && ${JSON.stringify(SYSTEM_COLOR_SCHEME_VALUES)}.indexOf(scheme) < 0 && scheme !== 'default') scheme = null;
     if (scheme && scheme !== 'custom') document.documentElement.setAttribute('data-color-scheme', scheme);
+    // El estilo del panel solo pinta dentro de [data-panel-shell] (styles/panel-appearance.css).
+    var panelStyle = localStorage.getItem('panelStyle');
+    document.documentElement.setAttribute('data-panel-style', ${JSON.stringify(PANEL_STYLES)}.indexOf(panelStyle) >= 0 ? panelStyle : 'neutral');
   } catch (e) {
     document.documentElement.classList.add('light');
   }

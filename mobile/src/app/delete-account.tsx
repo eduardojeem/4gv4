@@ -37,6 +37,9 @@ type Impact = {
   pending: { scheduledFor: string } | null;
   closesOrganizations: { id: string; name: string }[];
   supportEmail?: string;
+  /** false si entra solo con Google: confirma con un código por correo. Falta en servidores viejos. */
+  hasPassword?: boolean;
+  graceDays?: number;
 };
 
 type Step = 'review' | 'confirm';
@@ -49,10 +52,11 @@ function formatDate(value: string) {
  * Eliminar la cuenta desde la app (lo exige Google Play), en dos pasos para que
  * no pase sin querer:
  * 1. Qué se pierde, qué se conserva y alternativas, con casillas que hay que marcar.
- * 2. Contraseña, escribir ELIMINAR, mantener apretado el botón y, si el teléfono
- *    tiene huella o Face ID, confirmar con eso.
- * Usa la misma API que /saas/eliminar-cuenta: bloquea la cuenta en el momento y
- * a los 30 días borra los datos personales.
+ * 2. Contraseña (o, si entra con Google, un código que llega al correo),
+ *    escribir ELIMINAR, mantener apretado el botón y, si el teléfono tiene
+ *    huella o Face ID, confirmar con eso.
+ * Usa la misma API que /saas/eliminar-cuenta: bloquea la cuenta en el momento y,
+ * pasado el plazo que informa el servidor, borra los datos personales.
  */
 export default function DeleteAccountScreen() {
   const colors = usePalette();
@@ -66,30 +70,55 @@ export default function DeleteAccountScreen() {
   const [step, setStep] = useState<Step>('review');
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [password, setPassword] = useState('');
+  const [method, setMethod] = useState<'password' | 'code'>('password');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduledFor, setScheduledFor] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(true);
 
   useEffect(() => {
     apiFetch<Impact>('/api/account/delete')
-      .then(setImpact)
+      .then((data) => {
+        setImpact(data);
+        if (data.hasPassword === false) setMethod('code');
+      })
       .catch((err) => setLoadError(err instanceof Error ? err.message : 'No se pudo cargar la información de la cuenta.'));
   }, []);
 
   const closes = impact?.closesOrganizations ?? [];
   const closesNames = closes.map((org) => org.name).join(', ');
   const supportEmail = impact?.supportEmail || 'soporte@mitiendapy.com';
+  const graceDays = impact?.graceDays ?? 30;
   const acknowledgements = [
     { key: 'access', text: 'Entiendo que pierdo el acceso a Mi TiendaPy en todos mis dispositivos desde ahora.' },
-    { key: 'data', text: 'Entiendo que a los 30 días se borran mis datos personales y no se pueden recuperar.' },
+    { key: 'data', text: `Entiendo que a los ${graceDays} días se borran mis datos personales y no se pueden recuperar.` },
     ...(closes.length
       ? [{ key: 'business', text: `Entiendo que ${closesNames} se cierra para todo el equipo: la tienda online deja de verse y el plan se cancela.` }]
       : []),
   ];
   const allChecked = acknowledgements.every((item) => checks[item.key]);
   const confirmMatches = confirm.trim().toUpperCase() === CONFIRM_WORD;
-  const canHold = Boolean(password) && confirmMatches && !busy;
+  const secretReady = method === 'password' ? Boolean(password) : /^\d{6}$/.test(code.trim());
+  const canHold = secretReady && confirmMatches && !busy;
+
+  const requestCode = async () => {
+    if (sendingCode) return;
+    setSendingCode(true);
+    setError(null);
+    try {
+      await apiFetch('/api/account/delete/code', { method: 'POST' });
+      setCodeSent(true);
+      AccessibilityInfo.announceForAccessibility('Te mandamos el código por correo.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo mandar el código.');
+    } finally {
+      setSendingCode(false);
+    }
+  };
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/panel/profile' as never));
 
@@ -122,11 +151,12 @@ export default function DeleteAccountScreen() {
           return;
         }
       }
-      const result = await apiFetch<{ scheduledFor: string }>('/api/account/delete', {
+      const result = await apiFetch<{ scheduledFor: string; emailSent?: boolean }>('/api/account/delete', {
         method: 'POST',
-        body: JSON.stringify({ password, confirm, source: 'app' }),
+        body: JSON.stringify(method === 'password' ? { password, confirm, source: 'app' } : { code: code.trim(), confirm, source: 'app' }),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEmailSent(result.emailSent !== false);
       setScheduledFor(result.scheduledFor);
       AccessibilityInfo.announceForAccessibility('Tu cuenta quedó bloqueada.');
     } catch (err) {
@@ -175,7 +205,8 @@ export default function DeleteAccountScreen() {
                 <>
                   <Text style={[styles.title, { color: colors.text }]}>Cuenta bloqueada</Text>
                   <Text style={[styles.body, { color: colors.muted }]}>
-                    Tus datos personales se eliminan el {formatDate(scheduledFor)}. Te mandamos la confirmación por correo.
+                    Tus datos personales se eliminan el {formatDate(scheduledFor)}.{' '}
+                    {emailSent ? 'Te mandamos la confirmación por correo.' : 'No pudimos mandarte el correo de confirmación, pero el pedido quedó registrado.'}
                   </Text>
                   <Pressable onPress={finish} accessibilityRole="button" style={({ pressed }) => [styles.dangerButton, { opacity: pressed ? 0.88 : 1 }]}>
                     <Text style={styles.buttonText}>Salir</Text>
@@ -201,7 +232,7 @@ export default function DeleteAccountScreen() {
                     <>
                       <View style={styles.list}>
                         <Consequence icon="lock-closed-outline" tone="danger" text="La cuenta se bloquea en el momento: no vas a poder entrar en ningún dispositivo." colors={colors} />
-                        <Consequence icon="trash-outline" tone="danger" text="A los 30 días se borran tu nombre, correo, teléfono, foto y preferencias. No se puede deshacer." colors={colors} />
+                        <Consequence icon="trash-outline" tone="danger" text={`A los ${graceDays} días se borran tu nombre, correo, teléfono, foto y preferencias. No se puede deshacer.`} colors={colors} />
                         <Consequence icon="document-text-outline" tone="muted" text="Las ventas, cajas y facturas de los negocios se conservan sin tus datos, como exige la ley." colors={colors} />
                       </View>
 
@@ -263,25 +294,70 @@ export default function DeleteAccountScreen() {
                   ) : impact ? (
                     <>
                       <Text style={[styles.body, { color: colors.muted }]}>
-                        Vas a eliminar <Text style={{ color: colors.text, fontWeight: '800' }}>{impact.email ?? 'esta cuenta'}</Text>. Escribí tu contraseña y {CONFIRM_WORD} para confirmar.
+                        Vas a eliminar <Text style={{ color: colors.text, fontWeight: '800' }}>{impact.email ?? 'esta cuenta'}</Text>.{' '}
+                        {method === 'password'
+                          ? `Escribí tu contraseña y ${CONFIRM_WORD} para confirmar.`
+                          : `Te mandamos un código al correo de la cuenta. Escribilo junto con ${CONFIRM_WORD} para confirmar.`}
                       </Text>
 
-                      <View style={inputStyle}>
-                        <Ionicons name="lock-closed-outline" size={19} color={colors.muted} style={styles.fieldIcon} />
-                        <TextInput
-                          value={password}
-                          onChangeText={(value) => { setPassword(value); setError(null); }}
-                          accessibilityLabel="Contraseña"
-                          placeholder="Tu contraseña"
-                          placeholderTextColor={colors.muted}
-                          secureTextEntry
-                          autoCapitalize="none"
-                          autoComplete="current-password"
-                          textContentType="password"
-                          editable={!busy}
-                          style={[styles.textInput, { color: colors.text }]}
-                        />
-                      </View>
+                      {method === 'password' ? (
+                        <>
+                          <View style={inputStyle}>
+                            <Ionicons name="lock-closed-outline" size={19} color={colors.muted} style={styles.fieldIcon} />
+                            <TextInput
+                              value={password}
+                              onChangeText={(value) => { setPassword(value); setError(null); }}
+                              accessibilityLabel="Contraseña"
+                              placeholder="Tu contraseña"
+                              placeholderTextColor={colors.muted}
+                              secureTextEntry
+                              autoCapitalize="none"
+                              autoComplete="current-password"
+                              textContentType="password"
+                              editable={!busy}
+                              style={[styles.textInput, { color: colors.text }]}
+                            />
+                          </View>
+                          <Pressable onPress={() => { setMethod('code'); setError(null); }} disabled={busy} accessibilityRole="button" hitSlop={8}>
+                            <Text style={[styles.link, { color: palette.primary }]}>No sé mi contraseña: mandame un código</Text>
+                          </Pressable>
+                        </>
+                      ) : (
+                        <>
+                          <View style={inputStyle}>
+                            <Ionicons name="mail-outline" size={19} color={colors.muted} style={styles.fieldIcon} />
+                            <TextInput
+                              value={code}
+                              onChangeText={(value) => { setCode(value.replace(/\D/g, '').slice(0, 6)); setError(null); }}
+                              accessibilityLabel="Código del correo"
+                              placeholder={codeSent ? 'Código de 6 números' : 'Primero pedí el código'}
+                              placeholderTextColor={colors.muted}
+                              keyboardType="number-pad"
+                              autoComplete="one-time-code"
+                              textContentType="oneTimeCode"
+                              maxLength={6}
+                              editable={!busy && codeSent}
+                              style={[styles.textInput, { color: colors.text }]}
+                            />
+                          </View>
+                          <Pressable
+                            onPress={() => void requestCode()}
+                            disabled={busy || sendingCode}
+                            accessibilityRole="button"
+                            style={[styles.outlineDanger, { borderColor: palette.primary, opacity: sendingCode ? 0.6 : 1 }]}>
+                            {sendingCode ? (
+                              <ActivityIndicator color={palette.primary} />
+                            ) : (
+                              <Text style={[styles.outlineDangerText, { color: palette.primary }]}>{codeSent ? 'Reenviar código' : 'Mandarme el código'}</Text>
+                            )}
+                          </Pressable>
+                          {impact.hasPassword !== false && (
+                            <Pressable onPress={() => { setMethod('password'); setError(null); }} disabled={busy} accessibilityRole="button" hitSlop={8}>
+                              <Text style={[styles.link, { color: palette.primary }]}>Prefiero usar mi contraseña</Text>
+                            </Pressable>
+                          )}
+                        </>
+                      )}
                       <View style={[...inputStyle, confirmMatches && { borderColor: palette.danger }]}>
                         <TextInput
                           value={confirm}
