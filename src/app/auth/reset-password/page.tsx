@@ -4,13 +4,10 @@ import ResetPasswordContent from './ResetPasswordContent'
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#030712]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="absolute inset-0 blur-xl bg-blue-500/30 rounded-full" />
-            <div className="h-10 w-10 animate-spin border-2 border-blue-500 border-t-transparent rounded-full relative z-10" />
-          </div>
-          <p className="text-sm font-medium text-slate-400 tracking-wide">Cargando interfaz...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950" role="status">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Validando tu enlace…</p>
         </div>
       </div>
     }>

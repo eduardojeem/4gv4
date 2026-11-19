@@ -102,6 +102,13 @@ export default function LoginPage() {
   const isCustomerContext = Boolean(redirectTenantSlug) || rawRedirect.startsWith('/marketplace')
   const backHref = isCustomerContext ? rawRedirect || '/marketplace' : '/saas'
 
+  // `/auth/reset-password` manda acá con `?recuperar=1` cuando el enlace no
+  // sirve: se abre directo el pedido de un enlace nuevo.
+  const wantsRecovery = searchParams.get('recuperar') === '1'
+  useEffect(() => {
+    if (wantsRecovery) setResetOpen(true)
+  }, [wantsRecovery])
+
   const initializeActiveOrganization = async () => {
     try {
       const response = await fetch('/api/organizations', { method: 'GET', cache: 'no-store' })
