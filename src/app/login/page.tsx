@@ -39,6 +39,7 @@ import { browserSupportsPasskeys, describePasskeyError, isPasskeyCancellation } 
 import { describeAuthError } from '@/lib/auth/auth-error-messages'
 import { buildMfaPath } from '@/lib/auth/mfa'
 import { loadMfaState } from '@/lib/auth/mfa-client'
+import { requestPasswordResetEmail } from '@/lib/auth/request-password-reset'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -319,7 +320,7 @@ export default function LoginPage() {
 
     try {
       setResetLoading(true)
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+      const { error: resetErr } = await requestPasswordResetEmail(targetEmail, {
         redirectTo: siteUrl(`/auth/reset-password?next=${encodeURIComponent(rawRedirect || '/dashboard')}`),
         captchaToken: resetCaptchaToken,
       })
