@@ -515,16 +515,28 @@ export function renderAccountDeletionRequestedEmail(params: {
   scheduledFor: string
   closedOrganizations: string[]
   supportEmail: string
+  retentionYears: number
 }) {
   const date = new Date(params.scheduledFor).toLocaleDateString('es-PY', { day: 'numeric', month: 'long', year: 'numeric' })
   const closed = params.closedOrganizations.length
-    ? `<p>Como eras el único administrador, se cerró: ${params.closedOrganizations.map(escapeText).join(', ')}.</p>`
+    ? `<p>Como eras el único administrador, se cerró: ${params.closedOrganizations.map(escapeText).join(', ')}. Sus productos, clientes y archivos se conservan desactivados; si querés que también los borremos, pedilo a soporte.</p>`
     : ''
   return renderBrandedEmail({
     title: 'Recibimos tu pedido de eliminar la cuenta',
     preview: `Tu cuenta quedó bloqueada y tus datos personales se eliminan el ${date}.`,
     intro: 'Tu cuenta quedó bloqueada desde ahora y ya no podés iniciar sesión.',
-    bodyHtml: `<p>El ${escapeText(date)} se eliminan tus datos personales (nombre, correo, teléfono, foto y preferencias). Los registros comerciales y fiscales de los negocios se conservan sin tus datos, como exige la ley.</p>${closed}<p>Si no fuiste vos o te arrepentiste, escribinos a ${escapeText(params.supportEmail)} antes de esa fecha.</p>`,
+    bodyHtml: `<p>El ${escapeText(date)} se eliminan tus datos personales (nombre, correo, teléfono, foto y preferencias). Las ventas, la caja y los comprobantes de los negocios se conservan sin tus datos durante ${params.retentionYears} años, como exige la ley tributaria.</p>${closed}<p>Si no fuiste vos o te arrepentiste, escribinos a ${escapeText(params.supportEmail)} antes de esa fecha y cancelamos el pedido.</p>`,
+    brand: { name: 'MiTiendaPY', color: '#2563eb' },
+  })
+}
+
+/** Código de un solo uso para confirmar la eliminación de la cuenta. */
+export function renderAccountDeletionCodeEmail(params: { code: string; minutes: number; supportEmail: string }) {
+  return renderBrandedEmail({
+    title: 'Tu código para eliminar la cuenta',
+    preview: `Código: ${params.code}. Vence en ${params.minutes} minutos.`,
+    intro: 'Pediste eliminar tu cuenta. Para confirmarlo, ingresá este código:',
+    bodyHtml: `<p style="font-size:28px;font-weight:700;letter-spacing:6px;text-align:center">${escapeText(params.code)}</p><p>Vence en ${params.minutes} minutos y sirve una sola vez.</p><p>Si no fuiste vos, no hagas nada: tu cuenta sigue activa. Te conviene cambiar la contraseña o escribirnos a ${escapeText(params.supportEmail)}.</p>`,
     brand: { name: 'MiTiendaPY', color: '#2563eb' },
   })
 }
