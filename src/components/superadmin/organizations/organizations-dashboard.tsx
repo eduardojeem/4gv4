@@ -355,6 +355,7 @@ function OrganizationGridCard({
 
   const alerts = [
     attention.billingProblem && { tone: 'billing', label: 'Problema de cobro' },
+    attention.trialExpired && { tone: 'due', label: 'Prueba vencida sin pago' },
     attention.dueSoon && { tone: 'due', label: describeDue(org, now)?.label ?? 'Vence pronto' },
     attention.inactive && { tone: 'inactive', label: org.last_access_at ? `Sin entrar: ${access?.label.toLowerCase()}` : 'Nadie del equipo entró' },
     attention.noSubscription && { tone: 'no_subscription', label: 'Sin suscripción' },
@@ -365,7 +366,7 @@ function OrganizationGridCard({
       data-testid={`org-card-${org.slug}`}
       className={cn(
         'group flex flex-col overflow-hidden border-t-4 transition-shadow hover:shadow-md',
-        attention.erased ? 'border-t-border opacity-80' : attention.billingProblem ? 'border-t-red-500' : attention.dueSoon || attention.inactive ? 'border-t-amber-500' : 'border-t-emerald-500/70',
+        attention.erased ? 'border-t-border opacity-80' : attention.billingProblem ? 'border-t-red-500' : attention.trialExpired || attention.dueSoon || attention.inactive ? 'border-t-amber-500' : 'border-t-emerald-500/70',
       )}
     >
       <div className="flex items-start gap-3 p-4 pb-3">
@@ -458,7 +459,7 @@ function OrganizationListItem({
   return (
     <li
       data-testid={`org-row-${org.slug}`}
-      className={cn('flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0', attention.billingProblem && 'border-l-4 border-l-red-500', !attention.billingProblem && (attention.dueSoon || attention.inactive) && 'border-l-4 border-l-amber-500')}
+      className={cn('flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0', attention.billingProblem && 'border-l-4 border-l-red-500', !attention.billingProblem && (attention.trialExpired || attention.dueSoon || attention.inactive) && 'border-l-4 border-l-amber-500')}
     >
       <OrgAvatar org={org} size="sm" />
       <div className="min-w-0 flex-1 space-y-1">
@@ -858,7 +859,7 @@ export function OrganizationsDashboard({
                       const td = cn('border-b border-border/60 px-3 align-top', cellPad)
                       return (
                         <tr key={org.id} className={cn('group bg-card transition-colors hover:bg-muted/40', isSelected && 'bg-primary/5', attention.erased && 'opacity-70')}>
-                          <td className={cn(td, 'pl-4', 'border-l-4', attention.billingProblem ? 'border-l-red-500' : attention.dueSoon || attention.inactive ? 'border-l-amber-500' : 'border-l-transparent')}>
+                          <td className={cn(td, 'pl-4', 'border-l-4', attention.billingProblem ? 'border-l-red-500' : attention.trialExpired || attention.dueSoon || attention.inactive ? 'border-l-amber-500' : 'border-l-transparent')}>
                             <input type="checkbox" className="mt-2 size-4 accent-primary" aria-label={'Seleccionar ' + org.name} checked={isSelected} onChange={() => toggleSelected(org.id)} />
                           </td>
                           <td className={td}>
