@@ -70,6 +70,11 @@ export default function ResetPasswordContent() {
   const [confirmTouched, setConfirmTouched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // «Cambio de contraseña seguro» de Supabase: con una sesión de más de 24 h
+  // pide un código de 6 dígitos que llega por correo.
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
+  const [sendingCode, setSendingCode] = useState(false)
   const linkHrefRef = useRef<string>('')
 
   const router = useRouter()
@@ -87,6 +92,8 @@ export default function ResetPasswordContent() {
   const confirmId = useId()
   const checksId = useId()
   const confirmHintId = useId()
+  const codeId = useId()
+  const errorId = useId()
 
   useEffect(() => {
     let cancelled = false
@@ -94,7 +101,7 @@ export default function ResetPasswordContent() {
     const run = async () => {
       linkHrefRef.current = window.location.href
       try {
-        const result = await establishRecoverySession(supabase.auth, window.location.href)
+        const result = await establishRecoverySession(supabase.auth, window.location.href, () => window.location.href)
         if (cancelled) return
 
         if ('reason' in result) {
@@ -132,7 +139,26 @@ export default function ResetPasswordContent() {
   const strength = passwordStrength(password, allChecksMet)
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
   const showMismatch = confirmTouched && confirmPassword.length > 0 && !passwordsMatch
-  const canSubmit = allChecksMet && passwordsMatch && !loading
+  const codeComplete = /^\d{6}$/.test(code)
+  const canSubmit = allChecksMet && passwordsMatch && !loading && !sendingCode && (!needsCode || codeComplete)
+
+  const sendCode = async (): Promise<boolean> => {
+    setSendingCode(true)
+    try {
+      const { error: reauthError } = await supabase.auth.reauthenticate()
+      if (reauthError) {
+        setError(describePasswordUpdateError(reauthError).message)
+        return false
+      }
+      toast.success(email ? `Te enviamos un código a ${email}` : 'Te enviamos un código por correo')
+      return true
+    } catch (err) {
+      setError(describePasswordUpdateError(err as Error).message)
+      return false
+    } finally {
+      setSendingCode(false)
+    }
+  }
 
   const handleCapsLock = (event: React.KeyboardEvent<HTMLInputElement>) => {
     setCapsLock(event.getModifierState?.('CapsLock') ?? false)
@@ -153,12 +179,25 @@ export default function ResetPasswordContent() {
       return
     }
 
+    if (needsCode && !codeComplete) {
+      setError('Escribí el código de 6 dígitos que te llegó por correo.')
+      return
+    }
+
     setLoading(true)
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password })
+      const { error: updateError } = await supabase.auth.updateUser(
+        needsCode ? { password, nonce: code } : { password }
+      )
       if (updateError) {
         const described = describePasswordUpdateError(updateError)
         console.warn('[reset-password] updateUser falló', { kind: described.kind, code: updateError.code })
+        if (described.kind === 'reauth') {
+          setNeedsCode(true)
+          setCode('')
+          await sendCode()
+          return
+        }
         if (described.kind === 'session') {
           setView({ step: 'error', reason: 'expired' })
           return
@@ -324,7 +363,7 @@ export default function ResetPasswordContent() {
                         }}
                         onKeyUp={handleCapsLock}
                         onKeyDown={handleCapsLock}
-                        aria-describedby={checksId}
+                        aria-describedby={error ? `${checksId} ${errorId}` : checksId}
                         aria-invalid={password.length > 0 && !allChecksMet}
                         disabled={loading}
                         className="h-11 rounded-xl border-slate-200 bg-white pr-11 dark:border-slate-700 dark:bg-slate-950"
@@ -385,6 +424,9 @@ export default function ResetPasswordContent() {
                           </li>
                         ))}
                       </ul>
+                      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Tampoco puede ser una contraseña que aparezca en filtraciones de datos conocidas.
+                      </p>
                       {tooLong && (
                         <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
                           Máximo {PASSWORD_MAX_BYTES} caracteres.
@@ -410,7 +452,7 @@ export default function ResetPasswordContent() {
                         }}
                         onBlur={() => setConfirmTouched(true)}
                         onKeyUp={handleCapsLock}
-                        aria-describedby={confirmHintId}
+                        aria-describedby={error ? `${confirmHintId} ${errorId}` : confirmHintId}
                         aria-invalid={showMismatch}
                         disabled={loading}
                         className={cn(
@@ -437,8 +479,46 @@ export default function ResetPasswordContent() {
                     </p>
                   </div>
 
+                  {needsCode && (
+                    <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-500/30 dark:bg-blue-500/10">
+                      <Label htmlFor={codeId} className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                        Código de verificación
+                      </Label>
+                      <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                        Por seguridad, Supabase pide confirmar el cambio. Te enviamos un código de 6 dígitos
+                        {email ? <> a <span className="font-medium">{email}</span></> : ' por correo'}.
+                      </p>
+                      <Input
+                        id={codeId}
+                        name="one-time-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="\d{6}"
+                        maxLength={6}
+                        autoFocus
+                        value={code}
+                        onChange={(e) => {
+                          setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                          if (error) setError('')
+                        }}
+                        disabled={loading}
+                        placeholder="123456"
+                        className="h-11 rounded-xl border-slate-200 bg-white text-center font-mono text-lg tracking-[0.4em] dark:border-slate-700 dark:bg-slate-950"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void sendCode()}
+                        disabled={sendingCode || loading}
+                        className="text-[11px] font-medium text-blue-700 underline-offset-2 hover:underline disabled:opacity-50 dark:text-blue-300"
+                      >
+                        {sendingCode ? 'Enviando…' : 'Reenviar código'}
+                      </button>
+                    </div>
+                  )}
+
                   {error && (
                     <div
+                      id={errorId}
                       role="alert"
                       className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium leading-relaxed text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
                     >
