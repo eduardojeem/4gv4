@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import {
   DEFAULT_PLATFORM_BRANDING,
+  PLATFORM_BRANDING_TAG,
   getBrandingFromFeatures,
   normalizePlatformBranding,
   withBrandingInFeatures,
 } from '@/lib/platform/branding'
+import { SYSTEM_COLOR_SCHEME_VALUES } from '@/lib/theme/color-schemes'
 
 const brandingSchema = z.object({
   platformName: z.string().trim().min(2).max(80),
@@ -22,6 +25,11 @@ const brandingSchema = z.object({
   logoGlowDark: z.boolean().optional().default(true),
   marketplaceName: z.string().trim().min(2).max(80),
   marketplaceTagline: z.string().trim().min(2).max(140),
+  // Lo que se ve en el marketplace: no depende del tema de ninguna empresa.
+  marketplaceTheme: z.object({
+    mode: z.enum(['light', 'dark', 'system']),
+    colorScheme: z.enum(SYSTEM_COLOR_SCHEME_VALUES),
+  }).optional(),
   primaryCtaLabel: z.string().trim().min(2).max(50),
   primaryCtaHref: z.string().trim().min(1).max(500),
   secondaryCtaLabel: z.string().trim().min(2).max(50),
@@ -128,6 +136,9 @@ export async function PUT(request: NextRequest) {
   if (error) {
     return NextResponse.json({ success: false, error: 'No se pudo guardar la marca SaaS.' }, { status: 500 })
   }
+
+  // Sin esto el cambio (nombre, logo, tema del marketplace) tardaba hasta 5 minutos en verse.
+  revalidateTag(PLATFORM_BRANDING_TAG, 'max')
 
   await logSuperAdminAction({
     actorId: me.id,

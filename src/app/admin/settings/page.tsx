@@ -938,7 +938,7 @@ export default function AdminSettingsPage() {
                     Apariencia del panel
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Es tu preferencia personal: se aplica al instante y queda en este navegador. Cada persona del equipo elige la suya.
+                    Es tu preferencia personal: se aplica al instante y queda en este navegador. Cada persona del equipo elige la suya. Solo cambia el panel: el marketplace y tu tienda online tienen su propio aspecto.
                   </CardDescription>
                 </div>
               </div>

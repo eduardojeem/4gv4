@@ -19,7 +19,12 @@ export default async function MarketplaceLayout({
 }) {
   const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20 lg:pb-0">
+    // La paleta la define el superadmin (Marca SaaS → Marketplace), nunca el
+    // tema del panel de quien esté navegando.
+    <div
+      className="min-h-screen bg-background text-foreground pb-20 lg:pb-0"
+      data-color-scheme={branding.marketplaceTheme.colorScheme}
+    >
       <Suspense fallback={null}><MarketplacePublicNav initialBranding={branding} /></Suspense>
       <Suspense fallback={null}><MarketplaceLocationPicker /></Suspense>
       {children}

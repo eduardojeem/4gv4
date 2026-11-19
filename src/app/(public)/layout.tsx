@@ -7,6 +7,7 @@ import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
+import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { SiteAnalyticsTracker } from '@/components/analytics/SiteAnalyticsTracker'
 import {
@@ -80,7 +81,9 @@ export default async function PublicLayout({
         <CartProviderWithDrawer>
           <div 
             className="flex min-h-screen flex-col" 
-            data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
+            // Siempre con esquema propio: con color «custom» va el base y encima
+            // el de la marca. Sin atributo, la tienda heredaba la paleta del panel.
+            data-color-scheme={brandColor === 'custom' ? DEFAULT_SYSTEM_COLOR_SCHEME : brandColor}
             // Ver nota en [organizationSlug]/layout.tsx: --brand-primary lo
             // resuelve globals.css con ajuste automático para modo oscuro.
             data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
