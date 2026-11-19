@@ -15,6 +15,8 @@ import {
   Upload, RefreshCw,
   Sun,
   Moon,
+  Laptop,
+  Palette,
   Globe,
   Building2,
   Eye,
@@ -37,6 +39,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
+import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
+import type { ThemeMode } from '@/lib/theme/theme-scope'
 import {
   DEFAULT_PLATFORM_BRANDING,
   type PlatformBranding,
@@ -816,6 +820,57 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                     placeholder="Ej: Empresas y productos certificados"
                     maxLength={140}
                   />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-blue-600" />
+                    Apariencia del marketplace
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Es la única que manda en el marketplace. El tema que elige cada persona en su panel y los colores de cada tienda no lo cambian.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Modo</Label>
+                    <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Modo del marketplace">
+                      {([
+                        { value: 'light', label: 'Claro', icon: Sun },
+                        { value: 'dark', label: 'Oscuro', icon: Moon },
+                        { value: 'system', label: 'Según el dispositivo', icon: Laptop },
+                      ] as Array<{ value: ThemeMode; label: string; icon: typeof Sun }>).map((option) => {
+                        const selected = draft.marketplaceTheme.mode === option.value
+                        const Icon = option.icon
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => updateField('marketplaceTheme', { ...draft.marketplaceTheme, mode: option.value })}
+                            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                              selected
+                                ? 'border-blue-600 bg-blue-50 font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                                : 'border-slate-200 hover:border-blue-400 dark:border-slate-800'
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {option.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Color principal</Label>
+                    <SystemColorSchemePicker
+                      value={draft.marketplaceTheme.colorScheme}
+                      onChange={(colorScheme) => updateField('marketplaceTheme', { ...draft.marketplaceTheme, colorScheme })}
+                      footerText="Se aplica a botones, enlaces y acentos de todo el marketplace."
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

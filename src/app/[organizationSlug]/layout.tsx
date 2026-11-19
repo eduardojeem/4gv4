@@ -11,6 +11,7 @@ import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-ten
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
+import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { SiteAnalyticsTracker } from '@/components/analytics/SiteAnalyticsTracker'
 import {
@@ -78,7 +79,9 @@ export default async function OrganizationPublicLayout({
         <CartProviderWithDrawer>
           <div 
             className="flex min-h-screen flex-col" 
-            data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
+            // Siempre con esquema propio: con color «custom» va el base y encima
+            // el de la marca. Sin atributo, la tienda heredaba la paleta del panel.
+            data-color-scheme={brandColor === 'custom' ? DEFAULT_SYSTEM_COLOR_SCHEME : brandColor}
             data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
             style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
             data-storefront-style={storefrontStyle}

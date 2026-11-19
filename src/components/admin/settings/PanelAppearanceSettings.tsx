@@ -34,7 +34,7 @@ export function PanelAppearanceSettings() {
     <Card>
       <CardHeader className="border-b pb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3"><span className="rounded-xl bg-primary/10 p-2.5 text-primary"><Palette className="size-5" /></span><div><CardTitle><h2>Apariencia del panel</h2></CardTitle><CardDescription className="mt-2 max-w-xl leading-relaxed">Personalizá administración y dashboard. Los cambios se aplican al instante en este navegador; no hace falta guardar los datos del negocio.</CardDescription></div></div>
+          <div className="flex min-w-0 items-start gap-3"><span className="rounded-xl bg-primary/10 p-2.5 text-primary"><Palette className="size-5" /></span><div><CardTitle><h2>Apariencia del panel</h2></CardTitle><CardDescription className="mt-2 max-w-xl leading-relaxed">Personalizá administración y dashboard. Los cambios se aplican al instante en este navegador; no hace falta guardar los datos del negocio. Solo cambia el panel: el marketplace y tu tienda online tienen su propio aspecto.</CardDescription></div></div>
           <Button type="button" variant="outline" size="sm" onClick={resetAppearance}><RotateCcw className="mr-2 size-4" />Restablecer apariencia</Button>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">El acabado del panel no modifica la marca ni la plantilla de tu tienda pública.</p>

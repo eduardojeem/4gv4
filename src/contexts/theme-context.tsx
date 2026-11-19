@@ -1,12 +1,22 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
   isSystemColorScheme,
   type ThemeColorScheme,
 } from '@/lib/theme/color-schemes'
 import { normalizePanelStyle, readAppearancePreference, type PanelStyle } from '@/lib/theme/panel-appearance'
+import {
+  DEFAULT_MARKETPLACE_THEME,
+  PANEL_THEME_STORAGE_KEY,
+  PUBLIC_THEME_STORAGE_KEY,
+  isThemeMode,
+  themeScopeForPath,
+  type MarketplaceTheme,
+  type ThemeScope,
+} from '@/lib/theme/theme-scope'
 
 /** Lo que dura la transicion de color al cambiar de modo, igual que en el CSS. */
 export const THEME_TRANSITION_MS = 260
@@ -38,12 +48,40 @@ type CustomPalette = {
   neutralForeground?: string
 }
 
+const CUSTOM_PALETTE_KEYS: (keyof CustomPalette)[] = [
+  'primary',
+  'primaryForeground',
+  'accent',
+  'accentForeground',
+  'secondary',
+  'secondaryForeground',
+  'muted',
+  'mutedForeground',
+  'border',
+  'ring',
+  'sidebarPrimary',
+  'success',
+  'successForeground',
+  'warning',
+  'warningForeground',
+  'danger',
+  'dangerForeground',
+  'info',
+  'infoForeground',
+  'neutral',
+  'neutralForeground'
+]
+
 interface ThemeContextType {
+  /** Modo de la zona actual: el del panel, el del marketplace o el del visitante. */
   theme: Theme
+  /** Esquema de la zona actual. En tiendas lo pisa la propia tienda en su contenedor. */
   colorScheme: ColorScheme
   setTheme: (theme: Theme) => void
   setColorScheme: (scheme: ColorScheme) => void
   isDark: boolean
+  /** En qué zona está la página: el tema del panel solo se aplica en `panel`. */
+  scope: ThemeScope
   panelStyle: PanelStyle
   setPanelStyle: (style: PanelStyle) => void
   resetAppearance: () => void
@@ -65,6 +103,26 @@ interface ThemeProviderProps {
   children: React.ReactNode
   defaultTheme?: Theme
   defaultColorScheme?: ColorScheme
+  /** Lo que configuró el superadmin para el marketplace. */
+  marketplaceTheme?: MarketplaceTheme
+}
+
+function toKebab(s: string) {
+  return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
+}
+
+function readColorScheme(value: string | null, fallback: ColorScheme): ColorScheme {
+  return value === 'custom' || value === 'default' || (value && isSystemColorScheme(value)) ? value as ColorScheme : fallback
+}
+
+function readCustomPalette(value: string | null): CustomPalette | undefined {
+  if (!value) return undefined
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function ThemeProvider({
@@ -73,13 +131,17 @@ export function ThemeProvider({
   // este en oscuro. Quien ya eligio conserva su eleccion —incluido 'system',
   // que sigue al sistema operativo—. Tiene que coincidir con `ThemeInitScript`.
   defaultTheme = 'light',
-  defaultColorScheme = DEFAULT_SYSTEM_COLOR_SCHEME
+  defaultColorScheme = DEFAULT_SYSTEM_COLOR_SCHEME,
+  marketplaceTheme = DEFAULT_MARKETPLACE_THEME,
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
+  const scope = themeScopeForPath(usePathname())
+
+  // Preferencia personal del panel: la elige cada persona y queda en su navegador.
+  const [panelTheme, setPanelTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return defaultTheme
 
-    const savedTheme = readAppearancePreference('theme')
-    if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') return savedTheme
+    const savedTheme = readAppearancePreference(PANEL_THEME_STORAGE_KEY)
+    if (isThemeMode(savedTheme)) return savedTheme
 
     const legacyAdminDarkMode = readAppearancePreference('admin-dark-mode')
     if (legacyAdminDarkMode !== null) {
@@ -88,129 +150,117 @@ export function ThemeProvider({
 
     return defaultTheme
   })
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
-    if (typeof window === 'undefined') return defaultColorScheme
-    const saved = readAppearancePreference('colorScheme')
-    return saved === 'custom' || saved === 'default' || (saved && isSystemColorScheme(saved)) ? saved as ColorScheme : defaultColorScheme
+  // Modo que eligió el visitante en una tienda. Va aparte: si no, un visitante
+  // que pone oscuro en una tienda le cambiaba el panel a quien use ese navegador.
+  const [publicTheme, setPublicTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'light'
+    const saved = readAppearancePreference(PUBLIC_THEME_STORAGE_KEY)
+    return isThemeMode(saved) ? saved : 'light'
   })
-  const [panelStyle, setPanelStyle] = useState<PanelStyle>(() => normalizePanelStyle(readAppearancePreference('panelStyle')))
+  const [panelColorScheme, setPanelColorScheme] = useState<ColorScheme>(() => {
+    if (typeof window === 'undefined') return defaultColorScheme
+    return readColorScheme(readAppearancePreference('colorScheme'), defaultColorScheme)
+  })
+  const [panelStyle, setPanelStyleState] = useState<PanelStyle>(() => normalizePanelStyle(readAppearancePreference('panelStyle')))
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
   const [customPalette, setCustomPaletteState] = useState<CustomPalette | undefined>(() => {
     if (typeof window === 'undefined') return undefined
-
-    const savedCustomPalette = readAppearancePreference('customPalette')
-    if (!savedCustomPalette) return undefined
-
-    try {
-      const parsed = JSON.parse(savedCustomPalette)
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined
-    } catch {
-      return undefined
-    }
+    return readCustomPalette(readAppearancePreference('customPalette'))
   })
 
-  // helper to convert camelCase to kebab-case for CSS variables
-  function toKebab(s: string) {
-    return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
-  }
+  const theme: Theme = scope === 'panel'
+    ? panelTheme
+    : scope === 'marketplace'
+      ? marketplaceTheme.mode
+      : publicTheme
+  const colorScheme: ColorScheme = scope === 'panel'
+    ? panelColorScheme
+    : scope === 'marketplace'
+      ? marketplaceTheme.colorScheme
+      : defaultColorScheme
+  const usesCustomPalette = scope === 'panel' && colorScheme === 'custom'
   const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark)
 
   useEffect(() => {
     const root = window.document.documentElement
-    
-    // Remove previous theme classes
-    root.classList.remove('light', 'dark')
-    
-    // Apply theme class
-    if (isDark) {
-      root.classList.add('dark')
-    } else {
-      root.classList.add('light')
-    }
-    
-    // Apply color scheme
-    root.setAttribute('data-color-scheme', colorScheme)
-    root.setAttribute('data-panel-style', panelStyle)
-    
-    // Apply custom palette overrides when using custom scheme
-    const keys: (keyof CustomPalette)[] = [
-      'primary',
-      'primaryForeground',
-      'accent',
-      'accentForeground',
-      'secondary',
-      'secondaryForeground',
-      'muted',
-      'mutedForeground',
-      'border',
-      'ring',
-      'sidebarPrimary',
-      'success',
-      'successForeground',
-      'warning',
-      'warningForeground',
-      'danger',
-      'dangerForeground',
-      'info',
-      'infoForeground',
-      'neutral',
-      'neutralForeground'
-    ]
 
-    if (colorScheme === 'custom' && customPalette) {
-      keys.forEach((k) => {
+    root.classList.remove('light', 'dark')
+    root.classList.add(isDark ? 'dark' : 'light')
+
+    root.setAttribute('data-color-scheme', colorScheme)
+    // El estilo solo pinta dentro de [data-panel-shell] (styles/panel-appearance.css).
+    root.setAttribute('data-panel-style', panelStyle)
+
+    // La paleta propia es del panel: fuera de él se limpian los colores en línea
+    // para que mande el esquema del marketplace o el de la tienda.
+    if (usesCustomPalette && customPalette) {
+      CUSTOM_PALETTE_KEYS.forEach((k) => {
         const v = customPalette[k]
         if (typeof v === 'string' && v) root.style.setProperty(`--${toKebab(k)}`, v)
         else root.style.removeProperty(`--${toKebab(k)}`)
       })
-      try { localStorage.setItem('customPalette', JSON.stringify(customPalette)) } catch {}
     } else {
-      // Clear inline overrides to let scheme CSS take effect
-      keys.forEach((k) => {
+      CUSTOM_PALETTE_KEYS.forEach((k) => {
         root.style.removeProperty(`--${toKebab(k)}`)
       })
     }
-    
-    // Save to localStorage (no state changes here)
+  }, [colorScheme, customPalette, isDark, panelStyle, usesCustomPalette])
+
+  // Guardar en localStorage (no cambia estado).
+  useEffect(() => {
     try {
-      localStorage.setItem('theme', theme)
-      localStorage.setItem('colorScheme', colorScheme)
+      localStorage.setItem(PANEL_THEME_STORAGE_KEY, panelTheme)
+      localStorage.setItem('colorScheme', panelColorScheme)
       localStorage.setItem('panelStyle', panelStyle)
       localStorage.removeItem('admin-dark-mode')
+      if (customPalette) localStorage.setItem('customPalette', JSON.stringify(customPalette))
     } catch {}
-  }, [theme, colorScheme, customPalette, isDark, panelStyle])
+  }, [panelTheme, panelColorScheme, panelStyle, customPalette])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(PUBLIC_THEME_STORAGE_KEY, publicTheme)
+    } catch {}
+  }, [publicTheme])
+
+  // Cada zona cambia solo su propio modo. En el marketplace manda el superadmin.
+  const setTheme = useCallback((next: Theme) => {
+    if (scope === 'panel') setPanelTheme(next)
+    else if (scope === 'public') setPublicTheme(next)
+  }, [scope])
+
+  const setColorScheme = useCallback((next: ColorScheme) => {
+    if (scope === 'panel') setPanelColorScheme(next)
+  }, [scope])
+
+  const setPanelStyle = useCallback((next: PanelStyle) => {
+    if (scope === 'panel') setPanelStyleState(next)
+  }, [scope])
+
+  // El efecto aplica la paleta únicamente con el esquema custom.
   const setCustomPalette = useCallback((palette: CustomPalette) => {
     setCustomPaletteState(palette)
-    // El efecto aplica la paleta únicamente al seleccionar el esquema custom.
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('customPalette', JSON.stringify(palette))
-      } catch {}
-    }
   }, [])
+
   const resetAppearance = useCallback(() => {
-    setTheme(defaultTheme)
-    setColorScheme(defaultColorScheme)
-    setPanelStyle('neutral')
+    setPanelTheme(defaultTheme)
+    setPanelColorScheme(defaultColorScheme)
+    setPanelStyleState('neutral')
     setCustomPaletteState(undefined)
     try { localStorage.removeItem('customPalette') } catch {}
   }, [defaultTheme, defaultColorScheme])
 
+  // Lo que se cambia en otra pestaña se ve también en esta.
   useEffect(() => {
     const sync = (event: StorageEvent) => {
-      if (event.key === 'theme') setTheme(event.newValue === 'dark' || event.newValue === 'system' ? event.newValue : defaultTheme)
-      if (event.key === 'colorScheme') setColorScheme(event.newValue === 'custom' || event.newValue === 'default' || (event.newValue && isSystemColorScheme(event.newValue)) ? event.newValue as ColorScheme : defaultColorScheme)
-      if (event.key === 'panelStyle') setPanelStyle(normalizePanelStyle(event.newValue))
-      if (event.key === 'customPalette') {
-        try {
-          const parsed = event.newValue ? JSON.parse(event.newValue) : undefined
-          setCustomPaletteState(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined)
-        } catch { setCustomPaletteState(undefined) }
-      }
+      if (event.key === PANEL_THEME_STORAGE_KEY) setPanelTheme(isThemeMode(event.newValue) ? event.newValue : defaultTheme)
+      if (event.key === PUBLIC_THEME_STORAGE_KEY) setPublicTheme(isThemeMode(event.newValue) ? event.newValue : 'light')
+      if (event.key === 'colorScheme') setPanelColorScheme(readColorScheme(event.newValue, defaultColorScheme))
+      if (event.key === 'panelStyle') setPanelStyleState(normalizePanelStyle(event.newValue))
+      if (event.key === 'customPalette') setCustomPaletteState(readCustomPalette(event.newValue))
     }
     window.addEventListener('storage', sync)
     return () => window.removeEventListener('storage', sync)
@@ -240,7 +290,7 @@ export function ThemeProvider({
   useEffect(() => {
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
+
     const handleChange = (event: MediaQueryListEvent) => {
       setSystemPrefersDark(event.matches)
     }
@@ -256,13 +306,14 @@ export function ThemeProvider({
       setTheme,
       setColorScheme,
       isDark,
+      scope,
       panelStyle,
       setPanelStyle,
       resetAppearance,
       customPalette,
       setCustomPalette
     }),
-    [theme, colorScheme, isDark, customPalette, setCustomPalette, panelStyle, resetAppearance]
+    [theme, colorScheme, setTheme, setColorScheme, isDark, scope, panelStyle, setPanelStyle, resetAppearance, customPalette, setCustomPalette]
   )
 
   return (
