@@ -19,7 +19,7 @@ describe('tienda pública sin taller', () => {
   it('el layout resuelve el módulo en el servidor y se lo pasa al footer', () => {
     const layout = leer('src/app/[organizationSlug]/layout.tsx')
     expect(layout).toContain("const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
-    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />')
+    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />')
   })
 
   it('el footer exige el módulo además de la configuración del sitio', () => {
