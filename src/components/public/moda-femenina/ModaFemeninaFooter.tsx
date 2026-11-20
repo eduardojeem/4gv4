@@ -1,161 +1,152 @@
 'use client'
 
-import React from 'react'
 import Link from 'next/link'
-import { MapPin, Phone, Mail, Instagram, Facebook, Clock, ShieldCheck, Heart, ArrowUpRight } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { ArrowUpRight, Clock, Facebook, Instagram, Mail, MapPin, MessageCircle, Music2, Phone } from 'lucide-react'
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
+import { usePublicCategories } from '@/hooks/usePublicCategories'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { categoryCards } from '@/components/public/especial-cosmeticos/cosmetics-home-data'
+import './moda-femenina.css'
 
 interface ModaFemeninaFooterProps {
-  settings: WebsiteSettings
+  settings: WebsiteSettings | null
 }
 
+const SOCIAL_ICONS = { instagram: Instagram, facebook: Facebook, tiktok: Music2 } as const
+
+/**
+ * Pie de la plantilla «Boutique Femenina». Todo sale de lo que cargó el
+ * comercio: nombre, eslogan, categorías con productos, contacto, horarios y
+ * redes. Lo que no cargó no aparece (sin horarios ni promesas de ejemplo).
+ */
 export function ModaFemeninaFooter({ settings }: ModaFemeninaFooterProps) {
-  const company = useStorefrontCompanyInfo(settings.company_info)
-  const brandName = company.name?.trim() || 'Modeza.'
-  const displayName = brandName.endsWith('.') ? brandName : `${brandName}.`
+  const pathname = usePathname()
+  const company = useStorefrontCompanyInfo(settings?.company_info)
+  const { categories: liveCategories } = usePublicCategories()
+  const slug = getTenantSlugFromPathname(pathname)
+  const prefix = slug ? `/${slug}` : ''
+
+  const storeName = company?.name?.trim() || 'Tienda'
+  const about = company?.slogan?.trim() || company?.description?.trim() || ''
+  const categories = categoryCards(liveCategories, prefix, 5)
+  const socials = getSocialLinks(company)
+  const phone = company?.phone?.trim() || ''
+  const whatsapp = (company?.whatsapp || '').replace(/\D/g, '')
+  const email = company?.email?.trim() || ''
+  const address = company?.address?.trim() || ''
+  const hours = [
+    company?.hours?.weekdays?.trim() && `Lunes a viernes: ${company.hours.weekdays.trim()}`,
+    company?.hours?.saturday?.trim() && `Sábados: ${company.hours.saturday.trim()}`,
+    company?.hours?.sunday?.trim() && `Domingos: ${company.hours.sunday.trim()}`,
+  ].filter(Boolean) as string[]
+  const hasContact = Boolean(phone || whatsapp || email || address || hours.length)
 
   return (
-    <footer className="bg-[#F5EFEB] dark:bg-[#1C1816] text-[#1A1A1A] dark:text-[#F7F3EE] border-t border-[#736B63]/15 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
-          {/* Columna 1: Identidad */}
+    <footer id="contacto" className="scroll-mt-24 bg-[#F5EFEB] dark:bg-[#1C1816] text-[#1A1A1A] dark:text-[#F7F3EE] border-t border-[#736B63]/15 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16">
           <div className="space-y-4">
-            <h3 className="font-editorial text-3xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#F7F3EE]">
-              {displayName}
-            </h3>
-            <p className="text-sm text-[#736B63] dark:text-[#A89F95] leading-relaxed">
-              Diseños minimalistas de impacto máximo. Redefiní tu estilo con prendas atemporales y sofisticación en cada detalle.
-            </p>
-            <div className="pt-2 flex items-center gap-3">
-              {company.instagram && (
-                <a
-                  href={company.instagram.startsWith('http') ? company.instagram : `https://instagram.com/${company.instagram.replace('@', '')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-full bg-white dark:bg-[#2A2421] border border-[#736B63]/15 flex items-center justify-center text-[#1A1A1A] dark:text-[#F7F3EE] hover:bg-[#E06B3A] hover:text-white hover:border-[#E06B3A] transition-all shadow-sm"
-                  aria-label="Instagram"
-                >
-                  <Instagram className="w-4 h-4" />
-                </a>
-              )}
-              {company.facebook && (
-                <a
-                  href={company.facebook.startsWith('http') ? company.facebook : `https://facebook.com/${company.facebook}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-full bg-white dark:bg-[#2A2421] border border-[#736B63]/15 flex items-center justify-center text-[#1A1A1A] dark:text-[#F7F3EE] hover:bg-[#E06B3A] hover:text-white hover:border-[#E06B3A] transition-all shadow-sm"
-                  aria-label="Facebook"
-                >
-                  <Facebook className="w-4 h-4" />
-                </a>
-              )}
-            </div>
+            <p className="font-editorial text-3xl font-bold tracking-tight">{storeName}</p>
+            {about && <p className="text-sm text-[#736B63] dark:text-[#A89F95] leading-relaxed">{about}</p>}
+            {socials.length > 0 && (
+              <ul className="pt-2 flex items-center gap-3">
+                {socials.map((social) => {
+                  const Icon = SOCIAL_ICONS[social.platform]
+                  return (
+                    <li key={social.platform}>
+                      <a
+                        href={social.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-10 h-10 rounded-full bg-white dark:bg-[#2A2421] border border-[#736B63]/15 flex items-center justify-center hover:bg-[#E06B3A] hover:text-white hover:border-[#E06B3A] transition-all shadow-sm"
+                        aria-label={`${social.label} de ${storeName}`}
+                      >
+                        <Icon className="w-4 h-4" aria-hidden />
+                      </a>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
 
-          {/* Columna 2: Colecciones */}
-          <div className="space-y-4">
-            <h4 className="font-editorial text-lg font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-              Colecciones
-            </h4>
-            <ul className="space-y-2.5 text-sm text-[#736B63] dark:text-[#A89F95]">
-              <li>
-                <Link href="/productos?category=Vestidos" className="hover:text-[#E06B3A] transition-colors flex items-center justify-between group">
-                  <span>Vestidos & Monos</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </li>
-              <li>
-                <Link href="/productos?category=Tops" className="hover:text-[#E06B3A] transition-colors flex items-center justify-between group">
-                  <span>Blusas & Camisas</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </li>
-              <li>
-                <Link href="/productos?category=Outerwear" className="hover:text-[#E06B3A] transition-colors flex items-center justify-between group">
-                  <span>Blazers & Abrigos</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </li>
-              <li>
-                <Link href="/productos?category=Bottoms" className="hover:text-[#E06B3A] transition-colors flex items-center justify-between group">
-                  <span>Pantalones & Jeans</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </li>
-              <li>
-                <Link href="/ofertas" className="text-[#E06B3A] font-semibold hover:underline flex items-center gap-1">
-                  <span>Liquidación hasta 50% OFF</span>
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {categories.length > 0 && (
+            <nav aria-label="Categorías" className="space-y-4">
+              <h2 className="font-editorial text-lg font-bold">Categorías</h2>
+              <ul className="space-y-1 text-sm text-[#5F5750] dark:text-[#A89F95]">
+                {categories.map((category) => (
+                  <li key={category.id}>
+                    <Link href={category.href} className="group flex items-center justify-between py-1.5 hover:text-[#C2531F] dark:hover:text-[#F07C48] transition-colors">
+                      <span>{category.name}</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <Link href={`${prefix}/ofertas`} className="inline-block py-1.5 font-semibold text-[#C2531F] dark:text-[#F07C48] hover:underline">
+                    Ver ofertas
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+          )}
 
-          {/* Columna 3: Información y Tienda */}
-          <div className="space-y-4">
-            <h4 className="font-editorial text-lg font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-              Atención al Cliente
-            </h4>
-            <ul className="space-y-2.5 text-sm text-[#736B63] dark:text-[#A89F95]">
-              {company.phone && (
-                <li className="flex items-center gap-2.5">
-                  <Phone className="w-4 h-4 text-[#E06B3A] shrink-0" />
-                  <span>{company.phone}</span>
-                </li>
-              )}
-              {company.whatsapp && (
-                <li className="flex items-center gap-2.5">
-                  <span className="w-4 h-4 text-[#E06B3A] shrink-0 font-bold">WA</span>
-                  <span>WhatsApp: {company.whatsapp}</span>
-                </li>
-              )}
-              {company.address && (
-                <li className="flex items-start gap-2.5">
-                  <MapPin className="w-4 h-4 text-[#E06B3A] shrink-0 mt-0.5" />
-                  <span>{company.address}</span>
-                </li>
-              )}
-              <li className="flex items-center gap-2.5">
-                <Clock className="w-4 h-4 text-[#E06B3A] shrink-0" />
-                <span>Lun a Sáb: 09:00 - 19:00</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Columna 4: Club & Newsletter */}
-          <div className="space-y-4">
-            <h4 className="font-editorial text-lg font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-              Modeza Club
-            </h4>
-            <p className="text-sm text-[#736B63] dark:text-[#A89F95]">
-              Suscribite para recibir lanzamientos exclusivos, adelantos de temporada y 10% OFF en tu primera compra.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="email"
-                placeholder="Tu correo electrónico..."
-                className="w-full px-4 py-2.5 rounded-full border border-[#736B63]/25 bg-white dark:bg-[#2A2421] text-xs focus:outline-none focus:border-[#E06B3A]"
-              />
-              <button
-                type="button"
-                className="px-4 py-2.5 rounded-full bg-[#1A1A1A] text-white text-xs font-semibold hover:bg-[#E06B3A] transition-colors shrink-0"
-              >
-                Unirme
-              </button>
+          {hasContact && (
+            <div className="space-y-4">
+              <h2 className="font-editorial text-lg font-bold">Contacto</h2>
+              <ul className="space-y-3 text-sm text-[#5F5750] dark:text-[#A89F95]">
+                {phone && (
+                  <li>
+                    <a href={`tel:${phone.replace(/\s/g, '')}`} className="flex items-center gap-2.5 hover:text-[#C2531F] dark:hover:text-[#F07C48]">
+                      <Phone className="w-4 h-4 text-[#C2531F] dark:text-[#F07C48] shrink-0" aria-hidden />
+                      <span>{phone}</span>
+                    </a>
+                  </li>
+                )}
+                {whatsapp && (
+                  <li>
+                    <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 hover:text-[#C2531F] dark:hover:text-[#F07C48]">
+                      <MessageCircle className="w-4 h-4 text-[#C2531F] dark:text-[#F07C48] shrink-0" aria-hidden />
+                      <span>WhatsApp</span>
+                    </a>
+                  </li>
+                )}
+                {email && (
+                  <li>
+                    <a href={`mailto:${email}`} className="flex items-center gap-2.5 break-all hover:text-[#C2531F] dark:hover:text-[#F07C48]">
+                      <Mail className="w-4 h-4 text-[#C2531F] dark:text-[#F07C48] shrink-0" aria-hidden />
+                      <span>{email}</span>
+                    </a>
+                  </li>
+                )}
+                {address && (
+                  <li className="flex items-start gap-2.5">
+                    <MapPin className="w-4 h-4 text-[#C2531F] dark:text-[#F07C48] shrink-0 mt-0.5" aria-hidden />
+                    <span>{address}</span>
+                  </li>
+                )}
+                {hours.length > 0 && (
+                  <li className="flex items-start gap-2.5">
+                    <Clock className="w-4 h-4 text-[#C2531F] dark:text-[#F07C48] shrink-0 mt-0.5" aria-hidden />
+                    <span className="space-y-0.5">
+                      {hours.map((line) => <span key={line} className="block">{line}</span>)}
+                    </span>
+                  </li>
+                )}
+              </ul>
             </div>
-            <div className="pt-2 flex items-center gap-2 text-xs text-[#736B63] dark:text-[#A89F95]">
-              <ShieldCheck className="w-4 h-4 text-[#E06B3A]" />
-              <span>Compra 100% segura y protegida</span>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Separador inferior */}
-        <div className="mt-16 pt-8 border-t border-[#736B63]/15 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#736B63] dark:text-[#A89F95]">
-          <p>© {new Date().getFullYear()} {company.name || 'Modeza'}. Todos los derechos reservados.</p>
-          <p className="flex items-center gap-1">
-            <span>Potenciado con elegancia por</span>
-            <span className="font-semibold text-[#1A1A1A] dark:text-[#F7F3EE]">MiTienda.py</span>
+        <div className="mt-14 pt-8 border-t border-[#736B63]/15 flex flex-col items-center gap-4 text-xs text-[#5F5750] dark:text-[#A89F95] sm:flex-row sm:justify-between">
+          <p>© {new Date().getFullYear()} {storeName}</p>
+          <LegalFooterLinks className="[&_ul]:justify-center [&_ul]:text-xs" />
+          <p>
+            Tienda creada con <Link href="/" className="font-semibold text-[#1A1A1A] dark:text-[#F7F3EE] hover:underline">MiTiendaPy</Link>
           </p>
         </div>
       </div>

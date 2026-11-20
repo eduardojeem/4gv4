@@ -50,7 +50,6 @@ export function StorefrontAppearancePreview({
     <BrandColorScope
       brandColor={value.brandColor || 'blue'}
       customBrandColor={value.customBrandColor}
-      brandPalette={value.brandPalette}
       className={cn(
         'overflow-hidden rounded-xl border bg-background text-foreground shadow-sm transition-all duration-300',
         isMobile ? 'max-w-[320px] mx-auto' : 'w-full',
@@ -98,8 +97,8 @@ export function StorefrontAppearancePreview({
             theme.hero,
             style === 'fashion' && 'from-stone-900 via-stone-900 to-stone-800',
             style === 'especial-para-barbero' && 'from-[#0B0B0F] via-[#111116] to-[#1A1412] border-b border-primary/30',
-            style === 'especial-cosmeticos' && !value.brandPalette && 'from-rose-500 via-pink-400 to-amber-200 border-b border-rose-300',
-            style === 'moda-femenina' && !value.brandPalette && 'from-[#C45E2A] via-[#E06B3A] to-[#FBF7F2] text-zinc-900 border-b border-[#E06B3A]/30'
+            style === 'especial-cosmeticos' && 'from-rose-500 via-pink-400 to-amber-200 border-b border-rose-300',
+            style === 'moda-femenina' && 'from-[#C45E2A] via-[#E06B3A] to-[#FBF7F2] text-zinc-900 border-b border-[#E06B3A]/30'
           )}>
             <span className={cn(STOREFRONT_EYEBROW_CLASS[style], 'text-[9px]', style !== 'sport' && style !== 'tech' && style !== 'market' && 'text-white/80')}>
               {verticalDef.hero.badge || 'Bienvenidos'}
