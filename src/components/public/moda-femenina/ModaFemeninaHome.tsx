@@ -1,29 +1,33 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import {
   ArrowRight,
-  ArrowLeft,
-  Truck,
-  RotateCcw,
+  Award,
+  Clock,
+  CreditCard,
+  HeartHandshake,
+  MapPin,
+  MessageCircle,
+  Package,
   ShieldCheck,
-  Headphones,
+  ShoppingBag,
   Sparkles,
   Star,
-  Lock,
-  Play,
-  Heart,
-  ShoppingBag,
-  CheckCircle2,
+  Truck,
+  type LucideIcon,
 } from 'lucide-react'
+import { AppImage } from '@/components/ui/app-image'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
-import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { useHydrated } from '@/hooks/use-hydrated'
+import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { fetchPublicProducts, newestProductsKey, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
 import { ProductCard } from '@/components/public/ProductCard'
+import { categoryCards, cityFromAddress, offerCards, productPhoto } from '@/components/public/especial-cosmeticos/cosmetics-home-data'
 import type { WebsiteSettings } from '@/types/website-settings'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
@@ -35,7 +39,42 @@ interface ModaFemeninaHomeProps {
   capabilities?: StorefrontCapabilities
 }
 
-export function ModaFemeninaHome({ settings, branches, capabilities }: ModaFemeninaHomeProps) {
+/** Fotos de ambientación de la plantilla: decorativas, se usan solo si la tienda no tiene fotos propias. */
+const TEMPLATE_PHOTOS = {
+  hero: '/images/templates/moda-femenina/hero-model.jpg',
+  offers: '/images/templates/moda-femenina/promo-sale.jpg',
+  categories: [
+    '/images/templates/moda-femenina/cat-dresses.jpg',
+    '/images/templates/moda-femenina/cat-tops.jpg',
+    '/images/templates/moda-femenina/cat-outerwear.jpg',
+    '/images/templates/moda-femenina/cat-bottoms.jpg',
+  ],
+}
+
+const TRUST_ICONS: Record<string, LucideIcon> = {
+  truck: Truck,
+  'credit-card': CreditCard,
+  shield: ShieldCheck,
+  message: MessageCircle,
+  star: Star,
+  award: Award,
+  package: Package,
+  'map-pin': MapPin,
+  sparkles: Sparkles,
+  handshake: HeartHandshake,
+  clock: Clock,
+}
+
+const ACCENT_TEXT = 'text-[#C2531F] dark:text-[#F07C48]'
+
+/**
+ * Inicio de la plantilla «Boutique Femenina». Todo lo que muestra sale de la
+ * tienda: nombre, textos de portada, beneficios, categorías, ofertas y
+ * productos. Lo que el comercio no cargó no aparece: la primera versión traía
+ * cifras («10K+ clientas», «4.9/5»), envío gratis, cambios a 30 días y un
+ * «Hasta 50% Off» escritos a mano que se mostraban en todas las tiendas.
+ */
+export function ModaFemeninaHome({ settings, capabilities }: ModaFemeninaHomeProps) {
   const pathname = usePathname()
   const company = useStorefrontCompanyInfo(settings.company_info)
   const { categories: liveCategories } = usePublicCategories()
@@ -43,405 +82,267 @@ export function ModaFemeninaHome({ settings, branches, capabilities }: ModaFemen
   const prefix = slug ? `/${slug}` : ''
   const hasCatalog = capabilities?.hasCatalog !== false
 
-  // Carga de productos reales de la tienda
-  const { data: productsData, isLoading: productsLoading } = useSWR(
+  const { data: productsData, isLoading: productsFetching, error: productsError } = useSWR(
     hasCatalog ? newestProductsKey(slug) : null,
     fetchPublicProducts,
     NEWEST_PRODUCTS_SWR_OPTIONS
   )
+  const { data: offerData } = useSWR(
+    hasCatalog ? withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', slug) : null,
+    fetchPublicProducts,
+    NEWEST_PRODUCTS_SWR_OPTIONS
+  )
 
-  const products = useMemo(() => {
-    return productsData ?? []
-  }, [productsData])
+  // La caché de SWR es global: en el navegador los productos pueden estar desde
+  // el primer dibujo y en el servidor no. Hasta hidratar se dibuja lo mismo que el servidor.
+  const hydrated = useHydrated()
+  const products = useMemo(() => (hydrated ? productsData ?? [] : []), [hydrated, productsData])
+  const offerProducts = hydrated ? offerData : undefined
+  const productsLoading = hasCatalog && (!hydrated || productsFetching)
 
-  // Categorías de moda femenina predeterminadas con soporte a datos en vivo
-  const displayCategories = useMemo(() => {
-    const fallbackCategories = [
-      {
-        id: 'dresses',
-        name: 'Vestidos',
-        englishName: 'Dresses',
-        count: 24,
-        image: '/images/templates/moda-femenina/cat-dresses.jpg',
-        href: `${prefix}/productos?category=Vestidos`,
-      },
-      {
-        id: 'tops',
-        name: 'Tops & Blusas',
-        englishName: 'Tops',
-        count: 18,
-        image: '/images/templates/moda-femenina/cat-tops.jpg',
-        href: `${prefix}/productos?category=Tops`,
-      },
-      {
-        id: 'outerwear',
-        name: 'Blazers & Abrigos',
-        englishName: 'Outerwear',
-        count: 20,
-        image: '/images/templates/moda-femenina/cat-outerwear.jpg',
-        href: `${prefix}/productos?category=Outerwear`,
-      },
-      {
-        id: 'bottoms',
-        name: 'Pantalones & Jeans',
-        englishName: 'Bottoms',
-        count: 16,
-        image: '/images/templates/moda-femenina/cat-bottoms.jpg',
-        href: `${prefix}/productos?category=Bottoms`,
-      },
-    ]
+  const offers = useMemo(() => offerCards(offerProducts, 50), [offerProducts])
+  const maxDiscount = offers.reduce((max, offer) => Math.max(max, offer.discountPercent), 0)
+  const categories = useMemo(
+    () => (hasCatalog ? categoryCards(liveCategories, prefix, 4) : []),
+    [hasCatalog, liveCategories, prefix]
+  )
 
-    if (!liveCategories || liveCategories.length === 0) {
-      return fallbackCategories
-    }
+  const storeName = company?.name?.trim() || 'Nuestra tienda'
+  const slogan = company?.slogan?.trim() || ''
+  const description = company?.description?.trim() || ''
+  const city = cityFromAddress(company?.address)
 
-    // Si la tienda tiene categorías reales, adaptamos sus nombres
-    return fallbackCategories.map((fallback, idx) => {
-      const match = liveCategories[idx]
-      if (!match) return fallback
-      return {
-        id: match.id,
-        name: match.name,
-        englishName: match.name,
-        count: match.productCount ?? fallback.count,
-        image: fallback.image,
-        href: `${prefix}/productos?category=${encodeURIComponent(match.name)}`,
-      }
-    })
-  }, [liveCategories, prefix])
+  const heroVisible = settings.hero_content?.enabled !== false
+  const heroBadge = settings.hero_content?.badge?.trim() || city
+  const heroTitle = settings.hero_content?.title?.trim() || storeName
+  const heroSubtitle = settings.hero_content?.subtitle?.trim() || slogan || description
+  const heroCtaText = settings.hero_content?.ctaPrimaryText?.trim() || 'Ver colección'
+  const heroPhoto = productPhoto(products)
 
-  // Beneficios de confianza
-  const trustItems = useMemo(() => {
-    return [
-      {
-        icon: Truck,
-        title: 'Envío Gratis',
-        subtitle: 'En compras superiores a Gs. 200.000',
-      },
-      {
-        icon: RotateCcw,
-        title: 'Cambios Fáciles',
-        subtitle: 'Garantía de cambio por 30 días',
-      },
-      {
-        icon: ShieldCheck,
-        title: 'Pago Seguro',
-        subtitle: '100% protegido con todas las tarjetas',
-      },
-      {
-        icon: Headphones,
-        title: 'Atención 24/7',
-        subtitle: 'Asesoría de estilo por WhatsApp',
-      },
-    ]
-  }, [])
+  const trustItems = settings.trust_bar?.enabled === false
+    ? []
+    : (settings.trust_bar?.items || []).filter((item) => item.active !== false && item.title?.trim()).slice(0, 4)
 
-  // Imagen del hero
-  const heroImage = '/images/templates/moda-femenina/hero-model.jpg'
-  const heroBadge = settings.hero_content?.badge || 'NEW COLLECTION 2026'
-  const heroTitle = settings.hero_content?.title || 'Timeless'
-  const heroSubtitle =
-    settings.hero_content?.subtitle ||
-    'Minimal designs. Maximum impact. Redefine your wardrobe with pieces that speak sophistication.'
+  const offersVisible = hasCatalog && offers.length > 0 && settings.offers_section?.enabled !== false
+  const offersEyebrow = settings.offers_section?.eyebrow?.trim() || 'Ofertas de la tienda'
+  const offersTitle = settings.offers_section?.title?.trim() || (maxDiscount > 0 ? `Hasta ${maxDiscount}% de descuento` : 'Productos en oferta')
+  const offersSubtitle = settings.offers_section?.subtitle?.trim() || `${offers.length} ${offers.length === 1 ? 'producto rebajado' : 'productos rebajados'} en la tienda.`
+  const offerImage = offers.find((offer) => offer.image)?.image || TEMPLATE_PHOTOS.offers
 
   return (
-    <div className="moda-femenina-root min-h-screen flex flex-col font-sans selection:bg-[#E06B3A]/20 selection:text-[#E06B3A]">
-      <main className="flex-1">
-        {/* ── 1. PORTADA HERO (Timeless Elegance) ── */}
-        <section className="relative overflow-hidden pt-8 pb-16 sm:pb-24 lg:pt-12 lg:pb-32 bg-[#FAF7F2] dark:bg-[#181513] transition-colors">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-              {/* Columna Izquierda: Tipografía y Botones */}
-              <div className="lg:col-span-7 space-y-6 sm:space-y-8 z-10 text-center lg:text-left">
-                {/* Overline / Badge */}
-                <div className="inline-flex items-center gap-2">
-                  <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-[#E06B3A]">
-                    {heroBadge}
-                  </span>
-                </div>
-
-                {/* Título Principal Editorial */}
-                <h1 className="font-editorial text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#F7F3EE] leading-[1.05]">
-                  {heroTitle}
-                  <span className="block font-signature text-[#E06B3A] text-6xl sm:text-8xl lg:text-9xl font-normal leading-[1.1] pt-1">
-                    Elegance
-                  </span>
-                </h1>
-
-                {/* Descripción */}
-                <p className="max-w-xl mx-auto lg:mx-0 text-base sm:text-lg text-[#736B63] dark:text-[#A89F95] leading-relaxed">
-                  {heroSubtitle}
-                </p>
-
-                {/* Botones de Acción */}
-                <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                  <Link
-                    href={`${prefix}/productos`}
-                    className="inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#1A1A1A] hover:bg-[#E06B3A] text-white text-sm font-semibold tracking-wide transition-all shadow-md group"
-                  >
-                    <span>Explorar Colección</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-
-                  <a
-                    href="#colecciones"
-                    className="inline-flex items-center gap-2.5 px-7 py-4 rounded-full bg-white/90 dark:bg-[#221E1B] hover:bg-stone-50 dark:hover:bg-[#2A2421] text-[#1A1A1A] dark:text-[#F7F3EE] text-sm font-semibold border border-[#736B63]/20 transition-all shadow-sm"
-                  >
-                    <Play className="w-4 h-4 fill-current text-[#E06B3A]" />
-                    <span>Ver Lookbook</span>
-                  </a>
-                </div>
-
-                {/* Insignias de confianza en escritorio */}
-                <div className="pt-6 hidden sm:flex items-center justify-center lg:justify-start gap-6 text-xs text-[#736B63] dark:text-[#A89F95]">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#E06B3A]" />
-                    <span>Diseños exclusivos</span>
-                  </div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#736B63]/30" />
-                  <div className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                    <span>4.9 / 5 estrellas de clientas</span>
+    <div className="moda-femenina-root min-h-screen flex flex-col font-sans selection:bg-[#E06B3A]/20">
+      <div className="flex-1">
+        {heroVisible && (
+          <section className="relative overflow-hidden pt-8 pb-16 sm:pb-24 lg:pt-12 lg:pb-28 bg-[#FAF7F2] dark:bg-[#181513] transition-colors">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+                <div className="lg:col-span-7 space-y-6 sm:space-y-8 z-10 text-center lg:text-left">
+                  {heroBadge && (
+                    <p className={`text-xs sm:text-sm font-bold uppercase tracking-[0.25em] ${ACCENT_TEXT}`}>{heroBadge}</p>
+                  )}
+                  <h1 className="font-editorial text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#F7F3EE] leading-[1.05] break-words">
+                    {heroTitle}
+                  </h1>
+                  {heroSubtitle && (
+                    <p className="max-w-xl mx-auto lg:mx-0 text-base sm:text-lg text-[#5F5750] dark:text-[#A89F95] leading-relaxed">
+                      {heroSubtitle}
+                    </p>
+                  )}
+                  <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                    {hasCatalog && (
+                      <Link
+                        href={`${prefix}/productos`}
+                        className="inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#1A1A1A] hover:bg-[#C2531F] text-white text-sm font-semibold tracking-wide transition-all shadow-md group dark:bg-[#F7F3EE] dark:text-[#1A1A1A] dark:hover:bg-[#F07C48]"
+                      >
+                        <span>{heroCtaText}</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" aria-hidden />
+                      </Link>
+                    )}
+                    {categories.length > 0 && (
+                      <a
+                        href="#colecciones"
+                        className="inline-flex items-center gap-2.5 px-7 py-4 rounded-full bg-white/90 dark:bg-[#221E1B] hover:bg-stone-50 dark:hover:bg-[#2A2421] text-[#1A1A1A] dark:text-[#F7F3EE] text-sm font-semibold border border-[#736B63]/20 transition-all shadow-sm"
+                      >
+                        Ver categorías
+                      </a>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              {/* Columna Derecha: Composición Sol Terracota + Modelo */}
-              <div className="lg:col-span-5 relative flex items-center justify-center">
-                {/* Gran Círculo Sol Terracota de fondo */}
-                <div className="relative w-72 h-72 sm:w-96 sm:h-96 lg:w-[440px] lg:h-[440px] flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full moda-sun-circle" />
-
-                  {/* Foto de la modelo */}
-                  <div className="relative z-10 w-full h-full flex items-end justify-center overflow-hidden rounded-b-full">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={heroImage}
-                      alt="Modelo Moda Femenina"
-                      className="w-full h-full object-cover object-top drop-shadow-2xl scale-105 transition-transform duration-700 hover:scale-110"
-                    />
-                  </div>
-
-                  {/* Floating Badge 1: 10K+ Happy Customers */}
-                  <div className="absolute -left-4 sm:-left-8 top-16 z-20 moda-floating-pill px-4 py-2.5 rounded-2xl flex items-center gap-3 animate-fade-in shadow-lg">
-                    <div className="w-8 h-8 rounded-full bg-[#E06B3A]/15 flex items-center justify-center text-[#E06B3A]">
-                      <Lock className="w-4 h-4" />
+                <div className="lg:col-span-5 relative flex items-center justify-center">
+                  <div className="relative w-72 h-72 sm:w-96 sm:h-96 lg:w-[440px] lg:h-[440px]">
+                    <div className="absolute inset-0 rounded-full moda-sun-circle" aria-hidden />
+                    <div className="absolute inset-0 z-10 overflow-hidden rounded-b-full">
+                      <AppImage
+                        src={heroPhoto?.image || TEMPLATE_PHOTOS.hero}
+                        alt={heroPhoto?.name || ''}
+                        fill
+                        priority
+                        sizes="(min-width: 1024px) 440px, (min-width: 640px) 384px, 288px"
+                        className="object-cover object-top"
+                      />
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">10K+</p>
-                      <p className="text-[10px] text-[#736B63] dark:text-[#A89F95]">Clientas Felices</p>
-                    </div>
-                  </div>
-
-                  {/* Floating Badge 2: 4.9 Rating */}
-                  <div className="absolute -left-2 sm:-left-6 bottom-24 z-20 moda-floating-pill px-4 py-2.5 rounded-2xl flex items-center gap-3 animate-fade-in shadow-lg">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500">
-                      <Star className="w-4 h-4 fill-current" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">4.9 / 5.0</p>
-                      <p className="text-[10px] text-[#736B63] dark:text-[#A89F95]">Valoración promedio</p>
-                    </div>
-                  </div>
-
-                  {/* Floating Badge 3: Premium Quality */}
-                  <div className="absolute -right-2 sm:-right-6 top-8 z-20 moda-floating-pill px-4 py-2.5 rounded-2xl flex items-center gap-2.5 shadow-lg">
-                    <ShieldCheck className="w-5 h-5 text-[#E06B3A]" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">Premium</p>
-                      <p className="text-[10px] text-[#736B63] dark:text-[#A89F95]">Calidad Garantizada</p>
-                    </div>
+                    {heroPhoto && (
+                      <Link
+                        href={`${prefix}/productos/${encodeURIComponent(heroPhoto.id)}`}
+                        className="absolute -left-2 sm:-left-6 bottom-10 z-20 moda-floating-pill max-w-[70%] px-4 py-2.5 rounded-2xl shadow-lg"
+                      >
+                        <span className="block text-xs font-bold text-[#1A1A1A] dark:text-[#F7F3EE] line-clamp-1">{heroPhoto.name}</span>
+                        {heroPhoto.price !== null && (
+                          <span className={`block text-xs font-semibold ${ACCENT_TEXT}`}>Gs. {heroPhoto.price.toLocaleString('es-PY')}</span>
+                        )}
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* ── 2. BARRA FLOTANTE DE BENEFICIOS (Trust Bar) ── */}
-        <section className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 sm:-mt-12">
-          <div className="moda-floating-pill rounded-3xl p-6 sm:p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            {trustItems.map((item, index) => {
-              const Icon = item.icon
-              return (
-                <div key={index} className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#E06B3A]/10 dark:bg-[#E06B3A]/20 flex items-center justify-center text-[#E06B3A] shrink-0">
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-[#736B63] dark:text-[#A89F95] mt-0.5">
-                      {item.subtitle}
-                    </p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+        {trustItems.length > 0 && (
+          <section aria-label="Beneficios" className={`relative z-30 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${heroVisible ? '-mt-8 sm:-mt-12' : 'pt-10'}`}>
+            <ul className="moda-floating-pill rounded-3xl p-6 sm:p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+              {trustItems.map((item, index) => {
+                const Icon = (item.icon && TRUST_ICONS[item.icon.toLowerCase()]) || ShieldCheck
+                return (
+                  <li key={`${item.title}-${index}`} className="flex items-center gap-4">
+                    <span className={`w-12 h-12 rounded-2xl bg-[#E06B3A]/10 dark:bg-[#E06B3A]/20 flex items-center justify-center shrink-0 ${ACCENT_TEXT}`}>
+                      <Icon className="w-6 h-6" aria-hidden />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">{item.title}</span>
+                      {item.description?.trim() && (
+                        <span className="block text-xs text-[#5F5750] dark:text-[#A89F95] mt-0.5">{item.description}</span>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
 
-        {/* ── 3. COMPRAR POR CATEGORÍA (Shop by Category) ── */}
-        <section id="colecciones" className="py-20 sm:py-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Encabezado de Sección */}
-          <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4 mb-12">
-            <h2 className="font-editorial text-3xl sm:text-5xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-              Comprar por{' '}
-              <span className="font-signature text-[#E06B3A] font-normal italic">
-                Categoría
-              </span>
-            </h2>
-
-            <Link
-              href={`${prefix}/productos`}
-              className="inline-flex items-center gap-2 text-sm font-bold text-[#E06B3A] hover:text-[#C95627] transition-colors group"
-            >
-              <span>Ver todas las categorías</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-
-          {/* Grilla de 4 Categorías de Moda Femenina */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            {displayCategories.map((cat) => (
-              <Link
-                key={cat.id}
-                href={cat.href}
-                className="group relative block rounded-3xl overflow-hidden moda-category-card bg-[#F5EFEB] dark:bg-[#221E1B] border border-[#736B63]/15"
-              >
-                {/* Imagen vertical de la modelo */}
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-200 dark:bg-stone-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={cat.image}
-                    alt={cat.name}
-                    className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-                  />
-                  {/* Degradado suave inferior para legibilidad */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                </div>
-
-                {/* Información superpuesta abajo */}
-                <div className="absolute bottom-0 inset-x-0 p-5 flex items-end justify-between z-10">
-                  <div className="text-white">
-                    <h3 className="font-editorial text-xl font-bold tracking-tight text-white group-hover:text-[#F07C48] transition-colors">
-                      {cat.name}
-                    </h3>
-                    <p className="text-xs text-stone-300 font-medium mt-0.5">
-                      {cat.count} {cat.count === 1 ? 'Prenda' : 'Prendas'}
-                    </p>
-                  </div>
-
-                  {/* Botón circular de flecha */}
-                  <div className="w-10 h-10 rounded-full bg-white/95 dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white flex items-center justify-center shadow-md group-hover:bg-[#E06B3A] group-hover:text-white transition-all transform group-hover:rotate-45">
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                </div>
+        {categories.length > 0 && (
+          <section id="colecciones" className="scroll-mt-24 py-20 sm:py-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4 mb-12">
+              <h2 className="font-editorial text-3xl sm:text-5xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
+                Comprar por <span className={`font-signature font-normal italic ${ACCENT_TEXT}`}>categoría</span>
+              </h2>
+              <Link href={`${prefix}/productos`} className={`inline-flex items-center gap-2 text-sm font-bold hover:underline group ${ACCENT_TEXT}`}>
+                <span>Ver todo el catálogo</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" aria-hidden />
               </Link>
-            ))}
-          </div>
-        </section>
+            </div>
+            <ul className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
+              {categories.map((category, index) => (
+                <li key={category.id}>
+                  <Link
+                    href={category.href}
+                    className="group relative block rounded-3xl overflow-hidden moda-category-card bg-[#F5EFEB] dark:bg-[#221E1B] border border-[#736B63]/15"
+                  >
+                    <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-200 dark:bg-stone-800">
+                      <AppImage
+                        src={TEMPLATE_PHOTOS.categories[index % TEMPLATE_PHOTOS.categories.length]}
+                        alt=""
+                        fill
+                        sizes="(min-width: 1024px) 25vw, 50vw"
+                        className="object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" aria-hidden />
+                    </div>
+                    <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 flex items-end justify-between gap-2">
+                      <div className="min-w-0 text-white">
+                        <h3 className="font-editorial text-lg sm:text-xl font-bold tracking-tight line-clamp-2">{category.name}</h3>
+                        <p className="text-xs text-stone-200 font-medium mt-0.5">
+                          {category.count} {category.count === 1 ? 'producto' : 'productos'}
+                        </p>
+                      </div>
+                      <span className="hidden sm:flex w-10 h-10 shrink-0 rounded-full bg-white/95 text-[#1A1A1A] items-center justify-center shadow-md group-hover:bg-[#E06B3A] group-hover:text-white transition-all" aria-hidden>
+                        <ArrowRight className="w-4 h-4" />
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
-        {/* ── 4. BANNER SUMMER SALE (Liquidación de Temporada) ── */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 sm:pb-28">
-          <div className="rounded-3xl bg-[#F5EFEB] dark:bg-[#221E1B] border border-[#736B63]/15 overflow-hidden p-8 sm:p-12 lg:p-16 relative">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              {/* Contenido Texto */}
-              <div className="lg:col-span-7 space-y-6 text-center lg:text-left z-10">
-                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.2em] text-[#E06B3A]">
-                  Liquidación de Temporada
-                </span>
-                <h2 className="font-editorial text-4xl sm:text-6xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE] leading-[1.1]">
-                  Hasta 50% Off
-                </h2>
-                <p className="max-w-md mx-auto lg:mx-0 text-sm sm:text-base text-[#736B63] dark:text-[#A89F95] leading-relaxed">
-                  Renová tu estilo esta temporada con nuestra colección exclusiva de prendas seleccionadas. ¡Por tiempo limitado!
-                </p>
-                <div className="pt-2">
+        {offersVisible && (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 sm:pb-28">
+            <div className="rounded-3xl bg-[#F5EFEB] dark:bg-[#221E1B] border border-[#736B63]/15 overflow-hidden p-8 sm:p-12 lg:p-16">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
+                  <p className={`text-xs sm:text-sm font-bold uppercase tracking-[0.2em] ${ACCENT_TEXT}`}>{offersEyebrow}</p>
+                  <h2 className="font-editorial text-4xl sm:text-6xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE] leading-[1.1]">{offersTitle}</h2>
+                  <p className="max-w-md mx-auto lg:mx-0 text-sm sm:text-base text-[#5F5750] dark:text-[#A89F95] leading-relaxed">{offersSubtitle}</p>
                   <Link
                     href={`${prefix}/ofertas`}
-                    className="inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#1A1A1A] hover:bg-[#E06B3A] text-white text-sm font-semibold tracking-wide transition-all shadow-md group"
+                    className="inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#1A1A1A] hover:bg-[#C2531F] text-white text-sm font-semibold tracking-wide transition-all shadow-md group dark:bg-[#F7F3EE] dark:text-[#1A1A1A] dark:hover:bg-[#F07C48]"
                   >
-                    <span>Ver Ofertas</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    <span>Ver ofertas</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" aria-hidden />
                   </Link>
                 </div>
-              </div>
-
-              {/* Imagen Summer Sale */}
-              <div className="lg:col-span-5 relative flex items-center justify-center">
-                <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-full overflow-hidden border-4 border-white dark:border-[#2A2421] shadow-2xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/images/templates/moda-femenina/promo-sale.jpg"
-                    alt="Summer Sale"
-                    className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
-                  />
-                </div>
-
-                {/* Floating Badge "Limited Offer." */}
-                <div className="absolute bottom-4 right-4 sm:right-10 bg-white dark:bg-[#1A1A1A] border border-[#736B63]/20 shadow-xl rounded-full w-20 h-20 flex flex-col items-center justify-center text-center p-2">
-                  <span className="font-editorial text-xs font-bold text-[#1A1A1A] dark:text-[#F7F3EE] leading-tight">
-                    Oferta
-                  </span>
-                  <span className="font-signature text-xs text-[#E06B3A] italic">
-                    Limitada
-                  </span>
+                <div className="lg:col-span-5 flex items-center justify-center">
+                  <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-full overflow-hidden border-4 border-white dark:border-[#2A2421] shadow-2xl">
+                    <AppImage src={offerImage} alt="" fill sizes="320px" className="object-cover" />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* ── 5. COLECCIÓN DESTACADA (Catálogo de Productos) ── */}
         {hasCatalog && (
           <section className="py-12 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#736B63]/10">
             <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4 mb-10">
               <div>
-                <span className="text-xs font-bold uppercase tracking-widest text-[#E06B3A]">
-                  Selección de la Casa
-                </span>
-                <h2 className="font-editorial text-3xl sm:text-4xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE] mt-1">
-                  Colección Destacada
-                </h2>
+                <p className={`text-xs font-bold uppercase tracking-widest ${ACCENT_TEXT}`}>Recién llegados</p>
+                <h2 className="font-editorial text-3xl sm:text-4xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE] mt-1">Novedades de la tienda</h2>
               </div>
-
-              <Link
-                href={`${prefix}/productos`}
-                className="inline-flex items-center gap-2 text-sm font-bold text-[#1A1A1A] dark:text-[#F7F3EE] hover:text-[#E06B3A] transition-colors group"
-              >
-                <span>Explorar todo el catálogo</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+              {products.length > 0 && (
+                <Link href={`${prefix}/productos`} className="inline-flex items-center gap-2 text-sm font-bold text-[#1A1A1A] dark:text-[#F7F3EE] hover:underline group">
+                  <span>Ver todo el catálogo</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" aria-hidden />
+                </Link>
+              )}
             </div>
 
             {productsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6" aria-busy="true" aria-label="Cargando productos">
                 {[1, 2, 3, 4].map((i) => (
                   <div key={i} className="aspect-[3/4] rounded-3xl bg-[#736B63]/10 animate-pulse" />
                 ))}
               </div>
             ) : products.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-8">
                 {products.slice(0, 8).map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
             ) : (
               <div className="text-center py-16 px-4 bg-[#F5EFEB] dark:bg-[#221E1B] rounded-3xl border border-[#736B63]/15">
-                <ShoppingBag className="w-12 h-12 text-[#E06B3A] mx-auto mb-4 opacity-80" />
+                <ShoppingBag className={`w-12 h-12 mx-auto mb-4 ${ACCENT_TEXT}`} aria-hidden />
                 <h3 className="font-editorial text-xl font-bold text-[#1A1A1A] dark:text-[#F7F3EE]">
-                  Próximamente nuevas prendas
+                  {productsError ? 'No pudimos cargar los productos' : 'Todavía no hay productos publicados'}
                 </h3>
-                <p className="text-sm text-[#736B63] dark:text-[#A89F95] mt-1 max-w-sm mx-auto">
-                  Estamos preparando el catálogo de temporada. Ingresá en unos momentos para ver las novedades.
+                <p className="text-sm text-[#5F5750] dark:text-[#A89F95] mt-1 max-w-sm mx-auto">
+                  {productsError
+                    ? 'Probá de nuevo en unos minutos o entrá al catálogo.'
+                    : `Cuando ${storeName} publique su catálogo, vas a verlo acá.`}
                 </p>
+                {productsError && (
+                  <Link href={`${prefix}/productos`} className={`mt-4 inline-flex text-sm font-semibold hover:underline ${ACCENT_TEXT}`}>
+                    Ir al catálogo
+                  </Link>
+                )}
               </div>
             )}
           </section>
         )}
-      </main>
+      </div>
     </div>
   )
 }

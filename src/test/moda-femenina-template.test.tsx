@@ -7,7 +7,13 @@ import {
 } from '@/lib/website/storefront-style'
 import { STOREFRONT_TEMPLATE_TIER } from '@/lib/website/template-plan-access'
 
-describe('Moda Femenina & Elegance (Modeza) Template Integration', () => {
+describe('Moda Femenina & Elegance template integration', () => {
+  it('no nombra a otra marca en el selector de plantillas', () => {
+    const meta = STOREFRONT_TEMPLATES_METADATA['moda-femenina']
+    const text = [meta.name, meta.tagline, meta.description, ...meta.features].join(' ')
+    expect(text).not.toMatch(/modeza/i)
+  })
+
   it('resolves explicit moda-femenina style correctly across verticals', () => {
     expect(resolveStorefrontStyle('moda-femenina', 'clothing')).toBe('moda-femenina')
     expect(resolveStorefrontStyle('moda-femenina', 'general')).toBe('moda-femenina')
