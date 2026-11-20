@@ -1,3 +1,4 @@
+import { brandPaletteStyle, isBrandPalette } from '@/lib/website/brand-palette'
 import { Metadata } from 'next'
 import { StorefrontHeader, StorefrontMobileNav } from '@/components/public/StorefrontShell'
 import { PublicFooter } from '@/components/public/PublicFooter'
@@ -87,7 +88,8 @@ export default async function PublicLayout({
             // Ver nota en [organizationSlug]/layout.tsx: --brand-primary lo
             // resuelve globals.css con ajuste automático para modo oscuro.
             data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
-            style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
+            style={{ ...(brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } : {}), ...brandPaletteStyle(settings?.company_info?.brandPalette) } as React.CSSProperties}
+            data-storefront-palette={isBrandPalette(settings?.company_info?.brandPalette) ? '' : undefined}
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
@@ -98,10 +100,10 @@ export default async function PublicLayout({
             )}
             scope={`tienda:${storefrontOrganization?.slug ?? settings?.company_info?.slug ?? 'tienda'}`}
           />
-            <StorefrontHeader initialSettings={settings} catalogEnabled={catalogEnabled} />
+            <StorefrontHeader initialSettings={settings} catalogEnabled={catalogEnabled} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
-            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StorefrontMobileNav initialSettings={settings} />
+            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />
+            <StorefrontMobileNav initialSettings={settings} catalogEnabled={catalogEnabled} />
             <WhatsAppFloatButton />
             {storefrontOrganization && <SiteAnalyticsTracker tenantSlug={storefrontOrganization.slug} />}
           </div>

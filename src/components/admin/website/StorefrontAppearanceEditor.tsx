@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StorefrontTemplateSelector } from '@/components/admin/website/StorefrontTemplateSelector'
 import { StorefrontTemplatePreviewDialog, type StorefrontLook } from '@/components/admin/website/StorefrontTemplatePreviewDialog'
+import { StorefrontPaletteAssistant } from '@/components/admin/website/StorefrontPaletteAssistant'
 import { StorefrontAppearancePreview } from '@/components/admin/website/StorefrontAppearancePreview'
 import { BrandColorScope } from '@/components/admin/website/StorefrontTemplateThumbnail'
 import { ExtraBrandColorSwatches } from '@/components/admin/website/ExtraBrandColorSwatches'
@@ -104,6 +106,7 @@ export function StorefrontAppearanceEditor({
   const currentLook: StorefrontLook = {
     storefrontStyle: stylePreference,
     brandColor,
+    brandPalette: value.brandPalette,
     customBrandColor: value.customBrandColor,
     headerStyle: value.headerStyle || 'glass',
     showTopBar: value.showTopBar !== false,
@@ -185,7 +188,7 @@ export function StorefrontAppearanceEditor({
             </Button>
           }
         >
-          <BrandColorScope brandColor={brandColor} customBrandColor={value.customBrandColor}>
+          <BrandColorScope brandColor={brandColor} customBrandColor={value.customBrandColor} brandPalette={value.brandPalette}>
             <StorefrontTemplateSelector
               value={stylePreference}
               onChange={(next) => onChange({ storefrontStyle: next })}
@@ -207,7 +210,17 @@ export function StorefrontAppearanceEditor({
           </BrandColorScope>
         </Step>
 
-        <Step number={2} title="Color de marca" hint="Botones, enlaces y la portada del inicio.">
+        <Step number={2} title="Colores de la tienda" hint="Elegí tu color principal o explorá combinaciones recomendadas.">
+          <Tabs defaultValue="single" className="min-w-0">
+            <TabsList className="mb-4 grid h-auto w-full grid-cols-2" aria-label="Cómo elegir los colores">
+              <TabsTrigger value="single" className="min-h-10">Color único</TabsTrigger>
+              <TabsTrigger value="palettes" className="min-h-10">Combinaciones</TabsTrigger>
+            </TabsList>
+            <TabsContent value="palettes" className="m-0">
+              <StorefrontPaletteAssistant value={value} onChange={onChange} businessVertical={businessVertical} />
+            </TabsContent>
+            <TabsContent value="single" className="m-0 space-y-4">
+              <p className="text-xs text-muted-foreground">Al elegir un color único, reemplazás la combinación activa. Abrir esta opción no cambia tus colores.</p>
           <div role="group" aria-label="Color de marca" className="flex flex-wrap gap-2.5">
             {BRAND_COLORS.map((color) => {
               const selected = brandColor === color.key
@@ -301,10 +314,12 @@ export function StorefrontAppearanceEditor({
               )}
             </div>
           )}
+            </TabsContent>
+          </Tabs>
         </Step>
 
         <Step number={3} title="Encabezado" hint="La barra con tu logo y el menú.">
-          <BrandColorScope brandColor={brandColor} customBrandColor={value.customBrandColor}>
+          <BrandColorScope brandColor={brandColor} customBrandColor={value.customBrandColor} brandPalette={value.brandPalette}>
             <div role="group" aria-label="Estilo del encabezado" className="grid gap-3 sm:grid-cols-3">
               {STOREFRONT_HEADER_OPTIONS.map((option) => {
                 const selected = headerOption === option.value

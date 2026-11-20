@@ -208,7 +208,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
   const isDark = headerStyle === 'dark'
 
   const customBrandColor = company?.customBrandColor
-  const isCustomBrand = Boolean(customBrandColor && /^#[0-9A-Fa-f]{3,8}$/.test(customBrandColor))
+  const isCustomBrand = Boolean(company?.brandColor === 'custom' && customBrandColor && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(customBrandColor))
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -246,16 +246,16 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
     <>
       <header
         className={cn(
-          'sticky top-0 z-50 w-full transition-all duration-300',
+          'cosmetics-brand-surface sticky top-0 z-50 w-full transition-all duration-300',
           isAccent
-            ? 'bg-primary text-white border-b border-white/20 shadow-md shadow-black/10 py-1.5'
+            ? 'bg-[var(--cosmetics-600)] text-white border-b border-white/20 shadow-md shadow-black/10 py-1.5'
             : isDark
-            ? 'bg-stone-950 text-white border-b border-stone-800 shadow-md shadow-black/30 py-1.5'
+            ? 'bg-stone-950 dark:bg-[var(--cosmetics-page)] text-white border-b border-stone-800 shadow-md shadow-black/30 py-1.5'
             : scrolled
-            ? 'bg-[#FFFDFB]/95 dark:bg-zinc-950/95 shadow-md shadow-rose-950/5 backdrop-blur-md border-b border-rose-150/70 dark:border-rose-900/30 py-1.5'
-            : 'bg-[#FFFDFB] dark:bg-zinc-950 border-b border-rose-100 dark:border-zinc-800/80 py-2.5'
+            ? 'bg-[var(--cosmetics-page)]/95 dark:bg-[var(--cosmetics-page)]/95 shadow-md shadow-[var(--cosmetics-950)]/5 backdrop-blur-md border-b border-[var(--cosmetics-150)]/70 dark:border-[var(--cosmetics-900)]/30 py-1.5'
+            : 'bg-[var(--cosmetics-page)] dark:bg-[var(--cosmetics-page)] border-b border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)]/80 py-2.5'
         )}
-        style={isAccent && isCustomBrand ? { backgroundColor: customBrandColor, borderColor: `${customBrandColor}cc` } : undefined}
+        style={isAccent && isCustomBrand ? { backgroundColor: 'var(--cosmetics-600)', borderColor: 'var(--cosmetics-300)' } : undefined}
       >
         {/* ── 1. Barra superior de anuncios boutique ── */}
         {company?.showTopBar !== false && (
@@ -266,7 +266,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 ? 'border-white/15 bg-black/15 text-white/90'
                 : isDark
                 ? 'border-stone-800 bg-stone-900 text-stone-300'
-                : 'border-rose-100/70 bg-[#FFF5F6] text-rose-900 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-200'
+                : 'border-[var(--cosmetics-100)]/70 bg-[var(--cosmetics-tint)] text-[var(--cosmetics-ink)] dark:border-[var(--cosmetics-950)] dark:bg-[var(--cosmetics-950)]/40 dark:text-[var(--cosmetics-300)]'
             )}
           >
             <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
@@ -288,7 +288,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   <Sparkles
                     className={cn(
                       'h-3.5 w-3.5',
-                      isAccent ? 'text-white/90' : isDark ? 'text-amber-400' : 'text-rose-500'
+                      isAccent ? 'text-white/90' : isDark ? 'text-amber-400' : 'text-[var(--cosmetics-ink)]'
                     )}
                   />
                   <span className="font-medium tracking-wide">
@@ -331,13 +331,13 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         ? 'text-white/90 hover:text-white'
                         : isDark
                         ? 'text-stone-300 hover:text-white'
-                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                        : 'text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)] hover:text-[var(--cosmetics-ink)]'
                     )}
                   >
                     <InstagramIcon
                       className={cn(
                         'h-3.5 w-3.5',
-                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                        isAccent ? 'text-white/90' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)]'
                       )}
                     />
                     <span>@{company.instagram.replace(/^@/, '')}</span>
@@ -354,13 +354,13 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         ? 'text-white/90 hover:text-white'
                         : isDark
                         ? 'text-stone-300 hover:text-white'
-                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                        : 'text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)] hover:text-[var(--cosmetics-ink)]'
                     )}
                   >
                     <FacebookIcon
                       className={cn(
                         'h-3.5 w-3.5',
-                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                        isAccent ? 'text-white/90' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)]'
                       )}
                     />
                     <span>Facebook</span>
@@ -377,13 +377,13 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         ? 'text-white/90 hover:text-white'
                         : isDark
                         ? 'text-stone-300 hover:text-white'
-                        : 'text-rose-900 dark:text-rose-200 hover:text-rose-600'
+                        : 'text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)] hover:text-[var(--cosmetics-ink)]'
                     )}
                   >
                     <TikTokIcon
                       className={cn(
                         'h-3.5 w-3.5',
-                        isAccent ? 'text-white/90' : isDark ? 'text-rose-400' : 'text-rose-500'
+                        isAccent ? 'text-white/90' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)]'
                       )}
                     />
                     <span>TikTok</span>
@@ -402,7 +402,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               <div
                 className={cn(
                   'relative h-9 w-9 shrink-0 sm:h-11 sm:w-11 overflow-hidden rounded-full border shadow-xs bg-white',
-                  isAccent ? 'border-white/40' : isDark ? 'border-stone-700' : 'border-rose-200/80'
+                  isAccent ? 'border-white/40' : isDark ? 'border-stone-700' : 'border-[var(--cosmetics-200)]/80'
                 )}
               >
                 <AppImage
@@ -420,8 +420,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   isAccent
                     ? 'bg-white/15 text-white border border-white/30'
                     : isDark
-                    ? 'bg-stone-900 text-rose-400 border border-stone-700'
-                    : 'bg-gradient-to-tr from-rose-100 via-pink-50 to-amber-100 border border-rose-200/80 text-rose-600'
+                    ? 'bg-stone-900 text-[var(--cosmetics-400)] border border-stone-700'
+                    : 'bg-gradient-to-tr from-[var(--cosmetics-100)] via-[var(--cosmetics-50)] to-amber-100 border border-[var(--cosmetics-200)]/80 text-[var(--cosmetics-ink)]'
                 )}
               >
                 <svg
@@ -449,8 +449,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   isAccent
                     ? 'text-white'
                     : isDark
-                    ? 'text-white group-hover:text-rose-400'
-                    : 'text-stone-900 dark:text-stone-50 group-hover:text-rose-600'
+                    ? 'text-white group-hover:text-[var(--cosmetics-400)]'
+                    : 'text-stone-900 dark:text-stone-50 group-hover:text-[var(--cosmetics-ink)]'
                 )}
               >
                 {storeName}
@@ -462,8 +462,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     isAccent
                       ? 'text-white/80'
                       : isDark
-                      ? 'text-rose-400'
-                      : 'text-rose-600/90 dark:text-rose-400'
+                      ? 'text-[var(--cosmetics-400)]'
+                      : 'text-[var(--cosmetics-ink)]/90 dark:text-[var(--cosmetics-400)]'
                   )}
                 >
                   {slogan}
@@ -485,11 +485,11 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     : 'text-white/85 hover:text-white'
                   : isDark
                   ? isHome
-                    ? 'text-white font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
+                    ? 'text-white font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--cosmetics-500)]'
                     : 'text-stone-300 hover:text-white'
                   : isHome
-                  ? 'text-rose-600 font-semibold dark:text-rose-400 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  ? 'text-[var(--cosmetics-ink)] font-semibold dark:text-[var(--cosmetics-400)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--cosmetics-500)]'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               Inicio
@@ -515,8 +515,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       ? 'text-white font-bold'
                       : 'text-stone-300 hover:text-white'
                     : isProducts || megaMenuOpen
-                    ? 'text-rose-600 font-semibold dark:text-rose-400'
-                    : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                    ? 'text-[var(--cosmetics-ink)] font-semibold dark:text-[var(--cosmetics-400)]'
+                    : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
                 )}
                 aria-expanded={megaMenuOpen}
               >
@@ -530,7 +530,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       : isDark
                       ? 'text-stone-400'
                       : megaMenuOpen
-                      ? 'text-rose-600'
+                      ? 'text-[var(--cosmetics-ink)]'
                       : 'text-stone-400'
                   )}
                 />
@@ -539,18 +539,18 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               {/* Panel Mega Menú Flotante */}
               {megaMenuOpen && (
                 <div className="absolute top-full -left-24 pt-2.5 w-[760px] z-50 cosmeticos-dropdown-animate">
-                  <div className="cosmeticos-glass-panel rounded-3xl p-6 shadow-2xl overflow-hidden border border-rose-200/70 dark:border-zinc-800">
+                  <div className="cosmetics-brand-surface cosmeticos-glass-panel rounded-3xl p-6 shadow-2xl overflow-hidden border border-[var(--cosmetics-200)]/70 dark:border-[var(--cosmetics-200)]">
                     <div className="grid grid-cols-12 gap-6">
                       {/* Columna 1: Por Categoría (7 cols) */}
                       <div className="col-span-7 space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b border-rose-100 dark:border-zinc-800">
-                          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                        <div className="flex items-center justify-between pb-2 border-b border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)]">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] flex items-center gap-1.5">
                             <Sparkles className="h-3 w-3" />
                             <span>Líneas de Cuidado & Fórmulas</span>
                           </span>
                           <Link
                             href={`${prefix}/productos`}
-                            className="text-xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline flex items-center gap-1"
+                            className="text-xs font-semibold text-[var(--cosmetics-ink)] hover:text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] hover:underline flex items-center gap-1"
                           >
                             <span>Ver catálogo</span>
                             <ArrowRight className="h-3 w-3" />
@@ -564,18 +564,18 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                               <Link
                                 key={cat.key}
                                 href={`${prefix}/productos?q=${encodeURIComponent(cat.query)}`}
-                                className="group flex items-start gap-2.5 p-2.5 rounded-2xl hover:bg-rose-50/80 dark:hover:bg-zinc-900/80 transition-colors"
+                                className="group flex items-start gap-2.5 p-2.5 rounded-2xl hover:bg-[var(--cosmetics-50)]/80 dark:hover:bg-zinc-900/80 transition-colors"
                               >
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-100/70 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 group-hover:bg-rose-500 group-hover:text-white transition-all shadow-2xs">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--cosmetics-100)]/70 text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)]/60 dark:text-[var(--cosmetics-300)] group-hover:bg-[var(--cosmetics-500)] group-hover:text-white transition-all shadow-2xs">
                                   <IconC className="h-4 w-4" />
                                 </span>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
-                                    <p className="text-xs font-semibold text-stone-900 dark:text-stone-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 truncate">
+                                    <p className="text-xs font-semibold text-stone-900 dark:text-stone-100 group-hover:text-[var(--cosmetics-ink)] dark:group-hover:text-[var(--cosmetics-400)] truncate">
                                       {cat.name.split(' & ')[0]}
                                     </p>
                                     {cat.tag && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[var(--cosmetics-100)] text-[var(--cosmetics-ink)] dark:bg-[var(--cosmetics-950)] dark:text-[var(--cosmetics-300)]">
                                         {cat.tag}
                                       </span>
                                     )}
@@ -591,9 +591,9 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       </div>
 
                       {/* Columna 2: Por Objetivo & Tarjeta Destacada (5 cols) */}
-                      <div className="col-span-5 flex flex-col justify-between space-y-4 pl-4 border-l border-rose-100 dark:border-zinc-800">
+                      <div className="col-span-5 flex flex-col justify-between space-y-4 pl-4 border-l border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)]">
                         <div>
-                          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-400 flex items-center gap-1.5 mb-2.5">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] flex items-center gap-1.5 mb-2.5">
                             <Heart className="h-3 w-3" />
                             <span>Objetivo de Rutina</span>
                           </span>
@@ -604,15 +604,15 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                                 <Link
                                   key={routine.name}
                                   href={`${prefix}/productos?q=${encodeURIComponent(routine.query)}`}
-                                  className="group flex items-center justify-between p-2 rounded-xl hover:bg-rose-50/70 dark:hover:bg-zinc-900/70 text-xs transition-colors"
+                                  className="group flex items-center justify-between p-2 rounded-xl hover:bg-[var(--cosmetics-50)]/70 dark:hover:bg-zinc-900/70 text-xs transition-colors"
                                 >
                                   <div className="flex items-center gap-2">
-                                    <IconR className="h-3.5 w-3.5 text-rose-500 group-hover:scale-110 transition-transform" />
-                                    <span className="font-medium text-stone-800 dark:text-stone-200 group-hover:text-rose-600 dark:group-hover:text-rose-400">
+                                    <IconR className="h-3.5 w-3.5 text-[var(--cosmetics-ink)] group-hover:scale-110 transition-transform" />
+                                    <span className="font-medium text-stone-800 dark:text-stone-200 group-hover:text-[var(--cosmetics-ink)] dark:group-hover:text-[var(--cosmetics-400)]">
                                       {routine.name}
                                     </span>
                                   </div>
-                                  <ChevronRight className="h-3.5 w-3.5 text-stone-400 group-hover:text-rose-500 group-hover:translate-x-0.5 transition-all" />
+                                  <ChevronRight className="h-3.5 w-3.5 text-stone-400 group-hover:text-[var(--cosmetics-ink)] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
                               )
                             })}
@@ -622,7 +622,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         {/* Acceso a las ofertas reales de la tienda */}
                         <Link
                           href={`${prefix}/ofertas`}
-                          className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 dark:from-zinc-900 dark:to-zinc-850 border border-rose-200/80 dark:border-zinc-750 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:border-rose-300"
+                          className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-br from-[var(--cosmetics-50)] to-[var(--cosmetics-50)] dark:from-[var(--cosmetics-soft)] dark:to-[var(--cosmetics-soft)] border border-[var(--cosmetics-200)]/80 dark:border-[var(--cosmetics-150)] text-xs font-semibold text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-300)] hover:border-[var(--cosmetics-300)]"
                         >
                           <span className="flex items-center gap-2">
                             <Sparkles className="h-3.5 w-3.5" />
@@ -634,14 +634,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     </div>
 
                     {/* Pie del Mega Menú con llamada de asesoría */}
-                    <div className="mt-4 pt-3 border-t border-rose-100 dark:border-zinc-800 flex items-center justify-between text-xs">
+                    <div className="mt-4 pt-3 border-t border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)] flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
-                        <Clock className="h-3.5 w-3.5 text-rose-500" />
+                        <Clock className="h-3.5 w-3.5 text-[var(--cosmetics-ink)]" />
                         <span>{[city, weekdayHours].filter(Boolean).join(' · ') || storeName}</span>
                       </div>
                       <Link
                         href={`${prefix}/productos`}
-                        className="inline-flex items-center gap-1.5 font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 group"
+                        className="inline-flex items-center gap-1.5 font-bold text-[var(--cosmetics-ink)] hover:text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)] group"
                       >
                         <span>Explorar todo el catálogo</span>
                         <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
@@ -661,7 +661,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'text-white/85 hover:text-white'
                   : isDark
                   ? 'text-stone-300 hover:text-white'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               Categorías
@@ -678,11 +678,11 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     : 'text-white/85 hover:text-white'
                   : isDark
                   ? isOffers
-                    ? 'text-rose-400 font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
-                    : 'text-stone-300 hover:text-rose-400'
+                    ? 'text-[var(--cosmetics-400)] font-bold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--cosmetics-500)]'
+                    : 'text-stone-300 hover:text-[var(--cosmetics-400)]'
                   : isOffers
-                  ? 'text-rose-600 font-semibold dark:text-rose-400 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-rose-500'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  ? 'text-[var(--cosmetics-ink)] font-semibold dark:text-[var(--cosmetics-400)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--cosmetics-500)]'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               <span>Ofertas</span>
@@ -697,7 +697,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'text-white/85 hover:text-white'
                   : isDark
                   ? 'text-stone-300 hover:text-white'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               Rutina
@@ -712,7 +712,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'text-white/85 hover:text-white'
                   : isDark
                   ? 'text-stone-300 hover:text-white'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               Nosotros
@@ -727,7 +727,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'text-white/85 hover:text-white'
                   : isDark
                   ? 'text-stone-300 hover:text-white'
-                  : 'text-stone-700 hover:text-rose-600 dark:text-stone-300 dark:hover:text-rose-400'
+                  : 'text-stone-700 hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:text-[var(--cosmetics-400)]'
               )}
             >
               Ubicación
@@ -740,7 +740,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             <div className="relative">
               {isSearchOpen ? (
                 <div className="absolute right-0 top-1/2 -translate-y-1/2 z-50 flex items-center">
-                  <div className="flex items-center rounded-full border border-rose-300 bg-white dark:bg-zinc-900 shadow-xl py-1 pl-4 pr-2">
+                  <div className="flex items-center rounded-full border border-[var(--cosmetics-300)] bg-white dark:bg-[var(--cosmetics-soft)] shadow-xl py-1 pl-4 pr-2">
                     <form onSubmit={handleSearchSubmit} className="flex items-center">
                       <input
                         ref={searchInputRef}
@@ -752,7 +752,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       />
                       <button
                         type="submit"
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-white hover:bg-rose-600 shadow-2xs ml-1"
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--cosmetics-500)] text-white hover:bg-[var(--cosmetics-600)] shadow-2xs ml-1"
                         aria-label="Ejecutar búsqueda"
                       >
                         <Search className="h-3.5 w-3.5" />
@@ -778,7 +778,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       ? 'text-white hover:bg-white/15'
                       : isDark
                       ? 'text-stone-300 hover:bg-stone-800 hover:text-white'
-                      : 'text-stone-600 hover:bg-rose-50 hover:text-rose-600 dark:text-stone-300 dark:hover:bg-zinc-800'
+                      : 'text-stone-600 hover:bg-[var(--cosmetics-50)] hover:text-[var(--cosmetics-ink)] dark:text-stone-300 dark:hover:bg-zinc-800'
                   )}
                   aria-label="Buscar cosméticos"
                 >
@@ -819,10 +819,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'border-white/30 bg-white/10 text-white hover:bg-white/20'
                   : isDark
                   ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
-                  : 'border-rose-200/80 bg-white text-stone-700 hover:bg-rose-50/80 hover:text-rose-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200'
+                  : 'border-[var(--cosmetics-200)]/80 bg-white text-stone-700 hover:bg-[var(--cosmetics-50)]/80 hover:text-[var(--cosmetics-ink)] dark:border-[var(--cosmetics-200)] dark:bg-[var(--cosmetics-soft)] dark:text-stone-200'
               )}
             >
-              <Store className="h-3.5 w-3.5 text-rose-500" />
+              <Store className="h-3.5 w-3.5 text-[var(--cosmetics-ink)]" />
               <span>Volver al Marketplace</span>
             </Link>
 
@@ -838,7 +838,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         ? 'border-white/30 bg-white/15 text-white hover:bg-white/25'
                         : isDark
                         ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
-                        : 'border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-rose-300'
+                        : 'border border-[var(--cosmetics-200)] bg-[var(--cosmetics-50)] text-[var(--cosmetics-ink)] hover:border-[var(--cosmetics-400)] dark:border-[var(--cosmetics-150)] dark:bg-[var(--cosmetics-tint)] dark:text-[var(--cosmetics-300)]'
                     )}
                     aria-label="Menú de usuario"
                   >
@@ -849,8 +849,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                           isAccent
                             ? 'bg-white/25 text-white'
                             : isDark
-                            ? 'bg-stone-800 text-rose-400'
-                            : 'bg-rose-100 text-rose-700'
+                            ? 'bg-stone-800 text-[var(--cosmetics-400)]'
+                            : 'bg-[var(--cosmetics-100)] text-[var(--cosmetics-ink)]'
                         )}
                       >
                         {user.email?.charAt(0).toUpperCase() || 'U'}
@@ -858,7 +858,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     </Avatar>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-2xl border border-rose-150 p-2 shadow-xl bg-white dark:bg-zinc-900">
+                <DropdownMenuContent align="end" className="w-56 rounded-2xl border border-border p-2 shadow-xl bg-white dark:bg-[var(--cosmetics-soft)]">
                   <DropdownMenuLabel className="font-normal">
                     <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">
                       Mi Cuenta
@@ -868,20 +868,20 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href={`${prefix}/perfil`} className="flex items-center gap-2 text-xs">
-                      <User className="h-3.5 w-3.5 text-rose-600" />
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
                       <span>Mis Datos & Perfil</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href={`${prefix}/perfil?tab=orders`} className="flex items-center gap-2 text-xs">
-                      <ShoppingBag className="h-3.5 w-3.5 text-rose-600" />
+                      <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground" />
                       <span>Mis Pedidos</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => signOut()}
-                    className="flex items-center gap-2 text-xs text-rose-600 focus:text-rose-700"
+                    className="flex items-center gap-2 text-xs text-muted-foreground focus:text-muted-foreground"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     <span>Cerrar Sesión</span>
@@ -898,7 +898,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     ? 'border-white/30 bg-white/15 text-white hover:bg-white/25'
                     : isDark
                     ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
-                    : 'border border-rose-200 bg-rose-50/70 text-rose-800 hover:bg-rose-100 hover:border-rose-300 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
+                    : 'border border-[var(--cosmetics-200)] bg-[var(--cosmetics-50)]/70 text-[var(--cosmetics-ink)] hover:bg-[var(--cosmetics-100)] hover:border-[var(--cosmetics-300)] dark:border-[var(--cosmetics-900)] dark:bg-[var(--cosmetics-950)]/30 dark:text-[var(--cosmetics-300)]'
                 )}
               >
                 <LogIn className="h-3.5 w-3.5" />
@@ -916,7 +916,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   ? 'text-white hover:bg-white/15'
                   : isDark
                   ? 'text-stone-200 hover:bg-stone-800'
-                  : 'text-stone-700 hover:bg-rose-50 dark:text-stone-300 dark:hover:bg-zinc-800'
+                  : 'text-stone-700 hover:bg-[var(--cosmetics-50)] dark:text-stone-300 dark:hover:bg-zinc-800'
               )}
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={mobileMenuOpen}
@@ -931,14 +931,14 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
         {mobileMenuOpen && (
           <div id="cosmetics-mobile-menu"
             className={cn(
-              'lg:hidden border-t px-5 py-4 shadow-2xl animate-in slide-in-from-top-2 duration-200',
+              'cosmetics-brand-surface lg:hidden border-t px-5 py-4 shadow-2xl animate-in slide-in-from-top-2 duration-200',
               isAccent
-                ? 'border-white/20 bg-primary text-white'
+                ? 'border-white/20 bg-[var(--cosmetics-600)] text-white'
                 : isDark
-                ? 'border-stone-800 bg-stone-950 text-stone-100'
-                : 'border-rose-100 bg-[#FFFDFB] dark:border-zinc-800 dark:bg-zinc-950'
+                ? 'border-stone-800 bg-stone-950 dark:bg-[var(--cosmetics-page)] text-stone-100'
+                : 'border-[var(--cosmetics-100)] bg-[var(--cosmetics-page)] dark:border-[var(--cosmetics-200)] dark:bg-[var(--cosmetics-page)]'
             )}
-            style={isAccent && isCustomBrand ? { backgroundColor: customBrandColor } : undefined}
+            style={isAccent && isCustomBrand ? { backgroundColor: 'var(--cosmetics-600)' } : undefined}
           >
             {/* Buscador visible integrado en móvil */}
             <form onSubmit={handleSearchSubmit} className="relative mb-4">
@@ -954,7 +954,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     ? 'border-white/30 bg-white/15 text-white placeholder:text-white/60 focus:ring-white/40'
                     : isDark
                     ? 'border-stone-800 bg-stone-900 text-stone-100 focus:ring-stone-600'
-                    : 'border-rose-200 bg-white text-stone-800 focus:ring-rose-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-stone-200'
+                    : 'border-[var(--cosmetics-200)] bg-white text-stone-800 focus:ring-[var(--cosmetics-400)] dark:bg-[var(--cosmetics-soft)] dark:border-[var(--cosmetics-200)] dark:text-stone-200'
                 )}
               />
               <button
@@ -965,9 +965,9 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     ? 'bg-white text-primary'
                     : isDark
                     ? 'bg-stone-800 text-white'
-                    : 'bg-rose-500 text-white'
+                    : 'bg-[var(--cosmetics-500)] text-white'
                 )}
-                style={isAccent && isCustomBrand ? { color: customBrandColor } : undefined}
+                style={isAccent && isCustomBrand ? { color: 'var(--cosmetics-ink)' } : undefined}
               >
                 Buscar
               </button>
@@ -977,7 +977,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             <div
               className={cn(
                 'flex flex-wrap gap-1.5 mb-4 pb-3 border-b',
-                isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-rose-100 dark:border-zinc-800'
+                isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)]'
               )}
             >
               {SEARCH_SUGGESTIONS.slice(0, 4).map((tag) => (
@@ -991,7 +991,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       ? 'bg-white/15 text-white border-white/25 hover:bg-white/25'
                       : isDark
                       ? 'bg-stone-900 text-stone-300 border-stone-800 hover:bg-stone-800'
-                      : 'bg-rose-50 text-rose-800 border-rose-150 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900'
+                      : 'bg-[var(--cosmetics-50)] text-[var(--cosmetics-ink)] border-[var(--cosmetics-150)] hover:bg-[var(--cosmetics-100)] dark:bg-[var(--cosmetics-950)]/40 dark:text-[var(--cosmetics-300)] dark:border-[var(--cosmetics-900)]'
                   )}
                 >
                   {tag}
@@ -1011,7 +1011,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 Inicio
@@ -1024,13 +1024,13 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                   onClick={() => setMobileProductsOpen(!mobileProductsOpen)}
                   className={cn(
                     'flex w-full items-center justify-between px-3 py-2 transition-colors',
-                    isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                    isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                   )}
                 >
                   <span
                     className={cn(
                       'font-semibold',
-                      isAccent ? 'text-white' : isDark ? 'text-rose-400' : 'text-rose-600 dark:text-rose-400'
+                      isAccent ? 'text-white' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)] dark:text-[var(--cosmetics-400)]'
                     )}
                   >
                     Productos & Fórmulas
@@ -1039,7 +1039,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     className={cn(
                       'h-4 w-4 transition-transform duration-200',
                       mobileProductsOpen && 'rotate-180',
-                      isAccent ? 'text-white/80' : isDark ? 'text-rose-400' : 'text-rose-500'
+                      isAccent ? 'text-white/80' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)]'
                     )}
                   />
                 </button>
@@ -1052,7 +1052,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         ? 'bg-black/20 text-white'
                         : isDark
                         ? 'bg-stone-900/90 text-stone-200'
-                        : 'bg-rose-50/40 dark:bg-zinc-900/50'
+                        : 'bg-[var(--cosmetics-50)]/40 dark:bg-[var(--cosmetics-soft)]/50'
                     )}
                   >
                     <Link
@@ -1063,8 +1063,8 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                         isAccent
                           ? 'text-white hover:bg-white/15'
                           : isDark
-                          ? 'text-rose-400 hover:bg-stone-800'
-                          : 'text-rose-600 hover:bg-rose-100/50'
+                          ? 'text-[var(--cosmetics-400)] hover:bg-stone-800'
+                          : 'text-[var(--cosmetics-ink)] hover:bg-[var(--cosmetics-100)]/50'
                       )}
                     >
                       <span>Ver Todo el Catálogo →</span>
@@ -1082,10 +1082,10 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                               ? 'text-white/95 hover:bg-white/15'
                               : isDark
                               ? 'text-stone-300 hover:bg-stone-800'
-                              : 'text-stone-700 hover:bg-rose-100/50 dark:text-stone-300'
+                              : 'text-stone-700 hover:bg-[var(--cosmetics-100)]/50 dark:text-stone-300'
                           )}
                         >
-                          <IconComp className={cn('h-3.5 w-3.5', isAccent ? 'text-white' : isDark ? 'text-rose-400' : 'text-rose-500')} />
+                          <IconComp className={cn('h-3.5 w-3.5', isAccent ? 'text-white' : isDark ? 'text-[var(--cosmetics-400)]' : 'text-[var(--cosmetics-ink)]')} />
                           <span>{cat.name}</span>
                         </Link>
                       )
@@ -1099,7 +1099,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 Categorías
@@ -1110,7 +1110,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'flex items-center justify-between rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 <span>Ofertas Especiales</span>
@@ -1121,7 +1121,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 Rutina de Cuidado Diario
@@ -1132,7 +1132,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 Nosotros & Showroom
@@ -1143,13 +1143,13 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'rounded-xl px-3 py-2 transition-colors',
-                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-rose-50 dark:hover:bg-zinc-900'
+                  isAccent ? 'hover:bg-white/15' : isDark ? 'hover:bg-stone-900' : 'hover:bg-[var(--cosmetics-50)] dark:hover:bg-zinc-900'
                 )}
               >
                 Ubicación & Google Maps
               </Link>
 
-              <div className={cn('my-2 border-t', isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-rose-100 dark:border-zinc-800')} />
+              <div className={cn('my-2 border-t', isAccent ? 'border-white/15' : isDark ? 'border-stone-800' : 'border-[var(--cosmetics-100)] dark:border-[var(--cosmetics-200)]')} />
 
               {/* Opción Volver al Marketplace */}
               <Link
@@ -1161,11 +1161,11 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                     ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
                     : isDark
                     ? 'border-stone-700 bg-stone-900 text-stone-200 hover:bg-stone-800'
-                    : 'border-rose-200/80 bg-rose-50/80 text-rose-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-stone-200'
+                    : 'border-[var(--cosmetics-200)]/80 bg-[var(--cosmetics-50)]/80 text-[var(--cosmetics-ink)] dark:border-[var(--cosmetics-200)] dark:bg-[var(--cosmetics-soft)] dark:text-stone-200'
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <Store className="h-4 w-4 text-rose-500" />
+                  <Store className="h-4 w-4 text-[var(--cosmetics-ink)]" />
                   <span>Volver al Marketplace</span>
                 </div>
                 <ChevronRight className="h-4 w-4 opacity-70" />
@@ -1205,9 +1205,9 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
                       ? 'bg-white text-primary hover:bg-white/90'
                       : isDark
                       ? 'bg-stone-800 text-white hover:bg-stone-700'
-                      : 'bg-rose-500 text-white hover:bg-rose-600'
+                      : 'bg-[var(--cosmetics-500)] text-white hover:bg-[var(--cosmetics-600)]'
                   )}
-                  style={isAccent && isCustomBrand ? { color: customBrandColor } : undefined}
+                  style={isAccent && isCustomBrand ? { color: 'var(--cosmetics-ink)' } : undefined}
                 >
                   <LogIn className="h-4 w-4" />
                   <span>Iniciar Sesión / Registrarse</span>
@@ -1225,7 +1225,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
               ? 'border-white/15 bg-black/20 text-white'
               : isDark
               ? 'border-stone-800 bg-stone-900 text-stone-200'
-              : 'border-rose-150/70 bg-rose-50/80 dark:bg-zinc-900 dark:border-zinc-800 text-stone-800 dark:text-stone-200'
+              : 'border-[var(--cosmetics-150)]/70 bg-[var(--cosmetics-50)]/80 dark:bg-[var(--cosmetics-soft)] dark:border-[var(--cosmetics-200)] text-stone-800 dark:text-stone-200'
           )}
         >
           <Link
@@ -1234,7 +1234,7 @@ export function EspecialCosmeticosHeader({ settings = null }: EspecialCosmeticos
             className="container mx-auto flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-xs font-bold transition-colors hover:bg-black/5"
           >
             <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <Store className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-hidden="true" />
+            <Store className="h-3.5 w-3.5 shrink-0 text-[var(--cosmetics-ink)]" aria-hidden="true" />
             <span>Volver al Marketplace</span>
           </Link>
         </div>

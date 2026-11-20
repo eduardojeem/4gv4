@@ -83,3 +83,14 @@ describe('publication API safety', () => {
     expect(revalidatePath).not.toHaveBeenCalled()
   })
 })
+
+
+it('persiste la combinación de colores completa dentro de company_info', async () => {
+  const brandPalette = { primary:'#B21FB8',accent:'#7457B8',background:'#FAFAFC',text:'#202633' }
+  expect((await PUT(request({ publicationConfirmed:true,brandPalette }))).status).toBe(200)
+  expect(state.company?.brandPalette).toEqual(brandPalette)
+})
+it('rechaza una combinación ilegible antes de escribir', async () => {
+  expect((await PUT(request({ publicationConfirmed:true,brandPalette:{primary:'#fff',accent:'#000',background:'#fff',text:'#fff'} }))).status).toBe(400)
+  expect(state.updates).toHaveLength(0)
+})

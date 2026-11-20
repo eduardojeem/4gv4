@@ -4,6 +4,7 @@
 @import "../styles/design-tokens.css";
 @import "../styles/design-system.css";
 @import "../styles/panel-appearance.css";
+@import "../styles/storefront-palette.css";
 
 /* Oculta scrollbar manteniendo el scroll funcional */
 .scrollbar-hide {

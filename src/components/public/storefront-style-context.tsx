@@ -7,6 +7,7 @@ import {
   parseStorefrontPreviewDraft,
   type StorefrontPreviewDraft,
 } from '@/lib/website/storefront-preview-message'
+import { brandPaletteStyle, isBrandPalette, readableBrandAction, PALETTE_VARIABLES } from '@/lib/website/brand-palette'
 import type { CompanyInfo } from '@/types/website-settings'
 
 // Fuera de una tienda (dashboard, marketplace) no hay provider: todo queda con
@@ -42,6 +43,14 @@ function useAdminPreviewDraft(): StorefrontPreviewDraft | null {
     const root = document.querySelector<HTMLElement>('[data-storefront-style]')
     if (!root) return
     root.dataset.storefrontStyle = draft.style
+    const paletteStyle = brandPaletteStyle(draft.brandPalette)
+    if (isBrandPalette(draft.brandPalette)) root.dataset.storefrontPalette = ''
+    else delete root.dataset.storefrontPalette
+    PALETTE_VARIABLES.forEach(key => {
+      const value = paletteStyle?.[key as keyof typeof paletteStyle]
+      if (typeof value === 'string') root.style.setProperty(key, value)
+      else root.style.removeProperty(key)
+    })
     if (draft.brandColor === 'custom' && draft.customBrandColor) {
       delete root.dataset.colorScheme
       root.dataset.customBrand = ''
@@ -75,13 +84,16 @@ export function useStorefrontStyle(): StorefrontStyle {
 export function useStorefrontCompanyInfo<T extends Partial<CompanyInfo> | undefined>(companyInfo: T): T {
   const draft = useContext(StorefrontPreviewContext)
   return useMemo(() => {
-    if (!draft) return companyInfo
-    return {
+    if (!draft && !isBrandPalette(companyInfo?.brandPalette)) return companyInfo
+    const effective = draft ? {
       ...companyInfo,
       brandColor: draft.brandColor,
+      brandPalette: draft.brandPalette,
       customBrandColor: draft.customBrandColor,
       headerStyle: draft.headerStyle,
       showTopBar: draft.showTopBar,
-    } as T
+    } : companyInfo
+    if (isBrandPalette(effective?.brandPalette)) return { ...effective, brandColor: 'custom', customBrandColor: readableBrandAction(effective.brandPalette.primary) } as T
+    return effective as T
   }, [companyInfo, draft])
 }

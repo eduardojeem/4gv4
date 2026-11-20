@@ -19,7 +19,7 @@ import {
   themeScopeForPath,
 } from '@/lib/theme/theme-scope'
 
-const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8').replace(/\r\n/g, '\n')
 
 /**
  * Elegir una paleta en /admin/settings#apariencia cambiaba también el

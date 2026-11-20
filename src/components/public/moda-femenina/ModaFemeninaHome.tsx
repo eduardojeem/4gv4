@@ -138,11 +138,11 @@ export function ModaFemeninaHome({ settings, branches, capabilities }: ModaFemen
 
   // Imagen del hero
   const heroImage = '/images/templates/moda-femenina/hero-model.jpg'
-  const heroBadge = settings.hero_content?.badge || 'NEW COLLECTION 2026'
-  const heroTitle = settings.hero_content?.title || 'Timeless'
+  const heroBadge = settings.hero_content?.badge || 'NUEVA COLECCIÓN 2026'
+  const heroTitle = settings.hero_content?.title || 'Elegancia'
   const heroSubtitle =
     settings.hero_content?.subtitle ||
-    'Minimal designs. Maximum impact. Redefine your wardrobe with pieces that speak sophistication.'
+    'Diseños minimalistas. Máximo impacto. Redefiní tu guardarropa con prendas que transmiten sofisticación.'
 
   return (
     <div className="moda-femenina-root min-h-screen flex flex-col font-sans selection:bg-[#E06B3A]/20 selection:text-[#E06B3A]">
@@ -164,7 +164,7 @@ export function ModaFemeninaHome({ settings, branches, capabilities }: ModaFemen
                 <h1 className="font-editorial text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#F7F3EE] leading-[1.05]">
                   {heroTitle}
                   <span className="block font-signature text-[#E06B3A] text-6xl sm:text-8xl lg:text-9xl font-normal leading-[1.1] pt-1">
-                    Elegance
+                    Atemporal
                   </span>
                 </h1>
 

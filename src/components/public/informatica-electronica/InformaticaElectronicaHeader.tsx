@@ -1,6 +1,10 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import useSWR from 'swr'
+import { resolveTechPublication, hasTechOffer, techOffersKey } from '@/lib/website/mega-tech-publication'
+import { fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS } from '@/components/public/inicio/newest-products'
+import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
@@ -16,6 +20,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   MapPin,
+  ArrowLeft,
 } from 'lucide-react'
 import { AppImage } from '@/components/ui/app-image'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
@@ -50,7 +55,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
 
-export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSettings | null }) {
+export function InformaticaElectronicaHeader({ settings, catalogEnabled = true, repairsModuleEnabled = false, servicesModuleEnabled = false }: { settings: WebsiteSettings | null; catalogEnabled?: boolean; repairsModuleEnabled?: boolean; servicesModuleEnabled?: boolean }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -61,8 +66,11 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
 
   const company = settings?.company_info
   const storeName = company?.name?.trim() || 'Tienda Oficial'
-  const storeSlogan = company?.slogan?.trim() || 'Tecnología, informática y accesorios con garantía'
-  const phoneClean = (company?.phone || '').replace(/\D/g, '')
+  const storeSlogan = company?.slogan?.trim() || ''
+  const phoneClean = (company?.whatsapp || company?.phone || '').replace(/\D/g, '')
+  const published = resolveTechPublication(settings, { hasCatalog: catalogEnabled, hasRepairs: repairsModuleEnabled, hasServices: servicesModuleEnabled })
+  const { data: offerProducts } = useSWR(published.offers ? techOffersKey(slug) : null, fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS)
+  const { bookingHref } = usePublicAgenda(published.booking, company?.slug)
 
   const storeAddress = company?.address?.trim() || ''
 
@@ -74,10 +82,16 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const hydrated = useHydrated()
+  const offersVisible = hydrated && published.offers && Boolean(offerProducts?.some(hasTechOffer))
+  const serviceLinks = [
+    ...(published.services ? [{ label: 'Servicios', href: `${prefix}/servicios` }] : []),
+    ...(hydrated && published.booking && bookingHref ? [{ label: 'Reservar turno', href: bookingHref }] : []),
+    ...(published.repairs ? [{ label: 'Mi reparación', href: `${prefix}/mis-reparaciones` }] : []),
+  ]
 
   // Categorías reales de la organización para la barra superior (solo con productos o agregadas por la org)
   const navCategories = useMemo(() => {
-    const rootCategories = (categories || []).filter((c) => !c.parent_id)
+    const rootCategories = catalogEnabled ? (categories || []).filter((c) => !c.parent_id) : []
     if (rootCategories.length === 0) return []
 
     // Si algunas categorías tienen productCount especificado, priorizar aquellas con > 0
@@ -86,7 +100,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
       ? rootCategories.filter((c) => (c.productCount ?? 0) > 0)
       : rootCategories
 
-    const listToShow = filtered.length > 0 ? filtered : rootCategories
+    const listToShow = filtered
 
     return listToShow.map((cat) => ({
       id: cat.id,
@@ -94,7 +108,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
       icon: categoryVisual(cat.name).icon,
       href: `${prefix}/productos?category_id=${encodeURIComponent(cat.id)}`,
     }))
-  }, [categories, prefix])
+  }, [categories, prefix, catalogEnabled])
 
   const canAccessDashboard = canOpenDashboard(user)
 
@@ -137,15 +151,19 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/80 to-primary/50" />
 
       {/* ── 1. Barra superior: datos reales de la tienda (dirección y WhatsApp) ── */}
-      {(storeAddress || phoneClean) && (
+      {(
         <div className="bg-slate-100/95 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-xs py-1.5 px-4 border-b border-slate-200 dark:border-slate-800 transition-colors">
           <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-2.5">
+            <Link href="/marketplace" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              Volver al Marketplace
+            </Link>
             {storeAddress ? (
               <span className="inline-flex min-w-0 items-center gap-1 text-slate-500 dark:text-slate-400">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
                 <span className="truncate">{storeAddress}</span>
               </span>
-            ) : <span />}
+            ) : null}
             {phoneClean && (
               <a
                 href={`https://wa.me/${phoneClean}`}
@@ -166,19 +184,21 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             {/* Logo e identidad de la tienda (Redirige siempre a /inicio) */}
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 sm:flex-initial">
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-1.5 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                aria-label="Abrir menú"
+                className="lg:hidden shrink-0 p-1.5 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+                aria-expanded={mobileMenuOpen}
+                aria-controls="tech-mobile-menu"
               >
                 {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
 
-              <Link href={homeHref} className="group flex items-center gap-2.5">
+              <Link href={homeHref} className="group flex min-w-0 items-center gap-2.5">
                 {company?.logoUrl ? (
-                  <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-slate-100 dark:bg-white p-1 border border-primary/25 shadow-2xs group-hover:border-primary transition-colors">
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-white p-1 border border-primary/25 shadow-2xs group-hover:border-primary transition-colors">
                     <AppImage
                       src={company.logoUrl}
                       alt={storeName}
@@ -187,12 +207,12 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
                     />
                   </div>
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/25 text-primary shadow-2xs group-hover:bg-primary group-hover:text-primary-foreground transition-all">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/25 text-primary shadow-2xs group-hover:bg-primary group-hover:text-primary-foreground transition-all">
                     <Laptop className="h-5 w-5" />
                   </div>
                 )}
                 <div className="min-w-0">
-                  <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white group-hover:text-primary transition-colors truncate block">
+                  <span title={storeName} className="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white group-hover:text-primary transition-colors truncate block">
                     {storeName}
                   </span>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[220px] sm:max-w-xs">
@@ -203,7 +223,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
             </div>
 
             {/* Buscador Central Pro con acento de marca */}
-            <form onSubmit={handleSearchSubmit} className="hidden sm:flex flex-1 max-w-xl mx-2 md:mx-4">
+            {catalogEnabled && (<form onSubmit={handleSearchSubmit} className="hidden sm:flex flex-1 max-w-xl mx-2 md:mx-4">
               <div className="relative w-full flex items-center rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-inner overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary">
                 <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
                 <input
@@ -229,19 +249,19 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
                   Buscar
                 </button>
               </div>
-            </form>
+            </form>)}
 
             {/* Accesos a la derecha: Reubicado Ofertas, WhatsApp, Perfil, Modo Oscuro y Carrito */}
-            <div className="flex items-center gap-2 sm:gap-2.5">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
               {/* Botón Reubicado y Prominente de Ofertas */}
-              <Link
+              {offersVisible && (<Link
                 href={`${prefix}/ofertas`}
                 className="hidden sm:inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white px-3 py-1.5 text-xs font-black shadow-xs hover:shadow-md transition-all active:scale-95 shrink-0"
                 title="Ver Ofertas Especiales"
               >
                 <Flame className="h-4 w-4 fill-current text-amber-200 animate-pulse" />
                 <span>Ofertas</span>
-              </Link>
+              </Link>)}
 
               {phoneClean && (
                 <a
@@ -377,19 +397,19 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
               )}
 
               {/* El botón se oculta solo cuando la tienda vende por WhatsApp */}
-              {hydrated && <PublicCartButton />}
+              {hydrated && catalogEnabled && <PublicCartButton />}
             </div>
           </div>
 
           {/* Buscador móvil */}
-          <form onSubmit={handleSearchSubmit} className="sm:hidden mt-3">
+          {catalogEnabled && (<form onSubmit={handleSearchSubmit} className="sm:hidden mt-3">
             <div className="relative w-full flex items-center rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-primary">
               <Search className="absolute left-3 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar productos de tecnología..."
+                placeholder="Buscar en el catálogo..."
                 className="w-full pl-9 pr-3 py-2 text-xs bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden"
               />
               <button
@@ -399,7 +419,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
                 Buscar
               </button>
             </div>
-          </form>
+          </form>)}
         </div>
 
         {/* ── 3. Barra de Navegación: Ofertas al inicio + Catálogo + Categorías de la Organización ── */}
@@ -407,7 +427,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 overflow-x-auto py-2 scrollbar-none">
               {/* Ofertas reubicado al inicio de la barra */}
-              <Link
+              {offersVisible && (<Link
                 href={`${prefix}/ofertas`}
                 className={cn(
                   'flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-black transition-all shrink-0 shadow-2xs',
@@ -417,11 +437,11 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
                 )}
               >
                 <Flame className="h-3.5 w-3.5 fill-current text-amber-200" />
-                <span>OFERTAS RELÁMPAGO</span>
-              </Link>
+                <span>Ofertas</span>
+              </Link>)}
 
               {/* Catálogo Completo */}
-              <Link
+              {catalogEnabled && (<Link
                 href={`${prefix}/productos`}
                 className={cn(
                   'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all shrink-0',
@@ -431,9 +451,10 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
                 )}
               >
                 <span>Catálogo Completo</span>
-              </Link>
+              </Link>)}
 
               {/* Categorías reales existentes de la organización con iconos mejorados */}
+              {serviceLinks.map(item => <Link key={item.href} href={item.href} className="inline-flex min-h-10 shrink-0 items-center rounded-full px-3 py-2 text-xs font-semibold hover:bg-primary/10 hover:text-primary">{item.label}</Link>)}
               {hydrated && navCategories.map((item) => {
                 const Icon = item.icon
                 const isActive = pathname === `${prefix}/productos` && activeCategoryId === item.id
@@ -459,7 +480,7 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
 
         {/* Menú desplegable móvil */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 space-y-2 text-slate-900 dark:text-slate-100">
+          <div id="tech-mobile-menu" className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 space-y-2 text-slate-900 dark:text-slate-100">
             {/* Sección de usuario en móvil */}
             <div className="pb-3 border-b border-slate-200 dark:border-slate-800">
               {hydrated && user ? (
@@ -495,23 +516,24 @@ export function InformaticaElectronicaHeader({ settings }: { settings: WebsiteSe
             </div>
 
             {/* Ofertas reubicado arriba en móvil */}
-            <Link
+            {offersVisible && (<Link
               href={`${prefix}/ofertas`}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 text-white px-3 py-2 text-sm font-black shadow-xs"
             >
               <Flame className="h-4 w-4 fill-current text-amber-200" />
-              <span>Ofertas Relámpago</span>
-            </Link>
+              <span>Ofertas</span>
+            </Link>)}
 
-            <Link
+            {catalogEnabled && (<Link
               href={`${prefix}/productos`}
               onClick={() => setMobileMenuOpen(false)}
               className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white hover:bg-primary/10 hover:text-primary"
             >
               Catálogo Completo
-            </Link>
+            </Link>)}
 
+            {serviceLinks.map(item => <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} className="block min-h-11 rounded-lg px-3 py-3 text-sm font-semibold hover:bg-primary/10 hover:text-primary">{item.label}</Link>)}
             {hydrated &&
               navCategories.map((item) => (
                 <Link

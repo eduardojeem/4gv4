@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, className, style, 'aria-label': ariaLabel }: any) => (
+  default: ({ children, href, className, style, 'aria-label': ariaLabel }: React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>) => (
     <a href={href} className={className} style={style} aria-label={ariaLabel}>
       {children}
     </a>
@@ -20,7 +20,7 @@ vi.mock('next/link', () => ({
 /* eslint-disable @next/next/no-img-element */
 vi.mock('next/image', () => ({
   __esModule: true,
-  default: (props: any) => <img alt={props.alt || ''} src={props.src} />,
+  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img alt={props.alt || ''} src={props.src} />,
 }))
 
 const sampleSettings: PromotionalCarouselSettings = {
@@ -48,12 +48,12 @@ const sampleSettings: PromotionalCarouselSettings = {
 }
 
 describe('EspecialCosmeticosCarousel — colores y formatos', () => {
-  it('aplica el color de marca predeterminado (rose) cuando no se pasa color', () => {
-    const { container } = render(<EspecialCosmeticosCarousel settings={sampleSettings} />)
+  it('aplica el color de marca heredado de la tienda cuando no se pasa color', () => {
+    render(<EspecialCosmeticosCarousel settings={sampleSettings} />)
     const button = screen.getByRole('link', { name: /ver colección/i })
-    expect(button.className).toContain('from-rose-500')
+    expect(button.className).toContain('from-[var(--cosmetics-500)]')
     const badge = screen.getByText('Exclusivo')
-    expect(badge.parentElement?.className).toContain('text-rose-700')
+    expect(badge.parentElement?.className).toContain('text-[var(--cosmetics-ink)]')
   })
 
   it('aplica el color de marca estándar de la organización (ej: purple)', () => {
@@ -61,9 +61,10 @@ describe('EspecialCosmeticosCarousel — colores y formatos', () => {
       <EspecialCosmeticosCarousel settings={sampleSettings} brandColor="purple" />
     )
     const button = screen.getByRole('link', { name: /ver colección/i })
-    expect(button.className).toContain('from-purple-600')
+    expect(button).toBeVisible()
+    expect(container.querySelector('section')).toHaveAttribute('data-color-scheme', 'purple')
     const badge = screen.getByText('Exclusivo')
-    expect(badge.parentElement?.className).toContain('text-purple-700')
+    expect(badge.parentElement?.className).toContain('text-[var(--cosmetics-ink)]')
   })
 
   it('aplica el color de marca estándar de la organización (ej: emerald)', () => {
@@ -71,7 +72,8 @@ describe('EspecialCosmeticosCarousel — colores y formatos', () => {
       <EspecialCosmeticosCarousel settings={sampleSettings} brandColor="emerald" />
     )
     const button = screen.getByRole('link', { name: /ver colección/i })
-    expect(button.className).toContain('from-emerald-600')
+    expect(button).toBeVisible()
+    expect(container.querySelector('section')).toHaveAttribute('data-color-scheme', 'emerald')
   })
 
   it('aplica color personalizado hexadecimal (ej: Bordó #8B1E3F o Fucsia #B21FB8) a botón, badge y borde', () => {
@@ -84,10 +86,11 @@ describe('EspecialCosmeticosCarousel — colores y formatos', () => {
       />
     )
     const button = screen.getByRole('link', { name: /ver colección/i })
-    expect(button.style.backgroundColor).toBe('rgb(139, 30, 63)') // #8B1E3F in RGB
+    expect(button.style.backgroundColor).toBe('var(--cosmetics-600)')
+    expect(container.querySelector('section')?.style.getPropertyValue('--brand-primary')).toBe(customHex)
 
     const badge = screen.getByText('Exclusivo')
-    expect(badge.parentElement?.style.color).toBe('rgb(139, 30, 63)')
+    expect(badge.parentElement?.style.color).toBe('var(--cosmetics-ink)')
   })
 
   it('respeta ancho full-bleed cuando layoutMode es full', () => {
@@ -109,4 +112,18 @@ describe('EspecialCosmeticosCarousel — colores y formatos', () => {
     const frame = container.querySelector('.rounded-2xl')
     expect(frame).toBeTruthy()
   })
+})
+
+
+it('ignora un color personalizado antiguo cuando el comercio elige otra paleta', () => {
+  const { container } = render(<EspecialCosmeticosCarousel settings={sampleSettings} brandColor="green" customBrandColor="#B21FB8" />)
+  const carousel = container.querySelector('section')
+  expect(carousel).toHaveAttribute('data-color-scheme', 'green')
+  expect(carousel).not.toHaveAttribute('data-custom-brand')
+  expect(carousel?.style.getPropertyValue('--brand-primary')).toBe('')
+})
+it('no aplica un color personalizado inválido', () => {
+  const { container } = render(<EspecialCosmeticosCarousel settings={sampleSettings} brandColor="custom" customBrandColor="invalid" />)
+  expect(container.querySelector('section')).not.toHaveAttribute('data-custom-brand')
+  expect(screen.getByRole('link', { name: /ver colección/i })).toBeVisible()
 })

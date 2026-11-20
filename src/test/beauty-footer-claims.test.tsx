@@ -26,9 +26,10 @@ describe('Beauty footer claims', () => {
     expect(screen.queryByText(/Tienda oficial\. Catálogo con stock actualizado/i)).not.toBeInTheDocument()
   })
 
-  it('keeps the existing footer copy for other storefronts', () => {
+  it('tampoco inventa garantías en las otras plantillas', () => {
     renderFooter('classic')
 
-    expect(screen.getByText(/Tienda oficial\. Catálogo con stock actualizado, garantía y atención personalizada/i)).toBeInTheDocument()
+    expect(screen.queryByText(/garantía|atención personalizada/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Conocé los productos y canales de atención del negocio/i)).toBeInTheDocument()
   })
 })
