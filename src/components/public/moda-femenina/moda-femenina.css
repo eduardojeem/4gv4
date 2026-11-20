@@ -1,4 +1,5 @@
-/* Estilos dedicados para la plantilla Moda Femenina (Inspirada en Modeza) */
+/* Estilos de la plantilla «Boutique Femenina». Los importan la portada, el
+   encabezado y el pie, porque el encabezado y el pie se ven en todas las páginas. */
 
 .moda-femenina-root {
   --moda-bg: #FAF7F2;

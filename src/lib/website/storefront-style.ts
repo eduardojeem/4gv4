@@ -284,7 +284,7 @@ export const STOREFRONT_STYLE_OPTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
-  { value: 'moda-femenina', label: 'Boutique Femenina & Elegance', description: 'Inspirada en Modeza: portada Timeless Elegance con sol terracota, tipografía editorial y firmas cursivas, barra flotante de beneficios, vitrina de categorías con fotos y liquidación de temporada.' },
+  { value: 'moda-femenina', label: 'Boutique Femenina & Elegance', description: 'Boutique de moda: portada editorial con sol terracota, beneficios que carga la tienda, categorías con fotos y ofertas reales del catálogo.' },
   { value: 'especial-cosmeticos', label: 'Especial Cosméticos Premium', description: 'Boutique de cosmética y skincare de alta gama: paleta suave alabastro y rosa empolvado, tipografía serif editorial, rutinas de cuidado, ofertas con cuenta regresiva, perfil con fotos del local y mapa interactivo.' },
   { value: 'especial-para-barbero', label: 'Especial para barbero', description: 'Tienda profesional de barbería e insumos con mega menú, bandas oscuras, precios minoristas y mayoristas y colores adaptables a tu marca.' },
   { value: 'barber', label: 'Barbería Club', description: 'Inspirada en exclusivos clubes de caballeros como Club Varsovia: carta de rituales, atención personalizada, café o bebidas de cortesía, maestros barberos y turnos online.' },
@@ -607,15 +607,15 @@ export const STOREFRONT_TEMPLATES_METADATA: Record<StorefrontStyle, StorefrontTe
     name: 'Boutique Femenina & Elegance',
     badge: 'Moda Femenina',
     tagline: 'Elegancia atemporal, estética minimalista y compras fluidas',
-    description: 'Inspirada en Modeza y las mejores boutiques de indumentaria femenina: sol terracota de portada, tipografía editorial combinada con cursivas refinadas, barra flotante de confianza, vitrina de colecciones y banners de temporada.',
+    description: 'Para boutiques de indumentaria: portada editorial con sol terracota, tipografía con acentos cursivos, beneficios y categorías de la tienda y banner con sus ofertas reales.',
     recommendedVerticals: ['Indumentaria', 'Moda Femenina', 'Calzados', 'Accesorios', 'Boutique'],
     recommendedColors: ['orange', 'amber', 'rose', 'red'],
     features: [
-      'Portada Timeless Elegance con sol terracota y modelo de alta moda',
-      'Barra flotante de beneficios con envíos, devoluciones y pagos seguros',
-      'Vitrina de categorías con fotos verticales y contador de prendas',
-      'Banner promocional de temporada con descuentos y llamadas a la acción',
-      'Tipografía editorial con acentos cursivos estilizados',
+      'Portada editorial con el nombre, los textos y una foto de producto de la tienda',
+      'Barra de beneficios con los que carga el comercio (no muestra promesas de ejemplo)',
+      'Categorías con productos y su cantidad real',
+      'Banner de ofertas solo cuando hay productos rebajados, con el descuento real',
+      'Tipografía editorial con acentos cursivos',
     ],
     accentGradient: 'from-amber-700 via-orange-600 to-amber-500',
     badgeColorClass: 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/25',
@@ -813,7 +813,7 @@ export const STOREFRONT_EYEBROW_CLASS: Record<StorefrontStyle, string> = {
   barber: 'inline-block tracking-[0.2em] uppercase text-xs font-bold text-amber-600 dark:text-amber-400',
   'especial-para-barbero': 'inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/35 px-3 py-0.5 text-[11px] font-black uppercase tracking-[0.18em] text-primary',
   'especial-cosmeticos': 'inline-block rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-rose-700 dark:text-rose-300',
-  'moda-femenina': 'inline-block text-[11px] font-bold uppercase tracking-[0.22em] text-[#E06B3A]',
+  'moda-femenina': 'inline-block text-[11px] font-bold uppercase tracking-[0.22em] text-[#C2531F] dark:text-[#F07C48]',
 }
 
 /** Esquinas de fotos y botones. */
