@@ -1,4 +1,3 @@
-import { brandPaletteStyle, isBrandPalette, type StorefrontBrandPalette } from '@/lib/website/brand-palette'
 import type { CSSProperties, ReactNode } from 'react'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { usesPortraitMedia, type StorefrontStyle } from '@/lib/website/storefront-style'
@@ -11,13 +10,11 @@ import { cn } from '@/lib/utils'
 export function BrandColorScope({
   brandColor,
   customBrandColor,
-  brandPalette,
   className,
   children,
 }: {
   brandColor?: string
   customBrandColor?: string
-  brandPalette?: StorefrontBrandPalette | null
   className?: string
   children: ReactNode
 }) {
@@ -27,8 +24,7 @@ export function BrandColorScope({
       className={className}
       data-color-scheme={custom ? undefined : brandColor && brandColor !== 'custom' ? brandColor : 'blue'}
       data-custom-brand={custom ? '' : undefined}
-      data-storefront-palette={isBrandPalette(brandPalette) ? '' : undefined}
-      style={{ ...(custom ? { '--brand-primary': customBrandColor } : {}), ...brandPaletteStyle(brandPalette) } as CSSProperties}
+      style={custom ? ({ '--brand-primary': customBrandColor } as CSSProperties) : undefined}
     >
       {children}
     </div>
@@ -77,7 +73,7 @@ function ProductRow({ style, count = 3 }: { style: StorefrontStyle; count?: numb
  */
 export function StorefrontTemplateThumbnail({ style, className }: { style: StorefrontStyle; className?: string }) {
   return (
-    <div data-storefront-template={style} aria-hidden="true" className={cn('flex select-none flex-col gap-1 overflow-hidden bg-background p-1.5', className)}>
+    <div aria-hidden="true" className={cn('flex select-none flex-col gap-1 overflow-hidden bg-background p-1.5', className)}>
       {style === 'classic' && (
         <>
           <NavRow />
@@ -374,25 +370,25 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
           <div className="overflow-hidden rounded-sm bg-[#FAF7F2] dark:bg-zinc-900 border-b border-[#736B63]/15">
             <div className="flex items-center justify-between px-1.5 py-1">
               <div className="flex items-center gap-1">
-                <span className="font-serif text-[8px] font-bold text-stone-900 dark:text-stone-100">Modeza.</span>
+                <span className="font-serif text-[8px] font-bold text-stone-900 dark:text-stone-100">Boutique.</span>
               </div>
               <div className="flex items-center gap-1">
                 <span className="block h-0.5 w-2 rounded-full bg-[#E06B3A]" />
                 <span className="block h-1 w-1 rounded-full bg-stone-400" />
-                <span className="rounded-full bg-[#1A1A1A] px-1 py-0.2 text-[4px] font-semibold text-white">Shop</span>
+                <span className="rounded-full bg-[#1A1A1A] px-1 py-px text-[4px] font-semibold text-white">Comprar</span>
               </div>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-lg bg-[#FAF7F2] dark:bg-zinc-900 p-1.5 border border-[#736B63]/10 relative overflow-hidden">
             <div className="space-y-0.5 z-10">
-              <span className="block text-[5px] uppercase tracking-wider text-[#E06B3A] font-bold">2026 Collection</span>
-              <span className="block font-serif text-[7px] font-bold text-stone-800 dark:text-stone-100 leading-tight">Timeless</span>
-              <span className="block font-serif italic text-[6px] text-[#E06B3A]">Elegance</span>
+              <span className="block text-[5px] uppercase tracking-wider text-[#E06B3A] font-bold">Colección</span>
+              <span className="block font-serif text-[7px] font-bold text-stone-800 dark:text-stone-100 leading-tight">Atemporal</span>
+              <span className="block font-serif italic text-[6px] text-[#E06B3A]">Elegancia</span>
             </div>
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#C95627] to-[#E06B3A] shrink-0" />
           </div>
           <div className="flex justify-between gap-1 px-0.5">
-            {['Dresses', 'Tops', 'Outerwear'].map((label) => (
+            {['Vestidos', 'Blusas', 'Abrigos'].map((label) => (
               <span key={label} className="rounded-full bg-[#E06B3A]/10 px-1.5 py-0.5 text-[5px] font-medium text-[#E06B3A]">
                 {label}
               </span>
@@ -401,7 +397,7 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
           <div className="grid grid-cols-3 gap-1">
             {[0, 1, 2].map((index) => (
               <div key={index} className="overflow-hidden rounded-xl border border-stone-200/50 bg-white p-0.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="aspect-[3/4] w-full rounded-lg bg-gradient-to-b from-stone-100 to-amber-50 dark:from-zinc-800 dark:to-zinc-850" />
+                <div className="aspect-[3/4] w-full rounded-lg bg-gradient-to-b from-stone-100 to-amber-50 dark:from-zinc-800 dark:to-zinc-900" />
                 <div className="mt-0.5 space-y-0.5 px-0.5 text-center">
                   <span className="block h-0.5 w-3/4 mx-auto rounded-full bg-stone-700/70 dark:bg-stone-300/70" />
                   <span className="block h-1 w-1/2 mx-auto rounded-full bg-[#E06B3A]" />
