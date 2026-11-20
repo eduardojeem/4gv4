@@ -1,5 +1,6 @@
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import { toDateInput } from '@/lib/superadmin/organization-edit'
+import { isInternalSubscription } from '@/lib/saas/internal-subscription'
 
 /**
  * Lo que necesita el superadmin para operar una suscripción de un vistazo:
@@ -50,6 +51,9 @@ export function summarizeSubscription(sub: SubscriptionSnapshot | null, now = ne
   const trialing = sub.status === 'trialing'
   const due = trialing ? sub.trial_ends_at : sub.current_period_ends_at
   const dueLine = due ? `${trialing ? 'Prueba hasta' : 'Vence'} el ${longDate(due)} (${relative(due, now)})` : null
+  if (isInternalSubscription(sub)) {
+    return { tone: 'ok', headline: 'Cuenta interna', dueLine: 'Sin vencimiento', paymentLine: 'Sin cobro', blocked: false }
+  }
   const paymentLine = sub.payment_status === 'paid' ? 'Pago al día' : sub.payment_status === 'unpaid' ? 'Pago pendiente' : null
   if (evaluation.isBlocked) {
     return { tone: 'danger', headline: 'Bloqueada: el comercio no puede operar', dueLine, paymentLine, blocked: true }

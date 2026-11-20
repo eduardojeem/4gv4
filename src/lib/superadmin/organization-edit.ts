@@ -1,10 +1,12 @@
+import { INTERNAL_STATUS_OPTION, isInternalSubscription } from '@/lib/saas/internal-subscription'
+
 export type OrganizationEditValues = {
   name: string; slug: string; plan: string; status: string; currency: string; timezone: string;
   business_vertical: string; operating_model: string; enabled_modules: string[] | null; cancel_at_period_end: boolean;
   /** Fechas como «AAAA-MM-DD» (lo que muestra el campo de fecha); null sin fecha. */
   trial_ends_at: string | null; current_period_ends_at: string | null;
 }
-type Original = { name: string; slug: string; plan: string; subscription_status?: string | null } & Partial<{ [K in Exclude<keyof OrganizationEditValues, 'name' | 'slug' | 'plan' | 'status'>]: OrganizationEditValues[K] | null }>
+type Original = { name: string; slug: string; plan: string; subscription_status?: string | null; payment_status?: string | null } & Partial<{ [K in Exclude<keyof OrganizationEditValues, 'name' | 'slug' | 'plan' | 'status'>]: OrganizationEditValues[K] | null }>
 
 /** «2026-11-23T03:34:59Z» → «2026-11-23» en la hora del navegador. */
 export function toDateInput(value: string | null | undefined): string | null {
@@ -22,10 +24,16 @@ export function fromDateInput(value: string | null): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null
 }
 
+/** Estado que muestra el selector. La cuenta interna es «activa» con pago interno en la base. */
+export function editStatusOf(original: Pick<Original, 'subscription_status' | 'payment_status'>): string {
+  if (isInternalSubscription({ status: original.subscription_status, payment_status: original.payment_status })) return INTERNAL_STATUS_OPTION
+  return original.subscription_status === 'canceled' ? 'cancelled' : original.subscription_status || 'sin_registro'
+}
+
 export function organizationEditDefaults(original: Original): OrganizationEditValues {
   return {
     name: original.name, slug: original.slug, plan: (original.plan || 'FREE').toUpperCase(),
-    status: original.subscription_status === 'canceled' ? 'cancelled' : original.subscription_status || 'sin_registro', currency: original.currency || 'PYG', timezone: original.timezone || 'America/Asuncion',
+    status: editStatusOf(original), currency: original.currency || 'PYG', timezone: original.timezone || 'America/Asuncion',
     business_vertical: original.business_vertical || 'general', operating_model: original.operating_model || 'retail',
     enabled_modules: original.enabled_modules ?? null, cancel_at_period_end: Boolean(original.cancel_at_period_end),
     trial_ends_at: toDateInput(original.trial_ends_at), current_period_ends_at: toDateInput(original.current_period_ends_at),

@@ -1,5 +1,6 @@
 import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 import { normalizeTenantSlug, validateTenantSlug } from '@/lib/saas/reserved-slugs'
+import { INTERNAL_PAYMENT_STATUS, INTERNAL_STATUS_OPTION } from '@/lib/saas/internal-subscription'
 
 /**
  * Reglas del «Editar organización» del superadmin, sin base de datos para
@@ -26,6 +27,7 @@ export type CurrentSubscription = {
   status: string | null
   trial_ends_at: string | null
   current_period_ends_at: string | null
+  payment_status?: string | null
 } | null
 
 export type CurrentOrganization = { id: string; name: string; slug: string; plan: string | null }
@@ -156,8 +158,26 @@ export function planOrganizationUpdate(
 
   if (body.status !== undefined) {
     const status = typeof body.status === 'string' ? body.status.trim().toLowerCase().replace(/^canceled$/, 'cancelled') : ''
+    // Cuenta interna: activa, sin vencimiento ni cobro. No pide renovación ni suma al MRR.
+    if (status === INTERNAL_STATUS_OPTION) {
+      Object.assign(subscriptionPatch, {
+        status: 'active',
+        payment_status: INTERNAL_PAYMENT_STATUS,
+        current_period_ends_at: null,
+        trial_ends_at: null,
+        cancel_at_period_end: false,
+      })
+      return {
+        ok: true,
+        plan: { organization, subscription: subscriptionPatch, settings: Object.keys(settings).length ? settings : null, slugChange, requested: body },
+      }
+    }
     if (!(SUBSCRIPTION_STATUS_VALUES as readonly string[]).includes(status)) return fail('Ese estado de suscripción no existe.', 'status')
     subscriptionPatch.status = status
+    // Al salir de cuenta interna, el pago deja de figurar como interno.
+    if (subscription?.payment_status?.toLowerCase() === INTERNAL_PAYMENT_STATUS && status !== 'active') {
+      subscriptionPatch.payment_status = null
+    }
     const nowTime = now.getTime()
     // El sistema bloquea por fecha y por pago, no solo por el estado: «Activa»
     // con el pago impago o el período vencido seguía bloqueando el comercio.
