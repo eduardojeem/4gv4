@@ -53,7 +53,7 @@ export type Repair = {
   customer?: { id: string; name?: string | null; first_name?: string | null; last_name?: string | null; phone?: string | null; email?: string | null; customer_type?: string | null } | null;
   technician?: { id: string; full_name?: string | null } | null;
   images?: { id: string; image_url: string; description?: string | null }[] | null;
-  payments?: { id: string; amount?: number | null; payment_method?: string | null; created_at?: string | null }[] | null;
+  payments?: { id: string; amount?: number | null; payment_method?: string | null; reference?: string | null; created_at?: string | null }[] | null;
 };
 
 type IconName = keyof typeof Ionicons.glyphMap;
