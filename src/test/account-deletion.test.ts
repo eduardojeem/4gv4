@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   storageList: vi.fn(),
   storageRemove: vi.fn(),
+  branding: vi.fn(),
 }))
 
+vi.mock('@/lib/platform/branding', () => ({ getPlatformBranding: mocks.branding }))
 vi.mock('@/lib/auth/request-auth', () => ({ resolveRequestAuthUser: mocks.auth }))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminSupabase: () => ({
@@ -220,6 +222,34 @@ describe('getAccountDeletionImpact', () => {
     mocks.getUserById.mockResolvedValueOnce({ data: { user: { identities: [{ provider: 'google' }] } }, error: null })
 
     await expect(getAccountDeletionImpact(USER.id, USER.email)).resolves.toMatchObject({ hasPassword: false, graceDays: 30, pending: null })
+  })
+})
+
+describe('accountSupportEmail', () => {
+  it('usa el correo del superadmin, después las variables y por último el de la marca', async () => {
+    const { accountSupportEmail } = await import('@/lib/account/account-deletion')
+    vi.stubEnv('SUPPORT_EMAIL', 'env@mitiendapy.com')
+
+    mocks.branding.mockResolvedValueOnce({ supportEmail: 'marca@mitiendapy.com' })
+    await expect(accountSupportEmail()).resolves.toBe('marca@mitiendapy.com')
+
+    mocks.branding.mockResolvedValueOnce({ supportEmail: '' })
+    await expect(accountSupportEmail()).resolves.toBe('env@mitiendapy.com')
+
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubEnv('SUPPORT_EMAIL', '')
+    vi.stubEnv('EMAIL_REPLY_TO', '')
+    mocks.branding.mockRejectedValueOnce(new Error('base caída'))
+    await expect(accountSupportEmail()).resolves.toBe('soporte@mitiendapy.com')
+  })
+
+  it('el impacto que recibe la app trae el correo del superadmin', async () => {
+    const { getAccountDeletionImpact } = await import('@/lib/account/account-deletion')
+    mocks.branding.mockResolvedValueOnce({ supportEmail: 'marca@mitiendapy.com' })
+    mocks.from.mockReturnValueOnce(query({ data: null, error: null })).mockReturnValueOnce(query({ data: [], error: null }))
+    mocks.getUserById.mockResolvedValueOnce({ data: { user: { identities: [{ provider: 'email' }] } }, error: null })
+
+    await expect(getAccountDeletionImpact(USER.id, USER.email)).resolves.toMatchObject({ supportEmail: 'marca@mitiendapy.com' })
   })
 })
 

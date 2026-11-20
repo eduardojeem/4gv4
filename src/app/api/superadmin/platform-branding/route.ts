@@ -12,6 +12,12 @@ import {
   withBrandingInFeatures,
 } from '@/lib/platform/branding'
 import { SYSTEM_COLOR_SCHEME_VALUES } from '@/lib/theme/color-schemes'
+import { MAX_LOGO_HEIGHT_PX } from '@/lib/platform/logo-size'
+import {
+  SUPPORT_HOURS_MAX_LENGTH,
+  normalizeSupportEmail,
+  normalizeSupportWhatsapp,
+} from '@/lib/platform/support-contact'
 
 const brandingSchema = z.object({
   platformName: z.string().trim().min(2).max(80),
@@ -22,6 +28,9 @@ const brandingSchema = z.object({
   hideNavBrandText: z.boolean().optional().default(false),
   hideNavTagline: z.boolean().optional().default(false),
   logoHeight: z.enum(['sm', 'md', 'lg', 'xl']).optional().default('md'),
+  // Faltaba: zod descartaba el campo y el alto exacto del logo nunca se guardaba.
+  // 0 = sin alto personalizado; el resto se ajusta a 24-96 al normalizar.
+  logoHeightPx: z.number().finite().min(0).max(MAX_LOGO_HEIGHT_PX).optional().default(0),
   logoGlowDark: z.boolean().optional().default(true),
   marketplaceName: z.string().trim().min(2).max(80),
   marketplaceTagline: z.string().trim().min(2).max(140),
@@ -39,6 +48,15 @@ const brandingSchema = z.object({
   seoTitle: z.string().trim().min(2).max(160),
   seoDescription: z.string().trim().min(2).max(240),
   footerText: z.string().trim().min(2).max(180),
+  // Vacío = no configurado (el correo cae en SUPPORT_EMAIL / EMAIL_REPLY_TO).
+  supportEmail: z.string().trim().max(254).optional().default('')
+    .refine((value) => !value || Boolean(normalizeSupportEmail(value)), 'El correo de soporte no es válido.'),
+  supportWhatsapp: z.string().trim().max(32).optional().default('')
+    .refine(
+      (value) => !value || Boolean(normalizeSupportWhatsapp(value)),
+      'El WhatsApp de soporte debe ir con código de país, por ejemplo +595981123456.',
+    ),
+  supportHours: z.string().trim().max(SUPPORT_HOURS_MAX_LENGTH, `El horario admite hasta ${SUPPORT_HOURS_MAX_LENGTH} caracteres.`).optional().default(''),
 })
 
 function isSafeHref(value: string) {
