@@ -68,7 +68,7 @@ export async function submitUserFeedback(params: FeedbackInput & {
   // Aviso a soporte: el comentario ya quedó guardado, si el correo falla no es un error.
   try {
     await sendEmail({
-      to: accountSupportEmail(),
+      to: await accountSupportEmail(),
       ...(params.email ? { replyTo: params.email } : {}),
       subject: `[Comentario · ${KIND_LABELS[params.kind]}] ${params.organizationName ?? 'Sin comercio'}`,
       html: [

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
 }))
 
+vi.mock('@/lib/platform/branding', () => ({ getPlatformBranding: async () => ({ supportEmail: '' }) }))
 vi.mock('@/lib/auth/request-auth', () => ({ resolveRequestAuthUser: mocks.auth }))
 vi.mock('@/lib/saas/context', () => ({ getCurrentOrganizationContext: mocks.organization }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ from: mocks.from }) }))

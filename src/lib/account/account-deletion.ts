@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/resend'
 import { renderAccountDeletionCodeEmail, renderAccountDeletionRequestedEmail } from '@/lib/email/templates'
+import { resolveSupportEmail } from '@/lib/platform/support-contact'
 
 /**
  * Eliminación de cuenta a pedido del usuario (requisito de Google Play).
@@ -28,8 +29,21 @@ const CODE_RESEND_SECONDS = 60
 const BAN_DURATION = '876000h'
 const AVATAR_BUCKET = 'avatars'
 
-export function accountSupportEmail() {
-  return process.env.SUPPORT_EMAIL?.trim() || process.env.EMAIL_REPLY_TO?.trim() || 'soporte@mitiendapy.com'
+/**
+ * Correo de soporte: el que cargó el superadmin en Marca SaaS, si no
+ * SUPPORT_EMAIL / EMAIL_REPLY_TO y por último soporte@mitiendapy.com.
+ * La marca se importa al usarla para que leerla no sea obligatorio al cargar el
+ * módulo; si la base no responde, se sigue con las variables de entorno.
+ */
+export async function accountSupportEmail() {
+  let brandingEmail = ''
+  try {
+    const { getPlatformBranding } = await import('@/lib/platform/branding')
+    brandingEmail = (await getPlatformBranding()).supportEmail
+  } catch (error) {
+    console.error('[account-deletion] No se pudo leer el correo de soporte de la marca', { error })
+  }
+  return resolveSupportEmail(brandingEmail)
 }
 
 export class AccountDeletionError extends Error {
@@ -69,10 +83,11 @@ async function userHasPassword(userId: string) {
 /** Qué pasa si esta cuenta se elimina: negocios que se cierran y si ya hay un pedido. */
 export async function getAccountDeletionImpact(userId: string, email: string | null): Promise<AccountDeletionImpact> {
   const admin = createAdminSupabase()
-  const [{ data: pending }, { data: memberships }, hasPassword] = await Promise.all([
+  const [{ data: pending }, { data: memberships }, hasPassword, supportEmail] = await Promise.all([
     admin.from('account_deletion_requests').select('scheduled_for').eq('user_id', userId).eq('status', 'pending').maybeSingle(),
     admin.from('organization_members').select('organization_id').eq('user_id', userId).eq('status', 'active').in('role', ['owner', 'admin']),
     userHasPassword(userId),
+    accountSupportEmail(),
   ])
 
   const organizationIds = (memberships ?? []).map((row) => row.organization_id as string)
@@ -95,7 +110,7 @@ export async function getAccountDeletionImpact(userId: string, email: string | n
     closesOrganizations,
     hasPassword,
     graceDays: ACCOUNT_DELETION_GRACE_DAYS,
-    supportEmail: accountSupportEmail(),
+    supportEmail,
   }
 }
 
@@ -139,7 +154,7 @@ export async function sendAccountDeletionCode(params: { userId: string; email: s
   const sent = await sendEmail({
     to: params.email,
     subject: 'Tu código para eliminar la cuenta',
-    html: renderAccountDeletionCodeEmail({ code, minutes: ACCOUNT_DELETION_CODE_TTL_MINUTES, supportEmail: accountSupportEmail() }),
+    html: renderAccountDeletionCodeEmail({ code, minutes: ACCOUNT_DELETION_CODE_TTL_MINUTES, supportEmail: await accountSupportEmail() }),
   })
   if (!sent.ok || sent.skipped) {
     await admin.from('account_deletion_codes').delete().eq('user_id', params.userId)
@@ -219,7 +234,7 @@ export async function requestAccountDeletion(params: {
       html: renderAccountDeletionRequestedEmail({
         scheduledFor: request.scheduled_for,
         closedOrganizations: (closed ?? []).map((row) => row.name),
-        supportEmail: accountSupportEmail(),
+        supportEmail: await accountSupportEmail(),
         retentionYears: ACCOUNT_RECORDS_RETENTION_YEARS,
       }),
     })

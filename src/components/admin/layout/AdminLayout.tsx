@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { FeedbackButton } from '@/components/feedback/FeedbackButton'
+import { SupportContactMenu } from '@/components/support/SupportContactMenu'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowLeft, ChevronDown, ChevronRight, Crown, LayoutDashboard, LogOut, Menu, Search, Settings, Shield, Store, User } from 'lucide-react'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
@@ -266,6 +267,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
         <div className="space-y-2 border-t border-border bg-muted/20 p-4">
           <SubscriptionChip variant="sidebar" />
+          <SupportContactMenu collapsed={collapsed} showGuide onNavigate={() => setMobileSidebarOpen(false)} />
           {/* Salida del área de administración: destacada para no confundirla con una sección más. */}
           <Link href="/dashboard" onClick={() => setMobileSidebarOpen(false)} className={cn('flex items-center rounded-xl bg-primary font-semibold text-primary-foreground shadow-sm ring-1 ring-primary/30 transition-all duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5')} title="Volver al panel de inicio" aria-label="Volver al panel de inicio">
             <ArrowLeft className={cn('flex-shrink-0', collapsed ? 'h-5 w-5' : 'h-4 w-4')} />
