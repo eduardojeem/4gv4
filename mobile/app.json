@@ -24,12 +24,15 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.mitiendapy.app",
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
       ]
     },
     "web": {
@@ -56,6 +59,14 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MiTiendaPy usa tu ubicación aproximada solo para mostrarte las tiendas de tu ciudad.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
       [
         "expo-image-picker",
         {
