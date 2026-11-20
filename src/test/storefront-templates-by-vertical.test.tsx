@@ -26,7 +26,8 @@ describe('plantillas según el rubro, sin mezclar servicios y tienda', () => {
   })
 
   it('comercio general u otro rubro con agenda conserva todas las opciones', () => {
-    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(13)
+    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toHaveLength(14)
+    expect(offered('general', { servicesAvailable: true, catalogAvailable: true })).toContain('moda-femenina')
     expect(offered('other', { servicesAvailable: false, catalogAvailable: true })).not.toContain('services')
   })
 

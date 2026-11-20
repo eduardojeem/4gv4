@@ -62,6 +62,7 @@ export const TEMPLATE_GROUP_ICONS: Record<StorefrontTemplateGroupId, typeof Stor
 }
 
 export const TEMPLATE_FEATURE_PILLS: Record<StorefrontStyle, string[]> = {
+  'moda-femenina': ['Hero editorial sol', 'Barra beneficios', 'Categorías en tarjeta', 'Moda boutique'],
   'especial-cosmeticos': ['Carrusel boutique', 'Marcas oficiales', 'Ofertas en Gs.', 'Perfil de local'],
   'especial-para-barbero': ['Mega menú 4 col', 'Modo mayorista', 'Estética oscura', 'Marcas'],
   beauty: ['Categorías circulares', 'Rutina de cuidado', 'Marcas', 'Ofertas'],
