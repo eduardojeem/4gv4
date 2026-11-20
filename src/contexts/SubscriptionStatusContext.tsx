@@ -47,6 +47,10 @@ export type SubscriptionStatusData = {
   organizationName: string | null
   /** Logo de la organización activa (si tiene). */
   organizationLogoUrl: string | null
+  /** Cuenta interna: activa sin vencimiento ni cobro (no pide renovación). */
+  isInternal?: boolean
+  /** Quien mira es superadmin: los avisos de cobro se muestran como estado, no como pedido de pago. */
+  viewerIsSuperAdmin?: boolean
 }
 
 const DEFAULTS: SubscriptionStatusData = {

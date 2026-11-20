@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
-import { buildOrganizationPatch, organizationEditDefaults, organizationPatchPayload, toDateInput, ORGANIZATION_FIELD_LABELS, type OrganizationEditValues } from '@/lib/superadmin/organization-edit'
+import { buildOrganizationPatch, editStatusOf, organizationEditDefaults, organizationPatchPayload, toDateInput, ORGANIZATION_FIELD_LABELS, type OrganizationEditValues } from '@/lib/superadmin/organization-edit'
 import { ORGANIZATION_MODULE_KEYS, ORGANIZATION_PLAN_CODES, RESTRICTIVE_STATUSES, planCodeOf } from '@/lib/superadmin/organization-update'
 import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { createClient } from '@/lib/supabase/client'
@@ -62,6 +62,7 @@ type Props = {
 const PLAN_OPTIONS: readonly string[] = ORGANIZATION_PLAN_CODES
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Activa' },
+  { value: 'internal', label: 'Cuenta interna (sin cobro)' },
   { value: 'trialing', label: 'En Prueba (Trial)' },
   { value: 'past_due', label: 'Vencida / Pago Pendiente' },
   { value: 'suspended', label: 'Suspendida' },
@@ -142,7 +143,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
       setName(organization.name || '')
       setSlug(organization.slug || '')
       setPlan((organization.plan || 'FREE').toUpperCase())
-      setStatus(organization.subscription_status === 'canceled' ? 'cancelled' : organization.subscription_status || 'sin_registro')
+      setStatus(editStatusOf(organization))
       setCurrency(organization.currency || 'PYG')
       setTimezone(organization.timezone || 'America/Asuncion')
       setBusinessVertical(organization.business_vertical || 'general')
@@ -337,7 +338,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
               variant="outline"
               className={cn(
                 'text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full hidden sm:inline-flex',
-                status === 'active'
+                status === 'active' || status === 'internal'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                   : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
               )}
@@ -581,6 +582,11 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess,
                   <p className="text-xs text-muted-foreground">Al activarla se marca el pago como al día. Después de esta fecha vuelve a pedir renovación.</p>
                   {fieldError?.field === 'current_period_ends_at' ? <p role="alert" className="text-xs text-red-600">{fieldError.message}</p> : null}
                 </div>
+              )}
+              {status === 'internal' && (
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  Queda activa sin fecha de vencimiento y sin cobro: no pide renovación ni suma a los ingresos. Usala para la tienda de la plataforma o cuentas del equipo.
+                </p>
               )}
               {status === 'trialing' && (
                 <div className="space-y-1.5 sm:col-span-2">

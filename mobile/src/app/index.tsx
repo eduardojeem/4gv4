@@ -7,6 +7,8 @@ import { ALL_LOCATIONS, parseMarketplaceLocation, type MarketplaceLocation } fro
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
+import { matchNearbyLocation } from '@/lib/nearby-location-model';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -127,6 +129,8 @@ export default function MarketplaceScreen() {
   const [catalogResponse, setCatalogResponse] = useState<{key:string;value:MarketplaceHome}|null>(null);
   const [marketLocation,setMarketLocation]=useState<MarketplaceLocation>(ALL_LOCATIONS);
   const [locationReady,setLocationReady]=useState(false);
+  const [nearbyBusy,setNearbyBusy]=useState(false);
+  const [nearbyNote,setNearbyNote]=useState<string|null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -182,6 +186,36 @@ export default function MarketplaceScreen() {
   const applyLocation = (next:MarketplaceLocation) => {
     setMarketLocation(next);setProductPage(1);setOfferPage(1);setStorePage(1);setProductStore(null);setProductCategory(null);setProductBrand(null);setSortBy('default');setOfferSort('discount');setPriceRange('all');setSelectedProduct(null);setSelectedStorePreview(null);
     void secureStorage.setItem('marketplace_location_v1',JSON.stringify(next)).catch(()=>undefined);
+  };
+  // «Cerca mío»: las tiendas no tienen coordenadas, así que se filtra por la
+  // ciudad del celular (o su país si ahí no hay tiendas). Ubicación aproximada.
+  const findNearbyStores = async () => {
+    if (nearbyBusy) return;
+    setNearbyBusy(true);
+    setNearbyNote(null);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setNearbyNote('Para ver tiendas cerca, permití la ubicación en los ajustes del celular.');
+        return;
+      }
+      const position = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }));
+      const [address] = await Location.reverseGeocodeAsync(position.coords);
+      const match = matchNearbyLocation(address, catalogResponse?.value.location);
+      if (match.kind === 'none') {
+        setNearbyNote(match.city ? `Todavía no hay tiendas en ${match.city}.` : 'No pudimos saber en qué ciudad estás.');
+        return;
+      }
+      applyLocation(match.selection);
+      setNearbyNote(match.kind === 'city'
+        ? `Mostrando tiendas en ${match.label}.`
+        : `No hay tiendas en ${match.city ?? 'tu ciudad'}; te mostramos las de ${match.label}.`);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      setNearbyNote('No pudimos obtener tu ubicación. Probá de nuevo.');
+    } finally {
+      setNearbyBusy(false);
+    }
   };
   useEffect(()=>{let active=true;secureStorage.getItem('marketplace_location_v1').then(value=>{if(active&&value){try{setMarketLocation(parseMarketplaceLocation(JSON.parse(value)));}catch{}}}).catch(()=>undefined).finally(()=>{if(active)setLocationReady(true);});return()=>{active=false;};},[]);
 
@@ -1808,6 +1842,17 @@ export default function MarketplaceScreen() {
                     </Pressable>
                   )}
                 </View>
+
+                <Pressable
+                  onPress={() => void findNearbyStores()}
+                  disabled={nearbyBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver tiendas cerca mío"
+                  style={[styles.nearbyButton, { borderColor: colors.border, backgroundColor: colors.background, opacity: nearbyBusy ? 0.6 : 1 }]}>
+                  {nearbyBusy ? <ActivityIndicator size="small" color={palette.primary} /> : <Ionicons name="navigate-outline" size={16} color={palette.primary} />}
+                  <Text style={[styles.nearbyButtonText, { color: colors.text }]}>{nearbyBusy ? 'Buscando tu ciudad…' : 'Tiendas cerca mío'}</Text>
+                </Pressable>
+                {nearbyNote && <Text accessibilityLiveRegion="polite" style={[styles.nearbyNote, { color: colors.muted }]}>{nearbyNote}</Text>}
 
               </View>
 
@@ -3771,6 +3816,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 12,
     height: 48,
+  },
+  nearbyButton: {
+    marginTop: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  nearbyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  nearbyNote: {
+    marginTop: 6,
+    fontSize: 12,
+    textAlign: 'center',
   },
   clearSearchBtn: {
     padding: 4,
