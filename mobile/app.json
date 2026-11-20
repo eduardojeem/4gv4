@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mi TiendaPy",
     "slug": "mitiendapy",
-    "version": "1.3.4",
+    "version": "1.3.5",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "mitiendapy",

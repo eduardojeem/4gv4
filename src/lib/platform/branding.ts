@@ -1,5 +1,11 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { unstable_cache } from 'next/cache'
+import {
+  DEFAULT_MARKETPLACE_THEME,
+  normalizeMarketplaceTheme,
+  type MarketplaceTheme,
+} from '@/lib/theme/theme-scope'
+import { normalizeSupportEmail, normalizeSupportHours, normalizeSupportWhatsapp } from './support-contact'
 
 export type PlatformBranding = {
   platformName: string
@@ -15,6 +21,8 @@ export type PlatformBranding = {
   logoGlowDark?: boolean
   marketplaceName: string
   marketplaceTagline: string
+  /** Modo y paleta del marketplace. Solo lo define el superadmin. */
+  marketplaceTheme: MarketplaceTheme
   primaryCtaLabel: string
   primaryCtaHref: string
   secondaryCtaLabel: string
@@ -24,6 +32,12 @@ export type PlatformBranding = {
   seoTitle: string
   seoDescription: string
   footerText: string
+  /** Correo de soporte para comercios. Vacío: se usa SUPPORT_EMAIL o el de la marca. */
+  supportEmail: string
+  /** WhatsApp de soporte en formato internacional (+595981123456). Vacío: no se muestra. */
+  supportWhatsapp: string
+  /** Horario de atención, texto corto ("Lun a vie, 8 a 18 h"). */
+  supportHours: string
 }
 
 export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
@@ -39,6 +53,7 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   logoGlowDark: true,
   marketplaceName: 'Marketplace',
   marketplaceTagline: 'Empresas y productos',
+  marketplaceTheme: DEFAULT_MARKETPLACE_THEME,
   primaryCtaLabel: 'Crear empresa',
   primaryCtaHref: '/register',
   secondaryCtaLabel: 'Ver productos',
@@ -48,6 +63,9 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   seoTitle: 'POS, inventario, marketplace y servicios',
   seoDescription: 'Plataforma SaaS multiempresa para POS, inventario, ecommerce, reparaciones, servicios y marketplace.',
   footerText: 'Una plataforma para operar POS, catalogos, servicios y marketplace.',
+  supportEmail: '',
+  supportWhatsapp: '',
+  supportHours: '',
 }
 
 const BRANDING_KEY = 'saas_branding'
@@ -102,6 +120,7 @@ export function normalizePlatformBranding(value: unknown): PlatformBranding {
     logoGlowDark: readBoolean(source.logoGlowDark, DEFAULT_PLATFORM_BRANDING.logoGlowDark ?? true),
     marketplaceName: readString(source.marketplaceName, DEFAULT_PLATFORM_BRANDING.marketplaceName, 80),
     marketplaceTagline: readString(source.marketplaceTagline, DEFAULT_PLATFORM_BRANDING.marketplaceTagline, 140),
+    marketplaceTheme: normalizeMarketplaceTheme(source.marketplaceTheme),
     primaryCtaLabel: readString(source.primaryCtaLabel, DEFAULT_PLATFORM_BRANDING.primaryCtaLabel, 50),
     primaryCtaHref: readPath(source.primaryCtaHref, DEFAULT_PLATFORM_BRANDING.primaryCtaHref),
     secondaryCtaLabel: readString(source.secondaryCtaLabel, DEFAULT_PLATFORM_BRANDING.secondaryCtaLabel, 50),
@@ -111,6 +130,9 @@ export function normalizePlatformBranding(value: unknown): PlatformBranding {
     seoTitle: readString(source.seoTitle, DEFAULT_PLATFORM_BRANDING.seoTitle, 160),
     seoDescription: readString(source.seoDescription, DEFAULT_PLATFORM_BRANDING.seoDescription, 240),
     footerText: readString(source.footerText, DEFAULT_PLATFORM_BRANDING.footerText, 180),
+    supportEmail: normalizeSupportEmail(source.supportEmail),
+    supportWhatsapp: normalizeSupportWhatsapp(source.supportWhatsapp),
+    supportHours: normalizeSupportHours(source.supportHours),
   }
 }
 
@@ -138,8 +160,20 @@ async function getPlatformBrandingUncached() {
   return getBrandingFromFeatures((data as { features?: unknown } | null)?.features)
 }
 
-export const getPlatformBranding = unstable_cache(
+/** La etiqueta del caché de abajo: invalidarla hace que el cambio se vea enseguida. */
+export const PLATFORM_BRANDING_TAG = 'platform:branding'
+
+const getCachedPlatformBranding = unstable_cache(
   getPlatformBrandingUncached,
   ['platform-branding'],
   { revalidate: 300, tags: ['platform:branding'] }
 )
+
+/**
+ * Se normaliza también al salir del caché: una entrada guardada por una versión
+ * anterior no trae los campos nuevos (p. ej. `marketplaceTheme`) y quien la lea
+ * no tiene por qué saberlo.
+ */
+export async function getPlatformBranding(): Promise<PlatformBranding> {
+  return normalizePlatformBranding(await getCachedPlatformBranding())
+}

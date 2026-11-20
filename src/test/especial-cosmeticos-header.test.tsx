@@ -99,4 +99,12 @@ describe('EspecialCosmeticosHeader — headerStyle («Claro», «Color de marca�
     const header = container.querySelector('header')
     expect(header?.style.backgroundColor).toBe('rgb(139, 30, 63)')
   })
+
+  it('incluye opción de volver al marketplace en el encabezado', () => {
+    const settings = createSettings('solid')
+    render(<EspecialCosmeticosHeader settings={settings} />)
+    const marketplaceLinks = screen.getAllByRole('link', { name: /marketplace/i })
+    expect(marketplaceLinks.length).toBeGreaterThanOrEqual(1)
+    expect(marketplaceLinks.every((link) => link.getAttribute('href') === '/marketplace')).toBe(true)
+  })
 })

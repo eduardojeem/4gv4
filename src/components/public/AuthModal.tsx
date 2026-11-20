@@ -31,6 +31,7 @@ import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { AuthMethodDivider, GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { siteUrl } from '@/lib/site-url'
 import { toast } from 'sonner'
+import { requestPasswordResetEmail } from '@/lib/auth/request-password-reset'
 
 type AuthTab = 'login' | 'register'
 
@@ -364,8 +365,7 @@ function PasswordRecovery({ initialEmail, onBack }: { initialEmail: string; onBa
 
     setLoading(true)
     try {
-      const supabase = createClient()
-      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      const { error: recoveryError } = await requestPasswordResetEmail(normalizedEmail, {
         redirectTo: siteUrl('/auth/reset-password'),
         captchaToken,
       })

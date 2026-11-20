@@ -71,11 +71,15 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // El marketplace se ve como lo configura el superadmin; el panel, como lo
+  // elige cada persona (ver lib/theme/theme-scope).
+  const { marketplaceTheme } = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING);
+
   return (
     <html lang="es" suppressHydrationWarning data-color-scheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
       <head>
@@ -87,13 +91,13 @@ export default function RootLayout({
             next-themes/shadcn/HeroUI). El script en sí funciona bien en SSR;
             useServerInsertedHTML es el mecanismo soportado para inyectar HTML
             directo al stream sin que React lo trate como un nodo a reconciliar. */}
-        <ThemeInitScript />
+        <ThemeInitScript marketplaceTheme={marketplaceTheme} />
       </head>
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
+        <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME} marketplaceTheme={marketplaceTheme}>
           <AccessibilityProvider>
             <AuthProvider>
               <RegionalSettingsBoundary>

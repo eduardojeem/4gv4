@@ -16,6 +16,7 @@ import { filterDashboardNavGroups, getDashboardNavItemByPath } from '@/config/da
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
+import { SupportContactMenu } from '@/components/support/SupportContactMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   ChevronDown,
@@ -199,8 +200,8 @@ export const Sidebar = memo(function Sidebar() {
                   />
                 </div>
               ) : (
-                <div className="bg-linear-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg shrink-0">
-                  <Smartphone className="h-6 w-6 text-white" />
+                <div className="bg-primary p-2.5 rounded-xl shadow-lg shrink-0">
+                  <Smartphone className="h-6 w-6 text-primary-foreground" />
                 </div>
               )}
               <div className="min-w-0">
@@ -284,6 +285,13 @@ export const Sidebar = memo(function Sidebar() {
             </div>
           )})}
         </nav>
+
+        <div className={cn('shrink-0 border-t border-border', collapsed ? 'p-2' : 'px-4 py-2')}>
+          <SupportContactMenu
+            collapsed={collapsed}
+            showGuide={user?.role === 'admin' || user?.role === 'super_admin'}
+          />
+        </div>
 
         {/* User info */}
         {!collapsed && (

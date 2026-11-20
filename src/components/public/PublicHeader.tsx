@@ -6,6 +6,7 @@ import { InformaticaElectronicaHeader } from '@/components/public/informatica-el
 import { BarberHeader } from '@/components/public/barber/BarberHeader'
 import { EspecialBarberoHeader } from '@/components/public/especial-para-barbero/EspecialBarberoHeader'
 import { EspecialCosmeticosHeader } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHeader'
+import { ModaFemeninaHeader } from '@/components/public/moda-femenina/ModaFemeninaHeader'
 
 import { WhatsAppIcon, InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/public/SocialIcons'
 
@@ -275,6 +276,9 @@ export function PublicHeader({
   }
   if (storefrontStyle === 'especial-cosmeticos') {
     return <EspecialCosmeticosHeader settings={effectiveSettings ?? null} />
+  }
+  if (storefrontStyle === 'moda-femenina') {
+    return <ModaFemeninaHeader settings={effectiveSettings ?? null} />
   }
 
   return (

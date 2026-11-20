@@ -4,11 +4,12 @@ import { BottomSheet } from '@/components/bottom-sheet';
 import { repairWarrantySummary } from '@/lib/repair-warranty';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Platform,
   Pressable,
@@ -24,6 +25,7 @@ import { DeliverySheet } from '@/components/delivery-sheet';
 import { PatternPreview } from '@/components/pattern-picker';
 import { CostsSheet, EditRepairSheet, PaymentSheet } from '@/components/repair-editors';
 import { QualityCheckSheet } from '@/components/quality-check-sheet';
+import { RepairPhotos } from '@/components/repair-photos';
 import { formatGs, openWeb } from '@/lib/marketplace';
 import { usePanel } from '@/lib/panel';
 import { palette, usePalette } from '@/lib/palette';
@@ -110,6 +112,14 @@ export default function RepairDetail() {
   const [editor, setEditor] = useState<'edit' | 'costs' | 'payment' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { data: panel, can } = usePanel();
+  const insets = useSafeAreaInsets();
+
+  // El aviso flota sobre la barra de abajo: se ve desde cualquier pestaña y se va solo.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/panel/repairs' as never));
 
@@ -150,6 +160,26 @@ export default function RepairDetail() {
   const priority = repair.priority ? PRIORITY[repair.priority] : null;
   const outcome = repairOutcome(repair);
   const warranty = repairWarrantySummary(repair);
+
+  // Lo que sigue según el estado, siempre a mano en la barra de abajo (antes había
+  // que volver a «Resumen» y bajar hasta «Cambiar estado»).
+  const primary: { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; onPress: () => void } | null =
+    canVerify && repair.status === 'reparacion'
+      ? { label: 'Verificar y marcar listo', icon: 'shield-checkmark-outline', color: palette.success, onPress: () => { setNotice(null); setQcOpen(true); } }
+      : canDeliver
+        ? { label: 'Entregar equipo', icon: 'bag-check-outline', color: palette.primary, onPress: () => { setNotice(null); setDeliveryOpen(true); } }
+        : editable && !quoted
+          ? { label: 'Presupuestar', icon: 'pricetag-outline', color: palette.primary, onPress: () => setEditor('costs') }
+          : editable && balance > 0
+            ? { label: `Registrar pago · saldo ${formatGs(balance)}`, icon: 'cash-outline', color: palette.success, onPress: () => setEditor('payment') }
+            : null;
+  const paymentHistory = [...(repair.payments ?? [])].sort((a, b) => Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? ''));
+
+  const call = (number: string) => {
+    Linking.openURL(`tel:${number.replace(/[^\d+]/g, '')}`).catch(() =>
+      Alert.alert('No se pudo llamar', 'Este teléfono no tiene una app para hacer llamadas.')
+    );
+  };
 
   const openChange = (stage: RepairStatus) => {
     setError(null);
@@ -203,7 +233,7 @@ export default function RepairDetail() {
         </Pressable>
       </View>
 
-      <ScrollView ref={detailScroll} contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
+      <ScrollView ref={detailScroll} contentContainerStyle={[styles.content, primary && { paddingBottom: 96 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />}>
         {fetchError&&<View accessibilityRole="alert" style={[styles.outcome,{borderColor:colors.border,backgroundColor:colors.card}]}><Text style={[styles.small,{color:colors.muted}]}>{fetchError}</Text></View>}
         {/* Estado, identidad y saldo: resumen común a las tres vistas */}
         {justCreated && can('repairs.orders.read') ? (
@@ -292,11 +322,10 @@ export default function RepairDetail() {
           {phone ? <Text style={[styles.small, { color: colors.muted }]}>{phone}</Text> : null}
           {phone ? (
             <View style={styles.contactRow}>
-              <Pressable onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`)} style={[styles.contact, { borderColor: colors.border }]}>
+              <Pressable onPress={() => call(phone)} accessibilityRole="button" accessibilityLabel={`Llamar a ${customerName(repair)}`} style={[styles.contact, { borderColor: colors.border }]}>
                 <Ionicons name="call-outline" size={18} color={colors.text} />
                 <Text style={[styles.actionText, { color: colors.text }]}>Llamar</Text>
               </Pressable>
-
             </View>
           ) : (
             <Text style={[styles.small, { color: colors.muted }]}>Sin teléfono cargado.</Text>
@@ -305,41 +334,21 @@ export default function RepairDetail() {
         </Card>
 
         {/* Acciones de estado */}
-        {notice && (
-          <View style={[styles.outcome, { borderColor: '#16A34A55', backgroundColor: '#16A34A12' }]}>
-            <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
-            <Text style={[styles.outcomeText, styles.flex, { color: '#16A34A' }]}>{notice}</Text>
-          </View>
-        )}
-
-        {(next.length > 0 || canDeliver || canVerify) && (
+        {/* Verificar y entregar están en la barra de abajo; acá quedan los demás cambios. */}
+        {(next.length > 0 || (canVerify && repair.status === 'listo') || (repair.status === 'reparacion' && !canVerify)) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Cambiar estado</Text>
             <View style={styles.actions}>
-              {canVerify && (
+              {canVerify && repair.status === 'listo' && (
                 <Pressable
                   onPress={() => {
                     setNotice(null);
                     setQcOpen(true);
                   }}
                   accessibilityRole="button"
-                  style={[styles.action, styles.actionPrimary, { backgroundColor: '#16A34A' }]}>
-                  <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />
-                  <Text style={styles.actionPrimaryText}>
-                    {repair.status === 'listo' ? 'Repetir verificación técnica' : 'Verificación técnica y marcar listo'}
-                  </Text>
-                </Pressable>
-              )}
-              {repair.status === 'listo' && can('repairs.orders.deliver') && (
-                <Pressable
-                  onPress={() => {
-                    setNotice(null);
-                    setDeliveryOpen(true);
-                  }}
-                  accessibilityRole="button"
-                  style={[styles.action, styles.actionPrimary, { backgroundColor: '#0F172A' }]}>
-                  <Ionicons name="bag-check-outline" size={18} color="#fff" />
-                  <Text style={styles.actionPrimaryText}>Entregar equipo</Text>
+                  style={[styles.action, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color={palette.success} />
+                  <Text style={[styles.actionText, { color: colors.text }]}>Repetir verificación técnica</Text>
                 </Pressable>
               )}
               {next.filter(stage => can(stage === 'entregado' ? 'repairs.orders.deliver' : 'repairs.orders.update')).map((stage) => {
@@ -418,13 +427,17 @@ export default function RepairDetail() {
         </Card>
 
         {/* Fotos */}
-        {repair.images && repair.images.length > 0 && (
-          <Card title={`Fotos (${repair.images.length})`} icon="images-outline" colors={colors}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
-              {repair.images.map((image) => (
-                <Image key={image.id} source={image.image_url} style={[styles.photo, { backgroundColor: colors.background }]} contentFit="cover" transition={150} />
-              ))}
-            </ScrollView>
+        {((repair.images?.length ?? 0) > 0 || editable) && (
+          <Card title={(repair.images?.length ?? 0) > 0 ? `Fotos (${repair.images!.length})` : 'Fotos'} icon="images-outline" colors={colors}>
+            <RepairPhotos
+              repair={repair}
+              editable={editable}
+              onChanged={(updated) => {
+                const merged = { ...repair, ...updated };
+                setRepair(merged);
+                updateCachedRepair(merged);
+              }}
+            />
           </Card>
         )}
 
@@ -466,16 +479,67 @@ export default function RepairDetail() {
             </View>
           )}
           {editable && (quoted ? balance > 0 : true) && (
-            <Pressable onPress={() => setEditor('payment')} style={[styles.contact, { borderColor: '#16A34A66', backgroundColor: '#16A34A12' }]}>
-              <Ionicons name="cash-outline" size={18} color="#16A34A" />
-              <Text style={[styles.actionText, { color: '#16A34A' }]}>{quoted ? 'Registrar pago' : 'Registrar anticipo'}</Text>
+            <Pressable onPress={() => setEditor('payment')} accessibilityRole="button" style={[styles.contact, { borderColor: `${palette.success}66`, backgroundColor: `${palette.success}12` }]}>
+              <Ionicons name="cash-outline" size={18} color={palette.success} />
+              <Text style={[styles.actionText, { color: palette.success }]}>{quoted ? 'Registrar pago' : 'Registrar anticipo'}</Text>
             </Pressable>
+          )}
+        </Card>
+
+        {/* Cada pago con su fecha y forma de pago, como «Historial de pagos» en la web */}
+        <Card title="Historial de pagos" icon="receipt-outline" colors={colors}>
+          {paymentHistory.length === 0 ? (
+            <Text style={[styles.small, { color: colors.muted }]}>Sin pagos registrados.</Text>
+          ) : (
+            <View style={[styles.partsList, { borderColor: colors.border }]}>
+              {paymentHistory.map((payment) => (
+                <View key={payment.id} style={styles.partRow}>
+                  <Ionicons name={paymentMethodIcon(payment.payment_method)} size={16} color={colors.muted} />
+                  <View style={styles.flex}>
+                    <Text style={[styles.small, styles.bold, { color: colors.text }]}>{paymentMethodLabel(payment.payment_method)}</Text>
+                    <Text style={[styles.small, { color: colors.muted }]}>
+                      {payment.created_at ? formatPaymentDate(payment.created_at) : 'Sin fecha'}
+                      {payment.reference ? ` · Ref. ${payment.reference}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.small, styles.bold, { color: colors.text }]}>{formatGs(Number(payment.amount) || 0)}</Text>
+                </View>
+              ))}
+            </View>
           )}
         </Card>
 
 
         </>}
       </ScrollView>
+
+      {/* Aviso de lo que se acaba de guardar: flota abajo, en cualquier pestaña */}
+      {notice && (
+        <View
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          style={[styles.toast, { bottom: (primary ? 76 : 12) + insets.bottom, backgroundColor: colors.card, borderColor: `${palette.success}66` }]}>
+          <Ionicons name="checkmark-circle" size={18} color={palette.success} />
+          <Text style={[styles.outcomeText, styles.flex, { color: colors.text }]}>{notice}</Text>
+          <Pressable onPress={() => setNotice(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar aviso">
+            <Ionicons name="close" size={18} color={colors.muted} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* La acción que sigue según el estado, siempre a mano */}
+      {primary && (
+        <View style={[styles.bottomBar, { paddingBottom: 10 + insets.bottom, backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Pressable
+            onPress={primary.onPress}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.bottomAction, { backgroundColor: primary.color, opacity: pressed ? 0.88 : 1 }]}>
+            <Ionicons name={primary.icon} size={19} color="#fff" />
+            <Text numberOfLines={1} style={styles.actionPrimaryText}>{primary.label}</Text>
+          </Pressable>
+        </View>
+      )}
+
       {documentsOpen&&<BottomSheet visible title="Comprobante de reparación" onClose={()=>setDocumentsOpen(false)}><DocumentActions path={'/api/repairs/'+encodeURIComponent(repair.id)+'/receipt'} title="Formato y envío" whatsappPdf/></BottomSheet>}
 
 
@@ -646,6 +710,18 @@ function AccessInfoField({ repair, colors }: { repair: Repair; colors: Colors })
   );
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  cash: { label: 'Efectivo', icon: 'cash-outline' },
+  card: { label: 'Tarjeta', icon: 'card-outline' },
+  transfer: { label: 'Transferencia', icon: 'swap-horizontal-outline' },
+  credit: { label: 'Crédito', icon: 'time-outline' },
+};
+
+const paymentMethodLabel = (method?: string | null) => PAYMENT_METHOD_LABELS[method ?? '']?.label ?? 'Pago';
+const paymentMethodIcon = (method?: string | null) => PAYMENT_METHOD_LABELS[method ?? '']?.icon ?? 'wallet-outline';
+const formatPaymentDate = (iso: string) =>
+  new Date(iso).toLocaleString('es-PY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 const styles = StyleSheet.create({
   identityRow:{flexDirection:'row',gap:12,alignItems:'center'},
   deviceIcon:{height:52,width:52,borderRadius:14,alignItems:'center',justifyContent:'center'},
@@ -709,8 +785,25 @@ const styles = StyleSheet.create({
   contact: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 11 },
   moneyRow: { flexDirection: 'row', flexWrap:'wrap', gap: 12 },
   moneyValue: { fontSize: 15, fontWeight: '800', marginTop: 2 },
-  photos: { gap: 8 },
-  photo: { width: 110, height: 110, borderRadius: 12 },
+  toast: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+  },
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  bottomAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, minHeight: 50, paddingHorizontal: 16 },
   h2: { fontSize: 18, fontWeight: '800' },
   modalWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(2,6,23,0.45)' },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, gap: 12 },

@@ -43,7 +43,7 @@ describe('lo que la persona ya eligió se respeta', () => {
     // El proveedor ya la respetaba y el script no: alguien con solo esa clave
     // veía claro del script y oscuro del proveedor, o sea el parpadeo.
     expect(SCRIPT).toContain("localStorage.getItem('admin-dark-mode')")
-    expect(CONTEXTO).toContain("localStorage.getItem('admin-dark-mode')")
+    expect(CONTEXTO).toContain("readAppearancePreference('admin-dark-mode')")
   })
 
   it('si el almacenamiento falla, queda claro', () => {

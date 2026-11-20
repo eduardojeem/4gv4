@@ -3,6 +3,7 @@ import type { Ionicons } from '@expo/vector-icons';
 
 import { ApiError, apiFetch } from './api';
 import { formatMobileDate } from './regional-format';
+import { deliveryPricePatch } from '../../../src/lib/repairs/price-required';
 import {
   MAX_REPAIR_ACCESS_LENGTH,
   validateRepairAccess,
@@ -52,7 +53,7 @@ export type Repair = {
   customer?: { id: string; name?: string | null; first_name?: string | null; last_name?: string | null; phone?: string | null; email?: string | null; customer_type?: string | null } | null;
   technician?: { id: string; full_name?: string | null } | null;
   images?: { id: string; image_url: string; description?: string | null }[] | null;
-  payments?: { id: string; amount?: number | null; payment_method?: string | null; created_at?: string | null }[] | null;
+  payments?: { id: string; amount?: number | null; payment_method?: string | null; reference?: string | null; created_at?: string | null }[] | null;
 };
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -571,6 +572,19 @@ export type RepairEdit = {
   technicianId: string | null;
   warrantyMonths: number;
 };
+
+/**
+ * Fija el precio al entregar («¿Cuánto cobraste?» o «Sin cargo»), igual que la
+ * web: misma ruta y validaciones que editarlo (no puede quedar por debajo de lo
+ * que ya pagó el cliente).
+ */
+export async function defineRepairDeliveryPrice(id: string, amount: number, noCharge: boolean) {
+  const result = await apiFetch<{ repair: Repair }>(`/api/repairs/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(deliveryPricePatch(amount, noCharge)),
+  });
+  return result.repair;
+}
 
 /** PATCH /api/repairs/:id con los mismos nombres de campo que usa la web. */
 export async function updateRepair(id: string, edit: RepairEdit) {

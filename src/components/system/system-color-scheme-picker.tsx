@@ -16,6 +16,7 @@ interface SystemColorSchemePickerProps {
   className?: string
   labels?: Partial<Record<SystemColorScheme, { label: string; description: string; badge?: string }>>
   footerText?: string
+  compact?: boolean
 }
 
 export function SystemColorSchemePicker({
@@ -25,12 +26,13 @@ export function SystemColorSchemePicker({
   className,
   labels,
   footerText = 'El esquema elegido impacta botones principales, estados destacados, enlaces y acentos del panel.',
+  compact = false,
 }: SystemColorSchemePickerProps) {
   const selectedValue = value ?? DEFAULT_SYSTEM_COLOR_SCHEME
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={cn('grid gap-3', compact ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4' : 'sm:grid-cols-2 xl:grid-cols-3')}>
         {SYSTEM_COLOR_SCHEME_OPTIONS.map((scheme) => {
           const isActive = selectedValue === scheme.value
           const text = labels?.[scheme.value] ?? scheme
@@ -43,7 +45,8 @@ export function SystemColorSchemePicker({
               disabled={disabled}
               aria-pressed={isActive}
               className={cn(
-                'rounded-xl border bg-card p-4 text-left transition-all',
+                'min-w-0 rounded-xl border bg-card text-left transition-all',
+                compact ? 'p-3' : 'p-4',
                 'hover:border-primary/50 hover:shadow-sm',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 isActive && 'border-primary shadow-sm ring-2 ring-primary/15',
@@ -54,13 +57,13 @@ export function SystemColorSchemePicker({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-foreground">{text.label}</span>
-                    {text.badge ? (
+                    {text.badge && !compact ? (
                       <Badge variant="secondary" className="text-[10px]">
                         {text.badge}
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
+                  <p className={cn('text-xs leading-relaxed text-muted-foreground', compact && 'sr-only')}>
                     {text.description}
                   </p>
                 </div>
@@ -73,15 +76,15 @@ export function SystemColorSchemePicker({
                       : 'border-border bg-background text-muted-foreground'
                   )}
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  {isActive && <Check className="h-3.5 w-3.5" />}
                 </span>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className={cn('grid grid-cols-3 gap-2', compact ? 'mt-2' : 'mt-4')}>
                 {scheme.swatches.map((swatch) => (
                   <span
                     key={`${scheme.value}-${swatch}`}
-                    className="h-8 rounded-md border border-black/5 shadow-sm"
+                    className={cn('rounded-md border border-black/5 shadow-sm', compact ? 'h-5' : 'h-8')}
                     style={{ backgroundColor: swatch }}
                   />
                 ))}

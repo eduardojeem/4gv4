@@ -1,5 +1,6 @@
 import { assertCommercePayments } from '@/lib/payments/control-store'
 import { PaymentControlError } from '@/lib/payments/control-contract'
+import { REPAIR_PRICE_REQUIRED_MESSAGE } from '@/lib/repairs/price-required'
 export type FinancialClosurePaymentInput = {
   method: 'cash' | 'card' | 'transfer' | 'credit'
   amount: number
@@ -62,6 +63,7 @@ const ERROR_STATUS: Record<string, number> = {
   REPAIR_PAYMENT_INVALID_STATE: 422,
   REPAIR_DELIVERY_OUTCOME_INVALID: 422,
   REPAIR_FINAL_COST_REQUIRED: 422,
+  REPAIR_PRICE_REQUIRED: 409,
   REPAIR_PAYMENT_EXCEEDS_BALANCE: 422,
   REPAIR_CREDIT_MUST_COVER_BALANCE: 422,
   REPAIR_CREDIT_CUSTOMER_REQUIRED: 422,
@@ -104,6 +106,7 @@ function getFinancialErrorMessage(code: string, rawMessage: string) {
     REPAIR_PAYMENT_INVALID_STATE: 'No se puede procesar cobros en una reparación cancelada.',
     REPAIR_DELIVERY_OUTCOME_INVALID: 'El resultado de entrega no es válido.',
     REPAIR_FINAL_COST_REQUIRED: 'Definí el costo final de la reparación antes de realizar la entrega.',
+    REPAIR_PRICE_REQUIRED: REPAIR_PRICE_REQUIRED_MESSAGE,
     REPAIR_PAYMENT_EXCEEDS_BALANCE: 'El monto ingresado supera el saldo pendiente de la reparación.',
     REPAIR_OUTSTANDING_CONFIRMATION_REQUIRED: 'Confirmá la casilla para autorizar la entrega con saldo pendiente.',
     REPAIR_CREDIT_CUSTOMER_REQUIRED: 'La reparación no tiene un cliente asociado para cobrar a crédito.',

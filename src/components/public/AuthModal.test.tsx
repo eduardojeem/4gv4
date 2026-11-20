@@ -28,6 +28,11 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
+// El correo de recuperación sale sin PKCE (ver request-password-reset.ts).
+vi.mock('@/lib/auth/request-password-reset', () => ({
+  requestPasswordResetEmail: (...args: unknown[]) => resetPasswordForEmail(...args),
+}))
+
 vi.mock('@/components/security/TurnstileChallenge', () => ({
   TurnstileChallenge: ({
     action,
