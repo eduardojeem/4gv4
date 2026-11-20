@@ -2,6 +2,7 @@
 
 import { BarberHeader } from '@/components/public/barber/BarberHeader'
 import { PublicHeader } from '@/components/public/PublicHeader'
+import { ModaFemeninaHeader } from '@/components/public/moda-femenina/ModaFemeninaHeader'
 import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { ServicesSiteHeader } from '@/components/public/services/ServicesSiteHeader'
 import { ServicesMobileNav } from '@/components/public/services/ServicesMobileNav'
@@ -34,6 +35,7 @@ export function StorefrontHeader({
   const style = useStorefrontStyle()
   if (style === 'barber') return <BarberHeader settings={initialSettings} catalogEnabled={catalogEnabled} />
   if (style === 'services') return <ServicesSiteHeader initialSettings={initialSettings} catalogEnabled={catalogEnabled} />
+  if (style === 'moda-femenina') return <ModaFemeninaHeader settings={initialSettings} catalogEnabled={catalogEnabled} />
   return (
     <PublicHeader
       initialSettings={initialSettings}

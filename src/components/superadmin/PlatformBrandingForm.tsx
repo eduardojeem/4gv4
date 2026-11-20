@@ -26,11 +26,18 @@ import {
   CheckCircle2,
   HelpCircle,
   Sliders, MousePointerClick,
-  Search
+  Search,
+  LifeBuoy,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { BrandAssetHistory } from '@/components/superadmin/BrandAssetHistory'
 import { MAX_LOGO_HEIGHT_PX, MIN_LOGO_HEIGHT_PX } from '@/lib/platform/logo-size'
+import {
+  SUPPORT_HOURS_MAX_LENGTH,
+  formatSupportWhatsapp,
+  normalizeSupportEmail,
+  normalizeSupportWhatsapp,
+} from '@/lib/platform/support-contact'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -558,7 +565,8 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
               </TabsTrigger>
               <TabsTrigger value="seo" className="text-xs gap-1.5 font-medium data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs">
                 <Search className="h-3.5 w-3.5 text-indigo-600" />
-                <span>Google y login</span>
+                <span className="hidden sm:inline">Google, login y soporte</span>
+                <span className="sm:hidden">Más</span>
               </TabsTrigger>
             </TabsList>
 
@@ -1015,6 +1023,55 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                       onChange={(e) => updateField('footerText', e.target.value)}
                       maxLength={180}
                       className="min-h-16 text-xs"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <LifeBuoy className="h-4 w-4 text-emerald-600" />
+                    Soporte para comercios
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Se muestra en «Ayuda y soporte» del panel, en el pie de la landing, al eliminar la cuenta y en la app.
+                    Si dejás el correo vacío se usa el de las variables del servidor.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    id="supportEmail"
+                    label="Correo de soporte"
+                    value={draft.supportEmail}
+                    onChange={updateField}
+                    placeholder="soporte@mitiendapy.com"
+                    maxLength={254}
+                    helperText={draft.supportEmail && !normalizeSupportEmail(draft.supportEmail) ? 'No parece un correo válido.' : undefined}
+                  />
+                  <Field
+                    id="supportWhatsapp"
+                    label="WhatsApp de soporte"
+                    value={draft.supportWhatsapp}
+                    onChange={updateField}
+                    placeholder="+595981123456"
+                    maxLength={32}
+                    helperText={
+                      !draft.supportWhatsapp
+                        ? 'Con código de país. Vacío: no se muestra.'
+                        : normalizeSupportWhatsapp(draft.supportWhatsapp)
+                          ? `Abre wa.me con ${formatSupportWhatsapp(draft.supportWhatsapp)}.`
+                          : 'Falta el código de país, por ejemplo +595981123456.'
+                    }
+                  />
+                  <div className="sm:col-span-2">
+                    <Field
+                      id="supportHours"
+                      label="Horario de atención"
+                      value={draft.supportHours}
+                      onChange={updateField}
+                      placeholder="Lunes a viernes, 8 a 18 h"
+                      maxLength={SUPPORT_HOURS_MAX_LENGTH}
                     />
                   </div>
                 </CardContent>

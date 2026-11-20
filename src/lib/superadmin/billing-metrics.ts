@@ -1,4 +1,5 @@
 import { normalizeRevenuePlan, planMonthlyPrice, type PlanPrices } from '@/lib/superadmin/metrics-calculations'
+import { INTERNAL_PAYMENT_STATUS } from '@/lib/saas/internal-subscription'
 
 /**
  * Métricas de cobro de la plataforma a partir de lo que se cobró de verdad.
@@ -45,7 +46,8 @@ function isBillable(subscription: BillingSubscription, now: number) {
   const endsAt = subscription.current_period_ends_at ? Date.parse(subscription.current_period_ends_at) : NaN
   return subscription.status === 'active'
     && normalizeRevenuePlan(subscription.plan) !== 'FREE'
-    && !['failed', 'refunded', 'unpaid'].includes(subscription.payment_status?.toLowerCase() ?? '')
+    // Las cuentas internas no se cobran: ni MRR ni "sin cobro".
+    && !['failed', 'refunded', 'unpaid', INTERNAL_PAYMENT_STATUS].includes(subscription.payment_status?.toLowerCase() ?? '')
     && !(Number.isFinite(endsAt) && endsAt <= now)
 }
 

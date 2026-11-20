@@ -1,3 +1,4 @@
+import { isInternalSubscription } from '@/lib/saas/internal-subscription'
 import { readPrimaryActivity, type PrimaryActivity } from '@/lib/organization/primary-activity'
 import { readPlanMonthlyPrice, hasVerifiedPlanPrice } from './plan-price'
 import { countMonthlyRepairs } from './repair-monthly-usage'
@@ -810,6 +811,7 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
   isTrialing: boolean
   trialDaysLeft: number | null
   periodDaysLeft: number | null
+  isInternal: boolean
 }> {
   const supabase = createAdminSupabase()
   const { data, error } = await supabase
@@ -828,7 +830,8 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
     trialEndsAt: data?.trial_ends_at,
     periodEndsAt: data?.current_period_ends_at,
   })
-  return data ? evaluated : {...evaluated,isBlocked:true}
+  if (!data) return { ...evaluated, isBlocked: true, isInternal: false }
+  return { ...evaluated, isInternal: isInternalSubscription(data) }
 }
 
 export async function canCreateResource(

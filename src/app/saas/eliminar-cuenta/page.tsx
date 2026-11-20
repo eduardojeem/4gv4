@@ -29,7 +29,7 @@ export default async function DeleteAccountPage() {
   const user = 'reason' in auth ? null : auth.user
   const isSuperAdmin = user?.role === 'super_admin'
   const impact = user && !isSuperAdmin ? await getAccountDeletionImpact(user.id, user.email ?? null) : null
-  const supportEmail = accountSupportEmail()
+  const supportEmail = await accountSupportEmail()
 
   return (
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">

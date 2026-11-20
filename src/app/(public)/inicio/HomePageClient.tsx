@@ -6,6 +6,7 @@ import { InformaticaElectronicaHome } from '@/components/public/informatica-elec
 import { BarberHome } from '@/components/public/barber/BarberHome'
 import { EspecialBarberoHome } from '@/components/public/especial-para-barbero/EspecialBarberoHome'
 import { EspecialCosmeticosHome } from '@/components/public/especial-cosmeticos/EspecialCosmeticosHome'
+import { ModaFemeninaHome } from '@/components/public/moda-femenina/ModaFemeninaHome'
 import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -237,6 +238,9 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   }
   if (storefrontStyle === 'especial-cosmeticos') {
     return <EspecialCosmeticosHome settings={settings} branches={branches} capabilities={capabilities} />
+  }
+  if (storefrontStyle === 'moda-femenina') {
+    return <ModaFemeninaHome settings={settings} branches={branches} capabilities={capabilities} />
   }
 
   return (

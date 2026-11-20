@@ -46,6 +46,7 @@ export async function SubscriptionGate({ children }: { children: React.ReactNode
           trialedModules: planInfo.trialedModules,
           organizationName: organization.name,
           organizationLogoUrl: organization.logoUrl,
+          viewerIsSuperAdmin: auth.user.role === 'super_admin' && auth.user.roleIsActive,
         }
       }
     }

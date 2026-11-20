@@ -5,6 +5,7 @@ import {
   normalizeMarketplaceTheme,
   type MarketplaceTheme,
 } from '@/lib/theme/theme-scope'
+import { normalizeSupportEmail, normalizeSupportHours, normalizeSupportWhatsapp } from './support-contact'
 
 export type PlatformBranding = {
   platformName: string
@@ -31,6 +32,12 @@ export type PlatformBranding = {
   seoTitle: string
   seoDescription: string
   footerText: string
+  /** Correo de soporte para comercios. Vacío: se usa SUPPORT_EMAIL o el de la marca. */
+  supportEmail: string
+  /** WhatsApp de soporte en formato internacional (+595981123456). Vacío: no se muestra. */
+  supportWhatsapp: string
+  /** Horario de atención, texto corto ("Lun a vie, 8 a 18 h"). */
+  supportHours: string
 }
 
 export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
@@ -56,6 +63,9 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   seoTitle: 'POS, inventario, marketplace y servicios',
   seoDescription: 'Plataforma SaaS multiempresa para POS, inventario, ecommerce, reparaciones, servicios y marketplace.',
   footerText: 'Una plataforma para operar POS, catalogos, servicios y marketplace.',
+  supportEmail: '',
+  supportWhatsapp: '',
+  supportHours: '',
 }
 
 const BRANDING_KEY = 'saas_branding'
@@ -120,6 +130,9 @@ export function normalizePlatformBranding(value: unknown): PlatformBranding {
     seoTitle: readString(source.seoTitle, DEFAULT_PLATFORM_BRANDING.seoTitle, 160),
     seoDescription: readString(source.seoDescription, DEFAULT_PLATFORM_BRANDING.seoDescription, 240),
     footerText: readString(source.footerText, DEFAULT_PLATFORM_BRANDING.footerText, 180),
+    supportEmail: normalizeSupportEmail(source.supportEmail),
+    supportWhatsapp: normalizeSupportWhatsapp(source.supportWhatsapp),
+    supportHours: normalizeSupportHours(source.supportHours),
   }
 }
 

@@ -4,6 +4,7 @@ import { WholesaleFooter } from '@/components/public/wholesale/WholesaleFooter'
 import { CatalogBasicFooter } from '@/components/public/catalog-basic/CatalogBasicFooter'
 import { EspecialBarberoFooter } from '@/components/public/especial-para-barbero/EspecialBarberoFooter'
 import { EspecialCosmeticosFooter } from '@/components/public/especial-cosmeticos/EspecialCosmeticosFooter'
+import { ModaFemeninaFooter } from '@/components/public/moda-femenina/ModaFemeninaFooter'
 
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
@@ -76,6 +77,7 @@ export function PublicFooter({
 
   if (style === 'wholesale-pro') return <WholesaleFooter company={company} prefix={tenantPrefix} />
   if (style === 'catalog-basic') return <CatalogBasicFooter company={company} prefix={tenantPrefix} />
+  if (style === 'moda-femenina') return <ModaFemeninaFooter settings={effectiveSettings} />
   if (style === 'especial-para-barbero') {
     return (
       <EspecialBarberoFooter

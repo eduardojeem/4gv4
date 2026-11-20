@@ -1,0 +1,65 @@
+/* Estilos de la plantilla «Boutique Femenina». Los importan la portada, el
+   encabezado y el pie, porque el encabezado y el pie se ven en todas las páginas. */
+
+.moda-femenina-root {
+  --moda-bg: #FAF7F2;
+  --moda-card: #FFFFFF;
+  --moda-ink: #1A1A1A;
+  --moda-muted: #736B63;
+  --moda-border: rgba(115, 107, 99, 0.15);
+  --moda-accent: #E06B3A;
+  --moda-accent-soft: rgba(224, 107, 58, 0.12);
+  --moda-sun: #E06B3A;
+  background-color: var(--moda-bg);
+  color: var(--moda-ink);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+.dark .moda-femenina-root {
+  --moda-bg: #181513;
+  --moda-card: #221E1B;
+  --moda-ink: #F7F3EE;
+  --moda-muted: #A89F95;
+  --moda-border: rgba(247, 243, 238, 0.12);
+  --moda-accent: #E87A4B;
+  --moda-accent-soft: rgba(232, 122, 75, 0.18);
+  --moda-sun: #E87A4B;
+}
+
+.font-editorial {
+  font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, Cambria, 'Times New Roman', serif;
+}
+
+.font-signature {
+  font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.moda-sun-circle {
+  background: radial-gradient(circle at 45% 45%, #F07C48 0%, #E06B3A 65%, #C75525 100%);
+  box-shadow: 0 20px 50px -10px rgba(224, 107, 58, 0.25);
+}
+
+.moda-floating-pill {
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(115, 107, 99, 0.12);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+}
+
+.dark .moda-floating-pill {
+  background-color: rgba(34, 30, 27, 0.92);
+  border-color: rgba(247, 243, 238, 0.1);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.35);
+}
+
+.moda-category-card {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.moda-category-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.08);
+}
