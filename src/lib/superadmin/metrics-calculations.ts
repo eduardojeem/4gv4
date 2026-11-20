@@ -1,3 +1,5 @@
+import { INTERNAL_PAYMENT_STATUS } from '@/lib/saas/internal-subscription'
+
 export type MonthSeriesItem = {
   key: string
   label: string
@@ -61,7 +63,8 @@ export function calculateRecurringRevenue(
     const paymentStatus = subscription.paymentStatus?.toLowerCase() ?? null
     return subscription.status === 'active'
       && normalizeRevenuePlan(subscription.plan) !== 'FREE'
-      && !['failed', 'refunded', 'unpaid'].includes(paymentStatus ?? '')
+      // Las cuentas internas no se cobran: no son ingresos.
+      && !['failed', 'refunded', 'unpaid', INTERNAL_PAYMENT_STATUS].includes(paymentStatus ?? '')
   })
 
   let mrr = 0

@@ -3,13 +3,41 @@
 import {NONRENEWAL_WARNING} from '@/lib/saas/nonrenewal-policy'
 
 import Link from 'next/link'
-import { Clock, CreditCard, Gift, XCircle } from 'lucide-react'
+import { Clock, CreditCard, Gift, ShieldCheck, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 export function SubscriptionBanner() {
-  const { isBlocked, isTrialing, trialDaysLeft, status, downgradedFromExpiry, moduleTrials } = useSubscriptionStatus()
+  const { isBlocked, isTrialing, trialDaysLeft, status, downgradedFromExpiry, moduleTrials, isInternal, viewerIsSuperAdmin } = useSubscriptionStatus()
+
+  // Cuenta interna: activa sin vencimiento ni cobro, no hay nada que pedir.
+  if (isInternal) return null
+
+  // El superadmin no paga: ve el estado de la tienda, sin pedido de pago.
+  if (viewerIsSuperAdmin) {
+    const state = isBlocked
+      ? (status === 'suspended' ? 'está suspendida' : status ? 'tiene la suscripción vencida' : 'no tiene suscripción')
+      : downgradedFromExpiry
+        ? 'pasó al plan FREE por vencimiento'
+        : isTrialing && trialDaysLeft !== null && trialDaysLeft <= 7
+          ? `está en prueba (${trialDaysLeft === 0 ? 'vence hoy' : `${trialDaysLeft} día${trialDaysLeft === 1 ? '' : 's'}`})`
+          : null
+    if (!state) return null
+    return (
+      <div role="status" className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <ShieldCheck className="h-4 w-4 flex-none text-slate-600 dark:text-slate-400" />
+        <p className="flex-1 text-sm text-slate-700 dark:text-slate-300">
+          <span className="font-semibold">Vista de superadmin:</span> esta tienda {state}.
+          {isBlocked ? ' Las operaciones quedan bloqueadas igual que para el comercio.' : ''}
+          {' '}Si es una tienda de la plataforma, marcala como «Cuenta interna».
+        </p>
+        <Button asChild size="sm" variant="outline" className="flex-none">
+          <Link href="/superadmin/organizations">Gestionar</Link>
+        </Button>
+      </div>
+    )
+  }
 
   // Prueba de módulo activa: mostrar contador de días + CTA a upgrade.
   if (moduleTrials.length > 0 && !isBlocked) {
