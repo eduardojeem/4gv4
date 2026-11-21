@@ -127,6 +127,18 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Reparación lista',
     defaultBody: 'Un equipo en el taller está listo para ser entregado.',
     defaultResourceType: 'repair',
+    formatBody: (data) => (typeof data?.device === 'string' && data.device ? `${data.device} está listo para entregar.` : 'Un equipo en el taller está listo para ser entregado.'),
+  },
+  REPAIR_DELIVERED: {
+    title: 'Reparación entregada',
+    defaultBody: 'Se entregó un equipo del taller.',
+    defaultResourceType: 'repair',
+    formatBody: (data) => {
+      const device = typeof data?.device === 'string' && data.device ? data.device : 'un equipo'
+      if (data?.outcome === 'withdrawn') return `Se retiró ${device} sin reparar.`
+      if (data?.outcome === 'unrepairable') return `Se entregó ${device} sin solución.`
+      return `Se entregó ${device} al cliente.`
+    },
   },
   REPAIR_OVERDUE: {
     title: 'Reparación demorada',

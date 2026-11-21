@@ -21,6 +21,7 @@ import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { logger } from '@/lib/logger'
 import { validateDeliveryQualityCheck } from '@/lib/repairs/quality-check'
 import { REPAIR_PRICE_REQUIRED_MESSAGE, repairHasDefinedPrice } from '@/lib/repairs/price-required'
+import { afterResponse, notifyRepairsDelivered } from '@/lib/notifications/server/business-events'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -85,6 +86,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
       const { data: repair, error } = await fetchRepairById(ctx, id)
       if (error) throw error
       if (!repair) return NextResponse.json({ error: 'Reparación no encontrada.' }, { status: 404 })
+      if (!operation.idempotent) {
+        afterResponse(() => notifyRepairsDelivered({ organizationId: ctx.organizationId, branchId: ctx.branchId, repairIds: [id], actorUserId: ctx.userId }))
+      }
       return NextResponse.json({
         repair,
         closeout: { id: operation.closeout_id },
@@ -158,6 +162,10 @@ export async function POST(request: NextRequest, context: RouteParams) {
         repairId: id,
         error: loyalty.error?.message,
       })
+    }
+
+    if (!operation.idempotent) {
+      afterResponse(() => notifyRepairsDelivered({ organizationId: ctx.organizationId, branchId: ctx.branchId, repairIds: [id], actorUserId: ctx.userId }))
     }
 
     return NextResponse.json({
