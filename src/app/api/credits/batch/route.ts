@@ -6,7 +6,7 @@ import { readAllCreditRows } from '@/lib/credits/portfolio'
 import { chunkIds } from '@/lib/customers/batch'
 import { z } from 'zod'
 const batchSchema=z.object({customerIds:z.array(z.string().uuid()).max(500).default([])})
-export const POST=withTenantAuth({permission:'crm.customers.read',module:'crm'},async(request,{organization})=>{
+export const POST=withTenantAuth({permission:'crm.customers.read',module:['crm','credits']},async(request,{organization})=>{
   try {
     const parsed=batchSchema.safeParse(await request.json().catch(()=>null))
     if (!parsed.success) return NextResponse.json({error:'Lista de clientes inválida.'},{status:400})

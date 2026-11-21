@@ -1,5 +1,5 @@
 import { collectionRequestSchema } from '@/lib/credits/collection-contract'
-import { collectCustomerPayment, CollectionError } from '@/lib/credits/collection-rpc'
+import { collectCustomerPayment, CollectionError, readCollectionCurrency } from '@/lib/credits/collection-rpc'
 import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
 import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
@@ -14,6 +14,11 @@ import {
   type DebtItem,
 } from '@/lib/customers/collect-payment'
 import { logger } from '@/lib/logger'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
+
+/** Se cobra desde Clientes o desde Créditos; las cuotas exigen el módulo Créditos. */
+const COLLECTION_MODULES = ['crm', 'credits'] as const
+const creditsModuleEnabled = async (organizationId: string) => !(await moduleAccessResponse(organizationId, 'credits'))
 
 export type { DebtItem } from '@/lib/customers/collect-payment'
 
@@ -51,7 +56,7 @@ async function findCustomer(
  * Deudas pendientes del cliente y cuáles se pueden cobrar desde la sucursal activa.
  */
 export const GET = withTenantAuth(
-  { permission: 'crm.customers.read', module: 'crm' },
+  { permission: 'crm.customers.read', module: COLLECTION_MODULES },
   async (request, { organization, user }, routeContext) => {
     try {
       const customerId = await getRouteId(routeContext)
@@ -78,13 +83,14 @@ export const GET = withTenantAuth(
       const settings = await supabase.from('organization_settings').select('timezone').eq('organization_id', organization.id).maybeSingle()
       if (settings.error) return NextResponse.json({success:false,error:'No se pudo validar la zona horaria de la organización.'},{status:500})
       const timeZone = settings.data?.timezone || 'America/Asuncion'
-      const { debts, error } = await loadCustomerDebts(supabase, {
+      const { debts: allDebts, error } = await loadCustomerDebts(supabase, {
         organizationId: organization.id,
         customerId,
         branchId: branch.branchId,
         timeZone,
       })
       if (error) return NextResponse.json({ success: false, error }, { status: 500 })
+      const debts = await creditsModuleEnabled(organization.id) ? allDebts : allDebts.filter((debt) => debt.type !== 'installment')
 
       const storeCredit = await readStoreCreditBalance(
         supabase as unknown as Parameters<typeof readStoreCreditBalance>[0],
@@ -117,7 +123,7 @@ export const GET = withTenantAuth(
 
 /** A request is committed as a whole in SQL; no independent ledger/cash writes. */
 export const POST = withTenantAuth(
-  { permission: 'crm.customers.manage', module: 'crm' },
+  { permission: 'crm.customers.manage', module: COLLECTION_MODULES },
   async (request, { organization, user }, routeContext) => {
     try {
       const customerId = await getRouteId(routeContext)
@@ -129,6 +135,9 @@ export const POST = withTenantAuth(
         success: false, error: parsed.error.issues[0]?.message || 'Revisá el cobro.',
         field: parsed.error.issues[0]?.path.join('.'),
       }, { status: 400 })
+      if (parsed.data.allocations?.some((row) => row.type === 'installment' && row.amount > 0) && !(await creditsModuleEnabled(organization.id))) {
+        return NextResponse.json({ success: false, error: 'El módulo Créditos está desactivado: no se pueden cobrar cuotas.' }, { status: 403 })
+      }
       const admin = createAdminSupabase()
       const { data: customer, error } = await findCustomer(admin, organization.id, customerId)
       if (error) return NextResponse.json({ success: false, error: 'No se pudo leer la ficha del cliente.' }, { status: 500 })
@@ -144,8 +153,16 @@ export const POST = withTenantAuth(
         return NextResponse.json({ success: false, error: 'No podés cobrar en esa sucursal.' }, { status: 403 })
       }
       if (!branchId) return NextResponse.json({ success: false, error: 'Elegí una sucursal para cobrar.' }, { status: 400 })
+      // Solo hace falta el saldo exacto si el reparto trae céntimos (deudas viejas).
+      let pendingById: Record<string, number> | undefined
+      if (parsed.data.allocations?.some((row) => !Number.isInteger(row.amount))) {
+        const loaded = await loadCustomerDebts(admin, { organizationId: organization.id, customerId, branchId })
+        if (loaded.error) return NextResponse.json({ success: false, error: loaded.error }, { status: 500 })
+        pendingById = Object.fromEntries(loaded.debts.map((debt) => [debt.id, debt.pendingAmount]))
+      }
       const collection = await collectCustomerPayment(admin, {
-        organizationId: organization.id, customerId, actorId: user.id, branchId, request: parsed.data,
+        organizationId: organization.id, customerId, actorId: user.id, branchId, request: parsed.data, pendingById,
+        currency: await readCollectionCurrency(admin as unknown as Parameters<typeof readCollectionCurrency>[0], organization.id),
       })
       // Secondary and repeatable: loyalty cannot turn an already committed receipt into failure.
       try {

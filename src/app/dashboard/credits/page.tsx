@@ -61,7 +61,9 @@ function CreditsDashboardContent() {
     getNextPendingInstallment,
     filteredInstallments,
     sales,
-    saleItems
+    saleItems,
+    branchScope,
+    canCollect,
   } = useCredits()
 
   const isInstallmentLate = useCallback((row: InstallmentRow) => installmentIsLate(row, timeZone), [timeZone])
@@ -227,6 +229,7 @@ function CreditsDashboardContent() {
   }, [filteredInstallments, creditById, isInstallmentLate, timeZone])
 
   const openPaymentDialogForInstallment = (installment: InstallmentRow, scope: 'installment' | 'credit' = 'installment') => {
+    if (!canCollect) return
     setDialogInitialMethod('cash')
     const outstanding = getInstallmentOutstanding(installment)
     setDialogCreditId(installment.credit_id)
@@ -394,6 +397,14 @@ function CreditsDashboardContent() {
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               Control integral de cuotas, cartera de financiación, cobros y estado de clientes
             </p>
+            {branchScope.canViewAllBranches ? (
+              <div role="group" aria-label="Sucursales de la cartera" className="mt-2 inline-flex rounded-lg border p-0.5 text-xs">
+                <button type="button" aria-pressed={branchScope.allBranches} onClick={() => branchScope.setAllBranches(true)} className={`min-h-8 rounded-md px-3 font-medium ${branchScope.allBranches ? 'bg-blue-600 text-white' : 'text-muted-foreground'}`}>Todas las sucursales</button>
+                <button type="button" aria-pressed={!branchScope.allBranches} onClick={() => branchScope.setAllBranches(false)} className={`min-h-8 rounded-md px-3 font-medium ${!branchScope.allBranches ? 'bg-blue-600 text-white' : 'text-muted-foreground'}`}>Sucursal elegida</button>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Cartera de la sucursal elegida.</p>
+            )}
           </div>
         </div>
 
@@ -1007,7 +1018,7 @@ function CreditsDashboardContent() {
 
                     {/* Action */}
                     <div className="flex md:justify-center w-full md:w-24">
-                      {effStatus !== 'paid' ? (
+                      {effStatus !== 'paid' ? (canCollect ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -1017,6 +1028,8 @@ function CreditsDashboardContent() {
                           Cobrar
                         </Button>
                       ) : (
+                        <span className="text-xs text-muted-foreground">Pendiente</span>
+                      )) : (
                         <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
                           <CheckCircle className="h-3.5 w-3.5" />
                           Pagada
