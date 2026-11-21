@@ -6,6 +6,8 @@ import {
   type NotificationType,
 } from '../types'
 import { resolveNotificationDefaultPreference } from '../defaults'
+import { isNotificationTypeVisible } from '../visibility'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 export interface EffectivePreference {
   notificationType: NotificationType
@@ -124,8 +126,9 @@ export async function getBatchEffectiveNotificationPreferences(params: {
 }
 
 /**
- * Obtiene la lista completa de preferencias (efectivas y explícitas) de un usuario
- * en una organización para todos los tipos de notificación del catálogo.
+ * Preferencias (efectivas y explícitas) de un usuario, solo de los avisos que
+ * le pueden llegar: los que se envían, su rol puede ver y cuyo módulo está
+ * activo para el comercio según su rubro.
  */
 export async function getAllEffectiveNotificationPreferencesForUser(
   organizationId: string,
@@ -147,7 +150,15 @@ export async function getAllEffectiveNotificationPreferencesForUser(
     }
   }
 
-  const views: UserPreferenceView[] = NOTIFICATION_TYPES.map((type) => {
+  let modules: string[] | null = null
+  try {
+    modules = (await getOrganizationPlanInfo(organizationId)).effectiveModules
+  } catch {
+    // Sin módulos no se filtra por módulo: mejor mostrar de más que ocultar.
+  }
+  const visibleTypes = NOTIFICATION_TYPES.filter((type) => isNotificationTypeVisible(type, { role, modules }))
+
+  const views: UserPreferenceView[] = visibleTypes.map((type) => {
     const metadata = getNotificationMetadata(type)
     const categoryInfo = NOTIFICATION_CATEGORY_LABELS[metadata.category]
     const explicit = explicitMap.get(type)

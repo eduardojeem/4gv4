@@ -81,7 +81,8 @@ export async function dispatchNotificationEvent(
   const metadata = getNotificationMetadata(type)
 
   // 2. Control de Acceso por Módulos (Module Gating)
-  // No enviar notificaciones de módulos que no están habilitados en el plan de la organización.
+  // No enviar avisos de módulos apagados para el comercio. `planInfo.modules` son los
+  // módulos efectivos: el plan, el rubro y lo que el comercio activó.
   // El módulo 'security' es transversal y no requiere verificación de plan comercial.
   if (metadata.requiredModule && metadata.requiredModule !== 'security') {
     try {

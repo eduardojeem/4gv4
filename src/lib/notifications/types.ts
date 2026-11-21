@@ -129,6 +129,31 @@ export const NOTIFICATION_TYPES = [
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
 
 /**
+ * Tipos que hoy se envían de verdad (tienen al menos un punto de envío).
+ * Las preferencias solo muestran estos: un interruptor de un aviso que nunca
+ * llega confunde. Al implementar un tipo nuevo, sumarlo acá; un test de
+ * contrato controla que la lista coincida con el código.
+ */
+export const IMPLEMENTED_NOTIFICATION_TYPES: readonly NotificationType[] = [
+  'SALE_CREATED',
+  'LARGE_SALE',
+  'ORDER_CREATED',
+  'ORDER_CONFIRMED',
+  'ORDER_READY',
+  'ORDER_CANCELLED',
+  'NEW_ONLINE_ORDER',
+  'REPAIR_CREATED',
+  'REPAIR_ASSIGNED',
+  'REPAIR_READY',
+  'REPAIR_DELIVERED',
+  'SUBSCRIPTION_EXPIRING',
+  'SUBSCRIPTION_PAYMENT_FAILED',
+  'PLAN_CHANGED',
+  'SYSTEM_NEWS',
+]
+
+
+/**
  * Categorías de agrupación para la configuración de usuario y filtrado.
  */
 export const NOTIFICATION_CATEGORIES = [
