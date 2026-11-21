@@ -212,6 +212,21 @@ describe('Header Informática & Electrónica', () => {
 })
 
 describe('Inicio Informática & Electrónica', () => {
+  it('el taller aparece solo si el módulo está activo y la reparación es pública', () => {
+    const conTaller = { ...capabilities, hasRepairs: true }
+    const company = { name: 'Nexus Computación', phone: '+595 981 999888' }
+    const { rerender } = render(<InformaticaElectronicaHome settings={{ company_info: { ...company, repairTrackingEnabled: true } }} capabilities={conTaller} branches={[]} />)
+    expect(screen.getByText('Reparaciones')).toBeInTheDocument()
+
+    // Con el módulo activo pero la opción de Sitio Web apagada, como en la portada común.
+    rerender(<InformaticaElectronicaHome settings={{ company_info: { ...company, repairTrackingEnabled: false } }} capabilities={conTaller} branches={[]} />)
+    expect(screen.queryByText('Reparaciones')).not.toBeInTheDocument()
+
+    // Sin módulo no aparece aunque la opción esté encendida.
+    rerender(<InformaticaElectronicaHome settings={{ company_info: { ...company, repairTrackingEnabled: true } }} capabilities={capabilities} branches={[]} />)
+    expect(screen.queryByText('Reparaciones')).not.toBeInTheDocument()
+  })
+
   it('usa los textos del dueño en la portada', () => {
     renderHome({
       company_info: { name: 'Nexus' },

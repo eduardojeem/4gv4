@@ -47,6 +47,20 @@ const BUSINESS_LABELS: Record<BusinessVertical, string> = {
   other: 'Otro rubro',
 }
 
+/**
+ * Rubros donde la tienda pública puede mostrar el taller (servicio técnico,
+ * seguimiento de reparaciones). En los demás (ropa, cosméticos, comida,
+ * ferretería, barbería, belleza) no se muestra aunque el módulo esté activo:
+ * el banner y los textos hablan de celulares y computadoras.
+ */
+export const STOREFRONT_REPAIR_VERTICALS: readonly BusinessVertical[] = ['electronics', 'general', 'other']
+
+export function verticalOffersRepairs(vertical: BusinessVertical | string | null | undefined): boolean {
+  // Sin rubro cargado se comporta como «general».
+  if (!vertical) return true
+  return (STOREFRONT_REPAIR_VERTICALS as readonly string[]).includes(vertical)
+}
+
 export function resolveStorefrontCapabilities(input: {
   businessVertical: BusinessVertical
   operatingModel: OperatingModel
@@ -58,7 +72,7 @@ export function resolveStorefrontCapabilities(input: {
   // el inventario) y la portada no coincidían.
   const hasCatalog = modules.has('inventory')
   const hasServices = modules.has('services')
-  const hasRepairs = modules.has('repairs')
+  const hasRepairs = modules.has('repairs') && verticalOffersRepairs(input.businessVertical)
   const hasOrderTracking = modules.has('orders') || modules.has('delivery')
   const serviceFirst = hasServices && !modules.has('ecommerce') && (
     input.operatingModel === 'service' || input.operatingModel === 'repair'

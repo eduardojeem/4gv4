@@ -20,6 +20,7 @@ import {
   pickLiveAnnouncement,
 } from '@/lib/announcements/announcement'
 import { notFound } from 'next/navigation'
+import { verticalOffersRepairs } from '@/lib/website/storefront-capabilities'
 
 // Cada tienda declara su propio manifest, para que el icono instalado abra en
 // esa tienda y no en la raiz de la plataforma.
@@ -50,8 +51,10 @@ export default async function OrganizationPublicLayout({
   const { organizationSlug } = await params
   const storefrontOrganization = await resolvePublicStorefrontOrganizationBySlug(organizationSlug)
   if (!storefrontOrganization) notFound()
-  // Sin modulo de taller la tienda no ofrece seguimiento de reparaciones.
-  const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
+  // Sin modulo de taller, o en un rubro sin taller, la tienda no ofrece
+  // seguimiento de reparaciones.
+  const repairsModuleEnabled = verticalOffersRepairs(storefrontOrganization.business_vertical)
+    && await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
   const servicesModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')
   // En la plantilla «Servicios», la tienda de productos es un acceso secundario: solo si vende productos.
   const catalogEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'inventory')

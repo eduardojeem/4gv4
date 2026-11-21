@@ -18,6 +18,7 @@ import {
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolveRequestStorefrontOrganization } from '@/lib/website/request-storefront-organization'
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
+import { verticalOffersRepairs } from '@/lib/website/storefront-capabilities'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
@@ -59,7 +60,8 @@ export default async function PublicLayout({
   // Este layout tambien sirve tiendas (por subdominio). Sin modulo de taller no
   // ofrecen seguimiento de reparaciones; sin tienda resuelta queda como estaba.
   const repairsModuleEnabled = storefrontOrganization
-    ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
+    ? verticalOffersRepairs(storefrontOrganization.business_vertical)
+      && await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
     : true
   const catalogEnabled = storefrontOrganization
     ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'inventory')
