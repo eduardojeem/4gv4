@@ -3,7 +3,7 @@ import { readAllCreditRows, summarizeCreditPortfolio } from '@/lib/credits/portf
 import { chunkIds } from '@/lib/customers/batch'
 import { creditInstallmentIsOverdue, creditCalendarDate } from '@/lib/credits/calendar'
 import { z } from 'zod'
-import { collectCustomerPayment, CollectionError } from '@/lib/credits/collection-rpc'
+import { collectCustomerPayment, CollectionError, readCollectionCurrency } from '@/lib/credits/collection-rpc'
 import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
 import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { NextResponse } from 'next/server'
@@ -48,6 +48,8 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     let branchId:string|null=null
     if(branchRequest==='all'){if(!['owner','admin'].includes(organization.role))return NextResponse.json({error:'No tenés permiso para consultar todas las sucursales.'},{status:403})}
     else if(branchRequest||request.headers.get('x-branch-id')){try{const scope=await resolveBranchScopeForUser({userId:user.id,role:user.role as Parameters<typeof resolveBranchScopeForUser>[0]['role'],requestedBranchId:getRequestedBranchId(request,branchRequest),organizationId:organization.id,strict:true});branchId=scope.branchId}catch{return NextResponse.json({error:'No podés consultar esa sucursal.'},{status:403})}}
+    // Sin sucursal pedida, solo dueño y administrador ven toda la organización; el resto, su sucursal (igual que la app).
+    else if(!['owner','admin'].includes(organization.role)){const scope=await resolveBranchScopeForUser({userId:user.id,role:user.role as Parameters<typeof resolveBranchScopeForUser>[0]['role'],requestedBranchId:null,organizationId:organization.id});if(!scope.branchId)return NextResponse.json({success:false,error:'Elegí una sucursal para ver la cartera.'},{status:403});branchId=scope.branchId}
     const [allCredits, settings] = await Promise.all([
       readAllCreditRows((from,to) => supabase.from('credit_details').select('*').eq('organization_id', organization.id).order('id').range(from,to)),
       supabase.from('organization_settings').select('timezone,currency').eq('organization_id', organization.id).maybeSingle(),
@@ -144,10 +146,10 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     const input = parsed.data
     const admin = createAdminSupabase()
     const { data: row, error } = await admin.from('credit_installments')
-      .select('id, credit_id, customer_credits!inner(customer_id, organization_id)')
+      .select('id, credit_id, amount, amount_paid, customer_credits!inner(customer_id, organization_id)')
       .eq('id', input.installmentId).eq('customer_credits.organization_id', organization.id).maybeSingle()
     if (error) return NextResponse.json({ success: false, error: 'No se pudo leer la cuota.' }, { status: 500 })
-    const raw = row as { credit_id: string; customer_credits: { customer_id: string; organization_id: string } | Array<{ customer_id: string; organization_id: string }> } | null
+    const raw = row as { credit_id: string; amount?: number | string | null; amount_paid?: number | string | null; customer_credits: { customer_id: string; organization_id: string } | Array<{ customer_id: string; organization_id: string }> } | null
     const credit = Array.isArray(raw?.customer_credits) ? raw.customer_credits[0] : raw?.customer_credits
     if (!raw || !credit || credit.organization_id !== organization.id || (input.creditId && input.creditId !== raw.credit_id)) {
       return NextResponse.json({ success: false, error: 'La cuota no pertenece a la organización o al crédito seleccionado.' }, { status: 404 })
@@ -163,6 +165,8 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     if (!branchId) return NextResponse.json({ success: false, error: 'Elegí una sucursal para cobrar.' }, { status: 400 })
     const collection = await collectCustomerPayment(admin, {
       organizationId: organization.id, customerId: credit.customer_id, actorId: user.id, branchId,
+      currency: await readCollectionCurrency(admin as unknown as Parameters<typeof readCollectionCurrency>[0], organization.id),
+      pendingById: { [input.installmentId]: Math.max(0, Number(raw.amount ?? 0) - Number(raw.amount_paid ?? 0)) },
       request: {
         amount: input.amount, paymentMethod: input.method, mode: input.creditId ? 'auto' : 'manual',
         allocations: input.creditId ? undefined : [{ id: input.installmentId, type: 'installment', amount: input.amount }],

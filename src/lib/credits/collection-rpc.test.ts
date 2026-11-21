@@ -1,8 +1,10 @@
 vi.mock('@/lib/payments/control-store', () => ({ assertCommercePayments: vi.fn().mockResolvedValue(undefined) }))
+const replay = vi.hoisted(() => ({ recover: vi.fn() }))
+vi.mock('@/lib/payments/collection-replay', () => ({ recoverCollectionReplay: replay.recover }))
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { collectionRequestSchema } from './collection-contract'
-import { collectCustomerPayment } from './collection-rpc'
+import { collectCustomerPayment, collectionAmountsMatchCurrency, readCollectionCurrency } from './collection-rpc'
 
 const org = 'ca110000-0000-4000-8000-000000000001'
 const customer = 'ca210000-0000-4000-8000-000000000001'
@@ -45,5 +47,33 @@ describe('customer collection transaction boundary', () => {
   it('maps changed balances to conflict without leaking database details', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'COLLECTION_BALANCE_CHANGED private details' } })
     await expect(collectCustomerPayment({ rpc }, input)).rejects.toMatchObject({ status: 409, code: 'COLLECTION_BALANCE_CHANGED' })
+  })
+
+  it('rejects guaraní cents before reaching the database', async () => {
+    replay.recover.mockResolvedValue(null)
+    const rpc = vi.fn()
+    await expect(collectCustomerPayment({ rpc }, { ...input, currency: 'PYG', request: { ...request, amount: 99999.5 } }))
+      .rejects.toMatchObject({ status: 400, code: 'COLLECTION_INVALID_REQUEST' })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('returns the stored receipt of an older cents attempt instead of rejecting it', async () => {
+    replay.recover.mockResolvedValue(result)
+    const rpc = vi.fn()
+    expect(await collectCustomerPayment({ rpc }, { ...input, currency: 'PYG', request: { ...request, amount: 100.5 } })).toEqual(result)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('lets an old debt with cents be settled only for its exact balance', () => {
+    const id = 'ca610000-0000-4000-8000-000000000001'
+    const manual = (amount: number) => ({ ...request, mode: 'manual' as const, amount, allocations: [{ id, type: 'installment' as const, amount }] })
+    expect(collectionAmountsMatchCurrency(collectionRequestSchema.parse(manual(33333.33)), 'PYG', { [id]: 33333.33 })).toBe(true)
+    expect(collectionAmountsMatchCurrency(collectionRequestSchema.parse(manual(33333.3)), 'PYG', { [id]: 33333.33 })).toBe(false)
+    expect(collectionAmountsMatchCurrency(collectionRequestSchema.parse({ ...request, amount: 33333.33 }), 'PYG', { [id]: 33333.33 })).toBe(false)
+    expect(collectionAmountsMatchCurrency(collectionRequestSchema.parse({ ...request, amount: 100.5 }), 'USD')).toBe(true)
+  })
+  it('reads the organization currency and fails closed when it cannot', async () => {
+    const client = (result: { data: unknown; error: unknown }) => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => result }) }) }) })
+    expect(await readCollectionCurrency(client({ data: { currency: 'usd' }, error: null }) as never, org)).toBe('USD')
+    expect(await readCollectionCurrency(client({ data: null, error: null }) as never, org)).toBe('PYG')
+    await expect(readCollectionCurrency(client({ data: null, error: new Error('down') }) as never, org)).rejects.toMatchObject({ status: 503 })
   })
 })

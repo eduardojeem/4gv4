@@ -14,13 +14,15 @@ import { getPrivateCacheContext, subscribePrivateCacheContext } from '@/lib/priv
 import { secureStorage } from '@/lib/secure-storage';
 import { collectionWireInput, getPendingMobileCollection, MobileCollectionAttemptError, retryMobileCollection, submitMobileCollection, type CollectionAttemptContext, type PendingMobileCollection } from '@/lib/credit-collection-attempt';
 import {fetchOrgSettings} from '@/lib/settings-admin';
-import {parseCreditAmount,formatCreditAmountInput,formatCreditMoney,roundCreditMoney} from '@/lib/credit-model';
+import {parseCreditAmount,formatCreditAmountInput,formatCreditMoney} from '@/lib/credit-model';
+import {moneyFractionDigits,roundMoneyToCurrency} from '../../../src/lib/credits/money-input';
 import { palette, usePalette } from '@/lib/palette';
 
 type Colors = ReturnType<typeof usePalette>;
 
-const digits=(value:string)=>{if(!value.trim())return 0;try{return parseCreditAmount(value)}catch{return 0}};
-const pretty=formatCreditAmountInput;
+const digits=(value:string,currency:string|null)=>{if(!value.trim()||!currency)return 0;try{return parseCreditAmount(value,currency)}catch{return 0}};
+/** En guaraníes se agrupa por miles mientras se escribe: 150000 → 150.000. */
+const typedAmount=(value:string,currency:string|null)=>{if(!currency||moneyFractionDigits(currency)>0)return value;const plain=value.replace(/\D/g,'').replace(/^0+(?=\d)/,'');return plain?formatCreditAmountInput(Number(plain),currency):''};
 
 const METHODS = [
   { key: 'cash', label: 'Efectivo', icon: 'cash-outline' },
@@ -59,6 +61,8 @@ export function CollectSheet({
   }, [customerId]);
   const [currency,setCurrency]=useState<string|null>(null);
   const money=(value:number)=>formatCreditMoney(value,currency??'');
+  const round=(value:number)=>roundMoneyToCurrency(value,currency??'PYG');
+  const pretty=(value:number)=>currency?formatCreditAmountInput(value,currency):'';
   const [data, setData] = useState<DebtSummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string> | null>(focusDebtId ? new Set([focusDebtId]) : null);
@@ -95,7 +99,7 @@ export function CollectSheet({
         setAttemptContext(scopedContext);
         setPendingBlocked(false);
         const target = focusDebtId ? summary.debts.filter((debt) => debt.id === focusDebtId) : summary.debts.filter((debt) => debt.collectable);
-        setAmount(pretty(target.reduce((sum, debt) => sum + debt.pendingAmount, 0)));
+        setAmount(formatCreditAmountInput(target.reduce((sum, debt) => sum + debt.pendingAmount, 0), settings.currency));
         return getPendingMobileCollection(secureStorage, scopedContext).then((pending) => { if (active) setPendingAttempt(pending); });
       })
       .catch((err) => {
@@ -119,9 +123,10 @@ export function CollectSheet({
 
   const collectable = (data?.debts ?? []).filter((debt) => debt.collectable && debt.pendingAmount > 0);
   const chosen = selected ? collectable.filter((debt) => selected.has(debt.id)) : collectable;
-  const chosenTotal = roundCreditMoney(chosen.reduce((sum, debt) => sum + debt.pendingAmount, 0));
-  const value = digits(amount);
-  const overflow = roundCreditMoney(Math.max(0, value - chosenTotal));
+  const exactTotal = Math.round(chosen.reduce((sum, debt) => sum + debt.pendingAmount, 0) * 100) / 100;
+  const chosenTotal = round(exactTotal);
+  const value = digits(amount, currency);
+  const overflow = round(Math.max(0, value - chosenTotal));
 
   const preview = collectionPreview(value, chosenTotal, method);
   const cashRequired = method === 'cash' || chosen.some(debt => debt.type === 'repair');
@@ -141,7 +146,7 @@ export function CollectSheet({
       : !controls.allows(method)
         ? 'Elegí un medio de cobro habilitado.'
         : value <= 0
-      ? 'Ingresá un monto válido, sin separadores de miles y con hasta dos decimales.'
+      ? (currency && moneyFractionDigits(currency) === 0 ? 'Ingresá el monto en guaraníes enteros, por ejemplo 150.000.' : 'Ingresá un monto válido: el punto separa miles y la coma, decimales.')
       : chosen.length === 0
         ? 'Elegí qué cobrar.'
         : overflow > 0 && !excess
@@ -173,17 +178,21 @@ export function CollectSheet({
       }
       // Con todo elegido va en automático (más vieja primero); con selección, a lo elegido en orden.
       let remaining = Math.min(value, chosenTotal);
-      const allocations = selected
+      // Una deuda vieja con céntimos en guaraníes se salda por su saldo exacto, a mano.
+      const settleExact = value === chosenTotal && Math.abs(exactTotal - chosenTotal) > 1e-9;
+      const allocations = settleExact
+        ? chosen.map((debt) => ({ id: debt.id, type: debt.type === 'repair' ? ('repair' as const) : ('installment' as const), amount: debt.pendingAmount }))
+        : selected
         ? chosen
             .map((debt) => {
-              const applied = roundCreditMoney(Math.min(remaining, debt.pendingAmount));
-              remaining = roundCreditMoney(remaining-applied);
+              const applied = round(Math.min(remaining, debt.pendingAmount));
+              remaining = round(remaining-applied);
               return { id: debt.id, type: debt.type === 'repair' ? ('repair' as const) : ('installment' as const), amount: applied };
             })
             .filter((row) => row.amount > 0)
         : undefined;
       const payload = {
-          amount: value,
+          amount: settleExact ? exactTotal : value,
           method,
           allocations,
           referenceNumber: reference,
@@ -342,7 +351,7 @@ export function CollectSheet({
 
           <View style={[styles.moneyWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
             <Text style={[styles.bold, { color: colors.muted }]}>{currency??'—'}</Text>
-            <TextInput value={amount} onChangeText={setAmount} maxLength={14} keyboardType="decimal-pad" style={[styles.moneyInput, { color: colors.text }]} accessibilityLabel="Monto a cobrar" />
+            <TextInput value={amount} onChangeText={(next) => setAmount(typedAmount(next, currency))} maxLength={16} keyboardType={currency && moneyFractionDigits(currency) === 0 ? 'number-pad' : 'decimal-pad'} style={[styles.moneyInput, { color: colors.text }]} accessibilityLabel="Monto a cobrar" />
             {value !== chosenTotal && (
               <Pressable onPress={() => setAmount(pretty(chosenTotal))} hitSlop={8}>
                 <Text style={[styles.link, { color: palette.primary }]}>Todo</Text>
@@ -374,7 +383,7 @@ export function CollectSheet({
             <Text style={[styles.bold, { color: colors.text }]}>Antes de confirmar</Text>
             <Text style={[styles.small, { color: colors.text }]}>A la deuda seleccionada: {money(preview.applied)}</Text>
             <Text style={[styles.small, { color: colors.text }]}>Queda de lo seleccionado: {money(preview.remaining)}</Text>
-            <Text style={[styles.small, { color: colors.text }]}>Deuda total restante: {money(roundCreditMoney(Math.max(0, (data?.totalDebt ?? 0) - preview.applied)))}</Text>
+            <Text style={[styles.small, { color: colors.text }]}>Deuda total restante: {money(round(Math.max(0, (data?.totalDebt ?? 0) - preview.applied)))}</Text>
             <Text style={[styles.small, { color: colors.muted }]}>{method === 'cash' ? `El efectivo esperado de la caja aumenta ${money(preview.drawerIncrease)}.` : 'Este cobro no aumenta el efectivo esperado del cajón. El comprobante no confirma la acreditación bancaria.'}</Text>
             {preview.storeCredit > 0 && <Text style={[styles.small, { color: colors.muted }]}>Saldo a favor a confirmar: {money(preview.storeCredit)}</Text>}
           </View>

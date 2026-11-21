@@ -20,8 +20,11 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
 import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer, Share2 } from 'lucide-react'
-import { formatCurrency as formatCurrencyBase, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
-const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
+import { formatCurrency as formatCurrencyBase, formatThousands, parseThousands, getDisplayLocale, getLocaleConfig } from '@/lib/currency'
+import { moneyFractionDigits, roundMoneyToCurrency } from '@/lib/credits/money-input'
+/** Decimales de la moneda activa: 0 en guaraníes, para no mostrar ni cobrar céntimos. */
+const currencyDigits = () => moneyFractionDigits(getLocaleConfig().currency)
+const formatCurrency = (amount: number) => formatCurrencyBase(amount, { minimumFractionDigits: 0, maximumFractionDigits: currencyDigits() })
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 import { createSnapshotReceiptPdf } from '@/lib/credits/receipt-snapshot'
@@ -104,8 +107,14 @@ function CreditPaymentDialogContent({
 
 
     const handleAmountChange = (value: string) => {
+        // El punto separa miles y la coma, decimales; en guaraníes no hay decimales.
+        const digits = currencyDigits()
         const normalized = value.replace(/\./g, '').replace(',', '.')
-        if (!/^\d*(?:\.\d{0,2})?$/.test(normalized)) return
+        const pattern = digits > 0 ? new RegExp(`^\\d*(?:\\.\\d{0,${digits}})?$`) : /^\d*$/
+        if (!pattern.test(normalized)) {
+            if (digits === 0 && value.includes(',')) setError('Los guaraníes no llevan decimales.')
+            return
+        }
         setAmount(normalized)
         setError('')
     }
@@ -118,7 +127,7 @@ function CreditPaymentDialogContent({
     const handleQuickAmount = (percentage: number) => {
         const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
         if (!effectiveMaxAmount) return
-        const calculatedAmount = Math.round(effectiveMaxAmount * percentage * 100) / 100
+        const calculatedAmount = roundMoneyToCurrency(effectiveMaxAmount * percentage, getLocaleConfig().currency)
         setAmount(String(calculatedAmount))
         setError('')
     }
@@ -523,7 +532,7 @@ function CreditPaymentDialogContent({
                                             <Input
                                                 id="amount"
                                                 type="text"
-                                                inputMode="decimal"
+                                                inputMode={currencyDigits() > 0 ? 'decimal' : 'numeric'}
                                                 className={`min-h-11 pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                                                 value={formatThousands(amount.split('.')[0]) + (amount.includes('.') ? ',' + amount.split('.')[1] : '')}
                                                 placeholder="0"
@@ -536,7 +545,7 @@ function CreditPaymentDialogContent({
                                             <div className="grid grid-cols-4 gap-1.5 pt-1">
                                                 {[0.25, 0.5, 0.75, 1].map((p) => {
                                                     const label = p === 1 ? (allowFullDebtPayment ? '100% Total' : 'Total Cuota') : `${p * 100}%`
-                                                    const targetAmt = Math.round(effectiveMaxAmount * p)
+                                                    const targetAmt = roundMoneyToCurrency(effectiveMaxAmount * p, getLocaleConfig().currency)
                                                     const isSelected = Number(amount) === targetAmt
                                                     return (
                                                         <button

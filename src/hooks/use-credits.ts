@@ -5,6 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { useAuth } from '@/hooks/use-auth'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useOptionalBranch } from '@/contexts/branch-context'
+import { roleHasPermission } from '@/lib/saas/permissions'
+import { creditPortfolioUrl } from '@/lib/credits/portfolio-url'
 import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt, CollectionAttemptError } from '@/lib/credits/collection-attempt'
 import type { CollectionResult } from '@/lib/credits/collection-contract'
 import type { CreditPortfolioSummary } from '@/lib/credits/portfolio'
@@ -85,8 +87,8 @@ type InstallmentFilters = {
 export const isInstallmentLate = (i: InstallmentRow, timeZone = 'America/Asuncion'): boolean =>
   creditInstallmentIsOverdue(i.due_date, i.status, timeZone)
 
-const fetchTenantCreditsData = async () => {
-  const response = await fetch('/api/credits', { cache: 'no-store' })
+const fetchTenantCreditsData = async (url: string) => {
+  const response = await fetch(url, { cache: 'no-store' })
   const result = await response.json()
 
   if (!response.ok || !result.success) {
@@ -111,8 +113,17 @@ const fetchTenantCreditsData = async () => {
 
 export function useCredits(enabled = true) {
     const { user } = useAuth()
-    const organizationId = useOptionalActiveOrganization()?.organization?.id
+    const activeOrganization = useOptionalActiveOrganization()?.organization
+    const organizationId = activeOrganization?.id
     const branchId = useOptionalBranch()?.selectedBranchId ?? undefined
+    const role = activeOrganization?.role
+    const canViewAllBranches = role === 'owner' || role === 'admin'
+    /** Cobrar exige el mismo permiso que el servidor; sin él no se ofrece el botón. */
+    const canCollect = Boolean(role && roleHasPermission(role, 'crm.customers.manage'))
+    // Dueño y administrador ven todas las sucursales por defecto, como antes; el resto, la suya.
+    const [allBranchesChoice, setAllBranches] = useState(true)
+    const allBranches = canViewAllBranches && allBranchesChoice
+    const portfolioUrl = creditPortfolioUrl({ branchId, allBranches })
     const [globalSummary, setGlobalSummary] = useState<CreditPortfolioSummary | null>(null)
     const [loadedOrganizationId, setLoadedOrganizationId] = useState<string | undefined>()
     const currentOrganizationRef = useRef(organizationId)
@@ -170,7 +181,7 @@ export function useCredits(enabled = true) {
         setLoading(true)
         setError(null)
         try {
-            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems, globalSummary: loadedSummary, timeZone: loadedTimeZone } = await fetchTenantCreditsData()
+            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems, globalSummary: loadedSummary, timeZone: loadedTimeZone } = await fetchTenantCreditsData(portfolioUrl)
 
             // Llego una carga mas nueva mientras esta viajaba: se descarta.
             if (requestId !== loadSeqRef.current) return
@@ -256,7 +267,7 @@ export function useCredits(enabled = true) {
             // la pantalla diria "listo" con una consulta todavia en curso.
             if (requestId === loadSeqRef.current) setLoading(false)
         }
-    }, [enabled, organizationId])
+    }, [enabled, organizationId, portfolioUrl])
 
     const refreshData = useCallback(() => {
         startTransition(() => {
@@ -436,6 +447,9 @@ export function useCredits(enabled = true) {
     }, [installments, filterValues, creditById, timeZone])
 
     return {
+        /** Alcance de la cartera: todas las sucursales (solo dueño o admin) o la elegida. */
+        branchScope: { allBranches, canViewAllBranches, setAllBranches },
+        canCollect,
         loading: loading || !hasCurrentData,
         globalSummary: hasCurrentData ? globalSummary : null,
         timeZone,

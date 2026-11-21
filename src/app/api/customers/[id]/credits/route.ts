@@ -44,12 +44,12 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       .order('created_at', { ascending: false })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'No se pudieron cargar los créditos del cliente' }, { status: 500 })
     }
 
     const creditList = credits ?? []
     const totalCredits = creditList.length
-    const activeCredits = creditList.filter((c) => c.status === 'active' || c.status === 'pending' || c.status === 'late').length
+    const activeCredits = creditList.filter((c) => c.status === 'active' || c.status === 'defaulted').length
     const totalPrincipal = creditList.reduce((sum, c) => sum + Number(c.principal || c.amount || 0), 0)
 
     // 2. Obtener saldo pendiente total de cuotas si existen
@@ -79,9 +79,9 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
         ...balanceSummary,
       },
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error interno' },
+      { error: 'No se pudieron cargar los créditos del cliente' },
       { status: 500 }
     )
   }

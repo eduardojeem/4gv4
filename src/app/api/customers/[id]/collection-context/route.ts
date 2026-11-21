@@ -4,7 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { logger } from '@/lib/logger'
 /** Read-only preflight. The collection RPC repeats the check under its transaction. */
-export const GET = withTenantAuth({permission:'crm.customers.manage',module:'crm'}, async(request,{organization,user},context)=>{
+export const GET = withTenantAuth({permission:'crm.customers.manage',module:['crm','credits']}, async(request,{organization,user},context)=>{
  try {
   const {id} = await (context as {params:Promise<{id:string}>}).params
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return NextResponse.json({error:'Cliente inválido.'},{status:400})
