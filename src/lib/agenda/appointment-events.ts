@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { sendEmail } from '@/lib/email/resend'
 import { describeAppointmentEvent, type AppointmentEventKind } from '@/lib/agenda/messages'
 import { siteUrl } from '@/lib/site-url'
+import { afterResponse, notifyAppointmentChanged } from '@/lib/notifications/server/business-events'
 
 export type { AppointmentEventKind }
 
@@ -61,6 +62,15 @@ export async function notifyAppointmentEvent(
     logger.error('No se pudo registrar la novedad del turno', { error: error.message, kind: event.kind })
   }
 
+  // Aviso al celular del comercio (respeta las preferencias de cada usuario).
+  const text = describeAppointmentEvent(event, options.timeZone)
+  afterResponse(() => notifyAppointmentChanged({
+    organizationId: event.organizationId,
+    appointmentId: event.appointmentId,
+    kind: event.kind,
+    text,
+  }))
+
   if (!options.notifyEmail) return
   try {
     const { data } = await admin
@@ -72,7 +82,6 @@ export async function notifyAppointmentEvent(
     const company = ((data as { value?: Record<string, unknown> } | null)?.value ?? {}) as Record<string, unknown>
     const to = typeof company.email === 'string' ? company.email.trim() : ''
     if (!to) return
-    const text = describeAppointmentEvent(event, options.timeZone)
     const agendaUrl = siteUrl('/dashboard/agenda')
     await sendEmail({
       to,

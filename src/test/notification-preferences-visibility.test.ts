@@ -10,8 +10,8 @@ const ALL_MODULES = ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'ec
 
 describe('preferencias: solo los avisos que le pueden llegar al usuario', () => {
   it('oculta los avisos que todavía no se envían', () => {
-    expect(isNotificationTypeVisible('BOOKING_CREATED', { role: 'owner', modules: ALL_MODULES })).toBe(false)
-    expect(isNotificationTypeVisible('LOW_STOCK', { role: 'owner', modules: ALL_MODULES })).toBe(false)
+    expect(isNotificationTypeVisible('BOOKING_REMINDER', { role: 'owner', modules: ALL_MODULES })).toBe(false)
+    expect(isNotificationTypeVisible('CASH_DIFFERENCE', { role: 'owner', modules: ALL_MODULES })).toBe(false)
     expect(isNotificationTypeVisible('REPAIR_CREATED', { role: 'owner', modules: ALL_MODULES })).toBe(true)
   })
 

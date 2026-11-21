@@ -18,6 +18,11 @@ type ContentGenerator = {
  * Genera textos seguros para pantallas de bloqueo sin exponer datos sensibles de clientes.
  */
 /** «Pedido #A12 de Ana · Gs. 150.000»: lo que sirve leer en la pantalla bloqueada. */
+/** Turnos: el texto ya armado por la Agenda («Ana reservó Corte para el lunes 24, 10:00»). */
+function bookingBody(data: Record<string, unknown> | undefined, fallback: string) {
+  return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : fallback
+}
+
 function orderBody(data: Record<string, unknown> | undefined, fallback: string) {
   const parts = [
     typeof data?.orderNumber === 'string' && data.orderNumber ? `Pedido #${data.orderNumber}` : null,
@@ -156,6 +161,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Nueva reserva',
     defaultBody: 'Se agendó un nuevo turno o reserva de servicio.',
     defaultResourceType: 'booking',
+    formatBody: (data) => bookingBody(data, 'Se agendó un nuevo turno o reserva de servicio.'),
   },
   BOOKING_CONFIRMED: {
     title: 'Reserva confirmada',
@@ -166,11 +172,13 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Reserva cancelada',
     defaultBody: 'Una reserva fue cancelada.',
     defaultResourceType: 'booking',
+    formatBody: (data) => bookingBody(data, 'Una reserva fue cancelada.'),
   },
   BOOKING_RESCHEDULED: {
     title: 'Reserva reprogramada',
     defaultBody: 'Se modificó el horario o fecha de una reserva.',
     defaultResourceType: 'booking',
+    formatBody: (data) => bookingBody(data, 'Se modificó el horario o fecha de una reserva.'),
   },
   BOOKING_REMINDER: {
     title: 'Recordatorio de reserva',
@@ -190,7 +198,8 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     defaultResourceType: 'product',
     formatBody: (data) => {
       if (typeof data?.productName === 'string') {
-        return `El producto "${data.productName}" alcanzó el stock mínimo.`
+        const left = typeof data.stock === 'number' ? ` Quedan ${data.stock}.` : ''
+        return `${data.productName} llegó al stock mínimo.${left}`
       }
       return 'Uno o más productos alcanzaron el nivel mínimo de existencias.'
     },
@@ -199,6 +208,7 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
     title: 'Producto agotado',
     defaultBody: 'Un producto se ha quedado sin stock.',
     defaultResourceType: 'product',
+    formatBody: (data) => (typeof data?.productName === 'string' ? `${data.productName} se quedó sin stock.` : 'Un producto se ha quedado sin stock.'),
   },
   VARIANT_LOW_STOCK: {
     title: 'Variante con stock bajo',
@@ -331,9 +341,23 @@ const NOTIFICATION_PRESENTATION_MAP: Record<NotificationType, ContentGenerator> 
  * Si se incluye metadata adicional, puede enriquecer el cuerpo manteniendo
  * la seguridad para notificaciones emergentes.
  */
+/** En barberías y belleza la agenda se habla de «turnos»; en el resto, de «reservas». */
+const TURNO_VERTICALS = new Set(['barbershop', 'beauty_services'])
+const TURNO_TITLES: Partial<Record<NotificationType, string>> = {
+  BOOKING_CREATED: 'Nuevo turno',
+  BOOKING_CANCELLED: 'Turno cancelado',
+  BOOKING_RESCHEDULED: 'Turno reprogramado',
+}
+
+export function notificationTitleForVertical(type: NotificationType, fallback: string, businessVertical?: string | null) {
+  if (businessVertical && TURNO_VERTICALS.has(businessVertical)) return TURNO_TITLES[type] ?? fallback
+  return fallback
+}
+
 export function formatNotificationContent(
   type: NotificationType,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
+  context?: { businessVertical?: string | null },
 ): NotificationContent {
   const template = NOTIFICATION_PRESENTATION_MAP[type]
   if (!template) {
@@ -346,7 +370,7 @@ export function formatNotificationContent(
   const body = template.formatBody ? template.formatBody(data) : template.defaultBody
 
   return {
-    title: template.title,
+    title: notificationTitleForVertical(type, template.title, context?.businessVertical),
     body,
     defaultResourceType: template.defaultResourceType,
   }

@@ -84,9 +84,11 @@ export async function dispatchNotificationEvent(
   // No enviar avisos de módulos apagados para el comercio. `planInfo.modules` son los
   // módulos efectivos: el plan, el rubro y lo que el comercio activó.
   // El módulo 'security' es transversal y no requiere verificación de plan comercial.
+  let businessVertical: string | null = null
   if (metadata.requiredModule && metadata.requiredModule !== 'security') {
     try {
       const planInfo = await getOrganizationPlanInfo(organizationId)
+      businessVertical = planInfo.businessVertical ?? null
       const isModuleEnabled = planInfo.modules.includes(metadata.requiredModule)
 
       if (!isModuleEnabled) {
@@ -163,7 +165,7 @@ export async function dispatchNotificationEvent(
   // Los canales se evalúan de forma independiente: silenciar la bandeja no silencia push.
 
   // 5. Presentación y Formato del Contenido
-  const formatted = formatNotificationContent(type, data)
+  const formatted = formatNotificationContent(type, data, { businessVertical })
   const finalResourceType = resourceType ?? formatted.defaultResourceType ?? null
   const finalData = data ?? {}
 
