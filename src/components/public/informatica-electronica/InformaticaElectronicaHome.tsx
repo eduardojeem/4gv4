@@ -4,7 +4,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
-import { ArrowRight, ChevronRight, Flame, Laptop, Layers, PackageSearch, Sparkles, Tag } from 'lucide-react'
+import { ArrowRight, ChevronRight, Flame, Laptop, Layers, PackageSearch, Sparkles, Tag, MapPin, Navigation } from 'lucide-react'
+import { getCompanyMapsEmbedSrc, getDirectionsHref } from '@/lib/website/company-maps-url'
 import { AppImage } from '@/components/ui/app-image'
 import { formatThousands } from '@/lib/currency'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
@@ -478,6 +479,8 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
   const company = settings.company_info
   const storeName = company?.name?.trim() || 'Nuestra tienda'
   const phoneClean = (company?.whatsapp || company?.phone || '').replace(/\D/g, '')
+  const mapEmbedSrc = getCompanyMapsEmbedSrc(company?.mapsUrl, company?.address)
+  const directionsHref = getDirectionsHref(company?.mapsUrl, company?.address)
   const brandTheme = getBrandTheme(company?.brandColor)
 
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
@@ -941,6 +944,22 @@ export function InformaticaElectronicaHome({ settings, branches = [], capabiliti
 
       {/* Beneficios: solo los que el dueño configuró en el sitio web. */}
       {trustBar && <StoreTrustBar settings={trustBar} className="py-4 sm:py-5" />}
+
+      {directionsHref && (
+        <section id="ubicacion" aria-labelledby="tech-location-title" className="scroll-mt-36 border-t border-border/70 py-7 sm:py-10">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className={cn('grid overflow-hidden rounded-3xl border border-primary/15 bg-card shadow-sm', mapEmbedSrc && 'lg:grid-cols-[0.85fr_1.15fr]')}>
+              <div className="flex flex-col items-start justify-center gap-4 p-6 sm:p-8">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><MapPin className="size-5" aria-hidden="true" /></span>
+                <div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Visitá nuestro local</p><h2 id="tech-location-title" className="mt-2 text-2xl font-bold tracking-tight">Cómo llegar a {storeName}</h2></div>
+                {company?.address?.trim() && <p className="text-sm leading-relaxed text-muted-foreground">{company.address.trim()}</p>}
+                <a href={directionsHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><Navigation className="size-4" aria-hidden="true" />Cómo llegar en Google Maps</a>
+              </div>
+              {mapEmbedSrc && <iframe title={`Ubicación de ${storeName}`} src={mapEmbedSrc} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" className="h-64 w-full border-0 bg-muted sm:h-80" />}
+            </div>
+          </div>
+        </section>
+      )}
 
       {branches.length > 0 && <BranchLocations branches={branches} brand={brandTheme} />}
 

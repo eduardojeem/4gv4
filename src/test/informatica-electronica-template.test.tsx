@@ -367,3 +367,17 @@ describe('Inicio Informática & Electrónica', () => {
     expect(screen.getByText('Envío gratis')).toBeInTheDocument()
   })
 })
+
+describe('Mega Tech: ubicación del local', () => {
+  it('muestra la dirección configurada y permite iniciar la ruta en Google Maps', () => {
+    renderHome({ company_info: { name: 'Local real', address: 'Av. España 123, Asunción', phone: '' } } as WebsiteSettings)
+    const section = screen.getByRole('region', { name: 'Cómo llegar a Local real' })
+    expect(within(section).getByText('Av. España 123, Asunción')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'Cómo llegar en Google Maps' }).getAttribute('href')).toContain(encodeURIComponent('Av. España 123, Asunción'))
+    expect(within(section).getByTitle('Ubicación de Local real')).toHaveAttribute('loading', 'lazy')
+  })
+  it('no inventa una ubicación cuando la empresa no la configuró', () => {
+    renderHome({ company_info: { name: 'Sin ubicación', address: '', mapsUrl: '', phone: '' } } as WebsiteSettings)
+    expect(screen.queryByRole('region', { name: 'Cómo llegar a Sin ubicación' })).not.toBeInTheDocument()
+  })
+})
