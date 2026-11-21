@@ -1,3 +1,4 @@
+import { isBrandPalette } from '@/lib/website/brand-palette'
 import { CreditPlanDefinitionSchema } from '@/lib/credits/plan-definition'
 import { z } from 'zod'
 import { MAX_CREDIT_INSTALLMENTS, MAX_CREDIT_INTEREST_RATE } from '@/lib/credits/installments'
@@ -95,6 +96,7 @@ export const CompanyInfoSchema = z.object({
     .max(7, 'El color personalizado debe usar formato #RGB o #RRGGBB')
     .refine((value) => value === '' || isValidBrandHexColor(value), 'Ingresá un color HEX válido (#RGB o #RRGGBB)')
     .optional(),
+  brandPalette: z.object({ primary: z.string().max(7), accent: z.string().max(7), background: z.string().max(7), text: z.string().max(7) }).refine(isBrandPalette, 'La combinación debe tener colores HEX válidos y texto legible (contraste mínimo 4,5:1).').nullable().optional(),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   storefrontStyle: z.enum(STOREFRONT_STYLE_PREFERENCES).optional(),
   storefrontVariant: z.string().max(50).optional().or(z.literal('')),

@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
+import { brandPaletteStyle, isBrandPalette, type StorefrontBrandPalette } from '@/lib/website/brand-palette'
 import { usesPortraitMedia, type StorefrontStyle } from '@/lib/website/storefront-style'
 import { cn } from '@/lib/utils'
 
@@ -10,11 +11,13 @@ import { cn } from '@/lib/utils'
 export function BrandColorScope({
   brandColor,
   customBrandColor,
+  brandPalette,
   className,
   children,
 }: {
   brandColor?: string
   customBrandColor?: string
+  brandPalette?: StorefrontBrandPalette | null
   className?: string
   children: ReactNode
 }) {
@@ -24,7 +27,8 @@ export function BrandColorScope({
       className={className}
       data-color-scheme={custom ? undefined : brandColor && brandColor !== 'custom' ? brandColor : 'blue'}
       data-custom-brand={custom ? '' : undefined}
-      style={custom ? ({ '--brand-primary': customBrandColor } as CSSProperties) : undefined}
+      data-storefront-palette={isBrandPalette(brandPalette) ? '' : undefined}
+      style={{ ...(custom ? { '--brand-primary': customBrandColor } : {}), ...brandPaletteStyle(brandPalette) } as CSSProperties}
     >
       {children}
     </div>

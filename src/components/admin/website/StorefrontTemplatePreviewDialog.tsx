@@ -52,6 +52,7 @@ export interface StorefrontLook {
   storefrontStyle: StorefrontStylePreference
   brandColor: string
   customBrandColor?: string
+  brandPalette?: CompanyInfo['brandPalette']
   headerStyle: StorefrontPreviewDraft['headerStyle']
   showTopBar: boolean
 }
@@ -91,7 +92,7 @@ export function StorefrontTemplatePreviewDialog({
   const [page, setPage] = useState<PreviewPage>('inicio')
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [isLoading, setIsLoading] = useState(true)
-  const update = (patch: Partial<StorefrontLook>) => setLook((current) => ({ ...current, ...patch }))
+  const update = (patch: Partial<StorefrontLook>) => setLook((current) => ({ ...current, ...(('brandColor' in patch || 'customBrandColor' in patch) && !('brandPalette' in patch) ? { brandPalette: null } : {}), ...patch }))
 
   const { access } = useStorefrontTemplateAccess(open)
   const templateGroups = useMemo(
@@ -114,6 +115,7 @@ export function StorefrontTemplatePreviewDialog({
 
   const changes = useMemo(() => {
     const diff: Partial<CompanyInfo> = {}
+    if (JSON.stringify(look.brandPalette ?? null) !== JSON.stringify(initial.brandPalette ?? null)) diff.brandPalette = look.brandPalette ?? null
     if (look.storefrontStyle !== initial.storefrontStyle) diff.storefrontStyle = look.storefrontStyle
     if (look.brandColor !== initial.brandColor) diff.brandColor = look.brandColor as CompanyInfo['brandColor']
     // Los tonos extra se guardan como color personalizado: cambia el HEX aunque brandColor siga en 'custom'.
@@ -129,12 +131,13 @@ export function StorefrontTemplatePreviewDialog({
     const draft: StorefrontPreviewDraft = {
       style: candidateStyle,
       brandColor: look.brandColor,
+      brandPalette: look.brandPalette,
       customBrandColor: look.customBrandColor,
       headerStyle: look.headerStyle,
       showTopBar: look.showTopBar,
     }
     iframeRef.current?.contentWindow?.postMessage({ type: STOREFRONT_PREVIEW_UPDATE, ...draft }, window.location.origin)
-  }, [candidateStyle, look.brandColor, look.customBrandColor, look.headerStyle, look.showTopBar])
+  }, [candidateStyle, look.brandPalette, look.brandColor, look.customBrandColor, look.headerStyle, look.showTopBar])
 
   // La tienda avisa cuando está lista para recibir el borrador.
   useEffect(() => {
@@ -233,7 +236,7 @@ export function StorefrontTemplatePreviewDialog({
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tab === 'template' ? (
                 <>
-                  <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor}>
+                  <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor} brandPalette={look.brandPalette}>
                     <div role="radiogroup" aria-label="Plantillas" className="space-y-4 p-3">
                       {templateGroups.map((group) => {
                         const GroupIcon = TEMPLATE_GROUP_ICONS[group.id] ?? Store
@@ -387,6 +390,7 @@ export function StorefrontTemplatePreviewDialog({
                     <StorefrontAppearancePreview
                       value={{
                         name: 'Tu tienda',
+                        brandPalette: look.brandPalette,
                         brandColor: look.brandColor as CompanyInfo['brandColor'],
                         customBrandColor: look.customBrandColor,
                         headerStyle: look.headerStyle,
@@ -508,7 +512,7 @@ function LookEditor({
 
       <section className="space-y-2.5">
         <h3 className="text-sm font-semibold">Encabezado</h3>
-        <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor}>
+        <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor} brandPalette={look.brandPalette}>
           <div role="group" aria-label="Estilo del encabezado" className="space-y-2">
             {STOREFRONT_HEADER_OPTIONS.map((option) => {
               const selected = headerOption === option.value
