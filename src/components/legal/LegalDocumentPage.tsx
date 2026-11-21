@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
-import { LegalContent, legalHeadings } from '@/components/legal/LegalContent'
+import { ChevronDown } from 'lucide-react'
+import { LegalContent, legalHeadings, type LegalHeading } from '@/components/legal/LegalContent'
 import { getPlatformBranding } from '@/lib/platform/branding'
 import { OG_IMAGE_PATH } from '@/lib/seo/page-metadata'
 import {
@@ -25,6 +26,23 @@ export async function legalDocumentMetadata(documentType: LegalDocumentType): Pr
     alternates: { canonical: LEGAL_DOCUMENT_META[documentType].path },
     openGraph: { title, description: DESCRIPTIONS[documentType], type: 'article', images: [OG_IMAGE_PATH] },
   }
+}
+
+function LegalToc({ headings }: { headings: LegalHeading[] }) {
+  return (
+    <ol className="space-y-0.5">
+      {headings.map((heading) => (
+        <li key={heading.id}>
+          <a
+            href={`#${heading.id}`}
+            className="block py-1 leading-snug text-slate-600 underline-offset-4 hover:text-primary hover:underline dark:text-slate-300"
+          >
+            {heading.text}
+          </a>
+        </li>
+      ))}
+    </ol>
+  )
 }
 
 function formatDate(value: string | null): string {
@@ -62,20 +80,17 @@ export async function LegalDocumentPage({ documentType }: { documentType: LegalD
 
           {headings.length > 2 && (
             <nav aria-label="En este documento" className="order-first lg:order-none">
-              <div className="rounded-xl border p-4 text-sm lg:sticky lg:top-24 dark:border-slate-800">
+              {/* En el celular el índice va plegado para que el texto empiece en la primera pantalla. */}
+              <details className="group rounded-xl border text-sm lg:hidden dark:border-slate-800">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 [&::-webkit-details-marker]:hidden">
+                  En este documento ({headings.length} secciones)
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
+                </summary>
+                <div className="px-4 pb-3"><LegalToc headings={headings} /></div>
+              </details>
+              <div className="hidden rounded-xl border p-4 text-sm lg:sticky lg:top-24 lg:block dark:border-slate-800">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">En este documento</p>
-                <ol className="mt-3 space-y-1.5">
-                  {headings.map((heading) => (
-                    <li key={heading.id}>
-                      <a
-                        href={`#${heading.id}`}
-                        className="block leading-snug text-slate-600 underline-offset-4 hover:text-primary hover:underline dark:text-slate-300"
-                      >
-                        {heading.text}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
+                <div className="mt-2"><LegalToc headings={headings} /></div>
               </div>
             </nav>
           )}

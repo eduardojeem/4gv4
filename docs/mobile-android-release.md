@@ -18,8 +18,8 @@ Paquete: `com.mitiendapy.app` · proyecto EAS `@jeeem/mitiendapy` · comandos de
 
 ## Ficha de Play Console
 
-- Política de privacidad: `https://www.mitiendapy.com/saas/privacidad`. Hoy no nombra al responsable ni un correo de contacto, ni menciona la app (cámara, fotos, desbloqueo biométrico local). Conviene completarla desde la administración de documentos legales antes de enviar a revisión.
-- Seguridad de los datos: nombre, correo, teléfono, datos de compras y fotos de productos; cifrado en tránsito; la huella o Face ID no salen del dispositivo.
-- Borrado de cuenta: la app no permite crear cuentas (se crean en la web), así que la exigencia de borrado dentro de la app no aplica; el formulario de seguridad de los datos igual pregunta cómo se pide el borrado, y hoy la política solo remite a "los canales de soporte".
+- Política de privacidad: `https://www.mitiendapy.com/saas/privacidad`. El texto vive en la base (`legal_documents`): en SuperAdmin → Contenido web → Legal, «Cargar texto base» trae la versión del código (`src/lib/legal/defaults.ts`), que cubre la app (cámara, fotos, huella o Face ID local, almacenamiento seguro, notificaciones), los proveedores, los plazos, el borrado y el contacto `soporte@mitiendapy.com`. El responsable figura como «MiTiendaPy»: tiene que coincidir con el nombre de desarrollador de la ficha de Play.
+- Seguridad de los datos: tiene que coincidir con la política. Se recopilan nombre, correo, teléfono, fotos de productos, datos de compras y pagos (sin tarjeta), identificadores del dispositivo (token de notificaciones) y registros de la app (inicios de sesión). Cifrado en tránsito; se puede pedir el borrado; no se venden ni se usan para publicidad; la huella o Face ID no salen del dispositivo. Desde la versión con «Tiendas cerca mío» se declara también **Ubicación aproximada** (función de la app, opcional, no se guarda ni se comparte).
+- Borrado de cuenta: la app crea cuentas y comercios (ingreso con Google, «Crear mi comercio»), así que el borrado tiene que estar dentro de la app: está en Perfil → Eliminar cuenta. URL para el formulario: `https://www.mitiendapy.com/saas/eliminar-cuenta`.
 - Acceso para revisión: la app requiere login; cargar en "Acceso a la app" un usuario de demostración que no tenga datos reales.
 - Recursos: ícono 512×512, gráfico destacado 1024×500 y al menos 2 capturas de teléfono.

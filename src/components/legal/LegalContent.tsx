@@ -132,10 +132,25 @@ export function LegalContent({ content, title }: { content: string; title?: stri
   )
 }
 
+/**
+ * Correos y direcciones web se vuelven enlaces. Solo se arman `mailto:` y
+ * `https:`, así que el texto de la base no puede meter otro esquema.
+ */
+const AUTOLINK = /([\w.+-]+@[\w-]+(?:\.[\w-]+)+|(?:https:\/\/|www\.)[^\s),;]*[^\s.,;:)])/g
+const LINK_CLASS = 'font-medium text-primary underline underline-offset-4 break-words'
+
+function autolink(text: string, key: string): ReactNode[] {
+  return text.split(AUTOLINK).map((part, i) => {
+    if (i % 2 === 0) return <Fragment key={`${key}-${i}`}>{part}</Fragment>
+    const href = part.includes('@') && !part.includes('/') ? `mailto:${part}` : part.startsWith('https://') ? part : `https://${part}`
+    return <a key={`${key}-${i}`} href={href} className={LINK_CLASS}>{part}</a>
+  })
+}
+
 function inline(text: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith('**') && part.endsWith('**') && part.length > 4
-      ? <strong key={i} className="font-semibold text-slate-900 dark:text-slate-100">{part.slice(2, -2)}</strong>
-      : <Fragment key={i}>{part}</Fragment>,
+      ? <strong key={i} className="font-semibold text-slate-900 dark:text-slate-100">{autolink(part.slice(2, -2), String(i))}</strong>
+      : <Fragment key={i}>{autolink(part, String(i))}</Fragment>,
   )
 }

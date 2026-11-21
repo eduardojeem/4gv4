@@ -66,6 +66,16 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
   const placeholders = useMemo(() => findPlaceholders(content), [content])
   const responsibleGaps = useMemo(() => responsibleDataGaps(content), [content])
   const insertResponsible = () => setContent((current) => `${responsibleSection(documentType)}\n\n${current.trimStart()}`)
+  // Con una versión ya publicada el editor arranca de ella; esto trae el texto
+  // base del código (p. ej. cuando se actualiza) para revisarlo y publicarlo.
+  const defaultDocument = DEFAULT_LEGAL_DOCUMENTS[documentType]
+  const defaultContent = documentType === 'terms' ? appendNonrenewalTerms(defaultDocument.content) : defaultDocument.content
+  const isDefaultText = content === defaultContent && title === defaultDocument.title
+  const loadDefault = () => {
+    setTitle(defaultDocument.title)
+    setContent(defaultContent)
+    if (!changeSummary) setChangeSummary(defaultDocument.changeSummary ?? '')
+  }
   const dirty = !draft || title !== draft.title || content !== draft.content || changeSummary !== (draft.changeSummary ?? '')
 
   const save = () =>
@@ -107,9 +117,16 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
                 : 'Al guardar se crea un borrador. La versión publicada no cambia hasta que publiques.'}
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setPreview((v) => !v)}>
-            <Eye className="h-4 w-4" /> {preview ? 'Editar' : 'Vista previa'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {!isDefaultText && (
+              <Button type="button" variant="outline" size="sm" onClick={loadDefault} disabled={preview}>
+                <FileText className="h-4 w-4" /> Cargar texto base
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPreview((v) => !v)}>
+              <Eye className="h-4 w-4" /> {preview ? 'Editar' : 'Vista previa'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {preview ? (
