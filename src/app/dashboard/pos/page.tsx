@@ -359,6 +359,7 @@ function POSPageContent() {
   const [quickItemPurchasePrice, setQuickItemPurchasePrice] = useState('')
   const [quickItemWholesalePrice, setQuickItemWholesalePrice] = useState('')
   const [quickItemSku, setQuickItemSku] = useState('')
+  const [quickItemBarcode, setQuickItemBarcode] = useState('')
   const [quickItemPublishToCatalog, setQuickItemPublishToCatalog] = useState(false)
   const quickItemMargin = getQuickItemMargin(
     Number(quickItemPurchasePrice) || 0,
@@ -635,6 +636,28 @@ function POSPageContent() {
     }
     return `+1 ${product.name}`
   }, [addToCart, findProductByBarcode, getProductWithVariants, inventoryProducts])
+
+  /** El código no está cargado: abre el item rápido con el código ya puesto. */
+  const openQuickItemWithBarcode = useCallback((barcode: string) => {
+    setQuickItemBarcode(normalizeBarcode(barcode) || barcode.trim())
+    setQuickItemError('')
+    setIsQuickItemDialogOpen(true)
+  }, [])
+
+  const notifyBarcodeNotFound = useCallback((barcode: string) => {
+    toast.error('Producto no encontrado', {
+      description: `El código ${barcode} no está cargado.`,
+      action: { label: 'Crear con este código', onClick: () => openQuickItemWithBarcode(barcode) },
+    })
+  }, [openQuickItemWithBarcode])
+
+  /** Cámara: si el código no existe, cierra la cámara y abre el alta rápida. */
+  const scanWithCamera = useCallback(async (barcode: string): Promise<BarcodeScanFeedback> => {
+    const result = await addScannedBarcode(barcode)
+    if (result !== null) return result
+    openQuickItemWithBarcode(barcode)
+    return { text: `«${barcode}» no está cargado: completá nombre y precio`, close: true }
+  }, [addScannedBarcode, openQuickItemWithBarcode])
 
   // Función para agregar variante al carrito
   const addVariantToCart = useCallback((variant: ProductVariant, quantity: number) => {
@@ -1329,6 +1352,7 @@ function POSPageContent() {
         price: quickItemPrice,
         quantity: quickItemQty,
         sku: quickItemSku,
+        barcode: quickItemBarcode,
         publishToCatalog: quickItemPublishToCatalog,
         // Solo se manda el costo si el usuario puede verlo: para el resto el
         // campo no existe y el item se crea sin costo, como antes.
@@ -1365,6 +1389,7 @@ function POSPageContent() {
       setQuickItemWholesalePrice('')
       setQuickItemQty('1')
       setQuickItemSku('')
+      setQuickItemBarcode('')
       setQuickItemPublishToCatalog(false)
       setIsQuickItemDialogOpen(false)
       toast.success('Item rapido creado y sincronizado')
@@ -1375,7 +1400,7 @@ function POSPageContent() {
     } finally {
       setQuickItemSaving(false)
     }
-  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, canUpdateCost, selectedBranchId, syncProduct, addToCartHook])
+  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemBarcode, quickItemPublishToCatalog, canUpdateCost, selectedBranchId, syncProduct, addToCartHook])
 
   return (
     <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -2098,7 +2123,7 @@ function POSPageContent() {
                   <POSBarcodeScanner
                     onProductFound={async (barcode) => {
                       const result = await addScannedBarcode(barcode)
-                      if (result === null) toast.error('Producto no encontrado')
+                      if (result === null) notifyBarcodeNotFound(barcode)
                       else if (typeof result === 'object' && result?.ok === false) toast.error(result.text)
                     }}
                     className="w-full shadow-sm"
@@ -2111,7 +2136,7 @@ function POSPageContent() {
                   label="Escanear con la cámara"
                   className="w-full"
                   hint="Pasá los productos de a uno: cada lectura suma 1 al carrito"
-                  onScan={addScannedBarcode}
+                  onScan={scanWithCamera}
                 />}
               </div>
 
@@ -2568,6 +2593,27 @@ function POSPageContent() {
                     placeholder="Se genera automaticamente"
                     disabled={quickItemSaving}
                   />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="quick-item-barcode">Código de barras</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="quick-item-barcode"
+                      inputMode="numeric"
+                      maxLength={20}
+                      value={quickItemBarcode}
+                      onChange={(e) => setQuickItemBarcode(e.target.value.replace(/\s+/g, ''))}
+                      placeholder="Escanealo o escribilo"
+                      disabled={quickItemSaving}
+                    />
+                    <BarcodeScanner
+                      size="icon"
+                      label="Escanear código"
+                      onScan={(code) => { setQuickItemBarcode(code.replace(/\s+/g, '')) }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Con el código guardado, la próxima vez que lo escanees se agrega solo.</p>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3">
