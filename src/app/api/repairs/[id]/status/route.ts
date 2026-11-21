@@ -7,6 +7,7 @@ import { roleHasPermission } from '@/lib/saas/permissions'
 import { FULL_REPAIR_SELECT, isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 import { canTransition } from '@/lib/repairs/state-machine'
 import type { RepairStatus } from '@/types/repairs'
+import { afterResponse, notifyRepairReady, repairDeviceLabel } from '@/lib/notifications/server/business-events'
 
 type RepairStage = RepairStatus
 
@@ -191,6 +192,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       changed_by: staffAuth.user.id,
       notes: note,
     })
+
+    if (stage === 'listo') {
+      const branchId = branchScope.branchId
+      const device = repairDeviceLabel(updatedRepair as { device_brand?: string | null; device_model?: string | null })
+      afterResponse(() => notifyRepairReady({
+        organizationId: organization.id,
+        branchId,
+        repairId: id,
+        actorUserId: staffAuth.user.id,
+        device,
+      }))
+    }
 
     return NextResponse.json({
       ok: true,

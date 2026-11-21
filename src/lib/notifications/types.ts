@@ -77,6 +77,7 @@ export const NOTIFICATION_TYPES = [
   'REPAIR_READY',
   'REPAIR_OVERDUE',
   'REPAIR_NOTE_ADDED',
+  'REPAIR_DELIVERED',
 
   // Servicios / Reservas (Agenda)
   'BOOKING_CREATED',
@@ -451,6 +452,19 @@ export const NOTIFICATION_METADATA: Record<NotificationType, NotificationEventMe
     supportsBranchScope: true,
     defaultRoutePattern: '/panel/repairs/[id]',
     defaultPush: false,
+    defaultInApp: true,
+  },
+  REPAIR_DELIVERED: {
+    type: 'REPAIR_DELIVERED',
+    category: 'repairs',
+    title: 'Reparación entregada',
+    requiredModule: 'repairs',
+    requiredPermission: 'repairs.orders.read',
+    personal: false,
+    target: 'branch_members',
+    supportsBranchScope: true,
+    defaultRoutePattern: '/panel/repairs/[id]',
+    defaultPush: true,
     defaultInApp: true,
   },
 

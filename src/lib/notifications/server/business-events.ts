@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { config } from '@/lib/config'
 import { logger } from '@/lib/logger'
 import { dispatchNotificationEvent } from './dispatcher'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 
 /**
  * Avisos de la operación diaria (venta, pedido, reparación nueva) en la
@@ -166,6 +167,63 @@ export function notifyRepairCreated(params: {
         resourceId: params.repairId,
         data: { device: params.device ?? null },
         targetUserIds: [params.technicianId],
+      })
+    }
+  })
+}
+
+/** Texto del equipo para el aviso: «Samsung A54» o null. */
+export function repairDeviceLabel(repair: { device_brand?: string | null; device_model?: string | null } | null | undefined) {
+  return [repair?.device_brand, repair?.device_model].map((value) => value?.trim()).filter(Boolean).join(' ') || null
+}
+
+/** La reparación pasó a «listo»: avisa a quienes pueden entregarla. */
+export function notifyRepairReady(params: {
+  organizationId: string
+  branchId: string | null
+  repairId: string
+  actorUserId: string
+  device?: string | null
+}) {
+  return safely('la reparación lista', () => dispatchNotificationEvent({
+    organizationId: params.organizationId,
+    branchId: params.branchId,
+    type: 'REPAIR_READY',
+    resourceType: 'repair',
+    resourceId: params.repairId,
+    data: { device: params.device ?? null },
+    actorUserId: params.actorUserId,
+  }))
+}
+
+/**
+ * Reparaciones entregadas (desde Reparaciones o cobradas en el POS): avisa a
+ * la sucursal, con el equipo y si se retiró sin reparar.
+ */
+export function notifyRepairsDelivered(params: {
+  organizationId: string
+  branchId: string | null
+  repairIds: string[]
+  actorUserId: string
+}) {
+  if (params.repairIds.length === 0) return Promise.resolve()
+  return safely('la reparación entregada', async () => {
+    const { data, error } = await createAdminSupabase()
+      .from('repairs')
+      .select('id, device_brand, device_model, delivery_outcome, status')
+      .eq('organization_id', params.organizationId)
+      .in('id', params.repairIds)
+    if (error) throw error
+    for (const repair of data ?? []) {
+      if (repair.status !== 'entregado') continue
+      await dispatchNotificationEvent({
+        organizationId: params.organizationId,
+        branchId: params.branchId,
+        type: 'REPAIR_DELIVERED',
+        resourceType: 'repair',
+        resourceId: String(repair.id),
+        data: { device: repairDeviceLabel(repair), outcome: repair.delivery_outcome ?? null },
+        actorUserId: params.actorUserId,
       })
     }
   })
