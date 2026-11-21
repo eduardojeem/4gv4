@@ -2,7 +2,7 @@
 import { AppointmentCustomerCard } from './components/AppointmentCustomerCard'
 import { AppointmentCheckoutNotice } from './components/AppointmentCheckoutNotice'
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { FirstOperationEntryGuide } from '@/components/dashboard/onboarding/FirstOperationEntryGuide'
@@ -89,6 +89,7 @@ import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/Custom
 import { POSProductDetailDialog } from './components/POSProductDetailDialog'
 import { POSCashMovementDialog } from './components/POSCashMovementDialog'
 import { getRepairBalanceDue } from './lib/repair-charge'
+import { createDigitShortcutGuard } from './lib/digit-shortcut-guard'
 import {
   type ProductCreditSort
 } from './lib/product-credit-filter'
@@ -1173,6 +1174,19 @@ function POSPageContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [setSelectedSuggestionIndex, setShowSuggestions])
 
+  // Atajo 1-9: el guardián descarta las ráfagas del lector de códigos de barras,
+  // que antes sumaban al carrito los productos de esas posiciones de la lista.
+  const digitShortcutTargetsRef = useRef({ filteredProducts, addToCart })
+  useEffect(() => {
+    digitShortcutTargetsRef.current = { filteredProducts, addToCart }
+  }, [filteredProducts, addToCart])
+  const [digitShortcutGuard] = useState(() => createDigitShortcutGuard((digit) => {
+    const { filteredProducts: products, addToCart: add } = digitShortcutTargetsRef.current
+    const product = products[digit - 1]
+    if (product) add(product)
+  }))
+  useEffect(() => () => digitShortcutGuard.dispose(), [digitShortcutGuard])
+
   // Atajos de teclado mejorados
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -1275,18 +1289,15 @@ function POSPageContent() {
         }
       }
 
-      // Navegación por números (1-9 para agregar productos rápidamente)
-      if (!isInputFocused && /^[1-9]$/.test(e.key)) {
-        const index = parseInt(e.key) - 1
-        if (filteredProducts[index]) {
-          addToCart(filteredProducts[index])
-        }
+      // Números 1-9 para agregar productos rápidamente (no las ráfagas del lector)
+      if (!isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        digitShortcutGuard.handleKey(e.key)
       }
     }
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [addToCart, cart.length, clearCart, combinedCartItems.length, filteredProducts, handleOpenCheckout, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
+  }, [addToCart, cart.length, clearCart, combinedCartItems.length, digitShortcutGuard, filteredProducts, handleOpenCheckout, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
 
   // Búsqueda por código de barras
   useEffect(() => {
