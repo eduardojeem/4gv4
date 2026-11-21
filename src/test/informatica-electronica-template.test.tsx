@@ -381,3 +381,16 @@ describe('Mega Tech: ubicación del local', () => {
     expect(screen.queryByRole('region', { name: 'Cómo llegar a Sin ubicación' })).not.toBeInTheDocument()
   })
 })
+
+describe('Vitrina de portada', () => {
+  it('permite elegir un producto real y actualiza el enlace sin mostrar precios fuera de sus reglas', () => {
+    mockProducts = baseProducts.slice(0, 2).map(p => ({ ...p, image: `https://example.com/${p.id}.jpg` }))
+    renderHome()
+    const hero = screen.getByRole('region', { name: 'Portada de la tienda' })
+    expect(within(hero).getByRole('link', { name: 'Ver Notebook Asus 16GB' })).toHaveAttribute('href', '/mitienda/productos/p1')
+    fireEvent.click(within(hero).getByRole('button', { name: 'Mostrar iPhone 15' }))
+    expect(within(hero).getByRole('button', { name: 'Mostrar iPhone 15' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(hero).getByRole('link', { name: 'Ver iPhone 15' })).toHaveAttribute('href', '/mitienda/productos/p2')
+    expect(within(hero).queryByText(/9[.,]000[.,]000/)).not.toBeInTheDocument()
+  })
+})
