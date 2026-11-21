@@ -100,10 +100,10 @@ export default async function PublicLayout({
             )}
             scope={`tienda:${storefrontOrganization?.slug ?? settings?.company_info?.slug ?? 'tienda'}`}
           />
-            <StorefrontHeader initialSettings={settings} catalogEnabled={catalogEnabled} />
+            <StorefrontHeader initialSettings={settings} catalogEnabled={catalogEnabled} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
-            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StorefrontMobileNav initialSettings={settings} />
+            <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />
+            <StorefrontMobileNav initialSettings={settings} catalogEnabled={catalogEnabled} />
             <WhatsAppFloatButton />
             {storefrontOrganization && <SiteAnalyticsTracker tenantSlug={storefrontOrganization.slug} />}
           </div>

@@ -303,7 +303,7 @@ describe('la tienda recibe el aspecto', () => {
     expect(layout).toContain("await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')")
     expect(layout).toMatch(/<StorefrontStyleProvider style=\{storefrontStyle\}>\s*<CartProviderWithDrawer>/)
     expect(layout).toContain("await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
-    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />')
+    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />')
   })
 
   it('la consulta de la tienda pública trae el rubro', () => {

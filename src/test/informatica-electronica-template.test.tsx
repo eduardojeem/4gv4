@@ -70,6 +70,11 @@ const baseProducts = [
 
 let mockProducts: unknown[] = baseProducts
 let mockLoading = false
+const agendaState = vi.hoisted(() => ({ active: false }))
+vi.mock('@/components/public/inicio/ServicesHome', async importOriginal => ({
+  ...await importOriginal<typeof import('@/components/public/inicio/ServicesHome')>(),
+  usePublicAgenda: (enabled: boolean) => ({ agenda: enabled && agendaState.active ? { services: [], professionals: [] } : null, bookingHref: enabled && agendaState.active ? '/mitienda/turnos' : null }),
+}))
 
 vi.mock('swr', () => ({
   default: () => ({ data: mockProducts, isLoading: mockLoading, error: undefined }),
@@ -95,8 +100,67 @@ function renderHome(settings: WebsiteSettings = { company_info: { name: 'Nexus C
 beforeEach(() => {
   mockProducts = baseProducts
   mockLoading = false
+  agendaState.active = false
   searchParams = new URLSearchParams()
   pathname = '/mitienda/inicio'
+})
+
+describe('Mega Tech: publicación por módulos y preferencias', () => {
+  it('no publica procesos de taller cuando Reparaciones está apagado', () => {
+    renderHome({ company_info: { name: 'Tienda' }, process_flows: [{ id: 'repairs', title: 'Nuestro taller', active: true, steps: [{ id: 'a', number: 1, title: 'Diagnóstico', description: 'Revisión del equipo.' }] }] } as WebsiteSettings)
+    expect(screen.queryByText('Nuestro taller')).toBeNull()
+    expect(screen.queryByText('Diagnóstico')).toBeNull()
+  })
+  it('servicios y reservas necesitan publicación y una agenda disponible', () => {
+    const settings = { company_info: { name: 'Atención', servicesPageEnabled: true }, services: [], booking_section: { enabled: true, title: 'Reservá tu atención' } } as unknown as WebsiteSettings
+    const { unmount } = render(<InformaticaElectronicaHome settings={settings} capabilities={{ ...capabilities, hasServices: true }} />)
+    expect(screen.getByRole('heading', { name: 'Nuestros servicios' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Reservar turno' })).toBeNull()
+    unmount()
+    agendaState.active = true
+    render(<InformaticaElectronicaHome settings={settings} capabilities={{ ...capabilities, hasServices: true }} />)
+    expect(screen.getByRole('link', { name: 'Reservar turno' })).toHaveAttribute('href', '/mitienda/turnos')
+  })
+  it('sin inventario no reutiliza productos cacheados ni llama catálogo a servicios', () => {
+    render(<InformaticaElectronicaHome settings={{ company_info: { name: 'Atención' } } as WebsiteSettings} capabilities={{ ...capabilities, hasCatalog: false }} />)
+    expect(screen.queryAllByTestId('product-card')).toHaveLength(0)
+    expect(screen.queryByRole('link', { name: 'Ver catálogo' })).toBeNull()
+    expect(screen.queryByText(/notebooks, celulares, componentes/)).toBeNull()
+  })
+  it('el taller publicado no inventa coberturas ni certificaciones', () => {
+    render(<InformaticaElectronicaHome settings={{ company_info: { name: 'Tienda', repairTrackingEnabled: true } } as WebsiteSettings} capabilities={{ ...capabilities, hasRepairs: true }} />)
+    expect(screen.getByRole('link', { name: /Consultar mi reparación/ })).toHaveAttribute('href', '/mitienda/mis-reparaciones')
+    expect(screen.queryByText(/garantía escrita|certificados/i)).toBeNull()
+  })
+  it('el encabezado oculta ofertas sin descuentos y publica servicios solo con módulo', () => {
+    mockProducts = []
+    const { unmount } = render(<InformaticaElectronicaHeader settings={{ company_info: { name: 'Tienda', servicesPageEnabled: true } } as WebsiteSettings} servicesModuleEnabled={false} />)
+    expect(screen.queryByRole('link', { name: 'Servicios' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Ofertas' })).toBeNull()
+    unmount()
+    render(<InformaticaElectronicaHeader settings={{ company_info: { name: 'Tienda', servicesPageEnabled: true } } as WebsiteSettings} servicesModuleEnabled />)
+    expect(screen.getByRole('link', { name: 'Servicios' })).toHaveAttribute('href', '/mitienda/servicios')
+  })
+  it('oculta ofertas deshabilitadas aunque existan descuentos', () => {
+    renderHome({ company_info: { name: 'Tienda' }, offers_section: { enabled: false } } as WebsiteSettings)
+    expect(screen.queryByRole('region', { name: 'Productos con descuento' })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Ver ofertas|Precios especiales/ })).toBeNull()
+  })
+  it('oculta el taller cuando el comercio apagó su publicación', () => {
+    render(<InformaticaElectronicaHome settings={{ company_info: { name: 'Tienda', repairTrackingEnabled: false } } as WebsiteSettings} capabilities={{ ...capabilities, hasRepairs: true }} />)
+    expect(screen.queryByText(/Seguimiento de tu reparación|Reparaciones/)).toBeNull()
+  })
+  it('respeta los textos configurados de los botones de portada', () => {
+    renderHome({ company_info: { name: 'Tienda', phone: '595981123456' }, hero_content: { enabled: true, title: 'Nuestro catálogo', subtitle: 'Productos reales', ctaPrimaryText: 'Explorar productos', ctaSecondaryText: 'Hablar con la tienda' } } as WebsiteSettings)
+    expect(screen.getByRole('link', { name: /Explorar productos/ })).toHaveAttribute('href', '/mitienda/productos')
+    expect(screen.getByRole('link', { name: /Hablar con la tienda/ })).toHaveAttribute('href', 'https://wa.me/595981123456')
+  })
+  it('el encabezado no ofrece catálogo ni búsqueda sin Inventario', () => {
+    render(<InformaticaElectronicaHeader settings={{ company_info: { name: 'Servicio', servicesPageEnabled: false } } as WebsiteSettings} catalogEnabled={false} repairsModuleEnabled={false} servicesModuleEnabled={false} />)
+    expect(screen.queryByRole('link', { name: 'Catálogo Completo' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Carrito/ })).toBeNull()
+    expect(screen.queryByPlaceholderText(/Buscar productos/)).toBeNull()
+  })
 })
 
 describe('Plantilla Informática & Electrónica: registro', () => {
@@ -301,5 +365,32 @@ describe('Inicio Informática & Electrónica', () => {
       trust_bar: { enabled: true, position: 'bottom', items: [{ icon: 'truck', title: 'Envío gratis', description: 'En Asunción', active: true }] },
     } as WebsiteSettings)
     expect(screen.getByText('Envío gratis')).toBeInTheDocument()
+  })
+})
+
+describe('Mega Tech: ubicación del local', () => {
+  it('muestra la dirección configurada y permite iniciar la ruta en Google Maps', () => {
+    renderHome({ company_info: { name: 'Local real', address: 'Av. España 123, Asunción', phone: '' } } as WebsiteSettings)
+    const section = screen.getByRole('region', { name: 'Cómo llegar a Local real' })
+    expect(within(section).getByText('Av. España 123, Asunción')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'Cómo llegar en Google Maps' }).getAttribute('href')).toContain(encodeURIComponent('Av. España 123, Asunción'))
+    expect(within(section).getByTitle('Ubicación de Local real')).toHaveAttribute('loading', 'lazy')
+  })
+  it('no inventa una ubicación cuando la empresa no la configuró', () => {
+    renderHome({ company_info: { name: 'Sin ubicación', address: '', mapsUrl: '', phone: '' } } as WebsiteSettings)
+    expect(screen.queryByRole('region', { name: 'Cómo llegar a Sin ubicación' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Vitrina de portada', () => {
+  it('permite elegir un producto real y actualiza el enlace sin mostrar precios fuera de sus reglas', () => {
+    mockProducts = baseProducts.slice(0, 2).map(p => ({ ...p, image: `https://example.com/${p.id}.jpg` }))
+    renderHome()
+    const hero = screen.getByRole('region', { name: 'Portada de la tienda' })
+    expect(within(hero).getByRole('link', { name: 'Ver Notebook Asus 16GB' })).toHaveAttribute('href', '/mitienda/productos/p1')
+    fireEvent.click(within(hero).getByRole('button', { name: 'Mostrar iPhone 15' }))
+    expect(within(hero).getByRole('button', { name: 'Mostrar iPhone 15' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(hero).getByRole('link', { name: 'Ver iPhone 15' })).toHaveAttribute('href', '/mitienda/productos/p2')
+    expect(within(hero).queryByText(/9[.,]000[.,]000/)).not.toBeInTheDocument()
   })
 })

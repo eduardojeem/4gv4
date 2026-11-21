@@ -19,7 +19,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { cn } from '@/lib/utils'
 
-export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?: boolean }) {
+export function StoreMobileBottomNav({ offersEnabled = true, catalogEnabled = true, cartEnabled = true }: { offersEnabled?: boolean; catalogEnabled?: boolean; cartEnabled?: boolean }) {
   const pathname = usePathname()
   const storefrontStyle = useStorefrontStyle()
   const isBeauty = storefrontStyle === 'beauty'
@@ -40,14 +40,14 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
       ariaLabel: undefined,
       isActive: pathname === `${tenantPrefix}/inicio` || pathname === tenantPrefix || pathname === '/',
     },
-    {
+    ...(catalogEnabled ? [{
       href: `${tenantPrefix}/productos`,
       label: 'Productos',
       icon: Package,
       emphasized: false,
       ariaLabel: undefined,
       isActive: pathname.startsWith(`${tenantPrefix}/productos`) && !pathname.includes('ofertas=true'),
-    },
+    }] : []),
     ...(offersEnabled ? [{
       href: `${tenantPrefix}/ofertas`,
       label: 'Ofertas',
@@ -105,7 +105,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
         })}
 
         {/* Tab 4: Carrito con Badge */}
-        <button
+        {cartEnabled && catalogEnabled && <button
           type="button"
           onClick={openCart}
           className="group relative flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all select-none"
@@ -119,7 +119,7 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
             )}
           </div>
           <span className="truncate leading-none">Carrito</span>
-        </button>
+        </button>}
 
         {/* Tab 5: Mi Perfil */}
         {user ? (

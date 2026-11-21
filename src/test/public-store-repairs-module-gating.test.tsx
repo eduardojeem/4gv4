@@ -21,7 +21,7 @@ describe('tienda pública sin taller', () => {
     // Además del módulo, el rubro tiene que tener taller.
     expect(layout).toContain('const repairsModuleEnabled = verticalOffersRepairs(storefrontOrganization.business_vertical)')
     expect(layout).toContain("&& await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
-    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />')
+    expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} servicesModuleEnabled={servicesModuleEnabled} catalogEnabled={catalogEnabled} />')
   })
 
   it('el footer exige el módulo además de la configuración del sitio', () => {
