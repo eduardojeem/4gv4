@@ -1,3 +1,5 @@
+import { classifyBarcode, cleanBarcode } from '@/lib/products/barcode-catalog'
+
 export type QuickItemInput = {
   name: string
   price: string
@@ -8,6 +10,8 @@ export type QuickItemInput = {
   purchasePrice?: string
   /** Precio mayorista. Vacio = no se envia y el producto queda sin mayorista. */
   wholesalePrice?: string
+  /** Codigo de barras leido o escrito. Vacio = el producto queda sin codigo. */
+  barcode?: string
 }
 
 export type QuickItemApiError = {
@@ -47,6 +51,11 @@ export function buildQuickItemPayload(input: QuickItemInput) {
     throw new Error('La cantidad debe ser un numero entero mayor a cero.')
   }
 
+  const barcode = cleanBarcode(input.barcode)
+  if (barcode && classifyBarcode(barcode).kind === 'invalid') {
+    throw new Error('El codigo de barras no es valido. Usa EAN-8, UPC-A o EAN-13 y revisa los numeros.')
+  }
+
   const purchasePrice = parseOptionalPrice(input.purchasePrice, 'precio de compra') ?? 0
   const wholesalePrice = parseOptionalPrice(input.wholesalePrice, 'precio mayorista')
 
@@ -74,6 +83,8 @@ export function buildQuickItemPayload(input: QuickItemInput) {
     // Se omite cuando no se cargo, para dejar claro que no se especifico en
     // lugar de guardar un 0 que parece un mayorista real.
     ...(wholesalePrice !== null ? { wholesale_price: wholesalePrice } : {}),
+    // Con el codigo guardado, el proximo escaneo ya encuentra el producto.
+    ...(barcode ? { barcode } : {}),
     stock_quantity: stockQuantity,
     min_stock: 0,
     unit_measure: 'unidad',

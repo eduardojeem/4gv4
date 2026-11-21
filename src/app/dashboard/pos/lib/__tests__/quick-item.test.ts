@@ -127,3 +127,20 @@ describe('getQuickItemMargin', () => {
     expect(getQuickItemMargin(Number.NaN, 150000)).toBeNull()
   })
 })
+
+describe('buildQuickItemPayload con código de barras', () => {
+  const base = { name: 'Gaseosa 500ml', price: '8000', quantity: '1', sku: '', publishToCatalog: false }
+
+  it('guarda el código leído, sin espacios, para que el próximo escaneo lo encuentre', () => {
+    expect(buildQuickItemPayload({ ...base, barcode: ' 7840 0010 0001 1 ' }).barcode).toBe('7840001000011')
+  })
+
+  it('sin código no manda el campo', () => {
+    expect(buildQuickItemPayload({ ...base, barcode: '  ' })).not.toHaveProperty('barcode')
+    expect(buildQuickItemPayload(base)).not.toHaveProperty('barcode')
+  })
+
+  it('rechaza un código con el dígito verificador mal', () => {
+    expect(() => buildQuickItemPayload({ ...base, barcode: '7840001000012' })).toThrow('codigo de barras no es valido')
+  })
+})
