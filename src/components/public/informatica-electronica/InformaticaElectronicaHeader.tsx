@@ -8,6 +8,7 @@ import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
+  ArrowLeft,
   Laptop,
   Flame,
   Search,
@@ -149,16 +150,20 @@ export function InformaticaElectronicaHeader({ settings, catalogEnabled = true, 
       {/* ── 0. Borde superior de acento con gradiente de marca ── */}
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/80 to-primary/50" />
 
-      {/* ── 1. Barra superior: datos reales de la tienda (dirección y WhatsApp) ── */}
-      {(storeAddress || phoneClean) && (
+      {/* ── 1. Barra superior: volver al marketplace y datos reales de la tienda ── */}
+      {(
         <div className="bg-slate-100/95 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-xs py-1.5 px-4 border-b border-slate-200 dark:border-slate-800 transition-colors">
           <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-2.5">
+            <Link href="/marketplace" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              Volver al Marketplace
+            </Link>
             {storeAddress ? (
               <span className="inline-flex min-w-0 items-center gap-1 text-slate-500 dark:text-slate-400">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
                 <span className="truncate">{storeAddress}</span>
               </span>
-            ) : <span />}
+            ) : null}
             {phoneClean && (
               <a
                 href={`https://wa.me/${phoneClean}`}
