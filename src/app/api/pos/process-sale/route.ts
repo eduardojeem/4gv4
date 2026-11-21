@@ -1,7 +1,7 @@
 import { assertCommercePayments } from '@/lib/payments/control-store'
 import { PaymentControlError } from '@/lib/payments/control-contract'
 import { NextResponse, type NextRequest } from 'next/server'
-import { afterResponse, notifyRepairsDelivered, notifySaleCreated } from '@/lib/notifications/server/business-events'
+import { afterResponse, notifyRepairsDelivered, notifySaleCreated, notifyStockLevelsAfterSale } from '@/lib/notifications/server/business-events'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
@@ -753,6 +753,8 @@ export const POST = withTenantAuth(
         total: finiteNumber(result.total),
         code: savedCode,
       }))
+      const soldProductIds = [...new Set(items.map(item => item.product_id))]
+      afterResponse(() => notifyStockLevelsAfterSale({ organizationId: organization.id, branchId, productIds: soldProductIds }))
       if (body.p_mark_repairs_delivered === true && repairIds.length > 0) {
         afterResponse(() => notifyRepairsDelivered({ organizationId: organization.id, branchId, repairIds, actorUserId: user.id }))
       }

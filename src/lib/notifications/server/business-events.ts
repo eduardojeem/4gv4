@@ -228,3 +228,98 @@ export function notifyRepairsDelivered(params: {
     }
   })
 }
+
+const APPOINTMENT_NOTIFICATION_TYPES = {
+  booked: 'BOOKING_CREATED',
+  rescheduled: 'BOOKING_RESCHEDULED',
+  cancelled: 'BOOKING_CANCELLED',
+} as const
+
+/**
+ * El cliente reservó, cambió o canceló su turno desde la web: avisa al celular
+ * del comercio con el mismo texto de la campanita de la Agenda.
+ */
+export function notifyAppointmentChanged(params: {
+  organizationId: string
+  appointmentId: string
+  kind: keyof typeof APPOINTMENT_NOTIFICATION_TYPES
+  text: string
+}) {
+  return safely('el turno', () => dispatchNotificationEvent({
+    organizationId: params.organizationId,
+    branchId: null,
+    type: APPOINTMENT_NOTIFICATION_TYPES[params.kind],
+    resourceType: 'booking',
+    resourceId: params.appointmentId,
+    data: { text: params.text },
+    // Lo hizo el cliente, no alguien del comercio: nadie queda afuera.
+    actorUserId: null,
+  }))
+}
+
+export type StockLevel = { productId: string; name: string; stock: number; minStock: number | null }
+
+/** Agotado (0 o menos), stock bajo (llegó al mínimo) o nada. Sin mínimo cargado solo avisa agotado. */
+export function classifyStockLevel(level: Pick<StockLevel, 'stock' | 'minStock'>): 'OUT_OF_STOCK' | 'LOW_STOCK' | null {
+  if (level.stock <= 0) return 'OUT_OF_STOCK'
+  if (level.minStock != null && level.minStock > 0 && level.stock <= level.minStock) return 'LOW_STOCK'
+  return null
+}
+
+/**
+ * Después de vender: revisa los productos vendidos y avisa stock bajo o
+ * agotado. Con sucursal mira su inventario y su mínimo (o el del producto).
+ * Como máximo un aviso por día, por producto, sucursal y tipo.
+ */
+export function notifyStockLevelsAfterSale(params: {
+  organizationId: string
+  branchId: string | null
+  productIds: string[]
+  now?: Date
+}) {
+  const productIds = [...new Set(params.productIds.filter(Boolean))]
+  if (productIds.length === 0) return Promise.resolve()
+  return safely('el stock', async () => {
+    const admin = createAdminSupabase()
+    const { data: products, error } = await admin
+      .from('products')
+      .select('id, name, stock_quantity, min_stock, unit_measure, is_active')
+      .eq('organization_id', params.organizationId)
+      .in('id', productIds)
+    if (error) throw error
+    const branchRows = new Map<string, { stock_quantity: number | null; min_stock: number | null }>()
+    if (params.branchId) {
+      const { data: inventory, error: inventoryError } = await admin
+        .from('branch_inventory')
+        .select('product_id, stock_quantity, min_stock')
+        .eq('branch_id', params.branchId)
+        .in('product_id', productIds)
+      if (inventoryError) throw inventoryError
+      for (const row of inventory ?? []) branchRows.set(String(row.product_id), row)
+    }
+    const day = (params.now ?? new Date()).toISOString().slice(0, 10)
+    for (const product of products ?? []) {
+      // Los servicios no tienen stock; un producto inactivo no se repone.
+      if (product.unit_measure === 'servicio' || product.is_active === false) continue
+      const branch = branchRows.get(String(product.id))
+      if (params.branchId && !branch) continue
+      const level: StockLevel = {
+        productId: String(product.id),
+        name: String(product.name ?? 'Producto'),
+        stock: Number(branch ? branch.stock_quantity : product.stock_quantity) || 0,
+        minStock: (branch?.min_stock ?? product.min_stock ?? null) as number | null,
+      }
+      const type = classifyStockLevel(level)
+      if (!type) continue
+      await dispatchNotificationEvent({
+        organizationId: params.organizationId,
+        branchId: params.branchId,
+        type,
+        resourceType: 'product',
+        resourceId: level.productId,
+        data: { productName: level.name, stock: level.stock, minStock: level.minStock },
+        idempotencyKey: `stock:${type}:${level.productId}:${params.branchId ?? 'org'}:${day}`,
+      })
+    }
+  })
+}

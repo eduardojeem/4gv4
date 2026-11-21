@@ -64,7 +64,17 @@ Lo que más falta, por rubro:
 3. ✅ **Preferencias solo con lo que aplica** (`src/lib/notifications/visibility.ts`): un tipo se muestra si **se envía** (`IMPLEMENTED_NOTIFICATION_TYPES` en `types.ts`), el rol tiene el permiso y el módulo efectivo está activo.
 4. ✅ **Test de contrato** (`src/test/notification-preferences-visibility.test.ts`): la lista de implementados coincide con los puntos de envío del código, en las dos direcciones. Al sumar un aviso nuevo hay que agregarlo a la lista, o el test falla.
 
-### Fase 1 — Lo que cada rubro necesita (1 semana)
+### Fase 1 — Lo que cada rubro necesita · 🟡 en curso
+
+Hecho (PR «avisos de turnos y stock»):
+
+- ✅ **Turnos:** nuevo, reprogramado y cancelado cuando lo hace el **cliente** desde la web (reserva online o enlace del turno), con el mismo texto de la campanita de la Agenda. Se envía aunque la tienda no quiera email.
+- ✅ **Stock bajo y agotado** después de cada venta del POS: mira el inventario y el mínimo de la sucursal (o los del producto). Como máximo un aviso por día, por producto y sucursal. Agotado sale con push; stock bajo, solo en la bandeja (se puede activar el push en preferencias).
+- ✅ **Vocabulario por rubro:** en barberías y belleza, «Nuevo turno», «Turno cancelado» y «Turno reprogramado»; en el resto, «reserva».
+
+Pendiente de la Fase 1: recordatorio del día de turnos, stock al confirmar pedidos, reparación demorada y nota agregada.
+
+Plan original:
 
 | Rubro | Avisos | Dónde se disparan |
 |---|---|---|
