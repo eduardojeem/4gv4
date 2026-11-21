@@ -1,3 +1,4 @@
+import { isBrandPalette, type StorefrontBrandPalette } from './brand-palette'
 import { isKnownBrandColor } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { STOREFRONT_STYLE_PREFERENCES, type StorefrontHeaderStyle, type StorefrontStyle } from '@/lib/website/storefront-style'
@@ -14,6 +15,7 @@ export interface StorefrontPreviewDraft {
   style: StorefrontStyle
   brandColor: string
   customBrandColor?: string
+  brandPalette?: StorefrontBrandPalette | null
   headerStyle: StorefrontHeaderStyle
   showTopBar: boolean
 }
@@ -32,7 +34,10 @@ export function parseStorefrontPreviewDraft(data: unknown): StorefrontPreviewDra
   if (!HEADER_STYLES.includes(headerStyle as StorefrontHeaderStyle)) return null
   if (typeof showTopBar !== 'boolean') return null
 
+  if (message.brandPalette != null && !isBrandPalette(message.brandPalette)) return null
+
   return {
+    ...('brandPalette' in message ? { brandPalette: isBrandPalette(message.brandPalette) ? message.brandPalette : null } : {}),
     style: style as StorefrontStyle,
     brandColor: brandColor as string,
     customBrandColor: brandColor === 'custom' && typeof customBrandColor === 'string' && isValidBrandHexColor(customBrandColor)

@@ -17,6 +17,7 @@ export interface CompanyInfo {
   logoUrl?: string
   brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
   customBrandColor?: string
+  brandPalette?: import('@/lib/website/brand-palette').StorefrontBrandPalette | null
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
   storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty' | 'wholesale-pro' | 'catalog-basic' | 'informatica-electronica' | 'barber' | 'especial-para-barbero' | 'especial-cosmeticos' | 'moda-femenina'

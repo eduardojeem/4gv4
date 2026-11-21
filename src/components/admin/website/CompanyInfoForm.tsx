@@ -333,7 +333,8 @@ export function CompanyInfoForm() {
         return next
       })
     }
-    setDraft((current) => ({ ...(current ?? formData), ...patch }))
+    const clearsPalette = ('brandColor' in patch || 'customBrandColor' in patch) && !('brandPalette' in patch)
+    setDraft((current) => ({ ...(current ?? formData), ...(clearsPalette ? { brandPalette: null } : {}), ...patch }))
   }
 
   const handleChange = (field: keyof CompanyInfo | string, value: string) => {

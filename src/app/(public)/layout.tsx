@@ -1,3 +1,4 @@
+import { brandPaletteStyle, isBrandPalette } from '@/lib/website/brand-palette'
 import { Metadata } from 'next'
 import { StorefrontHeader, StorefrontMobileNav } from '@/components/public/StorefrontShell'
 import { PublicFooter } from '@/components/public/PublicFooter'
@@ -89,7 +90,8 @@ export default async function PublicLayout({
             // Ver nota en [organizationSlug]/layout.tsx: --brand-primary lo
             // resuelve globals.css con ajuste automático para modo oscuro.
             data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
-            style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
+            style={{ ...(brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } : {}), ...brandPaletteStyle(settings?.company_info?.brandPalette) } as React.CSSProperties}
+            data-storefront-palette={isBrandPalette(settings?.company_info?.brandPalette) ? '' : undefined}
             data-storefront-style={storefrontStyle}
           >
             <SkipToContentLink />
