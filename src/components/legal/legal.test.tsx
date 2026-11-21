@@ -60,6 +60,21 @@ describe('responsable del documento', () => {
     expect(findPlaceholders(responsibleSection('privacy'))).toHaveLength(4)
   })
 
+  it('convierte correos y direcciones web en enlaces seguros', () => {
+    render(<LegalContent content={'Escribinos a **soporte@mitiendapy.com** o entrá a www.mitiendapy.com/saas/eliminar-cuenta. Nada de javascript:alert(1).'} />)
+    expect(screen.getByRole('link', { name: 'soporte@mitiendapy.com' })).toHaveAttribute('href', 'mailto:soporte@mitiendapy.com')
+    expect(screen.getByRole('link', { name: 'www.mitiendapy.com/saas/eliminar-cuenta' })).toHaveAttribute('href', 'https://www.mitiendapy.com/saas/eliminar-cuenta')
+    expect(screen.getAllByRole('link')).toHaveLength(2)
+  })
+
+  it('la política base cubre contacto, borrado, app y ley, y se puede publicar tal cual', () => {
+    const { content } = DEFAULT_LEGAL_DOCUMENTS.privacy
+    for (const required of ['soporte@mitiendapy.com', '/saas/eliminar-cuenta', 'Perfil → Eliminar cuenta', 'Ley N° 7593/2025', 'Huella o Face ID', 'Cámara', 'Ubicación aproximada', 'Google Maps', '30 días', '5 años']) {
+      expect(content).toContain(required)
+    }
+    expect(findPlaceholders(content)).toEqual([])
+  })
+
   it('el texto base arranca sin "# Título" y con los títulos en su propia línea', () => {
     for (const document of Object.values(DEFAULT_LEGAL_DOCUMENTS)) {
       expect(document.content.startsWith('# ')).toBe(false)
